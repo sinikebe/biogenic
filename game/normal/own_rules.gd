@@ -220,8 +220,8 @@ func _refresh_body() -> void:
 ## **What of the vocabulary the player's body has, as the rulebook's bits**
 ## (§4.1, §4.3): every gene the body wears at the level `genome.gd`'s `level_of`
 ## answers -- the beam's earned level, every other gene's worn copies -- counted by
-## organ (catalogue.gd's `by_organ`), and what every body has. A gene the DNA carries and the body does not wear is not
-## there: an instinct for it is asleep.
+## organ (catalogue.gd's `by_organ`), and what every body has. A gene the DNA
+## carries and the body does not wear is not there: an instinct for it is asleep.
 func worn() -> int:
 	var parts := {}
 	var tiers: Dictionary = _genome.call(&"tiers")
