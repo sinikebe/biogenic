@@ -943,8 +943,13 @@ class Body:
 	## Radians clockwise from world north, the cell's own convention.
 	var heading := 0.0
 	var radius := 0.0
-	## `{gene: tier}`, fixed at seeding and grown by eating. Never null.
-	var genome := {}
+	## `{gene: tier}`, fixed at seeding and grown by eating. Never null. **Written
+	## whole, what it buys is read again** ([method derive], the `stat_` fields
+	## below); whoever edits it in place calls that itself.
+	var genome := {}:
+		set(value):
+			genome = value
+			derive()
 	## No cytostome, r13-21, eats nothing: the floor of §1.3.
 	var drifter := true
 	## False until _seed() has run, so the drifter counter cannot mistake an
@@ -1154,6 +1159,9 @@ class Body:
 	var turn_rate := 0.0
 	var thrust := 0.0
 	var dart_tier := 0
+	## Its dart's reach and cooldown at [member dart_tier]. Made with it.
+	var dart_reach := 0.0
+	var dart_rest := 0.0
 	## **Its organs as its senses read them** (§4.4, §12.1): each at its tier on
 	## the arc the default order puts it, made by [method _refresh_body] for a
 	## body with a mouth in a drop of this field's own; null otherwise. And what
@@ -1161,6 +1169,48 @@ class Body:
 	## and what every body has (`Rulebook.worn`).
 	var eye: Observer = null
 	var worn := 0
+	## **What its genome buys it, read when the genome is written**
+	## (docs/design/gene-catalogue.md §15, as built 1a) and never on a tick: its
+	## mouth's gape, as a multiple of its radius, and its bite; its armour; its
+	## turn; its tail's realised speed ([method CellBody.speed_of]) and the level
+	## that tail can be held still from; its dart -- tier, reach, cooldown and
+	## stun -- and its dash -- tier, burst and price. **Every body has them** -- a
+	## person's, a floc's, a replay's and today's water's -- which [member tail]
+	## and the rest above, made only by [method _refresh_body], are not.
+	var stat_gape := 0.0
+	var stat_bite := 0.0
+	var stat_armor := 1.0
+	var stat_turn := 0.0
+	var stat_speed := 0.0
+	var stat_hold := 0
+	var stat_dart_tier := 0
+	var stat_dart_range := 0.0
+	var stat_dart_cooldown := 0.0
+	var stat_dart_stun := 0.0
+	var stat_dash_tier := 0
+	var stat_dash_speed := 0.0
+	var stat_dash_cost := 0.0
+
+	func _init() -> void:
+		derive()
+
+	## **Reads what [member genome] buys into the `stat_` fields**: by its setter
+	## whenever it is written whole, and by whoever edits it in place.
+	func derive() -> void:
+		var g := genome
+		stat_gape = Stats.of(g, &"gape")
+		stat_bite = Stats.of(g, &"bite")
+		stat_armor = Stats.of(g, &"armor")
+		stat_turn = Stats.of(g, &"turn_rate")
+		stat_speed = CellBody.speed_of(g)
+		stat_hold = CellBody.hold_level(g)
+		stat_dart_tier = Stats.tier(g, &"dart_range")
+		stat_dart_range = Stats.of(g, &"dart_range")
+		stat_dart_cooldown = Stats.of(g, &"dart_cooldown")
+		stat_dart_stun = CellBody.dart_stun(g)
+		stat_dash_tier = Stats.tier(g, &"dash_speed")
+		stat_dash_speed = Stats.of(g, &"dash_speed")
+		stat_dash_cost = Stats.of(g, &"dash_cost")
 
 
 ## **What a body lacks, for the body that is another player** (§1.2): how it
@@ -1249,11 +1299,13 @@ class Observer:
 	var beam_fan_mid := 0.0
 	var beam_fan_half := -1.0
 	## `ampulla`: how far a call carries, where on the skin it leaves, how much
-	## of it a body in the way lets through, and the organ's tier.
+	## of it a body in the way lets through, and the organ's tier -- and, for a
+	## water cell's eye, the seconds between its calls at that tier.
 	var ping_range := 0.0
 	var ping_bearing := 0.0
 	var ping_through := 0.0
 	var ping_tier := 0
+	var ping_period := 0.0
 	## Its own slot, which none of its senses ever reports; -1 for the player on
 	## this device, who is in no slot of the water's.
 	var slot := -1
@@ -1857,7 +1909,7 @@ func _worth_committing_to(b: Body, gape: float, target_radius: float,
 		return true
 	# It cannot swallow it, so the only reason to go is that somebody else has
 	# already opened it -- and only a mouth that could actually finish the job.
-	return target_wound >= CHEW_INVITE and Stats.of(b.genome, &"bite") > 0.0
+	return target_wound >= CHEW_INVITE and b.stat_bite > 0.0
 
 
 func _step_stalk(index: int, b: Body, delta: float) -> void:
@@ -2144,7 +2196,7 @@ func _away_from(b: Body) -> Vector2:
 
 
 func _swim(b: Body, delta: float, speed: float) -> void:
-	var rate := Stats.of(b.genome, &"turn_rate")
+	var rate := b.stat_turn
 	var want := _angle_of(b.aim - b.pos, b.heading)
 	var turn := clampf(angle_difference(b.heading, want), -rate * delta, rate * delta)
 	b.wander = lerpf(b.wander, randf_range(-WANDER_RATE, WANDER_RATE),
@@ -2545,8 +2597,8 @@ func _mouth_reaches(b: Body, gape: float, at: Vector2, body_radius: float) -> bo
 func _chew(i: int, b: Body, j: int, other: Body) -> float:
 	if b.bite > 0.0:
 		return other.wound
-	var damage := CellBody.bite_damage(Stats.of(b.genome, &"bite"),
-		_gape(b), other.radius, Stats.of(other.genome, &"armor"),
+	var damage := CellBody.bite_damage(b.stat_bite,
+		_gape(b), other.radius, other.stat_armor,
 		_flank_theta(other.heading, other.pos, b.pos))
 	if damage <= 0.0:
 		return other.wound
@@ -2599,9 +2651,9 @@ func _bitten_by(index: int, b: Body, p: Person = null) -> bool:
 	# signed, which is the side a sting guards (dna-slots.md §7.2).
 	var landed := _cell.bearing_to(at) if p == null \
 		else _bite_bearing(pb.heading, pb.pos, at)
-	var damage := CellBody.bite_damage(Stats.of(b.genome, &"bite"),
+	var damage := CellBody.bite_damage(b.stat_bite,
 		_gape(b), _cell.radius if p == null else pb.radius,
-		_cell.stat(&"armor") if p == null else Stats.of(pb.genome, &"armor"),
+		_cell.stat(&"armor") if p == null else pb.stat_armor,
 		absf(landed))
 	if damage <= 0.0:
 		return false
@@ -2661,9 +2713,9 @@ func _bite_from(index: int, b: Body, p: Person = null) -> bool:
 	# this mouth arrived from. Holding your nose on a cell's stern is worth 2.10
 	# times holding it on its nose, and that is the owner's sentence made true.
 	var damage := CellBody.bite_damage(
-		_cell.stat(&"bite") if p == null else Stats.of(pb.genome, &"bite"),
+		_cell.stat(&"bite") if p == null else pb.stat_bite,
 		_cell.gape() if p == null else _gape(pb),
-		b.radius, Stats.of(b.genome, &"armor"),
+		b.radius, b.stat_armor,
 		_flank_theta(b.heading, b.pos, _cell.position if p == null else pb.pos))
 	if damage <= 0.0:
 		return false
@@ -2780,9 +2832,9 @@ func _chewed_by_friend(p: Person, me: Person = null) -> bool:
 	# for the side a sting guards.
 	var landed := _cell.bearing_to(there) if me == null \
 		else _bite_bearing(mb.heading, mb.pos, there)
-	var damage := CellBody.bite_damage(Stats.of(pb.genome, &"bite"),
+	var damage := CellBody.bite_damage(pb.stat_bite,
 		_gape(pb), _my_radius(me),
-		_cell.stat(&"armor") if me == null else Stats.of(mb.genome, &"armor"),
+		_cell.stat(&"armor") if me == null else mb.stat_armor,
 		absf(landed))
 	if damage <= 0.0:
 		return false
@@ -2819,9 +2871,9 @@ func _chew_friend(p: Person, me: Person = null) -> void:
 	var there := pb.pos
 	var here := _my_pos(me)
 	var damage := CellBody.bite_damage(
-		_cell.stat(&"bite") if me == null else Stats.of(mb.genome, &"bite"),
+		_cell.stat(&"bite") if me == null else mb.stat_bite,
 		_cell.gape() if me == null else _gape(mb),
-		pb.radius, Stats.of(pb.genome, &"armor"),
+		pb.radius, pb.stat_armor,
 		_flank_theta(pb.heading, there, here))
 	if damage <= 0.0:
 		return
@@ -3287,6 +3339,7 @@ func _devour(b: Body, prey: Body) -> void:
 	b.meals += 1
 	Genome.integrate_into(b.genome, Genome.dominant_of(prey.genome),
 		CellBody.slots_for(b.radius))
+	b.derive()
 	_changes += 1
 
 
@@ -3725,7 +3778,7 @@ func _feel(o: Observer, scan: PackedInt32Array, smell: bool, shade: bool, fear: 
 		# four constants is there and why not one of them is a gate.
 		if d >= CHEW_RANGE:
 			continue
-		var rate := CellBody.bite_damage(Stats.of(b.genome, &"bite"),
+		var rate := CellBody.bite_damage(b.stat_bite,
 			_gape(b), o.radius, o.armour, PI) \
 			/ CellBody.BITE_GAP
 		if rate <= 0.0:
@@ -6080,19 +6133,19 @@ func _seed_drifter(b: Body) -> void:
 	b.radius = randf_range(DRIFTER_MIN, DRIFTER_MAX)
 	# One gene at tier 1 and no mouth. It still carries something worth eating:
 	# drifters are half the water, and a floor that fed you nothing to grow a
-	# genome with would make the early game a dead end.
-	b.genome = {}
+	# genome with would make the early game a dead end. **Written whole**, so
+	# what it buys is read with it (`Body.derive`).
 	# **In the drop** (§5.8, §6.4): the gene the drop is down to its last
 	# carriers of, if one is -- and never the toxin, which comes back through a
 	# peer instead: the drop's drifters are its defenceless food (row 13).
 	if _drop != null:
 		var wanted := Drop.take_drifter_gene(_gene_short)
 		if wanted != &"":
-			b.genome[wanted] = 1
+			b.genome = {wanted: 1}
 			_stat(&"gene_floor")
 			return
-		b.genome[_place_toxin(_draw_gene(Catalogue.drifters() if drifter_toxin
-			else _drifter_pool))] = 1
+		b.genome = {_place_toxin(_draw_gene(Catalogue.drifters() if drifter_toxin
+			else _drifter_pool)): 1}
 		return
 	# **Drifters carry neither form in today's water either** (docs/design/
 	# dna-slots.md §0 item 12): the first water's drifter could carry the old
@@ -6103,7 +6156,7 @@ func _seed_drifter(b: Body) -> void:
 	var gene := _draw_gene(Catalogue.drifters())
 	if Genome.variety(gene) == Drop.TOXIN:
 		gene = _draw_gene(Drop.drifter_genes(Catalogue.drifters()))
-	b.genome[gene] = 1
+	b.genome = {gene: 1}
 
 
 ## A body in the peer band round a player of radius [param mine], whose senses
@@ -6222,7 +6275,7 @@ func _tier_weight(tier: int, sensed: float) -> float:
 # ---------------------------------------------------------------------------
 
 func _gape(b: Body) -> float:
-	return CellBody.gape_of(b.genome, b.radius)
+	return b.stat_gape * b.radius
 
 
 ## What this cell swims at while chasing: the chase's reference speed times the
@@ -6278,7 +6331,7 @@ func _reference_speed(b: Body) -> float:
 ## player's is -- so a chase between two field cells is the same chase the player
 ## is in.
 func _own_speed(b: Body) -> float:
-	return CellBody.speed_of(b.genome)
+	return b.stat_speed
 
 
 func _target_body(b: Body) -> Body:
@@ -7329,9 +7382,10 @@ func load_drop(cell: CellBody, state: Dictionary) -> Dictionary:
 		# **By name**: a gene this build does not know is kept as the name it is,
 		# and costs and draws as a retired `rhabdom` always has (the catalogue).
 		var genes: Dictionary = genome[k]
-		b.genome = {}
+		var tiers := {}
 		for gene: String in genes:
-			b.genome[StringName(gene)] = int(genes[gene])
+			tiers[StringName(gene)] = int(genes[gene])
+		b.genome = tiers
 		# An empty entry is a DNA that is the body: copied, so in the body's order.
 		var carried: Dictionary = dna[k] if not dna.is_empty() else {}
 		b.dna = b.genome.duplicate() if carried.is_empty() \
@@ -7795,6 +7849,7 @@ func _grow(b: Body, gene: StringName) -> void:
 	Genome.integrate_into(b.dna, gene, slots)
 	if not (births and _drop != null):
 		Genome.integrate_into(b.genome, gene, slots)
+		b.derive()
 	_refresh_body(b)
 	_changes += 1
 
@@ -7836,7 +7891,10 @@ func _rest(b: Body, seconds: float) -> void:
 	b.calm = seconds
 
 
-## What its organs buy, read once whenever its genome or its radius changes.
+## What its organs buy, read once whenever its genome or its radius changes. Its
+## `stat_` fields are already read ([method Body.derive]): by the genome's setter,
+## or by whoever edited the genome in place on its way here -- a meal, a drop's
+## load, the toxin given back.
 func _refresh_body(b: Body) -> void:
 	var g := b.genome
 	b.upkeep = Genome.upkeep_of(g)
@@ -7846,15 +7904,17 @@ func _refresh_body(b: Body) -> void:
 	# on the organ and not on what made the body.
 	b.income = b.sun + (absorb if Catalogue.worn_provider(g, &"gape") == &"" else 0.0)
 	b.burn = Stats.of(g, &"burn")
-	b.armour = Stats.of(g, &"armor")
+	b.armour = b.stat_armor
 	b.cruise = CellBody.swim_speed_of(g)
 	# Pack 3 (behaviour.md §4.5): its tail alone, the push being a trigger of
 	# its own -- and, for a mouth in a drop of this field's own, its organs as its
 	# senses read them (§12.1).
-	b.tail = CellBody.speed_of(g)
-	b.turn_rate = Stats.of(g, &"turn_rate")
+	b.tail = b.stat_speed
+	b.turn_rate = b.stat_turn
 	b.thrust = Stats.of(g, &"push_accel")
-	b.dart_tier = Stats.tier(g, &"dart_range")
+	b.dart_tier = b.stat_dart_tier
+	b.dart_reach = Stats.at(&"dart_range", b.dart_tier)
+	b.dart_rest = Stats.at(&"dart_cooldown", b.dart_tier)
 	# Pack 4 (automation.md §5.3): its tail's level is its copies, as its beam's is.
 	b.tail_level = Genome.tier_of(g, Catalogue.worn_provider(g, &"impulse_speed"))
 	b.eye = _eye_of(b) if _drop != null and not _mirror and not _replay \
@@ -8055,14 +8115,13 @@ func _darted_off(b: Body, d: float) -> bool:
 	var prey := _target_body(b)
 	if prey == null or prey.person != null or prey.inert:
 		return false
-	if Stats.tier(prey.genome, &"dart_range") <= 0 or prey.dart_clock > 0.0 \
-			or d >= Stats.of(prey.genome, &"dart_range"):
+	if prey.stat_dart_tier <= 0 or prey.dart_clock > 0.0 or d >= prey.stat_dart_range:
 		return false
 	var from := _angle_of(b.pos - prey.pos, prey.heading)
 	if absf(angle_difference(prey.heading + prey.dart_bearing, from)) \
 			> deg_to_rad(CellBody.DART_ARC_DEG) * 0.5:
 		return false
-	prey.dart_clock = Stats.of(prey.genome, &"dart_cooldown")
+	prey.dart_clock = prey.stat_dart_cooldown
 	_stat(&"water_darts")
 	_break_off(b)
 	return true
@@ -8073,11 +8132,11 @@ func _darted_off(b: Body, d: float) -> bool:
 func _dash(b: Body) -> void:
 	if not own_speed or b.dash_clock > 0.0:
 		return
-	if Stats.tier(b.genome, &"dash_speed") <= 0:
+	if b.stat_dash_tier <= 0:
 		return
-	b.dash_v = Stats.of(b.genome, &"dash_speed")
+	b.dash_v = b.stat_dash_speed
 	b.dash_clock = CellBody.DASH_COOLDOWN
-	b.effort += Stats.of(b.genome, &"dash_cost") * Metabolism.HUNGER_SECONDS
+	b.effort += b.stat_dash_cost * Metabolism.HUNGER_SECONDS
 	_stat(&"water_dashes")
 
 
@@ -8255,6 +8314,7 @@ func _eye_of(b: Body) -> Observer:
 	o.eyespot = Catalogue.worn_on(g, Catalogue.LIGHT) != &""
 	o.ping_range = Stats.of(g, &"ping_range")
 	o.ping_tier = Stats.tier(g, &"ping_range")
+	o.ping_period = Stats.at(&"ping_period", o.ping_tier)
 	o.ping_through = Stats.of(g, &"ping_through")
 	o.ping_bearing = _arc_in(order, g, &"ping_range")
 	# The beam as the run aims yours below its fork (normal_mode.gd's
@@ -8501,7 +8561,7 @@ static func report_echo(echoes: Array, o: Observer, now: float) -> Array:
 func _call_now(i: int, b: Body) -> void:
 	if b.eye == null or b.eye.ping_range <= 0.0 or _t < b.call_at:
 		return
-	b.call_at = _t + Stats.at(&"ping_period", b.eye.ping_tier)
+	b.call_at = _t + b.eye.ping_period
 	for k in range(b.echoes.size() - 1, -1, -1):
 		if float((b.echoes[k] as Array)[4]) <= _t:
 			b.echoes.remove_at(k)
@@ -8568,7 +8628,7 @@ func _swim_on(_i: int, b: Body, _k: int, _report: Array, _before: Variant, _tick
 func _rest_on(_i: int, b: Body, _k: int, _report: Array, _before: Variant, _tick: int) -> void:
 	b.resting = true
 	b.holding = false
-	b.tail_held = tails_beat and b.tail_level >= CellBody.hold_level(b.genome)
+	b.tail_held = tails_beat and b.tail_level >= b.stat_hold
 
 
 ## `flagellum.hold`, declared at the tail's hold level: its tail is held
@@ -8826,7 +8886,7 @@ func _felt_coming(b: Body, delta: float) -> void:
 ## Asked by [method _step_ruled] only of a body that wears one, whose dart is
 ## ready and which is no floc.
 func _darts_of(index: int, b: Body) -> void:
-	var reach := Stats.at(&"dart_range", b.dart_tier)
+	var reach := b.dart_reach
 	_dart_ids.resize(0)
 	_drop.grid.query(b.pos, reach + Drop.GRID_SLACK, _dart_ids)
 	var size := _swallow_r(b)
@@ -8848,8 +8908,8 @@ func _darts_of(index: int, b: Body) -> void:
 		best_d = d
 	if best < 0:
 		return
-	b.dart_clock = Stats.at(&"dart_cooldown", b.dart_tier)
-	_stun(_cells[best], b.pos, CellBody.dart_stun(b.genome))
+	b.dart_clock = b.dart_rest
+	_stun(_cells[best], b.pos, b.stat_dart_stun)
 	_stat(&"water_darts")
 
 
@@ -8866,7 +8926,7 @@ func _stun(b: Body, from: Vector2, seconds: float) -> void:
 	# Resting until its next tick reads its rules again, as `_rest_on` rests it:
 	# with a level-2 tail, held. The stun itself stops every tail, whatever its
 	# level ([method _tail_beats]).
-	b.tail_held = tails_beat and b.tail_level >= CellBody.hold_level(b.genome)
+	b.tail_held = tails_beat and b.tail_level >= b.stat_hold
 	_feel_hit(b, from, 1.0)
 	_stat(&"stuns")
 
@@ -9109,8 +9169,14 @@ static func floc_settle_after(settle: float, life: float, seconds: float) -> flo
 	return maxf(top - (seconds - left) / Drop.FLOC_SETTLE, 0.0)
 
 
+## **The widest mouth a drifter has**: the gape of a body with none, at the
+## largest a drifter grows -- a number of the genes', read once, not each step of
+## each floc.
+static var _drifter_mouth := CellBody.gape_of({}, DRIFTER_MAX)
+
+
 func _grazed_by_drifter(i: int, b: Body) -> void:
-	var mouth := CellBody.gape_of({}, DRIFTER_MAX)
+	var mouth := _drifter_mouth
 	var reach := b.radius + Cilia.mouth_reach(DRIFTER_MAX, mouth) + mouth * Cilia.MOUTH_BITE
 	_graze_ids.resize(0)
 	_drop.grid.query(b.pos, reach + Drop.GRID_SLACK, _graze_ids)
@@ -9593,6 +9659,7 @@ func _give_toxin_back(b: Body) -> void:
 	_gene_short.erase(Drop.TOXIN)
 	Drop.give_toxin(b.genome, CellBody.slots_for(b.radius),
 		Catalogue.tagged(Catalogue.SENSE), randi(), randi() % 2 == 0)
+	b.derive()
 	_stat(&"gene_floor_peer")
 
 

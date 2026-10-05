@@ -429,6 +429,18 @@ var _dash_timer := 0.0
 ## at [method hold_level] -- as [method _process] read it: what the views draw
 ## still, and what the step that stopped the stroke clock decided.
 var _held := false
+## **What this body wears buys it, read once a body** ([method _bought_now]): the
+## genome and its body's version they were read off; stat to value, stat to the
+## organ that provides it and to its tier, channel to the organ that drives it;
+## and the realised speed and the tail's hold level, -1 until read.
+var _bought_from: Node = null
+var _bought_at: Variant = -1
+var _bought := {}
+var _providers := {}
+var _tiers := {}
+var _channels := {}
+var _swim := -1.0
+var _hold := -1
 ## Seconds of rest this body has spent moving since the run last took them
 ## ([method take_effort]).
 var _effort := 0.0
@@ -676,9 +688,15 @@ func worn() -> Dictionary:
 
 
 ## **This body's [param which]** (stats.gd): what it wears of the stat's
-## providers, combined -- `turn_rate`, `gape`, `armor`.
+## providers, combined -- `turn_rate`, `gape`, `armor`. Read off the stats once a
+## body ([method _bought_now]).
 func stat(which: StringName) -> float:
-	return Stats.of(worn(), which)
+	var bought := _bought_now()
+	var known: Variant = bought.get(which)
+	if known == null:
+		known = Stats.of(worn(), which)
+		bought[which] = known
+	return known
 
 
 ## **The organ this body provides [param which] with**, `&""` for none: the mouth
@@ -686,35 +704,73 @@ func stat(which: StringName) -> float:
 ## needs the organ itself -- the arc it is worn on, its level -- it asks this,
 ## never a name (gene-catalogue.md §5.2).
 func provider(which: StringName) -> StringName:
-	return Catalogue.worn_provider(worn(), which)
+	_bought_now()
+	var known: Variant = _providers.get(which)
+	if known == null:
+		known = Catalogue.worn_provider(worn(), which)
+		_providers[which] = known
+	return known
 
 
 ## **The copies this body wears that organ at**, 0 for none: what a mechanic
 ## indexes a table of its own by -- the membrane's envelopes, the ping's
 ## resolution.
 func tier_for(which: StringName) -> int:
-	return Stats.tier(worn(), which)
+	_bought_now()
+	var known: Variant = _tiers.get(which)
+	if known == null:
+		known = Stats.tier(worn(), which)
+		_tiers[which] = known
+	return known
 
 
 ## **The organ this body drives membrane [param channel] with** (gene.gd's
 ## channels), `&""` for none: how the shade finds the eyespot, which buys no
 ## number of its own.
 func on_channel(channel: StringName) -> StringName:
-	return Catalogue.worn_on(worn(), channel)
+	_bought_now()
+	var known: Variant = _channels.get(channel)
+	if known == null:
+		known = Catalogue.worn_on(worn(), channel)
+		_channels[channel] = known
+	return known
+
+
+## **What this body wears buys it, read once a body** (docs/design/gene-catalogue.md
+## §15, as built 1a): every stat asked of it, by name -- and, beside, its organs
+## by stat and by channel, its tiers by stat, its realised speed and its tail's
+## hold level. The drive, the run and the water ask them every frame; what it
+## wears changes only when its genome expresses a body (`genome.gd`'s
+## `body_version`) or another genome is wired in, and then all of it is read
+## again, as it is asked. Returns the stats, emptied if they were stale.
+func _bought_now() -> Dictionary:
+	var version: Variant = genome.get(&"body_version") if genome != null else -1
+	if genome != _bought_from or version != _bought_at:
+		_bought_from = genome
+		_bought_at = version
+		_bought.clear()
+		_providers.clear()
+		_tiers.clear()
+		_channels.clear()
+		_swim = -1.0
+		_hold = -1
+	return _bought
 
 
 ## How wide this cell's mouth opens, in world units. Anything whose radius is
-## below this fits in it, and nothing else does.
+## below this fits in it, and nothing else does. [method gape_of]'s arithmetic,
+## its `gape` read once a body.
 func gape() -> float:
-	return gape_of(worn(), radius)
+	return stat(&"gape") * radius
 
 
 ## **How big this body is to a mouth**, which `pellicle` makes larger than it
 ## looks. Every "can that eat me" test in the water reads this and not
 ## [member radius]; every "how much is that worth" test reads the radius, so
-## armour never made you a bigger meal.
+## armour never made you a bigger meal. [method swallow_radius_of]'s arithmetic,
+## its `armor` read once a body.
 func swallow_radius() -> float:
-	return swallow_radius_of(radius, worn())
+	return radius * stat(&"armor")
 
 
 ## [method swallow_radius] for a body that is not this node: its
@@ -834,7 +890,10 @@ func tail_level() -> int:
 ## Whether this tail can be held still at all: at [method hold_level] or more.
 ## What draws the hold's control (controls.gd), and what its key and a rule ask.
 func can_hold() -> bool:
-	return tail_level() >= hold_level(worn())
+	_bought_now()
+	if _hold < 0:
+		_hold = hold_level(worn())
+	return tail_level() >= _hold
 
 
 ## **The level a tail can be held still from**: the tail's own number
@@ -877,7 +936,10 @@ func turn_response() -> float:
 ## has to lead. §7.1: this replaces Phase 4's hard-coded 56.5, so the chase
 ## stays a chase at every tier and only `cirrus` improves the dodge.
 func swim_speed() -> float:
-	return swim_speed_of(worn())
+	_bought_now()
+	if _swim < 0.0:
+		_swim = swim_speed_of(worn())
+	return _swim
 
 
 ## [method swim_speed] for a body that is not this node: the same arithmetic,

@@ -384,6 +384,11 @@ var _order: Array[StringName] = []
 
 ## The body: what this cell actually wears, fixed at birth.
 var _body := {}
+## **Bumped whenever [member _body] changes** -- [method express] (and through it
+## [method set_state]), [method _express_gift] and a form's conversion: what
+## `cell.gd` reads its stats off once a body by (docs/design/gene-catalogue.md
+## §15, as built 1a). Anything else that ever writes the body bumps it too.
+var body_version := 0
 ## Gene to slot for the body, also fixed at birth. A dictionary rather than an
 ## array because the only question ever asked of it is *which arc is this organ
 ## on*, and because the body may keep an organ the DNA has since replaced --
@@ -507,6 +512,7 @@ func express(dna: Dictionary, order: Array, body: Variant = null,
 	_levels = inherited
 	_tend_levels()
 	_sync_order()
+	body_version += 1
 
 
 ## **Every DNA form in its place** (docs/design/dna-slots.md §5.6), before
@@ -575,6 +581,7 @@ func _convert(from: StringName, to: StringName, whole: bool) -> void:
 	if whole and _body.has(from) and not _body.has(to):
 		_body[to] = _body[from]
 		_body.erase(from)
+		body_version += 1
 		if _body_slots.has(from):
 			if not is_inside_form(to):
 				_body_slots[to] = _body_slots[from]
@@ -1376,6 +1383,7 @@ func _express_gift(gene: StringName, slot: int) -> void:
 	# Tier 1: the host's referee judges by this -- change it with Wire.PROTOCOL
 	# and Wire.RULES (wire.gd).
 	_body[gene] = maxi(int(_body.get(gene, 0)), 1)
+	body_version += 1
 	if slot >= 0:
 		_body_slots[gene] = slot
 	_tend_levels()
