@@ -23,32 +23,47 @@ extends Node
 ## the cell's front) and "strength" where those make sense.
 signal sensation(kind: StringName, info: Dictionary)
 
+## **Every gene the game knows** (game/genes/catalogue.gd, which preloads no view):
+## the organs whose hues the lobes are drawn in.
+const Catalogue := preload("res://game/genes/catalogue.gd")
+## The kinds of load, by name and index. doses.gd preloads nothing.
+const Doses := preload("res://game/mechanics/doses.gd")
+
 # --- Palette. pulse_color is the launcher's rim colour, so Play is a cut with
 # --- no flash. Chemistry is the only other hue phase 1 is allowed.
 const SELF_COLOR := Vector3(0.12, 0.70, 0.58)
 const NUTRIENT_COLOR := Vector3(0.35, 0.88, 0.42)
-## `stigma`, the first earned gene: the light-sensitive spot, and the same amber
+## **A sense's lobe is its organ's hue**: the hue of the organ that drives the
+## lobe's channel, its organ file's (`look.hue`, gene-catalogue.md §7.1), read once
+## from the catalogue rather than copied -- the same organ cilia.gd's `hue_on`
+## draws that sense's marks in, so the lobe and the marks cannot drift apart.
+## `static var` because a constant expression cannot contain a call.
+##
+## `stigma`'s, the first earned gene: the light-sensitive spot, and the same amber
 ## the gene wears on the outside (docs/design/genes-and-cilia.md §4.4). Slot 2
 ## has been reserved since Phase 1 for exactly this.
-const LIGHT_COLOR := Vector3(0.98, 0.78, 0.30)
-## `ocellus`, the beam. The fourth glow slot, held empty since Phase 1 and spent
+static var LIGHT_COLOR: Vector3 = _hue_on(Catalogue.LIGHT)
+## `ocellus`'s, the beam. The fourth glow slot, held empty since Phase 1 and spent
 ## here. Same indigo-violet the gene wears on the outside.
-const BEAM_COLOR := Vector3(0.62, 0.55, 1.00)
-## `ampulla`, the ping's two arcs. The same violet the wave and the organ's own
-## tuft are drawn in -- `Cilia.hue(&"ampulla")`, copied rather than imported
-## because the membrane is a view and may not preload a sibling view. Deeper and
-## more saturated than the ocellus's pale periwinkle, which is the difference
-## the two lobes now have to carry on their own: they used to be one slot.
-const PING_COLOR := Vector3(0.655, 0.44, 1.00)
+static var BEAM_COLOR: Vector3 = _hue_on(Catalogue.BEAM)
+## `ampulla`'s, the ping's two arcs. The same violet the wave and the organ's own
+## tuft are drawn in. Deeper and more saturated than the ocellus's pale
+## periwinkle, which is the difference the two lobes now have to carry on their
+## own: they used to be one slot.
+static var PING_COLOR: Vector3 = _hue_on(Catalogue.PING)
 ## **The strains' hues**, by the kind of load each delivers -- harm, paralysis,
-## sleep, doses.gd's order -- copied from `Cilia.HUES` for the reason
-## [constant PING_COLOR] is (docs/design/dna-slots-ux.md §2.1). A dose that
-## arrives by a bite bruises in its strain's hue instead of teal; a poisonous meal
-## floods in it; a death by a dose closes in it. Lime is corrosive's, the one
-## strain phase 1 has. Ice and pale moon are the starting values for phases 3
-## and 4, to be rendered when those strains exist.
-const STRAIN_COLORS: Array[Vector3] = [
-	Vector3(0.84, 0.98, 0.22),   # harm: corrosive, lime
+## sleep, doses.gd's order: the hue of the forms that deliver it, their organ
+## file's, read as [member PING_COLOR] is (docs/design/dna-slots-ux.md §2.1). A
+## dose that arrives by a bite bruises in its strain's hue instead of teal; a
+## poisonous meal floods in it; a death by a dose closes in it. Lime is
+## corrosive's, the one strain phase 1 has. Read-only.
+static var STRAIN_COLORS: Array[Vector3] = _strain_colors()
+## **The starting hues of the kinds no form delivers yet**, by kind: ice for
+## paralysis and pale moon for sleep, the starting values for phases 3 and 4, to
+## be rendered when those strains exist. Harm's is never drawn -- the corrosive
+## toxin delivers it -- and is the self colour only to be something.
+const UNDELIVERED_COLORS: Array[Vector3] = [
+	SELF_COLOR,                  # harm: delivered, by the corrosive toxin
 	Vector3(0.42, 0.84, 1.00),   # paralysis: ice (phase 3)
 	Vector3(0.80, 0.78, 1.00),   # sleep: pale moon (phase 4)
 ]
@@ -845,6 +860,38 @@ func _push_hollow(hollow: float) -> void:
 
 static func _rgba(rgb: Vector3, a: float) -> Vector4:
 	return Vector4(rgb.x, rgb.y, rgb.z, a)
+
+
+## **The hue of the organ that drives [param channel]**, as the shader takes it: the
+## first live organ on it. A channel nothing drives -- every organ on it retired --
+## never lights, and its slot keeps the self colour.
+static func _hue_on(channel: StringName) -> Vector3:
+	return _rgb_of(Catalogue.first_on(channel), SELF_COLOR)
+
+
+## [param key]'s hue as the shader takes it, [param otherwise] for a key with none.
+static func _rgb_of(key: StringName, otherwise: Vector3) -> Vector3:
+	var hue: Variant = Catalogue.look(key).get("hue")
+	if not hue is Color:
+		return otherwise
+	var tone: Color = hue
+	return Vector3(tone.r, tone.g, tone.b)
+
+
+## [member STRAIN_COLORS]: each kind of load in the hue of the first live form that
+## delivers it, and in its starting hue while none does.
+static func _strain_colors() -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	out.assign(UNDELIVERED_COLORS)
+	var found := {}
+	for key: StringName in Catalogue.live():
+		var kind := Doses.kind_of(Catalogue.dose_of(key))
+		if kind < 0 or kind >= out.size() or found.has(kind):
+			continue
+		found[kind] = true
+		out[kind] = _rgb_of(key, out[kind])
+	out.make_read_only()
+	return out
 
 
 ## The ping's arc pool, at construction.

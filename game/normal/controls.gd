@@ -41,6 +41,8 @@ extends Control
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
 const Cilia := preload("res://game/vision/cilia.gd")
+## The organs the pads work the body through, found by what each provides.
+const Catalogue := preload("res://game/genes/catalogue.gd")
 const RunState := preload("res://game/run_state.gd")
 
 # --- What there is to hold --------------------------------------------------
@@ -100,21 +102,26 @@ const MARK_REST := 0.36
 ## only confirmation a lean has ever had.
 const MARK_HELD := 0.92
 
-## `cirrus` / turn and `axoneme` / push, **asked of the one hue table rather
-## than copied out of it**. A copy is what `cilia.gd` warns about in three
+## Turn -- `cirrus` -- and push -- `axoneme`: **the hue of the organ each pad
+## works the body through**, asked of the organ files' looks by what it provides
+## rather than copied or named. A copy is what `cilia.gd` warns about in three
 ## separate comments, and the pads are the surface where a drift would show
 ## worst: the mark on the pad and the glyph beside that gene's name on the
 ## pause screen are supposed to be the same object seen twice.
 ##
 ## `static var` rather than `const` because a constant expression in GDScript
-## cannot contain a call, and an instance `var` would re-read the table for
+## cannot contain a call, and an instance `var` would re-read the looks for
 ## every control on every frame it is drawn.
-static var TURN_HUE: Color = Cilia.hue(&"cirrus")
-static var PUSH_HUE: Color = Cilia.hue(&"axoneme")
-## `flagellum` / hold: the tail's own orchid, beside the axoneme's magenta -- the
-## family `cilia.gd` keeps on purpose, so it is the shape that tells the two
-## pads apart: the push pad's wave marches, and this one stops.
-static var HOLD_HUE: Color = Cilia.hue(&"flagellum")
+static var TURN_HUE: Color = Cilia.hue_for(&"turn_rate")
+static var PUSH_HUE: Color = Cilia.hue_for(&"push_accel")
+## Hold -- `flagellum`, the tail it holds still: its own orchid, beside the
+## axoneme's magenta -- the family `cilia.gd` keeps on purpose, so it is the
+## shape that tells the two pads apart: the push pad's wave marches, and this
+## one stops.
+static var HOLD_HUE: Color = Cilia.hue_for(&"impulse_speed")
+## **The organ the burst pad is drawn as** -- `myoneme`, the one that dashes -- its
+## tile at the pad's size, found by what it provides.
+static var DASH_ORGAN: StringName = Catalogue.first_provider(&"dash_speed")
 
 ## [method Cilia.draw_slot_dart] owns its own alpha -- 0.95 on the dart -- and
 ## it is shared with the pause strand and the choosing screen, so it is not
@@ -639,7 +646,7 @@ static func draw_hold_mark(canvas: CanvasItem, centre: Vector2, ink: float,
 
 
 func _draw_burst(box: Rect2, ink: float) -> void:
-	Cilia.draw_tile_organ(self, &"myoneme", 1,
+	Cilia.draw_tile_organ(self, DASH_ORGAN, 1,
 		box.get_center() + Vector2(0.0, BURST_SEAT), ink, BURST_SCALE)
 
 

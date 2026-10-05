@@ -35,98 +35,34 @@ const Catalogue := preload("res://game/genes/catalogue.gd")
 # degrees from self teal and threat red. Feed breaks the first rule on purpose:
 # the mouth *is* nutrition and the taste lobe is already that green.
 
-## Gene identity, one hue used in four places: the cilia on your body, the cilia
-## on the cell that carries it, the ingest flood at the instant you eat it, and
-## the slot on the genome strip. No legend, no lookup.
-## **§4.4's 30-degree separation rule is broken here, deliberately, and it had
+## **Gene identity, one hue used in four places**: the cilia on your body, the
+## cilia on the cell that carries it, the ingest flood at the instant you eat it,
+## and the slot on the genome strip. No legend, no lookup. **Each is its organ
+## file's** (`look.hue`, gene-catalogue.md §7.1), read through the catalogue's
+## looks, which this file holds as its own ([member _looks]).
+## **§4.4's 30-degree separation rule is broken there, deliberately, and it had
 ## to be.** The rule was written for adding *one* gene to four. Sixteen genes
 ## cannot sit 30 degrees apart on a wheel that also forbids 40 degrees either
 ## side of self teal and threat red -- that leaves about 200 usable degrees, so
 ## the real spacing is 12. What still carries identity is what §4.4 said carries
 ## it when colour fails: **shape**. Every gene has its own stroke count on the
-## body and on the tile ([constant EARNED_COUNT]), and every tile is labelled
-## with a word. The hue is now the coarse channel, not the only one.
+## body and on the tile (`look.count`), and every tile is labelled with a word.
+## The hue is now the coarse channel, not the only one.
 ##
 ## What is *not* relaxed: nothing sits within 25 degrees of self teal (168) or
 ## of threat red (355), because those two are the only colours in the game whose
-## meaning is a relationship rather than a name.
-const HUES := {
-	&"cytostome": Color(0.62, 1.00, 0.38),   # eat, 95 deg
-	&"cirrus": Color(0.36, 0.62, 0.98),      # turn, 216 deg
-	&"flagellum": Color(0.80, 0.42, 0.95),   # swim, 291 deg
-	&"stigma": Color(0.98, 0.78, 0.30),      # see, 45 deg
-	# The headline gene: a beam, so it is drawn as light. Indigo-violet is the
-	# one hue that is far from teal, far from red, far from the nutrient greens
-	# and still bright enough to be a line on near-black water.
-	&"ocellus": Color(0.62, 0.55, 1.00),     # beam, 251 deg
-	# The nose. It owns the scent band, and the scent band has been nutrient
-	# green since Phase 1 -- so the gene that grants it is a green, sitting in
-	# the one wide gap the wheel still had (97 to 136). Same argument as
-	# `axoneme` below: a gene whose whole job is one existing signal wears that
-	# signal's family.
-	&"chemocyte": Color(0.405, 1.00, 0.30),  # smell, 111 deg
-	# The ping shares the beam's glow lobe -- both mean *a hard surface, that
-	# way* -- so it shares the beam's family too, deeper and more saturated than
-	# the ocellus's pale periwinkle. Six pores against the ocellus's three
-	# strokes is what actually tells them apart; see EARNED_COUNT.
-	&"ampulla": Color(0.655, 0.44, 1.00),    # ping, 263 deg
-	# The flagellum's evolution, so it keeps the flagellum's family: orchid ->
-	# magenta. Close on purpose -- these two are the same organ, twice.
-	&"axoneme": Color(0.98, 0.44, 0.90),     # push, 306 deg
-	&"palp": Color(1.00, 0.68, 0.48),        # touch, 23 deg
-	&"myoneme": Color(0.94, 0.42, 0.68),     # dash, 333 deg (§4.4's reserved rose)
-	&"trichocyst": Color(0.76, 0.42, 1.00),  # sting, 276 deg
-	&"pellicle": Color(0.36, 0.88, 0.96),    # armor, 186 deg
-	# **The toxin wears its strain's hue, in both its forms** (dna-slots-ux.md
-	# §2.1): venom and poison of one strain are one colour, and the place is
-	# told by shape -- fangs on the lips, granules under the skin. Corrosive
-	# left nutrient green for lime: at 128 deg `veneneux` *was* the scent bloom's
-	# and the taste ring's green, so a poison looked like food and a dose would
-	# have felt like a smell. Lime is the free 72 deg the retired `rhabdom` left,
-	# and the only lime on either screen. signal_bus.gd copies it as
-	# STRAIN_COLORS, as it copies PING_COLOR.
-	&"veneneux": Color(0.84, 0.98, 0.22),    # poison, corrosive, 71 deg (was 128)
-	&"toxicyst": Color(0.84, 0.98, 0.22),    # venom, corrosive
-	&"plastid": Color(1.00, 0.86, 0.26),     # sun, 52 deg
-	&"vacuole": Color(0.44, 0.58, 1.00),     # store, 232 deg
-	&"crista": Color(0.86, 0.50, 0.22),      # burn, 26 deg, darker than palp
-}
+## meaning is a relationship rather than a name. The gene probe holds both.
+static var _looks: Dictionary = Catalogue.looks()
+## The shapes drawn on arcs of their own, whatever slot holds them (gene.gd).
+const HOME_SHAPES: Array[StringName] = [Catalogue.MAT, Catalogue.OARS, Catalogue.LASH]
+## An empty look: what a gene this build does not know, or a retired one, has.
+const NO_LOOK := {}
 
-## Stroke count on the arc and on the tile, per gene. **This is what actually
-## separates one earned gene from another**, now that sixteen hues cannot be 30
-## degrees apart: a three-bristle tuft and a nine-bristle tuft are different
-## objects at a glance and stay different under any colour-blindness simulation.
-## Anything not listed falls back to [constant COUNT_EARNED].
 ## **No eye**: what every cell but the player's own passes to [method
 ## draw_cell], and the organ drawn as it always was. One shared, read-only
 ## dictionary rather than a fresh `{}` per organ per body per frame.
 const NO_EYE := {}
 
-const EARNED_COUNT := {
-	&"stigma": 4,
-	&"ocellus": 3,
-	# A chemoreceptor is a *field* of pores, so it wears the densest tuft in the
-	# water -- 8 is the rendered ceiling documented under `plastid` below.
-	&"chemocyte": 8,
-	# Ampullae of Lorenzini come in clusters of pores, and six of them next to
-	# the ocellus's three is the whole of what separates two neighbouring
-	# violets at a glance.
-	&"ampulla": 6,
-	&"axoneme": 8,
-	&"palp": 8,
-	&"myoneme": 5,
-	&"trichocyst": 3,
-	&"pellicle": 7,
-	# Not the toxin: neither of its forms is a tuft. Venom is fangs on the lips
-	# or barbs on a side, poison granules under the whole skin -- see
-	# [method _draw_fangs], [method _draw_guard] and [method _draw_granules].
-	# 8 is the ceiling, found by rendering: a tier-3 tuft multiplies the count
-	# by 1.70, and above about 14 strokes a 24-degree arc closes up into a solid
-	# flag and stops being a texture -- the same failure the oral mat documents.
-	&"plastid": 8,
-	&"vacuole": 2,
-	&"crista": 6,
-}
 ## Held for the next gene, in wheel order, so a later phase does not have to
 ## re-derive the separation rule. An unknown gene draws in the first of these
 ## rather than in nothing at all -- a body with an invisible organ would be a
@@ -323,9 +259,9 @@ static func slot_bearing(slot: int) -> float:
 # readable and the gape does not, which is the right way round, because the
 # gape is what decides the encounter and the tier is only how it got that way.
 
-const COUNT_CYTOSTOME := 15
-const COUNT_CIRRUS := 5  ## per side
-const COUNT_FLAGELLUM := 6
+## A tuft's strokes where its look gives no count: an unknown gene's, a retired
+## one's. Every organ's own count is its file's (`look.count`; the oars' is per
+## side).
 const COUNT_EARNED := 4
 
 const LEN_CYTOSTOME := 0.27
@@ -635,12 +571,8 @@ const TILE_STROKE_ALPHA := 0.88
 const TILE_CENTRE_Y := 0.66
 const TILE_PIGMENT := 4.2
 
-const TILE_COUNT := {
-	&"cytostome": 9, &"cirrus": 5, &"flagellum": 6,
-}
-const TILE_LEN := {
-	&"cytostome": 8.0, &"cirrus": 13.0, &"flagellum": 17.0,
-}
+## An earned organ's strokes on a tile, where its look gives no count, and their
+## length; a home organ's are its look's `tile_count` and `tile_length`.
 const TILE_COUNT_EARNED := 5
 const TILE_LEN_EARNED := 11.0
 ## The toxin's tiles: venom's rods and their beads; poison's granules, on an arc
@@ -661,11 +593,34 @@ const TILE_COMPASS_R := 6.5
 # and by the held-sample disc -- one answer to all four.
 # ---------------------------------------------------------------------------
 
-## The hue of one gene. An unknown gene -- a later phase's, arriving over an
-## older binary in a content pack -- takes the first reserved hue rather than
-## drawing as nothing.
+## The hue of one gene: its organ file's. An unknown gene -- a later phase's,
+## arriving over an older binary in a content pack -- or a retired one takes the
+## first reserved hue rather than drawing as nothing.
 static func hue(gene: StringName) -> Color:
-	return HUES[gene] if HUES.has(gene) else RESERVED_HUES[0]
+	var look: Variant = _looks.get(gene)
+	return (look as Dictionary).get("hue", RESERVED_HUES[0]) if look != null \
+		else RESERVED_HUES[0]
+
+
+## **The hue of the organ that provides [param stat]** -- the first, where several
+## do: what a mechanic's own marks are drawn in -- a pad's glyph, a part's chip --
+## without naming the organ.
+static func hue_for(stat: StringName) -> Color:
+	return hue(Catalogue.first_provider(stat))
+
+
+## **The hue of the organ that drives membrane [param channel]** -- the first, where
+## several do: what that sense's marks are drawn in, the beam's rays and the ping's
+## wave, and the hue its glow lobe is (signal_bus.gd reads the same organ).
+static func hue_on(channel: StringName) -> Color:
+	return hue(Catalogue.first_on(channel))
+
+
+## [param gene]'s look, its organ file's; [constant NO_LOOK] for a gene this build
+## does not know, or a retired one.
+static func _look(gene: StringName) -> Dictionary:
+	var look: Variant = _looks.get(gene)
+	return look if look != null else NO_LOOK
 
 
 ## A cell's fill and rim: self teal pulled toward whatever the body is most
@@ -789,8 +744,8 @@ static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 	var layout := order if not order.is_empty() else default_order(tiers)
 	_draw_fringe(canvas, at, fwd, stb, r, tiers, clock, fade, steer, unit, layout,
 		eye, tail, dose)
-	draw_gape(canvas, at, fwd, stb, r, gape,
-		Genome.tier_of(tiers, &"cytostome"),
+	var mouth := Catalogue.worn_provider(tiers, &"gape")
+	draw_gape(canvas, at, fwd, stb, r, gape, mouth, Genome.tier_of(tiers, mouth),
 		not is_self and gape > viewer_radius, fade, unit)
 	# **Venom at the front is on the lips**, drawn after them: a venom worn in a
 	# front slot, or worn nowhere, rides on the bite (food.gd's `toxins_of`
@@ -798,7 +753,7 @@ static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 	if gape <= 0.0:
 		return
 	for gene: StringName in tiers:
-		if not Genome.has_forms(gene) or Genome.is_inside_form(gene):
+		if _look(gene).get("shape", &"") != Catalogue.SPINES or Genome.is_inside_form(gene):
 			continue
 		var tier := int(tiers[gene])
 		var worn := layout.find(gene)
@@ -808,12 +763,14 @@ static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 
 
 ## **The hue a load of [param kind] is drawn in**: its strain's, which is the
-## hue of the forms that deliver it (dna-slots-ux.md §2.1) -- lime for harm. A
-## kind no form delivers yet takes the first reserved hue, as an unknown gene
-## does, rather than drawing as nothing.
+## hue of the forms that deliver it (dna-slots-ux.md §2.1) -- lime for harm: the
+## first live one's, as signal_bus.gd's STRAIN_COLORS reads it. A kind no form
+## delivers yet takes the first reserved hue, as an unknown gene does, rather than
+## drawing as nothing.
 static func dose_hue(kind: int) -> Color:
-	for form: StringName in Catalogue.keys():
-		if Genome.has_forms(form) and Doses.kind_of(Genome.strain_of(form)) == kind:
+	for form: StringName in Catalogue.live():
+		var strain := Genome.strain_of(form)
+		if strain != &"" and Doses.kind_of(strain) == kind:
 			return hue(form)
 	return RESERVED_HUES[0]
 
@@ -1222,48 +1179,61 @@ static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 	if tiers.is_empty():
 		return
 
-	var eat := Genome.tier_of(tiers, &"cytostome")
-	if eat > 0:
-		var mat := PackedVector2Array()
-		_gather_cytostome(mat, at, fwd, stb, r, eat, clock)
-		_stroke(canvas, mat, hue(&"cytostome"),
-			ALPHA_CYTOSTOME * _tier(TIER_ALPHA, eat) * fade,
-			WIDTH_CYTOSTOME * unit)
+	# **The home organs, found by their shape and not their name** (gene.gd): the
+	# mat round the mouth, the oars on both flanks and the lash at the stern, each
+	# on arcs of its own whatever slot holds it, in the order they always drew.
+	for gene: StringName in Catalogue.shaped(Catalogue.MAT):
+		var eat := Genome.tier_of(tiers, gene)
+		if eat > 0:
+			var look := _look(gene)
+			var mat := PackedVector2Array()
+			_gather_cytostome(mat, at, fwd, stb, r, eat, clock, int(look["count"]))
+			_stroke(canvas, mat, look["hue"],
+				ALPHA_CYTOSTOME * _tier(TIER_ALPHA, eat) * fade,
+				WIDTH_CYTOSTOME * unit)
 
-	var turn := Genome.tier_of(tiers, &"cirrus")
-	if turn > 0:
-		var oars := PackedVector2Array()
-		_gather_cirrus(oars, at, fwd, stb, r, turn, clock, steer, 1.0)
-		_gather_cirrus(oars, at, fwd, stb, r, turn, clock, steer, -1.0)
-		_stroke(canvas, oars, hue(&"cirrus"),
-			ALPHA_CIRRUS * _tier(TIER_ALPHA, turn) * fade, WIDTH_CIRRUS * unit)
+	for gene: StringName in Catalogue.shaped(Catalogue.OARS):
+		var turn := Genome.tier_of(tiers, gene)
+		if turn > 0:
+			var look := _look(gene)
+			var oars := PackedVector2Array()
+			_gather_cirrus(oars, at, fwd, stb, r, turn, clock, steer, 1.0,
+				int(look["count"]))
+			_gather_cirrus(oars, at, fwd, stb, r, turn, clock, steer, -1.0,
+				int(look["count"]))
+			_stroke(canvas, oars, look["hue"],
+				ALPHA_CIRRUS * _tier(TIER_ALPHA, turn) * fade, WIDTH_CIRRUS * unit)
 
-	var swim := Genome.tier_of(tiers, &"flagellum")
-	if swim > 0:
-		var tails := PackedVector2Array()
-		var own := not is_nan(tail.x)
-		_gather_flagellum(tails, at, fwd, stb, r, swim, tail.x if own else clock,
-			tail.y if own else 0.0)
-		_stroke(canvas, tails, hue(&"flagellum"),
-			ALPHA_FLAGELLUM * _tier(TIER_ALPHA, swim) * fade,
-			WIDTH_FLAGELLUM * unit)
+	for gene: StringName in Catalogue.shaped(Catalogue.LASH):
+		var swim := Genome.tier_of(tiers, gene)
+		if swim > 0:
+			var look := _look(gene)
+			var tails := PackedVector2Array()
+			var own := not is_nan(tail.x)
+			_gather_flagellum(tails, at, fwd, stb, r, swim, tail.x if own else clock,
+				int(look["count"]), tail.y if own else 0.0)
+			_stroke(canvas, tails, look["hue"],
+				ALPHA_FLAGELLUM * _tier(TIER_ALPHA, swim) * fade,
+				WIDTH_FLAGELLUM * unit)
 
 	# **The slot is the arc.** Walked by slot rather than by dictionary order, so
 	# a gene the player placed in the rear-left diagonal is drawn -- and aimed --
 	# in the rear-left diagonal.
 	for slot in layout.size():
 		var gene: StringName = layout[slot]
-		if gene == &"" or gene == &"cytostome" or gene == &"cirrus" \
-				or gene == &"flagellum":
+		if gene == &"":
+			continue
+		var shape: StringName = _look(gene).get("shape", &"")
+		if HOME_SHAPES.has(shape):
 			continue
 		var tier := int(tiers.get(gene, 0))
 		if tier <= 0:
 			continue
-		# **The toxin is never a tuft.** Inside it has no arc, and is drawn
-		# below; at the front it is on the lips, drawn with the gape; on a side
-		# or the stern it is barbs on the arc it guards -- unless the switch has
-		# made a side venom inert, when it draws nothing at all.
-		if Genome.has_forms(gene):
+		# **Spines are never a tuft** -- the toxin's, today. Inside they have no
+		# arc, and are drawn below; at the front they are on the lips, drawn with
+		# the gape; on a side or the stern they are barbs on the arc they guard --
+		# unless the switch has made a side venom inert, when they draw nothing.
+		if shape == Catalogue.SPINES:
 			if not Genome.is_inside_form(gene) and slot < Genome.INSIDE \
 					and not Genome.is_front(slot) and CellBody.VENOM_SIDES:
 				_draw_guard(canvas, at, fwd, stb, r, gene, tier,
@@ -1285,8 +1255,9 @@ static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 ## texture is `cytostome`'s positive tell -- its hue is deliberately in the
 ## nutrient green family and so is the least legible of the four at range.
 static func _gather_cytostome(into: PackedVector2Array, at: Vector2,
-		fwd: Vector2, stb: Vector2, r: float, tier: int, clock: float) -> void:
-	var count := _count(COUNT_CYTOSTOME, tier)
+		fwd: Vector2, stb: Vector2, r: float, tier: int, clock: float,
+		strokes: int) -> void:
+	var count := _count(strokes, tier)
 	var scale := _tier(TIER_LEN, tier)
 	for i in count:
 		var u := (float(i) + 0.5) / float(count)
@@ -1317,9 +1288,9 @@ static func _gather_cytostome(into: PackedVector2Array, at: Vector2,
 ## not.
 static func _gather_cirrus(into: PackedVector2Array, at: Vector2, fwd: Vector2,
 		stb: Vector2, r: float, tier: int, clock: float, steer: float,
-		side: float) -> void:
+		side: float, strokes: int) -> void:
 	var arc := ARC_CIRRUS_STARBOARD if side > 0.0 else ARC_CIRRUS_PORT
-	var count := _count(COUNT_CIRRUS, tier)
+	var count := _count(strokes, tier)
 	var scale := _tier(TIER_LEN, tier)
 	# The outboard side of the turn works harder.
 	var bias := 1.0 + CIRRUS_STEER_BIAS * clampf(-steer * side, -1.0, 1.0)
@@ -1349,8 +1320,8 @@ static func _gather_cirrus(into: PackedVector2Array, at: Vector2, fwd: Vector2,
 ## [constant TAIL_HELD_LASH] (its clock is the caller's, and stops).
 static func _gather_flagellum(into: PackedVector2Array, at: Vector2,
 		fwd: Vector2, stb: Vector2, r: float, tier: int, clock: float,
-		still: float = 0.0) -> void:
-	var count := _count(COUNT_FLAGELLUM, tier)
+		strokes: int, still: float = 0.0) -> void:
+	var count := _count(strokes, tier)
 	var scale := _tier(TIER_LEN, tier)
 	var slack := lerpf(1.0, TAIL_HELD_LASH, clampf(still, 0.0, 1.0))
 	for i in count:
@@ -1393,7 +1364,8 @@ static func _draw_earned(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		stb: Vector2, r: float, gene: StringName, tier: int, arc: Vector2,
 		fade: float, unit: float, clock: float = 0.0,
 		eye: Dictionary = NO_EYE) -> void:
-	var tone := hue(gene)
+	var look := _look(gene)
+	var tone: Color = look.get("hue", RESERVED_HUES[0])
 	var mid := deg_to_rad((arc.x + arc.y) * 0.5)
 	var seat := _surface(at, fwd, stb, r * PIGMENT_SEAT, mid)
 	var flare := clampf(float(eye.get("flare", 0.0)), 0.0, 1.0)
@@ -1423,7 +1395,7 @@ static func _draw_earned(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		_draw_bud(canvas, seat, _normal(fwd, stb, mid), r, tone, bud, rim, core,
 			clock, fade)
 
-	var count := _count(int(EARNED_COUNT.get(gene, COUNT_EARNED)), tier)
+	var count := _count(int(look.get("count", COUNT_EARNED)), tier)
 	var scale := _tier(TIER_LEN, tier)
 	var reach := lerpf(1.0, FLARE_REACH, flare)
 	var strokes := PackedVector2Array()
@@ -1584,18 +1556,20 @@ static func _draw_bead(canvas: CanvasItem, at: Vector2, size: float, tone: Color
 ## > carries the relationship, which is colour and teeth; it does not carry the
 ## > measurement.** Do not remove the teeth on the strength of the caliper.
 ##
+## [param mouth] is the organ the body has its gape from, worn at [param
+## mouth_tier]: the lips are its hue, and self teal on a body that wears none.
 ## [param threat] is the one comparison that matters, `other.gape > my.radius`,
 ## and it is legal in full vision and only in full vision. The membrane is not
 ## told: point of view reads danger the way it always has, and identity on the
 ## skin is still forbidden.
 static func draw_gape(canvas: CanvasItem, at: Vector2, fwd: Vector2,
-		stb: Vector2, r: float, gape: float, cytostome_tier: int,
+		stb: Vector2, r: float, gape: float, mouth: StringName, mouth_tier: int,
 		threat: bool, fade: float = 1.0, unit: float = 1.0) -> void:
 	if gape <= 0.0 or fade <= 0.0:
 		return
 	var base := at + fwd * (r * OVOID_ALONG * GAPE_SEAT)
-	var tone := hue(&"cytostome") if cytostome_tier > 0 else SELF_TINT
-	var alpha := LIP_ALPHA_BASE + LIP_ALPHA_PER_TIER * float(cytostome_tier)
+	var tone := hue(mouth) if mouth_tier > 0 else SELF_TINT
+	var alpha := LIP_ALPHA_BASE + LIP_ALPHA_PER_TIER * float(mouth_tier)
 	var width := LIP_WIDTH
 	if threat:
 		tone = PREDATOR_TINT
@@ -2233,10 +2207,13 @@ static func draw_tile_organ(canvas: CanvasItem, gene: StringName, tier: int,
 	canvas.draw_arc(centre, arc_r, TILE_ARC_FROM, TILE_ARC_TO, 32,
 		Color(tone, TILE_ARC_ALPHA * ink), TILE_ARC_WIDTH * scale, true)
 
-	# **The toxin's two forms are two tiles** (dna-slots-ux.md §2.5): venom four
-	# beaded rods standing out of the dome, poison the dome, the pigment and seven
-	# dots on an arc just outside it -- the granules, at a tile's size.
-	if Genome.has_forms(gene):
+	# **Spines are two tiles, by place** -- the toxin's two forms (dna-slots-ux.md
+	# §2.5): venom four beaded rods standing out of the dome, poison the dome, the
+	# pigment and seven dots on an arc just outside it -- the granules, at a tile's
+	# size.
+	var look := _look(gene)
+	var shape: StringName = look.get("shape", &"")
+	if shape == Catalogue.SPINES:
 		if Genome.is_inside_form(gene):
 			canvas.draw_circle(centre + Vector2(0.0, -arc_r * PIGMENT_SEAT),
 				TILE_PIGMENT * scale, Color(tone, 0.85 * ink), true, -1.0, true)
@@ -2260,10 +2237,9 @@ static func draw_tile_organ(canvas: CanvasItem, gene: StringName, tier: int,
 		_stroke(canvas, rods, tone, alpha, TILE_ARC_WIDTH * 1.35 * scale)
 		return
 
-	var count := int(TILE_COUNT.get(gene,
-		EARNED_COUNT.get(gene, TILE_COUNT_EARNED)))
-	var length := float(TILE_LEN.get(gene, TILE_LEN_EARNED)) * scale
-	var earned := not TILE_COUNT.has(gene)
+	var count := int(look.get("tile_count", look.get("count", TILE_COUNT_EARNED)))
+	var length := float(look.get("tile_length", TILE_LEN_EARNED)) * scale
+	var earned := not HOME_SHAPES.has(shape)
 	if earned:
 		canvas.draw_circle(centre + Vector2(0.0, -arc_r * PIGMENT_SEAT),
 			TILE_PIGMENT * scale, Color(tone, 0.85 * ink), true, -1.0, true)
@@ -2275,12 +2251,12 @@ static func draw_tile_organ(canvas: CanvasItem, gene: StringName, tier: int,
 		var dir := Vector2(cos(angle), sin(angle))
 		var root := centre + dir * arc_r
 		var span := length
-		if gene == &"cytostome":
+		if shape == Catalogue.MAT:
 			# The same metachronal wave the body wears, held still at clock 0.
 			span *= 0.80 + 0.30 * sin(u * CYTOSTOME_WAVE_U)
-		elif gene == &"cirrus":
+		elif shape == Catalogue.OARS:
 			span *= 0.86 + 0.22 * cos(u * CIRRUS_WAVE_U)
-		elif gene == &"flagellum":
+		elif shape == Catalogue.LASH:
 			span *= 0.82 + 0.26 * sin(u * FLAGELLUM_WAVE_U)
 		else:
 			span *= 0.88 + 0.14 * sin(u * PI)
