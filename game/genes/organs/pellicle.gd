@@ -6,6 +6,8 @@ extends "res://game/genes/gene.gd"
 ## No class_name, for the reason signal_bus.gd gives. Preload it by path.
 
 ## **How much bigger a body is to a mouth**, by tier.
+## The host decides every contact by this: change it with Wire.PROTOCOL, by hand (wire.gd).
+## Wire.RULES holds its second copy's alone.
 const ARMOR_BY_TIER: Array[float] = [1.0, 1.14, 1.30, 1.52]
 
 

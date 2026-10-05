@@ -15,12 +15,14 @@ extends "res://game/genes/gene.gd"
 ## A.gape()`, evaluated in both directions independently) or have to take it
 ## apart a bite at a time, and `cell.gd`'s `bite_damage`'s `min(gape / radius,
 ## 1)` keeps the two continuous with each other.
+## The host decides every contact by this: change it with Wire.PROTOCOL, by hand (wire.gd).
 const GAPE_BY_TIER: Array[float] = [0.58, 0.82, 1.05, 1.40]
 
 ## **What one bite takes out of a body too big to swallow**, before the target's
 ## skin is taken into account. Tier 0 is a cell with no mouth at all and it is a
 ## hard zero, not an extrapolated step: drifters have no cytostome, and a floor
 ## that could chew on you would not be a floor.
+## The host decides every contact by this: change it with Wire.PROTOCOL, by hand (wire.gd).
 const BITE_BY_TIER: Array[float] = [0.0, 0.07, 0.10, 0.14]
 
 
