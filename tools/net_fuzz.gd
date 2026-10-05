@@ -573,7 +573,7 @@ static func _pond_why(pond: Array) -> String:
 
 ## **A sister, held to what [method Wire.take_sister] promises** (protocol 6):
 ## her body's genes and her DNA's named as the wire names them, at most
-## [constant Wire.GENES_MAX], at tiers inside 0..3 and her DNA's copies inside
+## [member Wire.GENES_MAX], at tiers inside 0..3 and her DNA's copies inside
 ## 1..3; and at most [constant Wire.MOST_RULES] lines, each 1 to
 ## [constant Wire.RULE_BYTES_MAX] bytes of [constant Wire.RULE_BYTES].
 static func _sister_why(sister: Array) -> String:
