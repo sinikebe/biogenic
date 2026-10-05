@@ -1443,6 +1443,18 @@ another's spread, p10 149.2 to 151.6 ms, so none was kept.
   it the end of moving `PROTOCOL` by hand for a plan change.
 - **Before a plan drops below a body's genes**: `_sync_order` leaves a gene with no
   outside slot unseated (above).
+- **Before the first plan change** (phase 2's review, recorded in phase 3):
+  - **Migration can give a body more live slots than it earned.** `migrate` sends a
+    gene whose slot left the plan, or another gene took, to the free outside slot
+    nearest it by bearing, whatever its index (`body_plan.gd`, its code against its
+    doc's "as far as a gene's new slot is"). A swap of the fore diagonals does it; so
+    does a born r26 cell with the gift on its bonus slot, or a gene whose slot was
+    retired. A meal that lapses later then lands past the earned count. Nothing is
+    lost or duplicated. Whether such a body keeps the slot, or the gene waits in its
+    DNA until it earns one, is a design call to make and record with that change.
+  - **The choosing screen's column** is `112 + (loci + 2) x 48` px, and its words
+    under it: 658 px at today's eight loci, 706 at nine, past the 720 px canvas at
+    ten. Phase 3's gene probe fails a plan it runs off (§15.4).
 
 ---
 
