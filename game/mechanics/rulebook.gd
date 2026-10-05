@@ -305,6 +305,16 @@ static func vocabulary(tables: Array) -> Vocabulary:
 	return vocab
 
 
+## **The part [param name] names, without its owner**: `smell` of
+## `chemocyte.smell` -- what its owner declared it as, which is what a reader or a
+## trigger can be wired by whatever the owner is called. [param name] itself for a
+## name with no owner, [constant ALWAYS].
+static func part_of(name: StringName) -> StringName:
+	var text := String(name)
+	var dot := text.find(".")
+	return StringName(text.substr(dot + 1)) if dot >= 0 else name
+
+
 ## [param owner]'s bit at [param level] in [param vocab], made the next bit --
 ## [param bits] -- when it is the first part declared there. Returns how many
 ## bits there are now.

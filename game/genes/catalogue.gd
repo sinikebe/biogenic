@@ -104,7 +104,9 @@ const DECLARES := &"declares"
 ## **They pin order only, never membership**: which genes are on a list is each
 ## gene's own field, and a gene that joins one after these follows them, in
 ## [method keys]' order. So the gene pass never edits this, and a retired gene
-## named here is simply not on its list any more.
+## named here is simply not on its list any more. `declares` names organs, whose
+## parts every variant shares ([method declares]); each shipped organ goes by its
+## own key.
 const SHIPPED_ORDERS := {
 	DRIFTERS: [&"cirrus", &"flagellum", &"stigma", &"chemocyte", &"ampulla",
 		&"ocellus", &"axoneme", &"palp", &"myoneme",
@@ -116,9 +118,11 @@ const SHIPPED_ORDERS := {
 }
 
 ## The fields a variant or a form may set over its organ: everything an organ
-## sets but its name and its variants (§6.2).
+## sets but its name, its variants and **the parts it declares**, which are the
+## organ's -- every variant of it has them, under the organ's name, and its rules
+## read them alike (§6.2; [method declares]).
 const OVERRIDES: Array[String] = ["order", "provides", "numbers", "levels", "water", "tags",
-	"channel", "born", "declares", "look"]
+	"channel", "born", "look"]
 
 ## An empty list, the answer for a name nothing is filed under.
 static var _none: Array[StringName] = _read_only([] as Array[StringName])
@@ -162,8 +166,12 @@ static var _one_variant := {}
 ## Key to the copies a newborn wears, and those keys in order.
 static var _born := {}
 static var _born_order: Array[StringName] = []
-## Key to the parts it declares, in the order they are declared.
+## **Organ to the parts it declares**, in the order they are declared; organ to
+## its first live key; and whether every organ that declares parts goes by its
+## own key alone ([method by_organ]).
 static var _declares := {}
+static var _first_keys := {}
+static var _owners_are_keys := true
 ## The live keys that earn levels.
 static var _levelled: Array[StringName] = []
 ## Channel to the live keys that drive it.
@@ -376,10 +384,40 @@ static func born_order() -> Array[StringName]:
 
 # --- Rules and levels -----------------------------------------------------------------
 
-## **Key to the parts it declares to a body's rules** (behaviour.md §3), in the
-## shape `rulebook.gd`'s vocabulary reads, in the order they are declared.
+## **Organ to the parts it declares to a body's rules** (behaviour.md §3), in the
+## shape `rulebook.gd`'s vocabulary reads, in the order they are declared. **The
+## parts are the organ's**: every variant of it has them, under the organ's name --
+## `chemocyte.smell` whichever nose a body wears -- so an instinct reads them alike,
+## and a list saved under one variant reads under the next. A body's rules count
+## them by organ ([method by_organ]).
 static func declares() -> Dictionary:
 	return _declares
+
+
+## **[param levels] -- a key to the level it works at -- by organ**: each organ to
+## the highest level of any live key of it, which is what a body's rules count its
+## parts by (rulebook.gd's owners are the organs of [method declares]). A retired
+## key brings nothing, as it provides nothing (§4.4), and a key this build does not
+## know stands for itself. **[param levels] itself while every organ that declares
+## parts goes by its own key alone** -- every one today -- so nothing is made.
+static func by_organ(levels: Dictionary) -> Dictionary:
+	if _owners_are_keys:
+		return levels
+	var out := {}
+	for key: Variant in levels:
+		var record := gene(StringName(key))
+		if record != null and record.tags.has(RETIRED):
+			continue
+		var organ: StringName = record.organ if record != null else StringName(key)
+		out[organ] = maxi(int(out.get(organ, 0)), int(levels[key]))
+	return out
+
+
+## **The first live key of [param organ]** -- its first variant's variety -- what
+## the organ is drawn as where no key is known: a part's chip on the instincts
+## page. The organ itself for one this build does not know.
+static func first_key(organ: StringName) -> StringName:
+	return _first_keys.get(organ, organ)
 
 
 ## The live keys that earn levels.
@@ -703,6 +741,9 @@ static func _index() -> void:
 	var levelled: Array[StringName] = []
 	var drifters: Array[StringName] = []
 	var declaring: Array[StringName] = []
+	var organ_declares := {}
+	var first_keys := {}
+	var owners_are_keys := true
 	for key: StringName in live:
 		var record: Gene = records[key]
 		for stat: StringName in record.provides:
@@ -720,8 +761,13 @@ static func _index() -> void:
 			levelled.append(key)
 		if bool(record.water.get("drifter", false)) and variety(key) == key:
 			drifters.append(key)
+		if not first_keys.has(record.organ):
+			first_keys[record.organ] = key
 		if not record.declares.is_empty():
-			declaring.append(key)
+			if not organ_declares.has(record.organ):
+				declaring.append(record.organ)
+				organ_declares[record.organ] = record.declares
+			owners_are_keys = owners_are_keys and key == record.organ
 	# In place: stats.gd holds this dictionary ([method provided]).
 	_provided.clear()
 	for stat: StringName in _providers:
@@ -739,10 +785,12 @@ static func _index() -> void:
 	_levelled = _read_only(levelled)
 	_drifters = _read_only(_pinned(drifters, SHIPPED_ORDERS[DRIFTERS]))
 	var declared := {}
-	for key: StringName in _pinned(declaring, SHIPPED_ORDERS[DECLARES]):
-		declared[key] = (records[key] as Gene).declares
+	for organ: StringName in _pinned(declaring, SHIPPED_ORDERS[DECLARES]):
+		declared[organ] = organ_declares[organ]
 	declared.make_read_only()
 	_declares = declared
+	_first_keys = first_keys
+	_owners_are_keys = owners_are_keys
 	_tagged = {}
 	_tag_sets = {}
 	for tag: StringName in Gene.TAGS:
@@ -784,6 +832,8 @@ static func _resolve(organ: Gene) -> Array:
 			var record: Gene = organ.get_script().new()
 			record.organ = organ.organ
 			record.variants = organ.variants
+			# The parts are the organ's, on every variant and form ([method declares]).
+			record.declares = organ.declares
 			_write_over(record, _fields_of(organ))
 			_write_over(record, entry)
 			if form is Dictionary:
