@@ -1279,7 +1279,7 @@ func _ready() -> void:
 			for spec: String in text.trim_prefix("--sample=").split(",", false):
 				var bits := spec.split(":", false)
 				_samples.append([StringName(bits[0]),
-					clampi(int(bits[1]), 1, 3) if bits.size() > 1 else 1])
+					clampi(int(bits[1]), 1, GenomeNode.TIER_MAX) if bits.size() > 1 else 1])
 			_sample = StringName(_samples[0][0]) if not _samples.is_empty() else &""
 		elif text.begins_with("--wound="):
 			_wound = float(text.trim_prefix("--wound="))

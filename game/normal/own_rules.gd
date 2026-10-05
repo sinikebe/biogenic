@@ -224,7 +224,7 @@ func _refresh_body() -> void:
 ## `worn_levels`, which the tail's hold reads too (`cell.gd`'s `tail_level`). A gene
 ## the DNA carries and the body does not wear is not there: an instinct for it is
 ## asleep.
-func worn() -> int:
+func worn() -> PackedInt64Array:
 	return Rulebook.worn(FoodField.vocabulary(),
 		Catalogue.by_organ(Catalogue.worn_levels(_genome.call(&"tiers"), _genome)),
 		FoodField.everybody())

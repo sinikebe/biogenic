@@ -61,8 +61,10 @@ enum Result {
 ## Three organs, three tiers. Tier 0 is "does not have this organ at all", which
 ## is a real state: drifters have no cytostome (§1.3), and §9.7 lets the player
 ## put a fourth gene over their own mouth and live with the consequences.
-## The host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
-const TIER_MAX := 3
+## **gene.gd's**, where the shape of a gene's tables is, so that the wire reads the
+## same number without loading this file. The host's referee judges by this: a change
+## moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
+const TIER_MAX := Catalogue.Gene.TIER_MAX
 ## **The copies the gift is worn at** ([method _express_gift]): one. The host's referee
 ## judges a born body's gift by it (game/net/rules.gd).
 const GIFT_TIER := 1

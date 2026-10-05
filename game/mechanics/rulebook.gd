@@ -55,6 +55,13 @@ const EVERY := &"all"
 ## Between a rule's input and its output, in its text.
 const ARROW := "->"
 
+## **How many owner bits one word of a mask holds**: an int's 64, less its sign, so a
+## word is never negative. A vocabulary numbers its owners-and-levels one after another
+## with no end, and a mask of them -- what a body wears ([method worn]), what the parts
+## waiting for a level are -- is as many words as its vocabulary needs
+## ([member Vocabulary.words]). One word today: eleven bits.
+const WORD := 63
+
 ## The four tests (§3.1): below or above a step on the value's ladder or a
 ## reference, and rising or falling since the last tick.
 enum Test { BELOW, ABOVE, RISING, FALLING }
@@ -95,17 +102,23 @@ class Vocabulary:
 	## what [constant EVERY] claims.
 	var claims := {}
 	var every := 0
-	## Each owner a table declares, to the bit of its parts at the first level:
-	## what [method worn] sets for a body that has that owner, and what a rule
-	## needs of it. An int holds 63 bits; the game uses eleven.
+	## Each owner a table declares, to **the number of its bit** at the first level:
+	## what [method worn] sets for a body that has that owner, and what a rule needs
+	## of it. **Numbered, with no ceiling** (gene-catalogue.md §13): bit `n` is in word
+	## `n / WORD` of a mask ([method has_bit]), so a vocabulary of any number of owners
+	## and levels has a bit for each. The game numbers eleven, one word.
 	var owners := {}
 	## **The parts an owner brings at a level above the first** (automation.md
 	## §4.3): owner to `{level: bit}`, one bit for each owner-and-level a table
-	## declares. [method worn] sets it for a body whose owner works at that level
-	## or more, so a part declared at level 2 is there from its owner's level 2.
+	## declares, numbered as [member owners]' are. [method worn] sets it for a body
+	## whose owner works at that level or more, so a part declared at level 2 is there
+	## from its owner's level 2.
 	var levels := {}
-	## Every bit [member levels] holds: the parts that wait for a level.
-	var levelled := 0
+	## Every bit [member levels] holds, as a mask: the parts that wait for a level.
+	var levelled := PackedInt64Array()
+	## **How many bits it numbers, and the words a mask of them takes**, at least one.
+	var bits := 0
+	var words := 1
 
 
 ## One declared input. Its reports are Arrays of its values in [member values]'
@@ -118,8 +131,8 @@ class InputDecl:
 	var values: Array[StringName] = []
 	var kinds: Array[StringName] = []
 	## The level its owner must work at for it to be there -- 1 unless its
-	## declaration says `"level"` -- and the vocabulary's bit for that
-	## owner-and-level: what a rule reading it needs.
+	## declaration says `"level"` -- and the number of the vocabulary's bit for that
+	## owner-and-level ([member Vocabulary.owners]): what a rule reading it needs.
 	var level := 1
 	var bit := 0
 
@@ -148,8 +161,8 @@ class OutputDecl:
 	var claims := 0
 	var needs := &""
 	var options: Array[float] = []
-	## The level its owner must work at, and that owner-and-level's bit, as an
-	## input's ([member InputDecl.level]).
+	## The level its owner must work at, and the number of that owner-and-level's
+	## bit, as an input's ([member InputDecl.level]).
 	var level := 1
 	var bit := 0
 
@@ -183,9 +196,13 @@ class Rule:
 	var output := &""
 	var out_owner := &""
 	var claims := 0
-	## The owners it needs there, as the vocabulary's bits: its output's, and
-	## its input's unless that is [constant ALWAYS].
+	## **The owners it needs there**, as the vocabulary's bits: its output's, and its
+	## input's unless that is [constant ALWAYS] -- those in a mask's first word here,
+	## as one int, so the check [method choose] makes of every rule on every tick is
+	## one `&`; and any past it in [member far], word by word from the second. Empty
+	## while its vocabulary has one word, which the game's has.
 	var needs := 0
+	var far := PackedInt64Array()
 	## The output's option, NAN for one that takes none.
 	var option := NAN
 
@@ -251,6 +268,7 @@ static var _always: Array = [[]]
 ## owner works at that level or more: its owner-and-level has a bit of its own,
 ## numbered after every bit before it, so a part at a level moves no bit a list
 ## was read with. An owner's first bit is its first level's, whatever its parts.
+## **Bits are numbered, not packed** ([constant WORD]): there is no end to them.
 static func vocabulary(tables: Array) -> Vocabulary:
 	var vocab := Vocabulary.new()
 	var claiming: Array = []
@@ -260,7 +278,7 @@ static func vocabulary(tables: Array) -> Vocabulary:
 			var parts: Dictionary = table[owner]
 			var named := StringName(owner)
 			if not vocab.owners.has(named):
-				vocab.owners[named] = 1 << bits
+				vocab.owners[named] = bits
 				bits += 1
 			for one: Dictionary in parts.get("in", []):
 				var input := InputDecl.new()
@@ -290,6 +308,12 @@ static func vocabulary(tables: Array) -> Vocabulary:
 				output.bit = _bit_of(vocab, named, output.level)
 				vocab.outputs[output.name] = output
 				claiming.append([output, one.get("claims", [])])
+	vocab.bits = bits
+	vocab.words = maxi((bits + WORD - 1) / WORD, 1)
+	vocab.levelled.resize(vocab.words)
+	for owner: StringName in vocab.levels:
+		for level: int in vocab.levels[owner]:
+			_mark(vocab.levelled, int(vocab.levels[owner][level]))
 	for pair: Array in claiming:
 		for claim: Variant in pair[1]:
 			var named := StringName(claim)
@@ -323,14 +347,13 @@ static func _level_bit(vocab: Vocabulary, owner: StringName, level: int, bits: i
 		return bits
 	var at: Dictionary = vocab.levels.get(owner, {})
 	if not at.has(level):
-		at[level] = 1 << bits
+		at[level] = bits
 		vocab.levels[owner] = at
-		vocab.levelled |= 1 << bits
 		bits += 1
 	return bits
 
 
-## The bit a part of [param owner]'s at [param level] needs.
+## The number of the bit a part of [param owner]'s at [param level] needs.
 static func _bit_of(vocab: Vocabulary, owner: StringName, level: int) -> int:
 	if level <= 1:
 		return int(vocab.owners[owner])
@@ -343,21 +366,85 @@ static func _bit_of(vocab: Vocabulary, owner: StringName, level: int) -> int:
 ## the first level unless [param parts] says more. **And each part at a level**
 ## (automation.md §4.3), from the level its owner works at: a gene's worn copies
 ## for a water cell, the level `genome.gd`'s `level_of` answers for the player,
-## a DNA's copies for what a change may draw.
-static func worn(vocab: Vocabulary, parts: Dictionary, always: Dictionary) -> int:
-	var mask := 0
+## a DNA's copies for what a change may draw. **A mask of [member Vocabulary.words]
+## words**, the first built as one int, as the whole of it always was.
+static func worn(vocab: Vocabulary, parts: Dictionary, always: Dictionary) -> PackedInt64Array:
+	var near := 0
+	var mask := PackedInt64Array()
+	mask.resize(vocab.words)
 	for owner: StringName in vocab.owners:
 		var level := int(parts.get(owner, 0))
 		if always.has(owner):
 			level = maxi(level, 1)
 		if level <= 0:
 			continue
-		mask |= int(vocab.owners[owner])
+		var bit := int(vocab.owners[owner])
+		if bit < WORD:
+			near |= 1 << bit
+		else:
+			_mark(mask, bit)
 		var at: Dictionary = vocab.levels.get(owner, {})
 		for need: int in at:
 			if level >= need:
-				mask |= int(at[need])
+				bit = int(at[need])
+				if bit < WORD:
+					near |= 1 << bit
+				else:
+					_mark(mask, bit)
+	mask[0] = near
 	return mask
+
+
+## **Whether [param mask] holds bit [param bit]**, by its number: false for -1, no
+## bit, and for a bit past the mask's words.
+static func has_bit(mask: PackedInt64Array, bit: int) -> bool:
+	if bit < 0 or bit / WORD >= mask.size():
+		return false
+	return (mask[bit / WORD] & (1 << (bit % WORD))) != 0
+
+
+## **Whether a body whose owners are [param worn] has every owner [param rule]
+## needs** -- what [method choose] asks of each rule, asked by a page.
+static func awake(rule: Rule, worn: PackedInt64Array) -> bool:
+	var near: int = worn[0] if not worn.is_empty() else 0
+	return (near & rule.needs) == rule.needs \
+		and (rule.far.is_empty() or _covers(worn, rule.far))
+
+
+## **[param mask] without the bits of [param other]**: a new mask, [param mask]
+## left as it was.
+static func without(mask: PackedInt64Array, other: PackedInt64Array) -> PackedInt64Array:
+	var out := mask.duplicate()
+	for w in mini(out.size(), other.size()):
+		out[w] &= ~other[w]
+	return out
+
+
+## Bit [param bit] set in [param mask], which has its word.
+static func _mark(mask: PackedInt64Array, bit: int) -> void:
+	mask[bit / WORD] |= 1 << (bit % WORD)
+
+
+## **Whether [param worn]'s words past the first hold every bit of [param far]**, a
+## rule's needs there ([member Rule.far]).
+static func _covers(worn: PackedInt64Array, far: PackedInt64Array) -> bool:
+	for w in far.size():
+		var need := far[w]
+		if need != 0 and (w + 1 >= worn.size() or (worn[w + 1] & need) != need):
+			return false
+	return true
+
+
+## [param bit] added to what [param rule] needs: to [member Rule.needs] in the first
+## word, to [member Rule.far] past it.
+static func _need(rule: Rule, bit: int) -> void:
+	if bit < WORD:
+		rule.needs |= 1 << bit
+		return
+	var w := bit / WORD - 1
+	if rule.far.size() <= w:
+		rule.far.resize(w + 1)
+	rule.far[w] |= 1 << (bit % WORD)
 
 
 # --- Text (§5.1, §8) -----------------------------------------------------------
@@ -454,9 +541,9 @@ static func rule_from(line: String, vocab: Vocabulary) -> Rule:
 	rule.output = output.name
 	rule.out_owner = output.owner
 	rule.claims = output.claims
-	rule.needs = output.bit
+	_need(rule, output.bit)
 	if input != null:
-		rule.needs |= input.bit
+		_need(rule, input.bit)
 	var rest := words.size() - arrow - 2
 	if output.options.is_empty():
 		if rest != 0:
@@ -524,7 +611,9 @@ static func number(value: float) -> String:
 ## fires.
 ##
 ## **An owner is there** when its bit is set in [param worn] ([method worn]). An
-## input whose owner is not there never reports, and is never read.
+## input whose owner is not there never reports, and is never read. The first word
+## of [param worn] is read once, and each rule's needs there tested with one `&`, as
+## when the whole mask was one int; a later word only for a vocabulary that has one.
 ##
 ## **Each input is read at most once a tick**, through [param read] (input name
 ## to its reports), and only when a rule reaches it whose output could still
@@ -536,7 +625,7 @@ static func number(value: float) -> String:
 ## **[param states], when a caller passes an Array, says what every rule did**
 ## (automation.md §13): see [method _choose_stating]. Left null -- as the water
 ## leaves it -- this is the choice pack 3 shipped, line for line.
-static func choose(list: Behaviour, read: Callable, worn: int, refs: Dictionary,
+static func choose(list: Behaviour, read: Callable, worn: PackedInt64Array, refs: Dictionary,
 		memory: Dictionary, tick: int, out: Array, states: Variant = null) -> void:
 	if states != null:
 		_choose_stating(list, read, worn, refs, memory, tick, out, states as Array)
@@ -549,11 +638,15 @@ static func choose(list: Behaviour, read: Callable, worn: int, refs: Dictionary,
 	if _now.size() < list.inputs:
 		_now.resize(list.inputs)
 		_before.resize(list.inputs)
+	var near: int = worn[0] if not worn.is_empty() else 0
+	var wide := worn.size() > 1
 	var claimed := 0
 	var have := 0
 	for k in rules.size():
 		var rule := rules[k]
-		if rule.inert or (claimed & rule.claims) != 0 or (worn & rule.needs) != rule.needs:
+		if rule.inert or (claimed & rule.claims) != 0 or (near & rule.needs) != rule.needs:
+			continue
+		if wide and not _covers(worn, rule.far):
 			continue
 		var reports: Array = _always
 		var before: Variant = null
@@ -632,8 +725,8 @@ static func _passes(rule: Rule, report: Array, before: Variant, refs: Dictionary
 ## real takes the peek's reports, so the callable is still asked once an input a
 ## tick, and what is remembered is what it would have been. [param read] must
 ## answer the same within one tick, as a body's senses do.
-static func _choose_stating(list: Behaviour, read: Callable, worn: int, refs: Dictionary,
-		memory: Dictionary, tick: int, out: Array, states: Array) -> void:
+static func _choose_stating(list: Behaviour, read: Callable, worn: PackedInt64Array,
+		refs: Dictionary, memory: Dictionary, tick: int, out: Array, states: Array) -> void:
 	out.clear()
 	states.clear()
 	var rules := list.rules
@@ -656,7 +749,7 @@ static func _choose_stating(list: Behaviour, read: Callable, worn: int, refs: Di
 		if rule.inert:
 			states.append([State.UNREAD, -1, 0])
 			continue
-		if (worn & rule.needs) != rule.needs:
+		if not awake(rule, worn):
 			states.append([State.ASLEEP, -1, 0])
 			continue
 		var taken := claimed & rule.claims
@@ -742,7 +835,7 @@ static func merged(lists: Array) -> Behaviour:
 ## Written to be sure rather than complete: a rule this does not name may still
 ## never act, by some chance of the water's, and the page says so only of the
 ## ones that are certain.
-static func never(list: Behaviour, worn: int) -> PackedInt32Array:
+static func never(list: Behaviour, worn: PackedInt64Array) -> PackedInt32Array:
 	var out := PackedInt32Array()
 	out.resize(list.rules.size())
 	out.fill(-1)
@@ -752,7 +845,7 @@ static func never(list: Behaviour, worn: int) -> PackedInt32Array:
 	var always := {}
 	for k in list.rules.size():
 		var rule := list.rules[k]
-		if rule.inert or (worn & rule.needs) != rule.needs:
+		if rule.inert or not awake(rule, worn):
 			continue
 		var by := -1
 		for bit: int in always:
@@ -806,8 +899,8 @@ static func measure(kind: StringName, value: float) -> float:
 ## **Nothing is written through**: the change is a new list sharing every rule
 ## it did not change, and the rule it changed is a new rule. A list nothing can
 ## change -- one with no rules -- comes back itself, with no kind.
-static func changed(list: Behaviour, vocab: Vocabulary, owners: int, weights: Dictionary,
-		most: int) -> Array:
+static func changed(list: Behaviour, vocab: Vocabulary, owners: PackedInt64Array,
+		weights: Dictionary, most: int) -> Array:
 	var rules := list.rules
 	var n := rules.size()
 	var nudges := _nudges(list, vocab)
@@ -1040,7 +1133,7 @@ static func _replaceable_parts(rule: Rule, vocab: Vocabulary, inputs: Array[Stri
 ## [method _replaceable_parts] says, asked the short way -- a test can always be
 ## added or taken away where its input carries a value, and otherwise the first
 ## input or output that could stand in will do.
-static func _can_replace(rule: Rule, vocab: Vocabulary, owners: int) -> bool:
+static func _can_replace(rule: Rule, vocab: Vocabulary, owners: PackedInt64Array) -> bool:
 	if not _readable(rule, vocab):
 		return false
 	if rule.input != ALWAYS and not (vocab.inputs[rule.input] as InputDecl).values.is_empty():
@@ -1060,7 +1153,7 @@ static func _readable(rule: Rule, vocab: Vocabulary) -> bool:
 ## owner-and-level is in [param owners], and [constant ALWAYS], but its own --
 ## and only those with a bearing when its output needs one. With [param one],
 ## the first found.
-static func _inputs_for(rule: Rule, vocab: Vocabulary, owners: int,
+static func _inputs_for(rule: Rule, vocab: Vocabulary, owners: PackedInt64Array,
 		one := false) -> Array[StringName]:
 	var output := vocab.outputs[rule.output] as OutputDecl
 	var bearing := output.needs == BEARING
@@ -1071,7 +1164,7 @@ static func _inputs_for(rule: Rule, vocab: Vocabulary, owners: int,
 			return out
 	for name: StringName in vocab.inputs:
 		var input := vocab.inputs[name] as InputDecl
-		if name != rule.input and (owners & input.bit) != 0 \
+		if name != rule.input and has_bit(owners, input.bit) \
 				and (input.bearing or not bearing):
 			out.append(name)
 			if one:
@@ -1082,14 +1175,14 @@ static func _inputs_for(rule: Rule, vocab: Vocabulary, owners: int,
 ## **The outputs that could stand in for [param rule]'s**: every output whose
 ## owner-and-level is in [param owners] but its own, and only those that need no
 ## bearing when its input carries none. With [param one], the first found.
-static func _outputs_for(rule: Rule, vocab: Vocabulary, owners: int,
+static func _outputs_for(rule: Rule, vocab: Vocabulary, owners: PackedInt64Array,
 		one := false) -> Array[StringName]:
 	var input := vocab.inputs.get(rule.input) as InputDecl
 	var bearing := input != null and input.bearing
 	var out: Array[StringName] = []
 	for name: StringName in vocab.outputs:
 		var output := vocab.outputs[name] as OutputDecl
-		if name != rule.output and (owners & output.bit) != 0 \
+		if name != rule.output and has_bit(owners, output.bit) \
 				and (output.needs != BEARING or bearing):
 			out.append(name)
 			if one:
@@ -1099,7 +1192,7 @@ static func _outputs_for(rule: Rule, vocab: Vocabulary, owners: int,
 
 ## [param rule] with one part replaced (§6.2): which part by a draw among those
 ## that can be, then what stands in for it.
-static func _replaced(rule: Rule, vocab: Vocabulary, owners: int) -> Rule:
+static func _replaced(rule: Rule, vocab: Vocabulary, owners: PackedInt64Array) -> Rule:
 	var inputs := _inputs_for(rule, vocab, owners)
 	var outputs := _outputs_for(rule, vocab, owners)
 	var parts := _replaceable_parts(rule, vocab, inputs, outputs)
@@ -1196,6 +1289,7 @@ static func _copy_of(rule: Rule) -> Rule:
 	next.out_owner = rule.out_owner
 	next.claims = rule.claims
 	next.needs = rule.needs
+	next.far = rule.far.duplicate()
 	next.option = rule.option
 	return next
 
@@ -1218,7 +1312,9 @@ static func _clause_copy(clause: Clause) -> Clause:
 ## line itself.
 static func _finish(rule: Rule, vocab: Vocabulary) -> void:
 	rule.inert = false
-	rule.needs = (vocab.outputs[rule.output] as OutputDecl).bit
+	rule.needs = 0
+	rule.far = PackedInt64Array()
+	_need(rule, (vocab.outputs[rule.output] as OutputDecl).bit)
 	if rule.input != ALWAYS:
-		rule.needs |= (vocab.inputs[rule.input] as InputDecl).bit
+		_need(rule, (vocab.inputs[rule.input] as InputDecl).bit)
 	rule.text = line_of(rule)

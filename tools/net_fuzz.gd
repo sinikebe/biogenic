@@ -70,6 +70,8 @@ const Referee := preload("res://game/net/referee.gd")
 const CellBody := preload("res://game/normal/cell.gd")
 ## Every gene's numbers, by stat: the reach an honest call has.
 const Stats := preload("res://game/genes/stats.gd")
+## **Every gene this build knows**, by key: what a genome here is drawn from.
+const Catalogue := preload("res://game/genes/catalogue.gd")
 const CORPUS := "res://tools/net_fuzz_corpus.txt"
 ## **The certificate every invite here carries**: made once, its key thrown
 ## away, so it proves nothing and opens nothing -- it is here so a seed's
@@ -714,16 +716,28 @@ func _lines() -> PackedStringArray:
 	return out
 
 
-## **A genome a body could wear** -- since protocol 7 the toxin's two forms
-## among its genes, and up to the nine names a genome may hold.
+## **A genome a body could wear, or a newer build's** (gene-catalogue.md §13): every
+## key the catalogue knows -- the retired among them, and since protocol 7 the toxin's
+## two forms -- and, about one gene in seven, a name this build does not know, as a
+## later content update could add one ([method _invented]). Up to two more than the
+## names a genome may hold, each at a tier from none to the wire's top.
 static func _tiers_from(rng: RandomNumberGenerator) -> Dictionary:
-	var genes := [&"cytostome", &"cirrus", &"flagellum", &"ampulla", &"ocellus",
-		&"stigma", &"chemocyte", &"pellicle", &"veneneux", &"toxicyst", &"palp",
-		&"axoneme"]
+	var genes := Catalogue.keys()
 	var out := {}
 	for i in rng.randi_range(1, Wire.GENES_MAX + 2):
-		out[genes[rng.randi_range(0, genes.size() - 1)]] = rng.randi_range(0, 3)
+		var gene: StringName = genes[rng.randi_range(0, genes.size() - 1)] \
+			if rng.randf() < 0.85 else _invented(rng)
+		out[gene] = rng.randi_range(0, Wire.TIER_TOP)
 	return out
+
+
+## **A gene's name this build does not know**: 1 to [constant Wire.NAME_MAX] letters
+## `a-z`, a name the wire carries and every reader keeps.
+static func _invented(rng: RandomNumberGenerator) -> StringName:
+	var name := ""
+	for k in rng.randi_range(1, Wire.NAME_MAX):
+		name += String.chr(97 + rng.randi_range(0, 25))
+	return StringName(name)
 
 
 ## **The loads a snapshot tells its recipient** (protocol 7): none mostly, then

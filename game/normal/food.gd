@@ -1163,9 +1163,9 @@ class Body:
 	## the arc the default order puts it, made by [method _refresh_body] for a
 	## body with a mouth in a drop of this field's own; null otherwise. And what
 	## of the rulebook's vocabulary it has, as rulebook.gd's bits: what it wears
-	## and what every body has (`Rulebook.worn`).
+	## and what every body has (`Rulebook.worn`), a mask of the vocabulary's words.
 	var eye: Observer = null
-	var worn := 0
+	var worn := PackedInt64Array()
 	## **What its genome buys it, read when the genome is written**
 	## (docs/design/gene-catalogue.md §15, as built 1a) and never on a tick: its
 	## mouth's gape, as a multiple of its radius, and its bite; its armour; its
@@ -7964,7 +7964,7 @@ func _refresh_body(b: Body) -> void:
 		Catalogue.organ_of(Catalogue.worn_provider(g, &"impulse_speed")))
 	b.eye = _eye_of(b) if _drop != null and not _mirror and not _replay \
 		and not b.drifter and not b.inert else null
-	b.worn = _worn_of(g) if b.eye != null else 0
+	b.worn = _worn_of(g) if b.eye != null else PackedInt64Array()
 	var smell := Stats.of(g, &"smell_range")
 	var ping := Stats.of(g, &"ping_range")
 	var beam := Stats.of(g, &"beam_range")
@@ -8277,9 +8277,9 @@ func _ruled() -> bool:
 ## 3's water has no part at a level** ([member tails_beat] off): those bits are
 ## never there, so nothing a level brings fires, nor is drawn by a change, and the
 ## drop is pack 3's to the byte.
-func _worn_of(parts: Dictionary) -> int:
+func _worn_of(parts: Dictionary) -> PackedInt64Array:
 	var mask := Rulebook.worn(vocabulary(), Catalogue.by_organ(parts), _everybody)
-	return mask if tails_beat else mask & ~vocabulary().levelled
+	return mask if tails_beat else Rulebook.without(mask, vocabulary().levelled)
 
 
 ## **The wiring** (§3.5 step 3), made on first use: each declared input to the
@@ -10022,7 +10022,9 @@ func census_line() -> String:
 ## and the largest family, and how many carry a DNA that is not their body --
 ## and what they have become: their cruise, reach, mouth and upkeep, the genes
 ## they wear and carry, how many have a tail, a sense, or are at r40; then each
-## gene's mean tier worn, and the three commonest bodies. Asking moves nothing.
+## gene's mean tier worn, by its key (gene-catalogue.md §13: four letters of it named
+## two genes as soon as two keys began alike), and the three commonest bodies. Asking
+## moves nothing.
 func lineage_line() -> String:
 	if _drop == null or _mirror:
 		return "[lineage] not in a drop of its own"
@@ -10086,7 +10088,7 @@ func lineage_line() -> String:
 	var m := float(maxi(n, 1))
 	var means := PackedStringArray()
 	for gene: StringName in Catalogue.live():
-		means.append("%s %.2f" % [String(gene).left(4), float(tiers.get(gene, 0)) / m])
+		means.append("%s %.2f" % [gene, float(tiers.get(gene, 0)) / m])
 	return ("[lineage] t %.0f  hunters %d, born %d  generation mean %.2f max %d  families %d"
 		+ " (largest %d)  dna apart %d  | cruise %.1f notice %.0f mouth %.2f upkeep %.2f"
 		+ " genes worn %.2f carried %.2f  tails %d sighted %d at r40 %d  | divisions %d"
