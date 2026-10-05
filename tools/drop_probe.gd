@@ -199,6 +199,10 @@ const ProgramWords := preload("res://game/normal/program_words.gd")
 
 ## Somewhere other than the origin, as the drop is once a run has started in it.
 const OFF_CENTRE := Vector2(-1234.5, 2345.25)
+## **The toxin, by its variety**: the gene no drifter carries and the floor gives
+## back through a peer (gene-catalogue.md §6.4, the tags `not_on_drifters` and
+## `floor_by_peers` on its organ). A tool may name a gene.
+const TOXIN := &"veneneux"
 
 var _failed := 0
 
@@ -501,7 +505,7 @@ class WatchedDrop extends "res://game/normal/food.gd":
 	func _make_one(players: PackedVector2Array, reaches: PackedFloat32Array) -> int:
 		var hunters := float(_living - _drifters)
 		var over := hunters >= Drop.hunter_floor(_made_share(), floor_share)
-		var venom := _toxin_short()
+		var venom := _peer_short() != &""
 		var index: int = super._make_one(players, reaches)
 		if births and index >= 0:
 			var kind := "drifter" if _cells[index].drifter else "peer"
@@ -525,7 +529,7 @@ class WatchedDrop extends "res://game/normal/food.gd":
 		if body_radius <= 0.0:
 			made += 1
 			if b.drifter:
-				for form: StringName in Genome.forms_of(Drop.TOXIN):
+				for form: StringName in Genome.forms_of(TOXIN):
 					venom_drifters += 1 if b.genome.has(form) else 0
 			else:
 				made_gape = maxf(made_gape, _gape(b))
@@ -1185,7 +1189,7 @@ func _drop() -> void:
 	for gene: StringName in genes:
 		counts[gene] = 5
 	counts[&"palp"] = 1
-	counts[Drop.TOXIN] = 0
+	counts[TOXIN] = 0
 	counts[&"crista"] = 2
 	var short := Drop.short_genes(counts, genes)
 	var first := Drop.take_drifter_gene(short)
@@ -1193,7 +1197,7 @@ func _drop() -> void:
 	_check(("the floor finds %s short of %d; a drifter takes palp (%s), never the toxin"
 		+ " (%s), which is left for a peer (%s)") % [str(Drop.short_genes(counts, genes)),
 		Drop.GENE_FLOOR, first, second, str(short)],
-		first == &"palp" and second == &"" and short == [Drop.TOXIN])
+		first == &"palp" and second == &"" and short == [TOXIN])
 	var shares := [Drop.wants_drifter(100, 44, 0.45), Drop.wants_drifter(100, 45, 0.45),
 		Drop.wants_drifter(0, 0, 0.92)]
 	_check("a drifter is made while the living share is under the one wanted: %s" % str(shares),
@@ -1205,7 +1209,7 @@ func _drop() -> void:
 	# What a new body is made of (§5.8).
 	var pool := Drop.drifter_genes(Catalogue.drifters())
 	_check("a drifter draws its gene from %d of the %d, all but the toxin in either form"
-		% [pool.size(), Catalogue.drifters().size()], not pool.has(Drop.TOXIN)
+		% [pool.size(), Catalogue.drifters().size()], not pool.has(TOXIN)
 		and not pool.has(&"toxicyst") and pool.size() == Catalogue.drifters().size() - 1)
 	var plan := Drop.peer_plan()
 	var blind := {&"cytostome": 2, &"cirrus": 1, &"flagellum": 3}
@@ -1220,21 +1224,21 @@ func _drop() -> void:
 	# **The toxin back through a peer, at either place** (dna-slots.md §9, §20.3
 	# check 8): venom takes an arc as the old gene did, poison takes none.
 	var full := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"ampulla": 1, &"crista": 2}
-	Drop.give_toxin(full, 5, Catalogue.tagged(Catalogue.SENSE), 3, false)
+	Drop.give_back(full, TOXIN, 5, Catalogue.tagged(Catalogue.SENSE), 3, false)
 	var bare := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"chemocyte": 1}
-	Drop.give_toxin(bare, 3, Catalogue.tagged(Catalogue.SENSE), 3, false)
+	Drop.give_back(bare, TOXIN, 3, Catalogue.tagged(Catalogue.SENSE), 3, false)
 	var inside := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"ampulla": 1, &"crista": 2}
-	Drop.give_toxin(inside, 5, Catalogue.tagged(Catalogue.SENSE), 3, true)
+	Drop.give_back(inside, TOXIN, 5, Catalogue.tagged(Catalogue.SENSE), 3, true)
 	var carried := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"toxicyst": 2}
-	Drop.give_toxin(carried, 5, Catalogue.tagged(Catalogue.SENSE), 3, true)
+	Drop.give_back(carried, TOXIN, 5, Catalogue.tagged(Catalogue.SENSE), 3, true)
 	_check("venom back through a full peer takes a spare slot, never the plan or a sense"
 		+ " (%s); with none spare, a bonus one (%s); poison takes no slot (%s); and a"
 		% [str(full.keys()), str(bare.keys()), str(inside.keys())]
 		+ " peer carrying either form is given nothing (%s)" % str(carried.keys()),
 		full.has(&"toxicyst") and not full.has(&"crista") and full.has(&"ampulla")
 		and full.size() == 5 and bare.size() == 5 and bare.has(&"toxicyst")
-		and inside.has(Drop.TOXIN) and inside.has(&"crista") and inside.size() == 6
-		and carried.size() == 4 and not carried.has(Drop.TOXIN))
+		and inside.has(TOXIN) and inside.has(&"crista") and inside.size() == 6
+		and carried.size() == 4 and not carried.has(TOXIN))
 	# Where a new body may go: out of every player's reach, and in the drop.
 	var players := PackedVector2Array([OFF_CENTRE + Vector2(1500.0, -800.0),
 		OFF_CENTRE + Vector2(-4500.0, 3000.0)])
@@ -9721,7 +9725,7 @@ func _dna_water() -> void:
 	for k in 20000:
 		var one := FoodField.Body.new()
 		today._seed_drifter(one)
-		for form: StringName in GenomeNode.forms_of(Drop.TOXIN):
+		for form: StringName in GenomeNode.forms_of(TOXIN):
 			toxic_today += 1 if one.genome.has(form) else 0
 	var water := _water(3000.0)
 	var field: WatchedDrop = water[0]
@@ -9731,7 +9735,7 @@ func _dna_water() -> void:
 	for k in 20000:
 		var one := FoodField.Body.new()
 		field._seed_drifter(one)
-		for form: StringName in GenomeNode.forms_of(Drop.TOXIN):
+		for form: StringName in GenomeNode.forms_of(TOXIN):
 			toxic_drop += 1 if one.genome.has(form) else 0
 	# The floor: the drop down to its last carriers gives the toxin to the next peer,
 	# its place by a coin -- and to none that carries a form of it.
@@ -9741,14 +9745,14 @@ func _dna_water() -> void:
 	var peer := {&"cytostome": 2, &"cirrus": 1, &"flagellum": 1, &"ampulla": 1, &"crista": 2}
 	seed(77)
 	for k in 40:
-		var short: Array[StringName] = [Drop.TOXIN]
+		var short: Array[StringName] = [TOXIN]
 		field.set("_gene_short", short)
 		var i := _pose(field, home + Vector2(1500.0, 300.0 * (k % 8)), 34.0, peer)
-		field._give_toxin_back(cells[i])
+		field._give_back_by_peer(cells[i])
 		var genome: Dictionary = (cells[i] as Object).get("genome")
 		places["venom"] += 1 if genome.has(&"toxicyst") else 0
 		places["poison"] += 1 if genome.has(&"veneneux") else 0
-		if (field.get("_gene_short") as Array).has(Drop.TOXIN):
+		if (field.get("_gene_short") as Array).has(TOXIN):
 			still_short += 1
 		if GenomeNode.count_outside(genome) > CellBody.slots_for(34.0) \
 				or (genome.has(&"veneneux") and genome.size() != peer.size() + 1):
@@ -9756,10 +9760,10 @@ func _dna_water() -> void:
 		field.take_out(i)
 	var carriers := 0
 	for form: StringName in [&"toxicyst", &"veneneux"]:
-		var short: Array[StringName] = [Drop.TOXIN]
+		var short: Array[StringName] = [TOXIN]
 		field.set("_gene_short", short)
 		var i := _pose(field, home + Vector2(-1500.0, 0.0), 34.0, _merged(peer, {form: 1}))
-		field._give_toxin_back(cells[i])
+		field._give_back_by_peer(cells[i])
 		carriers += (cells[i] as Object).get("genome").size()
 		field.take_out(i)
 	# Where a water cell wears its toxin.

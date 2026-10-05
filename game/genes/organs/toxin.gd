@@ -108,6 +108,11 @@ const NAMES := {&"veneneux": "toxicyst", &"toxicyst": "toxicyst"}
 
 func _init() -> void:
 	organ = &"toxin"
+	# **No drifter carries it, and the floor gives it back through a peer**
+	# (gene-catalogue.md §6.4; dna-slots.md §9): the drop's defenceless food stays
+	# harmless to eat, and a mouthless drifter's venom would bite nothing anyway.
+	# Every strain inherits both.
+	tags = [NOT_ON_DRIFTERS, FLOOR_BY_PEERS]
 	variants = [
 		# The first form listed is the variety: the name the toxin goes by where no
 		# place is known yet -- the water's draws, the floor's count, and two meals

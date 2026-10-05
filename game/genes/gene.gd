@@ -54,13 +54,22 @@ const INSIDE := &"inside"
 ## - `retired`: known, drawn and inert (§4.4). It drops out of every list above
 ##   and every pool the water, drift and the gift draw from, and provides nothing.
 ##   Its key stays known for good, because saves and the wire keep it.
+## - `not_on_drifters`: no drifter carries it, in any form, so the drop's
+##   defenceless food stays harmless to eat (ocean.md §5.8) -- the toxin
+##   (`food.gd`, `drop.gd`).
+## - `floor_by_peers`: the gene floor gives it back through the next peer, never a
+##   drifter, its place by a coin -- the toxin again (gene-catalogue.md §6.4).
+##   Every variant of it inherits both, so a second strain is covered by every rule.
 const SENSE := &"sense"
 const GIFT := &"gift"
 const ALWAYS_EXPRESSED := &"always_expressed"
 const NEVER_DRIFTS := &"never_drifts"
 const RETIRED := &"retired"
+const NOT_ON_DRIFTERS := &"not_on_drifters"
+const FLOOR_BY_PEERS := &"floor_by_peers"
 ## Every tag an organ may carry. The gene probe fails on any other.
-const TAGS: Array[StringName] = [SENSE, GIFT, ALWAYS_EXPRESSED, NEVER_DRIFTS, RETIRED]
+const TAGS: Array[StringName] = [SENSE, GIFT, ALWAYS_EXPRESSED, NEVER_DRIFTS, RETIRED,
+	NOT_ON_DRIFTERS, FLOOR_BY_PEERS]
 
 ## **The membrane's channels** (§7.3): which one a sense organ drives -- the
 ## shade of a body (`light`), what the beam strikes (`beam`), what the ping hears

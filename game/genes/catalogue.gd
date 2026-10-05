@@ -57,6 +57,8 @@ const GIFT := Gene.GIFT
 const ALWAYS_EXPRESSED := Gene.ALWAYS_EXPRESSED
 const NEVER_DRIFTS := Gene.NEVER_DRIFTS
 const RETIRED := Gene.RETIRED
+const NOT_ON_DRIFTERS := Gene.NOT_ON_DRIFTERS
+const FLOOR_BY_PEERS := Gene.FLOOR_BY_PEERS
 ## The membrane's channels (gene.gd), for the same reason.
 const LIGHT := Gene.LIGHT
 const BEAM := Gene.BEAM

@@ -6152,7 +6152,7 @@ func _seed_drifter(b: Body) -> void:
 	# a toxin drawn is drawn again from the rest -- one more number, on that
 	# drifter alone.
 	var gene := _draw_gene(Catalogue.drifters())
-	if Genome.variety(gene) == Drop.TOXIN:
+	if Catalogue.has_tag(gene, Catalogue.NOT_ON_DRIFTERS):
 		gene = _draw_gene(Drop.drifter_genes(Catalogue.drifters()))
 	b.genome = {gene: 1}
 
@@ -9332,7 +9332,7 @@ func _make_one(players: PackedVector2Array, reaches: PackedFloat32Array) -> int:
 	var venom := false
 	if births:
 		var share := _made_share()
-		venom = _toxin_short()
+		venom = _peer_short() != &""
 		if not venom:
 			drifter = float(_drifters) < Drop.food_count(share)
 			if not drifter \
@@ -9366,7 +9366,7 @@ func _shortfall() -> float:
 	var hunters := maxf(Drop.hunter_floor(share, floor_share) - float(_living - _drifters),
 		0.0)
 	return food + hunters * _drop.spawner.tau / maxf(floor_tau, 1e-3) \
-		+ (1.0 if _toxin_short() else 0.0)
+		+ (1.0 if _peer_short() != &"" else 0.0)
 
 
 ## **The drifter share of the water the spawner keeps**: the share each player
@@ -9379,11 +9379,18 @@ func _made_share() -> float:
 	return sum / float(turns)
 
 
-## Whether the drop is down to its last carriers of the toxin, in either form,
-## which only a peer brings back (row 13; a tool's `--drifter-toxin=1` lets a
-## drifter carry it).
-func _toxin_short() -> bool:
-	return not drifter_toxin and _gene_short.has(Drop.TOXIN)
+## **The gene the drop is down to its last carriers of that only a peer brings
+## back** (gene-catalogue.md §6.4): the first short variety tagged
+## `floor_by_peers` -- the toxin's, in either form -- or `&""` for none (row 13; a
+## tool's `--drifter-toxin=1` lets a drifter carry it, and then none waits on a
+## peer).
+func _peer_short() -> StringName:
+	if drifter_toxin:
+		return &""
+	for gene: StringName in _gene_short:
+		if Catalogue.has_tag(gene, Catalogue.FLOOR_BY_PEERS):
+			return gene
+	return &""
 
 
 ## A drifter [param reach] from a player at [param from], ahead of its
@@ -9443,7 +9450,7 @@ func _spawn(at: Vector2, drifter: bool, sensed: float, fill := false,
 		if mine <= 0.0:
 			mine = _cell.radius if _cell != null else CellBody.BASE_RADIUS
 		_seed_peer(b, mine, sensed)
-		_give_toxin_back(b)
+		_give_back_by_peer(b)
 	# Expressed whole, as a run's first cell is: after the toxin, which is worn.
 	b.dna = b.genome.duplicate()
 	b.pos = at
@@ -9661,17 +9668,19 @@ func _draw_living(body_radius: float, sensed: float) -> Dictionary:
 	return tiers
 
 
-## **The toxin back through a peer** (§6.4, docs/design/dna-slots.md §9): a drop
-## down to its last carriers of it, in either form, gives the next peer the
-## toxin -- its place by a coin -- since no drifter may carry it.
-func _give_toxin_back(b: Body) -> void:
-	if drifter_toxin or not _gene_short.has(Drop.TOXIN):
+## **A gene back through a peer** (§6.4, docs/design/dna-slots.md §9;
+## gene-catalogue.md §6.4): a drop down to its last carriers of a gene tagged
+## `floor_by_peers` -- the toxin's, in either form -- gives the next peer that
+## gene, its place by a coin, since no drifter may carry it.
+func _give_back_by_peer(b: Body) -> void:
+	var gene := _peer_short()
+	if gene == &"":
 		return
-	for form: StringName in Genome.forms_of(Drop.TOXIN):
+	for form: StringName in Genome.forms_of(gene):
 		if Genome.tier_of(b.genome, form) > 0:
 			return
-	_gene_short.erase(Drop.TOXIN)
-	Drop.give_toxin(b.genome, CellBody.slots_for(b.radius),
+	_gene_short.erase(gene)
+	Drop.give_back(b.genome, gene, CellBody.slots_for(b.radius),
 		Catalogue.tagged(Catalogue.SENSE), randi(), randi() % 2 == 0)
 	b.derive()
 	_stat(&"gene_floor_peer")
