@@ -322,6 +322,14 @@ none, it is the stat's value with no provider. Today every stat has exactly one
 provider, so every combine rule gives today's number. The rule only starts to matter
 when the gene pass adds a second provider of a stat, and it is set in that stat's row.
 
+**A group of stats is one provider's** (phase 5, §15.6): the stats a mechanic reads
+together -- a stroke's speed and its two gaps, a call's reach, period and pass, a
+turn, a dash, a dart, a beam -- each name their group in their row's `group` (the
+group's first stat), and a body wearing two providers takes the whole group from the
+one best on that first stat, never stat by stat. Two tails swim at the faster one's
+speed with the faster one's gaps. Every stat of a group combines by `best`, and the
+gene probe holds that.
+
 ### 5.2 Mechanics read stats, never genes
 
 `cell.gd`'s `turn_rate()` becomes the body's `turn_rate`, through the stats layer.
