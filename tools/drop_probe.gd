@@ -552,15 +552,20 @@ class WatchedDrop extends "res://game/normal/food.gd":
 	## the tables -- and no burst without a `myoneme`.
 	func _move_ruled(b: Body, delta: float) -> void:
 		var g := b.genome
-		var most := maxf(CellBody.speed_of(g), DRIFT_SPEED) \
-			+ Stats.of(g, &"push_accel") / CellBody.DRAG + b.dash_v
 		var burst := b.dash_v > 0.0 and Genome.tier_of(g, &"myoneme") <= 0
 		var effort := b.effort
 		var dash := b.dash_v
 		super._move_ruled(b, delta)
 		moves += 1
-		if b.speed > most + 1e-3:
-			fast_moves += 1
+		# Read off the genome by the tables, not off the body's own fields: the
+		# bound is the check. Only for a body that moved faster than the drift
+		# and its dash, which the bound is never under -- a resting body, most of
+		# them, needs no reading.
+		if b.speed > DRIFT_SPEED + dash + 1e-3:
+			var most := maxf(CellBody.speed_of(g), DRIFT_SPEED) \
+				+ Stats.of(g, &"push_accel") / CellBody.DRAG + dash
+			if b.speed > most + 1e-3:
+				fast_moves += 1
 		if burst:
 			bursts += 1
 		var paid := b.effort - effort
