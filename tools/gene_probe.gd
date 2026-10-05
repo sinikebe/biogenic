@@ -2593,6 +2593,47 @@ func _strain_of_shipped() -> void:
 		and side == PackedFloat64Array([FoodField.HOW_STING, kind, float(stacks[2]),
 			Cilia.slot_bearing(1)])
 		and not said.is_empty() and Array(Catalogue.keys()) == before)
+	_person_order()
+
+
+## **A person's order is written before its genome** (gene-catalogue.md §15.6): with a
+## second dart -- one entry in the dart's own file, its stun its own -- a person who
+## wears both and moves them round is read under the order they wear them in now, by a
+## replay's field and by a pond's: the dart that fires first in slot order is the one
+## whose stun its body has. Both ways round, so neither dart passes by being first in
+## the catalogue's order.
+func _person_order() -> void:
+	var before := Array(Catalogue.keys())
+	var dart := Catalogue.first_provider(&"dart_range")
+	var organ: Gene = (Catalogue.gene(dart).get_script() as GDScript).new()
+	organ.variants = [{"variant": &"probestun", "order": 950, "numbers": {&"stun": 9.0}}]
+	Catalogue.register(organ)
+	var body := Catalogue.born().duplicate()
+	body[dart] = 1
+	body[&"probestun"] = 1
+	var first: Array = Array(Catalogue.born_order()) + [dart, &"probestun"]
+	var second: Array = Array(Catalogue.born_order()) + [&"probestun", dart]
+	var cell: Node = CellBody.new()
+	var field: Node = FoodField.new()
+	field.call(&"open_replay", cell, 0)
+	field.call(&"open_replay_person")
+	var cells: Array = field.get(&"_cells")
+	var stuns := []
+	for orders: Array in [[first, second], [second, first]]:
+		field.call(&"restore_person_genome", body, orders[0])
+		field.call(&"restore_person_genome", body, orders[1])
+		stuns.append(float((cells[FoodField.PERSON_SLOT] as Object).get(&"stat_dart_stun")))
+		field.call(&"set_person_genome", body, orders[0])
+		field.call(&"set_person_genome", body, orders[1])
+		stuns.append(float((cells[FoodField.PERSON_SLOT] as Object).get(&"stat_dart_stun")))
+	var own := float(Catalogue.number(dart, &"stun"))
+	field.free()
+	cell.free()
+	Catalogue.forget(Catalogue.organ_of(dart))
+	_check(("and a person's order is written before its genome: wearing a second dart beside"
+		+ " %s and moving them round, its stun is the dart first in slot order now -- %s, by"
+		+ " a replay's field and a pond's, each way round") % [dart, str(stuns)],
+		stuns == [9.0, 9.0, own, own] and own != 9.0 and Array(Catalogue.keys()) == before)
 
 
 ## The part [param name] an organ of the catalogue declares as an input, its
