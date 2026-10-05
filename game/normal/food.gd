@@ -1123,9 +1123,9 @@ class Body:
 	## [method CellBody.hold_level]. Under [member tails_beat] a tail beats
 	## unless this holds it.
 	var tail_held := false
-	## **The level its tail works at**: the worn copies of the organ that beats,
-	## as its beam's level is its copies (`_eye_of`). Made with its body
-	## ([method _refresh_body]).
+	## **The level its tail works at**: the worn copies of the organ that beats --
+	## the best of any key of it, as its rules count it -- as its beam's level is its
+	## copies (`_eye_of`). Made with its body ([method _refresh_body]).
 	var tail_level := 0
 	## **The random turn it holds**: the rule that drew it and the tick it last
 	## fired on, -1 for none. While that rule keeps firing, the heading it drew
@@ -7953,8 +7953,11 @@ func _refresh_body(b: Body) -> void:
 	b.turn_rate = b.stat_turn
 	b.thrust = Stats.of(g, &"push_accel")
 	b.dart_tier = b.stat_dart_tier
-	# Pack 4 (automation.md §5.3): its tail's level is its copies, as its beam's is.
-	b.tail_level = Genome.tier_of(g, Catalogue.worn_provider(g, &"impulse_speed"))
+	# Pack 4 (automation.md §5.3): its tail's level is its copies, as its beam's is --
+	# the level its rules count the tail's organ at, the best of any key of it worn
+	# (catalogue.gd's `organ_level`; gene-catalogue.md §15.6).
+	b.tail_level = Catalogue.organ_level(g,
+		Catalogue.organ_of(Catalogue.worn_provider(g, &"impulse_speed")))
 	b.eye = _eye_of(b) if _drop != null and not _mirror and not _replay \
 		and not b.drifter and not b.inert else null
 	b.worn = _worn_of(g) if b.eye != null else 0

@@ -2521,6 +2521,9 @@ func _variant_of_shipped() -> void:
 		Cilia.accent_of(&"probeswift"), Cilia.accent_of(plain),
 		Figure.explain_name(&"probeswift")]
 	var peers := _peers_wearing(&"probeswift", plain)
+	var mixed := Catalogue.born().duplicate()
+	mixed[&"probeswift"] = 3
+	var measured := _tail_levels(mixed, organ)
 	Catalogue.forget(organ)
 	var rules_after := DropSave.rules_text()
 	var wire_after := Rules.text()
@@ -2564,11 +2567,38 @@ func _variant_of_shipped() -> void:
 	Catalogue.register(single)
 	var peers_single := _peers_wearing(&"probeswift", plain)
 	Catalogue.forget(organ)
+	_check(("and one measure of a part owner's level: a plain %s at one copy beside the faster"
+		+ " one at three works at %d for its rules, at %d for the hand's hold, which can hold it"
+		+ " (%s), and at %d in the water, where a rest holds it (%s)") % [plain, measured[0],
+		measured[1], str(measured[2]), measured[3], str(measured[4])],
+		measured == [3, 3, true, 3, true])
 	_check(("and a peer's born organs are its born keys, the organ's other variants left in its"
 		+ " pool: of 400 peers made at r40, %d draw the faster %s beside the one they were born"
 		+ " with, and %d once the organ holds one variant a body") % [peers, plain, peers_single],
 		peers > 0 and peers_single == 0 and Array(Catalogue.keys()) == before)
 	_strain_of_shipped()
+
+
+## **What [param body] works [param organ] at** (gene-catalogue.md §15.6): `[its rules'
+## level, your cell's tail level, whether your cell can hold it, a water body's tail
+## level, whether a rest holds a water body's]` -- one measure, the rules', for all.
+static func _tail_levels(body: Dictionary, organ: StringName) -> Array:
+	var cell: Node = CellBody.new()
+	var genome: Node = Genome.new()
+	genome.setup(cell)
+	cell.genome = genome
+	genome.express(body, Cilia.default_order(body))
+	var yours := [int(cell.tail_level()), bool(cell.can_hold())]
+	genome.free()
+	cell.free()
+	var field: Node = FoodField.new()
+	var water: RefCounted = FoodField.Body.new()
+	water.set(&"genome", body.duplicate())
+	field.call(&"_refresh_body", water)
+	field.free()
+	return [int(Catalogue.by_organ(body).get(organ, 0)), yours[0], yours[1],
+		int(water.get(&"tail_level")),
+		int(water.get(&"tail_level")) >= int(water.get(&"stat_hold"))]
 
 
 ## **How many of 400 peers made at r40 wear [param variant] beside [param plain]**:
