@@ -1159,9 +1159,6 @@ class Body:
 	var turn_rate := 0.0
 	var thrust := 0.0
 	var dart_tier := 0
-	## Its dart's reach and cooldown at [member dart_tier]. Made with it.
-	var dart_reach := 0.0
-	var dart_rest := 0.0
 	## **Its organs as its senses read them** (§4.4, §12.1): each at its tier on
 	## the arc the default order puts it, made by [method _refresh_body] for a
 	## body with a mouth in a drop of this field's own; null otherwise. And what
@@ -1300,7 +1297,8 @@ class Observer:
 	var beam_fan_half := -1.0
 	## `ampulla`: how far a call carries, where on the skin it leaves, how much
 	## of it a body in the way lets through, and the organ's tier -- and, for a
-	## water cell's eye, the seconds between its calls at that tier.
+	## water cell's eye, the seconds between its calls, read as yours are: by
+	## the organ it wears, at its copies (`cell.gd`'s `ping_period`).
 	var ping_range := 0.0
 	var ping_bearing := 0.0
 	var ping_through := 0.0
@@ -7913,8 +7911,6 @@ func _refresh_body(b: Body) -> void:
 	b.turn_rate = b.stat_turn
 	b.thrust = Stats.of(g, &"push_accel")
 	b.dart_tier = b.stat_dart_tier
-	b.dart_reach = Stats.at(&"dart_range", b.dart_tier)
-	b.dart_rest = Stats.at(&"dart_cooldown", b.dart_tier)
 	# Pack 4 (automation.md §5.3): its tail's level is its copies, as its beam's is.
 	b.tail_level = Genome.tier_of(g, Catalogue.worn_provider(g, &"impulse_speed"))
 	b.eye = _eye_of(b) if _drop != null and not _mirror and not _replay \
@@ -8314,7 +8310,7 @@ func _eye_of(b: Body) -> Observer:
 	o.eyespot = Catalogue.worn_on(g, Catalogue.LIGHT) != &""
 	o.ping_range = Stats.of(g, &"ping_range")
 	o.ping_tier = Stats.tier(g, &"ping_range")
-	o.ping_period = Stats.at(&"ping_period", o.ping_tier)
+	o.ping_period = Stats.of(g, &"ping_period")
 	o.ping_through = Stats.of(g, &"ping_through")
 	o.ping_bearing = _arc_in(order, g, &"ping_range")
 	# The beam as the run aims yours below its fork (normal_mode.gd's
@@ -8886,7 +8882,7 @@ func _felt_coming(b: Body, delta: float) -> void:
 ## Asked by [method _step_ruled] only of a body that wears one, whose dart is
 ## ready and which is no floc.
 func _darts_of(index: int, b: Body) -> void:
-	var reach := b.dart_reach
+	var reach := b.stat_dart_range
 	_dart_ids.resize(0)
 	_drop.grid.query(b.pos, reach + Drop.GRID_SLACK, _dart_ids)
 	var size := _swallow_r(b)
@@ -8908,7 +8904,7 @@ func _darts_of(index: int, b: Body) -> void:
 		best_d = d
 	if best < 0:
 		return
-	b.dart_clock = b.dart_rest
+	b.dart_clock = b.stat_dart_cooldown
 	_stun(_cells[best], b.pos, b.stat_dart_stun)
 	_stat(&"water_darts")
 

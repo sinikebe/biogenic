@@ -166,8 +166,10 @@ static func value(key: StringName, stat: StringName, copies: int) -> float:
 	return float(table[clampi(copies, 0, table.size() - 1)])
 
 
-## [param stat] at [param copies] of its first provider: a number read at a tier a
-## caller already holds -- a tool's, or a stat of a body only ever worn whole.
+## [param stat] at [param copies] of its first provider: a number a tool reads at
+## a tier it already holds. **No mechanic reads it**: a body's stat is [method
+## of]'s, by the providers it wears, and the first provider is not always the one
+## worn.
 static func at(stat: StringName, copies: int) -> float:
 	var pairs: Array = _provided.get(stat, NO_PAIRS)
 	if pairs.is_empty() or (pairs[1] as Array).is_empty():
