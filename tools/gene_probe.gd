@@ -805,6 +805,12 @@ func _words() -> void:
 		var needed: Array[StringName] = [&"word", &"explains"]
 		if Catalogue.has_forms(key):
 			needed.append_array([&"carried", &"carried_explains"] as Array[StringName])
+		# **A venom says where it works** (the 1b review's finding 4): every provider of
+		# `venom_stacks` -- whose mechanic is the bite at the front and a sting on a side
+		# or at the stern -- has its line on a side and at the stern, or a second strain
+		# would say its front line on the flank.
+		if Catalogue.provides(key, &"venom_stacks"):
+			needed.append_array([&"side", &"stern"] as Array[StringName])
 		for name: StringName in needed:
 			if not _said(words.get(name)):
 				bad.append("%s's %s" % [key, name])
@@ -1008,14 +1014,26 @@ func _lines() -> void:
 	# **A retired key needs no lines** (§16): its organ's file may keep them, and a
 	# body still wearing it reads them. One whose file says none draws nothing, as
 	# a key this build does not know draws nothing.
+	# **A dose says what one stack of its own kind does** (the 1b review's finding
+	# 4): every live key that delivers one answers its organ's `dose_line`, so a
+	# second strain never says harm's.
+	var dosed: Array[String] = []
+	for key: StringName in Catalogue.live():
+		if Catalogue.dose_of(key) == &"":
+			continue
+		dosed.append(String(key))
+		var said: Dictionary = Catalogue.gene(key).dose_line(ctx)
+		if said.is_empty():
+			bad.append("%s says nothing of a stack of its %s" % [key, Catalogue.dose_of(key)])
 	var silent: Array[StringName] = _said_nothing()
 	silent.append(&"probeunknown")
 	for key: StringName in silent:
 		if GeneStats.lines(key, 2, 0, &"", ctx) != [[], []]:
 			bad.append("%s draws a row" % key)
 	_check(("every live gene says what it does and what it costs on the pause screen -- %d"
-		+ " readings, every copy count, level, way and slot -- and a key with no lines, %s,"
-		+ " draws nothing%s") % [rows_read,
+		+ " readings, every copy count, level, way and slot -- every key with a dose what a"
+		+ " stack of its own kind does (%s), and a key with no lines, %s, draws"
+		+ " nothing%s") % [rows_read, ", ".join(dosed),
 			str(silent), "" if bad.is_empty() else ": wrong: %s" % ", ".join(bad)],
 		bad.is_empty())
 

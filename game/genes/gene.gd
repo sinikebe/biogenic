@@ -270,6 +270,14 @@ func upkeep_at(_level: int, _path: StringName) -> float:
 	return -1.0
 
 
+## **What one stack of its dose does**, a readout item, for a key that delivers a
+## dose ([member dose]): each kind its own line, read off the key's own dose --
+## a second strain says its kind's, never harm's. Empty for a key with no dose, and
+## for a kind its organ has no line for, which the gene probe fails.
+func dose_line(_ctx: Dictionary) -> Dictionary:
+	return {}
+
+
 ## **Its numbers on the pause screen** (gene-catalogue.md §8.4; gene-stats.md §5):
 ## `[what it does, what it costs]`, each an array of readout items, for this key
 ## worn at [param t] copies -- or, for an organ that levels, at [param level]
