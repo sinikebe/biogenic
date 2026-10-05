@@ -350,20 +350,26 @@ static func rules_text() -> String:
 	# name, and sorted as they came the same tables would fingerprint differently
 	# from one process to the next, and a launch could read its own drop as
 	# converted.
+	var cell := {}
+	var constants: Dictionary = (CellBody as Script).get_script_constant_map()
+	for key: Variant in constants:
+		cell[String(key)] = constants[key]
 	var tables := {}
 	for stat: StringName in Stats.ROWS:
 		var providers := Catalogue.providers(stat)
 		for k in providers.size():
 			var label := Stats.label(stat) + ("" if k == 0 else "." + String(providers[k]))
 			tables[label] = Catalogue.table(providers[k], stat)
+	# And any table by tier cell.gd still has of its own, found by name as every
+	# one used to be: none today, and one added there later is in it without anyone
+	# remembering.
+	for name: String in cell:
+		if name.ends_with("_BY_TIER") and not tables.has("cell." + name):
+			tables["cell." + name] = cell[name]
 	var labels: Array = tables.keys()
 	labels.sort()
 	for label: String in labels:
 		put.call(label, tables[label])
-	var cell := {}
-	var constants: Dictionary = (CellBody as Script).get_script_constant_map()
-	for key: Variant in constants:
-		cell[String(key)] = constants[key]
 	for name: String in ["BASE_RADIUS", "SLOT_RADIUS", "SLOT_MIN", "SLOT_MAX",
 			"GROWTH_PER_MEAL", "DIVIDE_RADIUS", "STROKE_COST", "TURN_COST"]:
 		put.call("cell." + name, cell[name])
