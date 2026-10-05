@@ -110,21 +110,22 @@ const SHIPPED_LISTS := {
 		&"axoneme", &"flagellum"],
 }
 
-## **The stats a mechanic reads together, as one organ's** -- so every organ that
-## provides one of a group provides all of it: a call is its reach, its period
-## and how much of it passes a body; a stroke its speed and its two gaps; a turn
-## its rate and how fast it answers; a dash its burst and its price; a dart its
-## reach and its rest; a beam its reach, its rays and their fan. An organ that
-## gave one alone would be read at the others' values with no provider -- a call
-## every 0 s, which the referee divides by, or a tail's speed beating at the
-## gaps of no tail.
+## **The stats a mechanic reads together, as one organ's** -- `stats.gd`'s groups, by
+## its rows' `group`, in its rows' order, kept here as well so that a change there
+## fails here first -- so every organ that provides one of a group provides all of it:
+## a stroke is its speed and its two gaps; a turn its rate and how fast it answers; a
+## beam its reach, its rays and their fan; a call its reach, its period and how much
+## of it passes a body; a dash its burst and its price; a dart its reach and its rest.
+## An organ that gave one alone would be read at the others' values with no provider
+## -- a call every 0 s, which the referee divides by, or a tail's speed beating at the
+## gaps of no tail. And a body wearing two providers takes a whole group from one.
 const TOGETHER: Array = [
-	[&"ping_range", &"ping_period", &"ping_through"],
 	[&"impulse_speed", &"impulse_gap_min", &"impulse_gap_max"],
 	[&"turn_rate", &"turn_response"],
+	[&"beam_range", &"beam_count", &"beam_fan_deg"],
+	[&"ping_range", &"ping_period", &"ping_through"],
 	[&"dash_speed", &"dash_cost"],
 	[&"dart_range", &"dart_cooldown"],
-	[&"beam_range", &"beam_count", &"beam_fan_deg"],
 ]
 
 ## **What a look may hold today** (gene.gd's `look`): phase 6 adds a kind's
@@ -606,13 +607,21 @@ func _tables() -> void:
 				or combine == Stats.PRODUCT and Stats.none(stat) != 1.0 \
 				or not [Stats.BEST, Stats.SUM, Stats.PRODUCT].has(combine):
 			rows_bad.append("%s combines by %s from %s" % [stat, combine, str(row.get("none"))])
-		if not row.has("unit") or not row.has("judged") or not row.has("contact"):
-			rows_bad.append("%s has no unit, no judged or no contact" % stat)
+		if not row.has("unit") or not row.has("judged") or not row.has("contact") \
+				or not row.get("group") is StringName:
+			rows_bad.append("%s has no unit, no judged, no contact or no group" % stat)
+		else:
+			# A group is named by its first stat, which is its own group's and comes first.
+			var lead: StringName = row["group"]
+			if lead != &"" and (not Stats.ROWS.has(lead) or Stats.ROWS[lead].get("group") != lead
+					or Stats.ROWS.keys().find(lead) > Stats.ROWS.keys().find(stat)):
+				rows_bad.append("%s is grouped by %s, which is not its group's first stat"
+					% [stat, lead])
 	_check(("every row says which way is better, how providers combine -- a sum from 0, a"
-		+ " product from 1 -- its unit, whether the referee judges it and whether the host"
-		+ " decides a contact by it; judged: %s, contact: %s%s") % [str(Stats.judged()),
-		str(Stats.contact()), "" if rows_bad.is_empty() else ": " + "; ".join(rows_bad)],
-		rows_bad.is_empty())
+		+ " product from 1 -- its unit, whether the referee judges it, whether the host"
+		+ " decides a contact by it and the group it is read in; judged: %s, contact: %s%s")
+		% [str(Stats.judged()), str(Stats.contact()),
+			"" if rows_bad.is_empty() else ": " + "; ".join(rows_bad)], rows_bad.is_empty())
 	# One provider each today, so every combine rule gives the table's own number.
 	var crowded: Array[StringName] = []
 	for stat: StringName in Stats.ROWS:
@@ -721,11 +730,29 @@ func _unwired(field: Node, own: RefCounted, parts: Array[StringName]) -> Array[S
 # --- What the mechanics ask of an organ (§5.2, §5.3) ---------------------------------------
 
 ## Every organ a mechanic finds by its stat answers what that mechanic asks of
-## it: every stat of the group it reads together ([constant TOGETHER]), the tail
+## it: every stat of the group it reads together (stats.gd's `groups`), the tail
 ## its hold level, the dart its stun, the beam its shape, its price and its
 ## levels. Then an organ that calls with no period is registered, to show this
 ## fails on one -- and that the referee holds it to a rate all the same.
 func _mechanics() -> void:
+	# **A group is one provider's** (§15.6): the groups are stats.gd's, as they shipped,
+	# and each of their stats combines by `best` -- a body takes the whole group from the
+	# provider best on its first stat, so a row that said a sum or a product would say
+	# what no body does, and the limits read off it (`Stats.top`) would be no bound.
+	var groups := Stats.groups()
+	var not_best: Array[StringName] = []
+	for group: Array in groups:
+		for stat: StringName in group:
+			if Stats.ROWS[stat]["combine"] != Stats.BEST:
+				not_best.append(stat)
+	var moved := not _same_list(groups, TOGETHER)
+	_check(("the %d groups of stats a mechanic reads together are stats.gd's, as they shipped,"
+		% groups.size() + " and every stat of them combines by best%s%s") % [""
+		if not_best.is_empty() else ": not %s" % str(not_best), "" if not moved
+		else ("; stats.gd's rows group them %s, the probe's TOGETHER %s: what a mechanic"
+			+ " reads together changed, so change both, and say why") % [str(groups),
+			str(TOGETHER)]],
+		not moved and not_best.is_empty())
 	var missing := _unanswered()
 	for key: StringName in Catalogue.levelled():
 		var levels := Catalogue.levels(key)
@@ -735,7 +762,7 @@ func _mechanics() -> void:
 		elif Catalogue.upkeep_at(key, 2, &"") < 0.0:
 			missing.append("%s's price per level" % key)
 	_check(("every organ a mechanic finds by its stat answers it: all of the %d groups of"
-		% TOGETHER.size() + " stats it reads together, the tail its hold level, the dart its"
+		% Stats.groups().size() + " stats it reads together, the tail its hold level, the dart its"
 		+ " stun, the beam its shape, xp cap and price, every levelled gene its levels%s")
 		% ("" if missing.is_empty() else ": not " + ", ".join(missing)),
 		missing.is_empty() and not Catalogue.levelled().is_empty())
@@ -759,11 +786,11 @@ func _mechanics() -> void:
 
 
 ## What the organs providing each stat leave unanswered of what a mechanic asks,
-## one line each: a stat of a group ([constant TOGETHER]) missing, or a number
+## one line each: a stat of a group (stats.gd's `groups`) missing, or a number
 ## or hook of the organ's own.
 func _unanswered() -> Array[String]:
 	var missing: Array[String] = []
-	for group: Array in TOGETHER:
+	for group: Array in Stats.groups():
 		for stat: StringName in group:
 			for key: StringName in Catalogue.providers(stat):
 				for other: StringName in group:
@@ -2376,7 +2403,8 @@ func _variant_of_shipped() -> void:
 		+ " rules (%s) and the handshake's (%s) fingerprint it, and are as they were once it is"
 		+ " gone; the caps see it -- the fastest a body goes %.0f u/s with it, %.0f without,"
 		+ " against the referee's %.0f%s -- and a body wearing it beside the plain tail swims at"
-		+ " the best speed and the shortest gap of the two, as their rows say (%s, %s); its"
+		+ " the faster one's speed with the faster one's gaps, a group being one provider's"
+		+ " (%s, %s); its"
 		+ " parts are the tail's, bit for bit, in a vocabulary that did not move (%s); and the"
 		+ " pause screen reads its own numbers") % [plain, str(entries), organ,
 		str(rules_with != rules_before), str(wire_with != wire_before), peak_with, peak_before,
@@ -2389,7 +2417,7 @@ func _variant_of_shipped() -> void:
 		and wire_with != wire_before and wire_after == wire_before
 		and top_with > top_before and peak_with > peak_before
 		and speeds[2] == maxf(speeds[0], speeds[1]) and speeds[1] > speeds[0]
-		and gaps[2] == minf(gaps[0], gaps[1]) and gaps[1] > gaps[0]
+		and gaps[2] == gaps[1] and gaps[1] > gaps[0]
 		and tails == plains and tails != 0
 		and _bits_kept(bits_before, _vocabulary_bits()) == ""
 		and rows.size() == 2 and not (rows[0] as Array).is_empty()
