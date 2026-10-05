@@ -469,8 +469,13 @@ func _register() -> void:
 		"water": {"weight": 1, "drifter": false},
 		"forms": {Gene.INSIDE: {"key": &"probein", "order": 900},
 			Gene.OUTSIDE: {"key": &"probeout", "order": 901,
-				"provides": {&"armor": [1.0, 1.0, 1.0, 1.0]}}}}]
+				"provides": {&"armor": [1.0, 1.25, 1.25, 1.25]}}}}]
+	var bare := Stats.of({&"probeout": 1}, &"armor")
 	Catalogue.register(organ)
+	# Read through stats.gd, which holds the catalogue's dictionary: the new
+	# organ's armour at once, and a second provider combined by the row's rule.
+	var read := [Stats.of({&"probeout": 1}, &"armor"),
+		Stats.of({&"pellicle": 1, &"probeout": 1}, &"armor")]
 	var filed := Catalogue.known(&"probein") and Catalogue.known(&"probeout") \
 		and Catalogue.has_forms(&"probein") and Catalogue.variety(&"probeout") == &"probein" \
 		and Catalogue.form_in(&"probein", Gene.OUTSIDE) == &"probeout" \
@@ -481,9 +486,13 @@ func _register() -> void:
 		and not Catalogue.provides(&"probein", &"armor") \
 		and Catalogue.weight(&"probeout") == 1 and not Catalogue.drifters().has(&"probein")
 	Catalogue.forget(&"probeorgan")
-	_check("a registered organ's two forms answer as the toxin's do, and forgetting it leaves"
-		+ " the catalogue as it was", filed and Array(Catalogue.keys()) == before
-		and not Catalogue.known(&"probein"))
+	read.append(Stats.of({&"probeout": 1}, &"armor"))
+	_check(("a registered organ's two forms answer as the toxin's do, and forgetting it leaves"
+		+ " the catalogue as it was; its armour reads through the stats at once -- %s alone,"
+		+ " %s beside a pellicle, %s again once forgotten (%s before)") % [read[0], read[1],
+		read[2], bare], filed and Array(Catalogue.keys()) == before
+		and not Catalogue.known(&"probein") and bare == 1.0 and read[0] == 1.25
+		and is_equal_approx(read[1], 1.14 * 1.25) and read[2] == 1.0)
 
 
 # --- Gene names left in code (§12.2) ----------------------------------------------------------

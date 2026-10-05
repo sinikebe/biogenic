@@ -112,8 +112,18 @@ static var _live: Array[StringName] = []
 static var _rank := {}
 ## Key to every form of its variant, its variety first.
 static var _forms := {}
+## **Asked of every gene of every body drawn, every frame**, so each is one
+## lookup: key to its variety; the keys that are one form of several, as a set;
+## and key to the place it sits in.
+static var _varieties := {}
+static var _formed := {}
+static var _places := {}
 ## Stat to the live keys that provide it, in [member _keys]' order.
 static var _providers := {}
+## The same, each key beside its table: stat to `[key, table, key, table, ...]`.
+## What a body's stat is read through every frame ([method provided]). **Filled
+## in place and never replaced**: stats.gd holds this very dictionary.
+static var _provided := {}
 ## Tag to its keys, in order; and tag to the same as a set.
 static var _tagged := {}
 static var _tag_sets := {}
@@ -182,8 +192,7 @@ static func variant_of(key: StringName) -> StringName:
 ## **The place [param key] sits in**: outside for every gene of one form and for
 ## a key this build does not know.
 static func place_of(key: StringName) -> StringName:
-	var record := gene(key)
-	return record.place if record != null else Gene.OUTSIDE
+	return _places.get(key, Gene.OUTSIDE)
 
 
 ## **Every form of [param key]'s variant**, its variety first; itself alone for
@@ -197,14 +206,14 @@ static func forms_of(key: StringName) -> Array[StringName]:
 ## Whether [param key] is one form of a variant with others: true exactly when its
 ## variant sits in more than one place -- the toxin's two forms, today.
 static func has_forms(key: StringName) -> bool:
-	return _forms.has(key) and (_forms[key] as Array).size() > 1
+	return _formed.has(key)
 
 
 ## **[param key]'s variety**: the first form of its variant, the name it goes by
 ## where no place is known yet -- the water's draws, the floor's count, two meals
 ## found to be one. Itself for a gene of one form.
 static func variety(key: StringName) -> StringName:
-	return forms_of(key)[0]
+	return _varieties.get(key, key)
 
 
 ## **[param key]'s variant, in [param place]**: the form it is there, or `&""`
@@ -297,8 +306,15 @@ static func number(key: StringName, name: StringName) -> Variant:
 ## none: the tail's hold level, the dart's stun. The mechanic asks the organ it
 ## acts through, and never names it.
 static func number_for(tiers: Dictionary, stat: StringName, name: StringName) -> Variant:
-	var key := worn_provider(tiers, stat)
-	return number(key if key != &"" else first_provider(stat), name)
+	var all: Array[StringName] = _providers.get(stat, _none)
+	if all.is_empty():
+		return null
+	var key := all[0]
+	for each: StringName in all:
+		if int(tiers.get(each, 0)) > 0:
+			key = each
+			break
+	return (_records[key] as Gene).numbers.get(name)
 
 
 ## **What [param key] adds to the metabolic multiplier at [param level] down
@@ -315,6 +331,16 @@ static func upkeep_at(key: StringName, level: int, path: StringName) -> float:
 ## through `stats.gd`, which combines what it wears of them.
 static func providers(stat: StringName) -> Array[StringName]:
 	return _providers.get(stat, _none)
+
+
+## **Every stat's [method providers], each beside its table**: stat to `[key,
+## table, key, table, ...]`, each list read-only. What `stats.gd` reads a body's
+## value through, every frame. **It is the catalogue's own dictionary**, which
+## stats.gd holds once and reads as its own: every index refills it in place --
+## [method register] and [method forget] too -- and never replaces it, so the
+## holder is never stale. Read it; do not write it.
+static func provided() -> Dictionary:
+	return _provided
 
 
 ## The first of [method providers], `&""` for a stat nothing provides.
@@ -341,7 +367,7 @@ static func table(key: StringName, stat: StringName) -> Array:
 ## mechanic, for now (§5.2): the beam leaves from this one, and the ping calls
 ## from it.
 static func worn_provider(tiers: Dictionary, stat: StringName) -> StringName:
-	for key: StringName in providers(stat):
+	for key: StringName in _providers.get(stat, _none):
 		if int(tiers.get(key, 0)) > 0:
 			return key
 	return &""
@@ -419,10 +445,18 @@ static func _index() -> void:
 			groups[group] = [] as Array[StringName]
 		(groups[group] as Array).append(record.key)
 	_forms = {}
+	_formed = {}
+	_varieties = {}
 	for group: String in groups:
 		var forms: Array[StringName] = _read_only(groups[group])
 		for key: StringName in forms:
 			_forms[key] = forms
+			_varieties[key] = forms[0]
+			if forms.size() > 1:
+				_formed[key] = true
+	_places = {}
+	for record: Gene in resolved:
+		_places[record.key] = record.place
 	_providers = {}
 	_channels = {}
 	var born := {}
@@ -449,8 +483,15 @@ static func _index() -> void:
 			drifters.append(key)
 		if not record.declares.is_empty():
 			declaring.append(key)
+	# In place: stats.gd holds this dictionary ([method provided]).
+	_provided.clear()
 	for stat: StringName in _providers:
 		_read_only(_providers[stat])
+		var pairs := []
+		for key: StringName in _providers[stat]:
+			pairs.append(key)
+			pairs.append((records[key] as Gene).provides[stat])
+		_provided[stat] = _read_only_pairs(pairs)
 	for channel: StringName in _channels:
 		_read_only(_channels[channel])
 	born.make_read_only()
@@ -554,3 +595,10 @@ static func _pinned(keys: Array[StringName], shipped: Array) -> Array[StringName
 static func _read_only(list: Array[StringName]) -> Array[StringName]:
 	list.make_read_only()
 	return list
+
+
+## [param pairs], `[key, table, ...]`, made read-only and handed back. The tables
+## in it are the organs' own, not copies.
+static func _read_only_pairs(pairs: Array) -> Array:
+	pairs.make_read_only()
+	return pairs

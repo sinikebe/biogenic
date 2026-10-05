@@ -103,24 +103,44 @@ const ROWS := {
 		"unit": "stacks", "judged": false},
 }
 
+## **Each stat's providers beside their tables, `[key, table, ...]`**: the
+## catalogue's own dictionary (its `provided()`), held here so that the read
+## [method of] makes every frame, for every body, is a lookup in a static of this
+## script's rather than a call into another. The catalogue refills it in place
+## whenever it indexes and never replaces it, so this is never stale.
+static var _provided: Dictionary = Catalogue.provided()
+## The pairs of a stat nothing provides.
+const NO_PAIRS: Array = []
+
 
 ## **A body's [param stat]**: what it wears of the stat's providers -- its
 ## [param tiers], key to copies -- each at its copies, combined by the stat's row.
 ## The value with no provider when it wears none. Copies are clamped to the
 ## table, as every read of a tier table always was.
+##
+## **Read every frame, by every body**, so it is one lookup and an index per
+## provider worn: [member _provided] has each provider beside its table, and the
+## row is only read for a body that wears none or several. A stat of one
+## provider -- every stat today -- skips the walk.
 static func of(tiers: Dictionary, stat: StringName) -> float:
-	var row: Dictionary = ROWS[stat]
-	var value := float(row["none"])
+	var pairs: Array = _provided.get(stat, NO_PAIRS)
+	if pairs.size() == 2:
+		var worn := int(tiers.get(pairs[0], 0))
+		if worn <= 0:
+			return float((ROWS[stat] as Dictionary)["none"])
+		var only: Array = pairs[1]
+		return float(only[mini(worn, only.size() - 1)])
+	var value := 0.0
 	var found := false
-	for key: StringName in Catalogue.providers(stat):
-		var copies := int(tiers.get(key, 0))
+	for i in range(0, pairs.size(), 2):
+		var copies := int(tiers.get(pairs[i], 0))
 		if copies <= 0:
 			continue
-		var table: Array = Catalogue.table(key, stat)
+		var table: Array = pairs[i + 1]
 		var given := float(table[mini(copies, table.size() - 1)])
-		value = _combined(row, value, given) if found else given
+		value = _combined(ROWS[stat], value, given) if found else given
 		found = true
-	return value
+	return value if found else float((ROWS[stat] as Dictionary)["none"])
 
 
 ## **The copies a body wearing [param tiers] wears its first provider of
@@ -129,10 +149,12 @@ static func of(tiers: Dictionary, stat: StringName) -> float:
 ## the ping's resolution in `food.gd`, the membrane's envelopes in
 ## `signal_bus.gd`.
 static func tier(tiers: Dictionary, stat: StringName) -> int:
-	var key := Catalogue.worn_provider(tiers, stat)
-	if key == &"":
-		return 0
-	return mini(int(tiers[key]), Catalogue.table(key, stat).size() - 1)
+	var pairs: Array = _provided.get(stat, NO_PAIRS)
+	for i in range(0, pairs.size(), 2):
+		var copies := int(tiers.get(pairs[i], 0))
+		if copies > 0:
+			return mini(copies, (pairs[i + 1] as Array).size() - 1)
+	return 0
 
 
 ## **[param stat] at [param copies] of [param key]**: its own table's, clamped,
@@ -147,7 +169,11 @@ static func value(key: StringName, stat: StringName, copies: int) -> float:
 ## [param stat] at [param copies] of its first provider: a number read at a tier a
 ## caller already holds -- a tool's, or a stat of a body only ever worn whole.
 static func at(stat: StringName, copies: int) -> float:
-	return value(Catalogue.first_provider(stat), stat, copies)
+	var pairs: Array = _provided.get(stat, NO_PAIRS)
+	if pairs.is_empty() or (pairs[1] as Array).is_empty():
+		return none(stat)
+	var first: Array = pairs[1]
+	return float(first[clampi(copies, 0, first.size() - 1)])
 
 
 ## **The table of [param stat]'s first provider**, read-only: what a fingerprint
@@ -162,8 +188,9 @@ static func top(stat: StringName) -> float:
 	var row: Dictionary = ROWS[stat]
 	var higher: bool = row["better"] == HIGHER
 	var best := float(row["none"])
-	for key: StringName in Catalogue.providers(stat):
-		for given: Variant in Catalogue.table(key, stat):
+	var pairs: Array = _provided.get(stat, NO_PAIRS)
+	for i in range(1, pairs.size(), 2):
+		for given: Variant in pairs[i]:
 			var at_copies := float(given)
 			if (at_copies > best) if higher else (at_copies < best):
 				best = at_copies
