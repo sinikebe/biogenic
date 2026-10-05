@@ -2690,13 +2690,16 @@ func _one_body() -> void:
 	var venom_in := [alive, said["ate"], said["killed"], not (cells[s] as Object).get("seeded"),
 		cell.loads[0], said["order"] == ["dosed", "eaten"]]
 	cell.loads.fill(0.0)
-	# Row 5: `pellicle` on a water body puts it past a mouth its bare radius fits.
+	# Row 5: armour on a water body puts it past a mouth its bare radius fits -- the
+	# armour of the first live organ that provides it, asked for by its stat and not
+	# by a gene's name, so retiring one organ that provides it moves this to the next.
+	var armour := Catalogue.first_provider(&"armor")
 	var mouth := _pose(field, p + Vector2(-900.0, 0.0), 30.0,
 		{&"cytostome": 2, &"cirrus": 1, &"flagellum": 1})
 	var mb: Object = cells[mouth]
 	var gape: float = field._gape(mb)
 	var armoured := _pose(field, p + Vector2(-900.0, -60.0), 24.0,
-		{&"cirrus": 1, &"pellicle": 3})
+		{&"cirrus": 1, armour: 3})
 	var bare := _pose(field, p + Vector2(-900.0, 60.0), 24.0, {&"cirrus": 1})
 	field._mouth_on_drop(mouth, mb, armoured, cells[armoured], gape)
 	(mb as Object).set("bite", 0.0)
@@ -2727,7 +2730,7 @@ func _one_body() -> void:
 	for skin: int in [0, 3]:
 		var tiers := {&"cirrus": 1}
 		if skin > 0:
-			tiers[&"pellicle"] = skin
+			tiers[armour] = skin
 		var t := _pose(field, p + Vector2(0.0, -300.0), 18.0, tiers)
 		field.set("_near", PackedInt32Array([t]))
 		field._step_sense()
@@ -2753,11 +2756,12 @@ func _one_body() -> void:
 		and is_equal_approx(venom_out[3], Stats.at(&"swallow_stacks", 3)) and venom_out[4]
 		and venom_in[0] and venom_in[1] == 1 and venom_in[2] == 2 and venom_in[3]
 		and is_equal_approx(venom_in[4], Stats.at(&"swallow_stacks", 3)) and venom_in[5])
-	_check(("11. pellicle: an r24 body with a tier-3 skin is chewed by a mouth of %.1f"
+	_check(("%s11. armour, %s's: an r24 body with a tier-3 skin is chewed by a mouth of %.1f"
 		+ " (%s), the same body bare is swallowed (%s); a water cell's dart breaks a run"
 		+ " at it (%s); the taste %.3f bare and %.3f armoured, the bloom %.2f and %.2f")
-		% [gape, str(kept), str(taken), str(darted), tasted[0], tasted[1], bloom[0],
-		bloom[1]],
+		% ["" if armour != &"" else ("no live organ provides armour, which row 5 poses"
+			+ " a body with -- "), armour, gape, str(kept), str(taken), str(darted),
+		tasted[0], tasted[1], bloom[0], bloom[1]],
 		kept and taken and darted == [true, true, true] and tasted[0] > 0.05
 		and tasted[1] == 0.0 and bloom[0] == 1.0 and bloom[1] == 0.0)
 	_done(water)
@@ -9407,7 +9411,9 @@ func _dna_deliveries() -> void:
 	var venom := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2, &"toxicyst": copies}
 	var poison := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2, &"veneneux": copies}
 	var plain := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2}
-	var armoured := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2, &"pellicle": 3}
+	# Armoured by the first live organ that provides it, asked for by its stat.
+	var armoured := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2,
+		Catalogue.first_provider(&"armor"): 3}
 	var mouth := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 2}
 	var side := Cilia.slot_bearing(5)
 	var astray := 0
@@ -9634,7 +9640,7 @@ func _dna_deliveries() -> void:
 		and you_flank == stings and its_flank == stings and all_of.call(you_poison, poison_n)
 		and all_of.call(its_poison, poison_n) and its_poison.size() == 6
 		and all_of.call(swallowed, swallow_n) and swallowed.size() == 3 and astray == 0)
-	_check(("dna 7. venom and poison: a front venom's bite leaves %.0f whatever the pellicle"
+	_check(("dna 7. venom and poison: a front venom's bite leaves %.0f whatever the armour"
 		+ " (%s), and nothing on a swallow (%s; the venom eaten %s, %s, you swallowed %s); a"
 		+ " flank venom stings within 55° of its bearing and nowhere else (%s), and you take"
 		+ " it biting there (%s); a poisonous body bitten leaves %.0f on the biter; swallowed,"

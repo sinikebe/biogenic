@@ -1417,8 +1417,17 @@ another's spread, p10 149.2 to 151.6 ms, so none was kept.
 - **Retiring a gene is its tag** (§16). A retired key may keep its look, which is held
   as a live one's is, and its lines. A key draws nothing when its organ's file has no
   lines, or when this build does not know it. A kept colour pair with a retired key in
-  it leaves the count. With only the tag, `pellicle` fails one check, the drifter
-  list, which §16 says it must until `SHIPPED_LISTS` records it.
+  it leaves the count. With only the tag, `pellicle` fails one of the gene probe's
+  checks, the drifter list, which §16 says it must until `SHIPPED_LISTS` records it.
+  **That is not all it fails** (phase 2's review, corrected in phase 3): `i18n_pot
+  --check` goes stale, because the template's room notes are measured with the widest
+  gene word; nine of `drop_probe`'s checks fail, its seeded water's pins -- a drifter
+  leaving moves the water -- and row 5's, which posed `pellicle` by name; and seven of
+  `net_probe`'s, five pond-field checks that posed it by name and the referee's
+  `RULES` with the handshake check that holds them, rightly: armour is in the rules.
+  Phase 3 has the probes pose the first live organ that provides armour, so retiring
+  one moves them to the next, and the last one's retirement fails them saying so
+  (§15.4, §16).
 - **The nits**: `crista`'s unused `burn`; `ocellus`'s dead fallback price; `stat_at`'s
   doc, which now says it answers 0 for a stat its organ does not provide, and why;
   and `HOME_SHAPES`, one list, gene.gd's.
@@ -1464,7 +1473,15 @@ another's spread, p10 149.2 to 151.6 ms, so none was kept.
   key. A stat only it provided reads its value with no provider, and the probe names
   it. If it was on a list a draw or a bit reads -- a drifter, a sense, the gift, a
   declarer -- every seeded draw moves, and the probe fails until its `SHIPPED_LISTS`
-  says so.
+  says so. **And what else it moves fails until it is moved**: `drop_probe`'s pins of
+  the seeded water, when it was a drifter; `Wire.RULES`, and `Wire.PROTOCOL` with it,
+  when it provided a table the rules list (`net_probe`'s referee check names the
+  line); and the translation template, whose room notes are measured with the widest
+  gene word, which `i18n_pot -- --write` writes again when `--check` says stale. The
+  probes pose a mechanic by its stat -- the first live organ that provides armour --
+  so retiring one organ moves them to the next. Retiring the last one that provides
+  a stat fails the checks that pose it, saying so: the mechanic has no organ left,
+  which is a design call, not a fix.
 - **Changing the slots**: edit `body_plan.gd`; saves migrate (§10.3). Move the gene
   probe's pins of the plan that shipped with it and, until phase 4, `Wire.PROTOCOL`
   (§15.3).
