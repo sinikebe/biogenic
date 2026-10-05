@@ -50,9 +50,8 @@ func _init() -> void:
 
 
 ## **Its numbers on the pause screen** (gene.gd's `lines`): how much less everything burns.
-func lines(t: int, _level: int, _path: StringName, ctx: Dictionary, _slot: int,
+func lines(t: int, _level: int, _path: StringName, _ctx: Dictionary, _slot: int,
 		wear: Dictionary) -> Array:
-	var burn := float(ctx.get("burn", 1.0))
 	# TRANSLATORS: The cleaner-burning gene (`crista`, shown as `burn`): everything
 	# the cell carries costs less energy to keep.
 	return [[Readout.item("everything burns {} less", [1.0 - stat_at(&"burn", t)],

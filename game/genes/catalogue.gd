@@ -69,6 +69,8 @@ const OARS := Gene.OARS
 const LASH := Gene.LASH
 const TUFT := Gene.TUFT
 const SPINES := Gene.SPINES
+## The shapes drawn on arcs of their own, whatever slot holds them (gene.gd).
+const HOME_SHAPES := Gene.HOME_SHAPES
 
 ## **The tables of words an organ's file may hold** (gene.gd, "Its words"), by
 ## constant name, and what each is called here: the words said of a key ...

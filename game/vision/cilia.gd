@@ -74,8 +74,8 @@ const MAT := Catalogue.MAT
 const OARS := Catalogue.OARS
 const LASH := Catalogue.LASH
 const SPINES := Catalogue.SPINES
-## The shapes drawn on arcs of their own, whatever slot holds them (gene.gd).
-const HOME_SHAPES: Array[StringName] = [MAT, OARS, LASH]
+## The shapes drawn on arcs of their own, whatever slot holds them: gene.gd's one list.
+const HOME_SHAPES := Catalogue.HOME_SHAPES
 ## An empty look: what a gene this build does not know has -- a retired one has the
 ## catalogue's own empty look -- and no keys of a shape nothing is drawn as.
 const NO_LOOK := {}
