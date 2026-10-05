@@ -886,6 +886,15 @@ the gene probe with `-- --names`, which prints one failure for every such litera
 -- its file, line and text -- and `ALL PASS` only for none. Comment lines and `tools/`
 are exempt, and retired keys count. There are none.
 
+**And from phase 5** (§15.6, the review's call 13): it reads every `.tscn`, `.tres` and
+`.gdshader` under `game/` as well as every script -- not the translations, whose notes
+name genes for a translator -- each with its own comment marker. It looks for an
+organ's name and a variant's as well as a key (`&"toxin"`, `"corrosive"`), in single
+quotes too (`&'palp'`), alone or with a part (`&"flagellum.hold"`); and a name in a
+comment at the end of a line no longer fails it. **A name built by concatenation or a
+format** (`"%s.hold" % organ`) **cannot be caught** by reading lines, so the playbook
+says not to build one.
+
 ### 12.3 Synthetic genes and plans, end to end
 
 A probe registers a test organ with a variant and two places. It wears it, and then:
