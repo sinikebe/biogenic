@@ -409,11 +409,12 @@ static func declares() -> Dictionary:
 
 
 ## **[param levels] -- a key to the level it works at -- by organ**: each organ to
-## the highest level of any live key of it, which is what a body's rules count its
-## parts by (rulebook.gd's owners are the organs of [method declares]). A retired
-## key brings nothing, as it provides nothing (§4.4), and a key this build does not
-## know stands for itself. **[param levels] itself while every organ that declares
-## parts goes by its own key alone** -- every one today -- so nothing is made.
+## the highest level of any live key of it ([method organ_level]), which is what a
+## body's rules count its parts by (rulebook.gd's owners are the organs of [method
+## declares]). A retired key brings nothing, as it provides nothing (§4.4), and a key
+## this build does not know stands for itself. **[param levels] itself while every
+## organ that declares parts goes by its own key alone** -- every one today -- so
+## nothing is made.
 static func by_organ(levels: Dictionary) -> Dictionary:
 	if _owners_are_keys:
 		return levels
@@ -425,6 +426,37 @@ static func by_organ(levels: Dictionary) -> Dictionary:
 		var organ: StringName = record.organ if record != null else StringName(key)
 		out[organ] = maxi(int(out.get(organ, 0)), int(levels[key]))
 	return out
+
+
+## **The level each key a body wears works at**, key to level, for its rules and its
+## tail's hold alike: [param genome]'s `level_of` -- the beam's earned level, every
+## other gene's worn copies -- and at least 1, for every key of [param tiers], the
+## body, worn at a copy or more. [param genome] is the body's genome node, or any
+## object that answers `level_of` (a tool's stub): this file preloads none.
+static func worn_levels(tiers: Dictionary, genome: Object) -> Dictionary:
+	var out := {}
+	for key: Variant in tiers:
+		if int(tiers[key]) > 0:
+			out[key] = maxi(int(genome.call(&"level_of", key)), 1)
+	return out
+
+
+## **The level [param organ] works at, in a body whose keys work at [param levels]**
+## (key to level): the highest of any live key of it -- **one measure**, the one a
+## body's rules count a part's owner by ([method by_organ]), so a mechanic that asks
+## an organ's level asks the same: the tail's hold (`cell.gd`'s `tail_level`,
+## `food.gd`'s `Body.tail_level`). A plain tail at one copy beside a faster one at
+## three works at three. A retired key brings nothing, and a name no organ goes by
+## stands for itself. 0 for an organ it has none of.
+static func organ_level(levels: Dictionary, organ: StringName) -> int:
+	var keys: Array[StringName] = _organ_keys.get(organ, _none)
+	if keys.is_empty():
+		return int(levels.get(organ, 0))
+	var best := 0
+	for key: StringName in keys:
+		if levels.has(key) and not has_tag(key, RETIRED):
+			best = maxi(best, int(levels[key]))
+	return best
 
 
 ## **The first live key of [param organ]** -- its first variant's variety -- what
