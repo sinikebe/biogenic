@@ -135,6 +135,9 @@ const KEPT_UNTIL_FAMILIES: Array = [
 ]
 ## The game's French, whose missing gene words are listed (§8.3).
 const FRENCH := "res://game/i18n/fr.po"
+## **The template every translation starts from** (§8.2): a word the catalogue hands
+## out that is not in it reaches no translator, and ships in English for good.
+const TEMPLATE := "res://game/i18n/biogenic.pot"
 
 ## The folder the index must match, file for file.
 const ORGANS_DIR := "res://game/genes/organs"
@@ -208,6 +211,7 @@ func _ready() -> void:
 	_register()
 	_looks()
 	_words()
+	_template()
 	_lines()
 	_colours()
 	_plan()
@@ -843,6 +847,121 @@ func _words() -> void:
 		+ " declare its word, its line and, waiting for a level, what it says; no word table"
 		+ " is keyed by what is not its organ's%s") % [parts.size(),
 			"" if bad.is_empty() else ": missing or stray: %s" % ", ".join(bad)], bad.is_empty())
+
+
+## **Every word the catalogue hands out is in the template, and every live chip word
+## fits its rooms** (§8.2, §8.3). The translation tool lists a word table only where
+## it carries a TRANSLATORS note, and measures a word only against a ROOM line: a
+## table with no note, or a note with no room, passed every check before this one.
+## So every word of every key and every part is looked up in the template, under the
+## context it is said in; and every live gene's chip word, in English and in French,
+## is measured in the fallback font against the two places it is drawn -- the
+## choosing screen's word block (`normal_mode.gd`'s `CHOOSE_BLOCK_W` less
+## `CHOOSE_WORD_X`, at its `LABEL_SIZE`) and a chip, beside its three pips
+## (`figure.gd`'s `SLOT_SIZE`, at `CHIP_WORD`).
+func _template() -> void:
+	var held := _template_ids()
+	var said := {}
+	for key: StringName in Catalogue.keys():
+		var english: Array = []
+		var words := Catalogue.words(key)
+		for name: StringName in words:
+			if name != &"name":
+				_strings_into(english, words[name], "")
+		for one: Array in english:
+			said[one] = String(key)
+	var parts := _declared_parts()
+	for part: StringName in parts:
+		var own := Catalogue.part_words(part)
+		for name: StringName in own:
+			var english: Array = []
+			_strings_into(english, own[name], "sense" if name == &"sense" else "")
+			for one: Array in english:
+				said[one] = String(part)
+	var missing: Array[String] = []
+	for one: Array in said:
+		var id := String(one[0]) if String(one[1]).is_empty() \
+			else "%s\u0004%s" % [one[1], one[0]]
+		if not held.has(id):
+			missing.append("%s's \"%s\"" % [said[one], one[0]])
+	_check(("every word the catalogue hands out, %d of them, is in the template, %d messages"
+		+ " (%s)%s") % [said.size(), held.size(), TEMPLATE.get_file(),
+			"" if missing.is_empty() else ": not there, so no translator sees it: "
+			+ ", ".join(missing)], missing.is_empty() and not held.is_empty())
+	var font := ThemeDB.fallback_font
+	var block := NormalMode.CHOOSE_BLOCK_W - NormalMode.CHOOSE_WORD_X
+	var beside := Figure.PIP_GAP + Figure.PIP_PITCH * float(Genome.TIER_MAX - 1) \
+		+ Figure.PIP_R * 2.0
+	if Figure.LEVEL_SEAT == Figure.LevelSeat.AFTER_PIPS:
+		beside += Figure.LEVEL_AFTER_GAP + maxf(font.get_string_size("99",
+			HORIZONTAL_ALIGNMENT_LEFT, -1.0, Figure.LEVEL_SIZE).x, font.get_string_size("999",
+			HORIZONTAL_ALIGNMENT_LEFT, -1.0, Figure.LEVEL_SIZE_SMALL).x)
+	var chip := Figure.SLOT_SIZE.x - beside
+	var fr := load(FRENCH) as Translation
+	var over: Array[String] = []
+	var widest := {"block": ["", 0.0], "chip": ["", 0.0]}
+	for key: StringName in Catalogue.live():
+		var word := String(Catalogue.words(key).get(&"word", ""))
+		var french := String(fr.get_message(StringName(word))) if fr != null else ""
+		for each: String in [word, french]:
+			if each.is_empty():
+				continue
+			var small := font.get_string_size(each, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
+				NormalMode.LABEL_SIZE).x
+			var big := font.get_string_size(each, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
+				Figure.CHIP_WORD).x
+			if small > float(widest["block"][1]):
+				widest["block"] = [each, small]
+			if big > float(widest["chip"][1]):
+				widest["chip"] = [each, big]
+			if small > block:
+				over.append("%s's \"%s\" %.1f px in the choosing screen's %.0f" % [key, each,
+					small, block])
+			if big > chip:
+				over.append("%s's \"%s\" %.1f px on a chip's %.1f" % [key, each, big, chip])
+	_check(("and every live chip word fits where it is drawn, in English and in French: the"
+		+ " choosing screen's %.0f px at %d px -- the widest \"%s\", %.1f -- and a chip's %.1f"
+		+ " beside its pips at %d px -- the widest \"%s\", %.1f%s") % [block,
+		NormalMode.LABEL_SIZE, widest["block"][0], widest["block"][1], chip, Figure.CHIP_WORD,
+		widest["chip"][0], widest["chip"][1],
+		"" if over.is_empty() else ": too wide: " + ", ".join(over)], over.is_empty())
+
+
+## Every message the template holds, by gettext's own key: the context, `\u0004` and
+## the id where it has a context, and the id alone where not -- a plural's id too.
+func _template_ids() -> Dictionary:
+	var out := {}
+	var entry := {"msgctxt": "", "msgid": "", "msgid_plural": ""}
+	var field := ""
+	for line: String in FileAccess.get_file_as_string(TEMPLATE).split("\n"):
+		var body := line.strip_edges()
+		if body.begins_with("\""):
+			if entry.has(field):
+				entry[field] = String(entry[field]) + _quoted(body)
+			continue
+		var space := body.find(" ")
+		var word := body.substr(0, space) if space > 0 else body
+		if word.begins_with("msgstr"):
+			var context := String(entry["msgctxt"])
+			for id: String in [String(entry["msgid"]), String(entry["msgid_plural"])]:
+				if not id.is_empty():
+					out[id if context.is_empty() else context + "\u0004" + id] = true
+			entry = {"msgctxt": "", "msgid": "", "msgid_plural": ""}
+			field = ""
+		elif entry.has(word):
+			field = word
+			entry[word] = _quoted(body.substr(space + 1))
+		else:
+			field = ""
+	return out
+
+
+## The text of one quoted `.po` string, its escapes read.
+static func _quoted(text: String) -> String:
+	var t := text.strip_edges()
+	if t.length() < 2 or not t.begins_with("\"") or not t.ends_with("\""):
+		return ""
+	return t.substr(1, t.length() - 2).c_unescape()
 
 
 ## **Every live gene has its numbers on the pause screen** -- what it does and what
