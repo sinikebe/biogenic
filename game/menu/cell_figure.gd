@@ -276,12 +276,12 @@ func show_cell(cell: Dictionary, record: bool) -> void:
 	var genome: Dictionary = cell.get("genome", {})
 	_dna = GenomeNode.tiers_from_names(genome.get("dna", {}))
 	_tiers = GenomeNode.tiers_from_names(genome.get("body", {}))
-	_worn.clear()
-	for gene: String in genome.get("worn", PackedStringArray()):
-		_worn.append(StringName(gene))
-	var layout: Array[StringName] = []
-	for gene: String in genome.get("order", PackedStringArray()):
-		layout.append(StringName(gene))
+	# Both layouts on the body plan in use, each gene in its slot by id
+	# (gene-catalogue.md §10.3), as the cell would load.
+	_worn.assign(GenomeNode.layout_from(genome.get("worn", PackedStringArray()),
+		genome.get("plan")))
+	var layout := GenomeNode.layout_from(genome.get("order", PackedStringArray()),
+		genome.get("plan"))
 	_levels = {}
 	var kept: Dictionary = genome.get("levels", {})
 	for gene: StringName in Catalogue.levelled():

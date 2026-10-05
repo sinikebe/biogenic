@@ -814,6 +814,11 @@ func restore_levels(state: Dictionary) -> void:
 ## other -- the slots the body did not earn, the gift not yet placed, every
 ## waiting gene with its copies and the seconds it has left, and the lineage's
 ## levels. A gene this build does not know is kept by the name it has.
+##
+## **And `plan`, the body plan's slot ids by index** (gene-catalogue.md §10.3),
+## which the two layouts are kept under: a build on another plan puts each gene
+## back in its slot by id ([method layout_from]). A file before it has none, and
+## was kept under today's plan; a build before it never asks.
 func to_state() -> Dictionary:
 	var waiting: Array = []
 	for one: Waiting in _waiting:
@@ -827,6 +832,7 @@ func to_state() -> Dictionary:
 		"order": PackedStringArray(layout()),
 		"body": tiers_by_name(_body),
 		"worn": PackedStringArray(body_layout()),
+		"plan": BodyPlan.stamp(),
 		"bonus": bonus_slots,
 		"gift": String(_gift),
 		"waiting": waiting,
@@ -839,12 +845,8 @@ func to_state() -> Dictionary:
 ## queue, each clock where it had got to -- which no birth does, since a birth
 ## starts every clock full ([method carry]).
 func set_state(state: Dictionary) -> void:
-	var order: Array = []
-	for gene: String in state["order"]:
-		order.append(StringName(gene))
-	var worn: Array = []
-	for gene: String in state["worn"]:
-		worn.append(StringName(gene))
+	var order := layout_from(state["order"], state.get("plan"))
+	var worn := layout_from(state["worn"], state.get("plan"))
 	express(tiers_from_names(state["dna"]), order, tiers_from_names(state["body"]), worn)
 	restore_levels(state["levels"])
 	bonus_slots = int(state["bonus"])
@@ -853,6 +855,20 @@ func set_state(state: Dictionary) -> void:
 		_waiting.append(Waiting.new(StringName(one[0]), clampi(int(one[1]), 1, TIER_MAX),
 			float(one[2])))
 	_sync_order()
+
+
+## **A slot layout as a file keeps it, on the body plan in use**
+## (gene-catalogue.md §10.3): [param names], gene names by slot, kept under the
+## plan whose ids [param plan] stamps -- `null` for a file kept before the stamp,
+## under today's plan. Under the plan in use it is read as it is; under another,
+## every gene goes back to its slot by id, and one whose slot is gone to the free
+## slot nearest it, or out of the layout and into the DNA alone: never dropped
+## (body_plan.gd's `migrate`).
+static func layout_from(names: Variant, plan: Variant) -> Array[StringName]:
+	var out: Array[StringName] = []
+	for gene: Variant in BodyPlan.migrate(Array(names), BodyPlan.written(plan)):
+		out.append(StringName(gene))
+	return out
 
 
 ## `{gene: tier}` with every gene a String: how a file keeps a genome.

@@ -1307,26 +1307,25 @@ func _resume_cell(state: Dictionary) -> void:
 		_instincts.set_fed(float(state["fed"]))
 	_kept_daughters = []
 	for one: Dictionary in state["daughters"]:
-		var order: Array[StringName] = []
-		for gene: String in one["order"]:
-			order.append(StringName(gene))
 		_kept_daughters.append({
 			"tiers": GenomeNode.tiers_from_names(one["tiers"]),
-			"order": order,
+			"order": GenomeNode.layout_from(one["order"], one.get("plan")),
 			"body": GenomeNode.tiers_from_names(one["body"]),
 			"mutation": StringName(one["mutation"]),
 		})
 	_resumed = true
 
 
-## A division's two daughters as the drop keeps them, every gene by name; none
-## before the pinch has rolled them.
+## A division's two daughters as the drop keeps them, every gene by name, each
+## layout with the body plan's slot ids beside it (gene-catalogue.md §10.3), as a
+## genome's is; none before the pinch has rolled them.
 static func _daughters_by_name(pair: Array) -> Array:
 	var out: Array = []
 	for one: Dictionary in pair:
 		out.append({
 			"tiers": GenomeNode.tiers_by_name(one["tiers"]),
 			"order": PackedStringArray(one["order"]),
+			"plan": BodyPlan.stamp(),
 			"body": GenomeNode.tiers_by_name(one["body"]),
 			"mutation": String(one["mutation"]),
 		})

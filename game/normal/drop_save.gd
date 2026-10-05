@@ -130,7 +130,9 @@ const SHAPE := {
 ## this one -- it comes back into this drop at a quiet place, as a guest does
 ## that leaves the pond. **And `fed`** (pack 4, docs/design/automation.md §9.2):
 ## the seconds since it last ate, for its instincts, absent for one that never
-## has. Your programs are not here: they are the device's (`library.gd`).
+## has. Your programs are not here: they are the device's (`library.gd`). **And
+## `genome.plan`** (docs/design/gene-catalogue.md §10.3): the body plan's slot ids
+## its two layouts are kept under, absent from a file kept before there was one.
 ##
 ## **This is every view's cell** ([constant CELLS]): what a view keeps is the
 ## same whichever view it is.
@@ -305,7 +307,9 @@ const BEHAVIOURS_VERSION := 1
 
 ## One of the two daughters a division offers, by gene name: the DNA she is
 ## made of, its layout, the body that expressed, and the mutation that made her
-## -- empty for the faithful one.
+## -- empty for the faithful one. **And, since the body plan, `plan`**: the slot
+## ids her layout is kept under (gene-catalogue.md §10.3), checked when it is
+## there, as the genome's is ([method bad_cell]).
 const DAUGHTER := {
 	"tiers": TYPE_DICTIONARY,
 	"order": TYPE_PACKED_STRING_ARRAY,
@@ -839,11 +843,18 @@ static func bad_cell(cell: Dictionary, at := "cell.") -> String:
 		return at + "daughters is not two daughters"
 	for one: Variant in pair:
 		if not one is Dictionary or not misfit(one, DAUGHTER).is_empty() \
-				or not _is_genes(one["tiers"]) or not _is_genes(one["body"]):
+				or not _is_genes(one["tiers"]) or not _is_genes(one["body"]) \
+				or (one.has("plan") and not BodyPlan.is_stamp(one["plan"])):
 			return at + "daughters is not two daughters by gene name"
 	var genome: Dictionary = cell["genome"]
 	if not _is_genes(genome["dna"]) or not _is_genes(genome["body"]):
 		return at + "genome is not gene names to tiers"
+	# **The body plan's slot ids, beside every layout** (gene-catalogue.md §10.3),
+	# the genome's and each daughter's: absent from a file kept before them, which
+	# was kept under today's plan. A build before them never asks -- a shape is
+	# checked key by key, and a key it does not name is not looked at.
+	if genome.has("plan") and not BodyPlan.is_stamp(genome["plan"]):
+		return at + "genome.plan is not slot ids"
 	for one: Variant in genome["waiting"]:
 		if not one is Array or (one as Array).size() != 3 \
 				or typeof(one[0]) != TYPE_STRING or typeof(one[1]) != TYPE_INT \
