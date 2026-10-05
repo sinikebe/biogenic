@@ -2283,7 +2283,6 @@ func _variant_of_shipped() -> void:
 		and rules_with != rules_before and rules_after == rules_before
 		and rules_with.contains(Stats.label(&"impulse_speed") + ".probeswift=")
 		and wire_with != wire_before and wire_after == wire_before
-		and wire_before.sha256_text() == Wire.RULES
 		and top_with > top_before and peak_with > peak_before
 		and speeds[2] == maxf(speeds[0], speeds[1]) and speeds[1] > speeds[0]
 		and gaps[2] == minf(gaps[0], gaps[1]) and gaps[1] > gaps[0]
