@@ -27,7 +27,7 @@ extends RefCounted
 ## 3. the contact rules no table holds: the bite's gap and flank, `bite_damage`, the
 ##    doses' constants, and the dart's arc and stun, by sample where a rule is a
 ##    function;
-## 4. the referee's own limits;
+## 4. the referee's own limits ([constant REFEREE_LIMITS]);
 ## 5. the body plan's fingerprint (body_plan.gd), so builds on other plans -- other
 ##    slot counts, other arcs -- refuse each other too.
 ##
@@ -72,15 +72,40 @@ const ROW_FIELDS_UNREAD := {
 	"contact": "whether the row is here at all, which its lines say",
 }
 
-## **The referee's own limits**, by the names they have in referee.gd: the caps over
-## motion, the slack on a radius and a ring, the shout's and the arrival's banks,
-## the re-entry and the stall. A limit added to its judgement belongs here.
-const REFEREE_LIMITS: Array[String] = ["MOVE_RATE", "MOVE_HOLD", "MOVE_SLACK", "TURN_RATE",
-	"TURN_HOLD", "TURN_SLACK", "SPEED_MAX", "TURNING_MAX", "RADIUS_SLACK", "DAUGHTER_RADIUS",
-	"OUT_STILL", "BIRTH_WAIT", "SISTER_DISTANCE", "SISTER_RING", "SHOUT_REACH", "SHOUT_PAST",
-	"SHOUT_BANK", "SHOUT_EARLY", "ENTER_BANK", "ENTER_EVERY", "RADIUS_EPSILON", "PERSON_RATE",
-	"PERSON_BANK", "FIRST_SENSES", "STALE_FOR", "REENTRY_KEEPS_WOUND", "REENTRY_WITHIN",
-	"STALL_CREDIT"]
+## **The referee's own limits**, by the names they have in referee.gd and in its
+## order: what each foul weighs on the ledger and how often one rule may foul, the
+## caps over motion, the slack on a radius and a ring, the shout's and the arrival's
+## banks, the re-entry and the stall. **Every constant of referee.gd is here or in
+## [constant REFEREE_NOT_LIMITS]**, and `tools/net_probe.gd` fails on one in neither,
+## so a limit added to the referee's judgement is in the rules or said not to be. One
+## list: the probe writes the limits from this one, and sorts referee.gd by it.
+const REFEREE_LIMITS: Array[String] = ["WEIGHT_MOVE", "WEIGHT_TURN", "WEIGHT_SIZE",
+	"WEIGHT_OUT", "WEIGHT_SHOUT", "WEIGHT_ENTER", "WEIGHT_BODY_RATE", "WEIGHT_BODY",
+	"WEIGHT_SISTER", "WEIGHT_SISTER_OFF", "WEIGHT_DIED", "FOUL_EVERY", "MOVE_RATE",
+	"MOVE_HOLD", "MOVE_SLACK", "TURN_RATE", "TURN_HOLD", "TURN_SLACK", "SPEED_MAX",
+	"TURNING_MAX", "RADIUS_SLACK", "DAUGHTER_RADIUS", "OUT_STILL", "BIRTH_WAIT",
+	"SISTER_DISTANCE", "SISTER_RING", "SHOUT_REACH", "SHOUT_PAST", "SHOUT_BANK",
+	"SHOUT_EARLY", "ENTER_BANK", "ENTER_EVERY", "RADIUS_EPSILON", "PERSON_RATE",
+	"PERSON_BANK", "STALE_FOR", "REENTRY_KEEPS_WOUND", "REENTRY_WITHIN", "STALL_CREDIT"]
+## **The constants of referee.gd that are no limit**, each with why.
+const REFEREE_NOT_LIMITS := {
+	"CellBody": "a script it loads: what it judges by there is a line above, by name",
+	"Catalogue": "a script it loads: the gift and who may call are lines above",
+	"Stats": "a script it loads: every table it reads is a line above",
+	"FoodField": "a script it loads: the grace and the names of contacts are above",
+	"Basin": "a script it loads: the rim's arithmetic, sampled above",
+	"MOVE": "a rule's name, as the log and the tools say it: it judges nothing",
+	"TURN": "a rule's name, as the log and the tools say it: it judges nothing",
+	"SIZE": "a rule's name, as the log and the tools say it: it judges nothing",
+	"OUT": "a rule's name, as the log and the tools say it: it judges nothing",
+	"SHOUT": "a rule's name, as the log and the tools say it: it judges nothing",
+	"ENTER": "a rule's name, as the log and the tools say it: it judges nothing",
+	"BODY": "a rule's name, as the log and the tools say it: it judges nothing",
+	"SISTER": "a rule's name, as the log and the tools say it: it judges nothing",
+	"DIED": "a rule's name, as the log and the tools say it: it judges nothing",
+	"RULES": "the rules' names, in the log's order: it judges nothing",
+	"Budget": "the class its budgets are made of: their numbers are the limits",
+}
 
 
 ## **The fingerprint**: the SHA-256 of [method text], [constant SIZE] bytes, as the
@@ -146,7 +171,8 @@ static func text() -> String:
 		FoodField.armoured_size(30.0, Stats.at(&"armor", 2), FoodField.ARMOUR_SWALLOW))
 	# The run's sister ring, by the referee's copy of it -- the run's own is a scene's
 	# constant this file cannot load without a cycle, and the probe holds the two
-	# equal -- and the free senses, the catalogue's `gift` tag.
+	# equal -- and the free senses, the catalogue's `gift` tag, which the referee
+	# reads too (§11.1): no copy of its own any more, so no line of its own.
 	put.call("run.SISTER_DISTANCE", Referee.SISTER_DISTANCE)
 	put.call("run.FIRST_SENSES", Catalogue.tagged(Catalogue.GIFT))
 	# genome.gd: the tiers, a born body -- each organ's own `born` -- and the gift's.
@@ -177,12 +203,10 @@ static func text() -> String:
 	for k in darts.size():
 		put.call("cell.dart_stun" + ("" if k == 0 else "." + String(darts[k])),
 			CellBody.dart_stun({darts[k]: 1}))
-	# 4. The referee's own limits. **The gift's senses are no copy**: the referee
-	# reads the catalogue's `gift` tag (§11.1), so its line is written from there.
+	# 4. The referee's own limits.
 	var referee: Dictionary = (Referee as Script).get_script_constant_map()
 	for name: String in REFEREE_LIMITS:
-		put.call("referee." + name, Catalogue.tagged(Catalogue.GIFT) if name == "FIRST_SENSES"
-			else referee[name])
+		put.call("referee." + name, referee.get(name))
 	# 5. The body plan.
 	put.call("plan.fingerprint", BodyPlan.fingerprint())
 	return "\n".join(lines)

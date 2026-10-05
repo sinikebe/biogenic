@@ -3243,6 +3243,39 @@ func _referee_rules() -> void:
 		+ " is in the rules the handshake fingerprints, one line an organ that provides"
 		+ " it, after the stat's row%s" % ("" if unwritten.is_empty()
 			else "; not %s -- write it in _rules_text" % ", ".join(unwritten)))
+	# **Every constant of referee.gd is a limit the rules write, or one named as no
+	# limit with why** (rules.gd's REFEREE_LIMITS and REFEREE_NOT_LIMITS): a limit
+	# added to the referee's judgement fails here until it is in the rules or said
+	# not to be, and a name either list keeps after referee.gd lost it fails too.
+	var constants := {}
+	for key: Variant in (Referee as Script).get_script_constant_map():
+		constants[String(key)] = true
+	var neither: Array[String] = []
+	var twice: Array[String] = []
+	var gone: Array[String] = []
+	for name: String in constants:
+		var limit := Rules.REFEREE_LIMITS.has(name)
+		var no_limit := Rules.REFEREE_NOT_LIMITS.has(name)
+		if limit and no_limit:
+			twice.append(name)
+		elif not limit and not no_limit:
+			neither.append(name)
+		elif no_limit and str(Rules.REFEREE_NOT_LIMITS[name]).strip_edges().is_empty():
+			neither.append(name + " (no reason given)")
+	for name: Variant in Rules.REFEREE_LIMITS + Rules.REFEREE_NOT_LIMITS.keys():
+		if not constants.has(String(name)):
+			gone.append(String(name))
+	var sorted := neither.is_empty() and twice.is_empty() and gone.is_empty()
+	_says(sorted, ("referee: every one of referee.gd's %d constants is sorted -- the %d"
+		% [constants.size(), Rules.REFEREE_LIMITS.size()] + " limits the rules write, and"
+		+ " %d named as no limit, with why: the scripts it loads, its rules' names and"
+		% Rules.REFEREE_NOT_LIMITS.size() + " its budgets' class") if sorted
+		else ("referee: referee.gd's constants are not all sorted -- in neither list: %s;"
+			% (", ".join(neither) if not neither.is_empty() else "none") + " in both: %s;"
+			% (", ".join(twice) if not twice.is_empty() else "none") + " listed, and not"
+			+ " referee.gd's: %s -- a limit goes in rules.gd's REFEREE_LIMITS, which moves"
+			% (", ".join(gone) if not gone.is_empty() else "none") + " the pin, and"
+			+ " anything else in REFEREE_NOT_LIMITS, with why"))
 	# **A row's fields are each written or said not to decide a value**: a field
 	# stats.gd's rows gain -- phase 5's `group` -- fails here until it is one or the
 	# other, so how two providers combine cannot change with no line moving.
@@ -3396,19 +3429,14 @@ func _rules_text() -> String:
 		var stun: Variant = Catalogue.number(darts[k], &"stun")
 		put.call("cell.dart_stun" + ("" if k == 0 else "." + String(darts[k])),
 			float(stun) if stun != null else 0.0)
-	# referee.gd: its own limits, and its copies of the run's numbers. **The
-	# gift's senses are no copy any more**: the referee reads the catalogue's
-	# `gift` tag (gene-catalogue.md §11.1), so its line is written from there,
-	# under the name and in the place it always had.
+	# referee.gd: its own limits, and its copies of the run's numbers, by the one list
+	# of them (rules.gd's REFEREE_LIMITS), each read here off referee.gd by name.
+	# `_referee_rules` sorts every constant referee.gd has by that list and the list of
+	# those that are not limits. **The gift's senses are no copy any more**: the
+	# referee reads the catalogue's `gift` tag (§11.1), which `run.FIRST_SENSES` is.
 	var referee: Dictionary = (Referee as Script).get_script_constant_map()
-	for name: String in ["MOVE_RATE", "MOVE_HOLD", "MOVE_SLACK", "TURN_RATE", "TURN_HOLD",
-			"TURN_SLACK", "SPEED_MAX", "TURNING_MAX", "RADIUS_SLACK", "DAUGHTER_RADIUS",
-			"OUT_STILL", "BIRTH_WAIT", "SISTER_DISTANCE", "SISTER_RING", "SHOUT_REACH",
-			"SHOUT_PAST", "SHOUT_BANK", "SHOUT_EARLY", "ENTER_BANK", "ENTER_EVERY",
-			"RADIUS_EPSILON", "PERSON_RATE", "PERSON_BANK", "FIRST_SENSES", "STALE_FOR",
-			"REENTRY_KEEPS_WOUND", "REENTRY_WITHIN", "STALL_CREDIT"]:
-		put.call("referee." + name, Catalogue.tagged(Catalogue.GIFT) if name == "FIRST_SENSES"
-			else referee[name])
+	for name: String in Rules.REFEREE_LIMITS:
+		put.call("referee." + name, referee.get(name))
 	# **The body plan** (gene-catalogue.md §10.4): builds on other plans -- other slot
 	# counts, other arcs -- are other rules.
 	put.call("plan.fingerprint", BodyPlan.fingerprint())
