@@ -3225,7 +3225,8 @@ static func _ref_rules(fouls: Array) -> Array:
 ## row marks judged or contact is in them, by every organ; the game's text is this
 ## one, line for line; and `Wire.RULES` pins their SHA-256, so they change on purpose.
 func _referee_rules() -> void:
-	var text := _rules_text()
+	var doubts: Array = []
+	var text := _rules_text(doubts)
 	var now := text.sha256_text()
 	# Every stat a row marks as judged or contact is in the text, by every provider.
 	var unwritten: Array[String] = []
@@ -3313,6 +3314,16 @@ func _referee_rules() -> void:
 			+ " %d: the game's '%s', this probe's '%s' -- write the same value in both"
 			% [first + 1, theirs[first] if first < theirs.size() else "",
 			ours[first] if first < ours.size() else ""]))
+	# **Written the same on every machine** (rules.gd's note): every float as whole
+	# millionths by Godot alone, none within RULE_TIE of a rounding edge -- the body
+	# plan's own numbers too, inside its fingerprint -- and nothing of a kind the rules
+	# would hand to the C library to write.
+	_says(doubts.is_empty(), ("referee: every value of the %d lines is one every machine"
+		% ours.size() + " writes alike -- each float as whole millionths, by Godot alone,"
+		+ " and none within %s of a half, the plan's own numbers in its line too" % RULE_TIE)
+		if doubts.is_empty() else ("referee: the rules print values one machine could"
+			+ " write otherwise: %s -- move a sample off its edge, or write the value as"
+			% "; ".join(PackedStringArray(doubts)) + " rules.gd's note says"))
 	# **The tripwire**: a build's rules move only on purpose. No PROTOCOL moves with
 	# them any more -- the handshake keeps builds on other rules apart by itself.
 	var ok := now == Wire.RULES
@@ -3331,11 +3342,14 @@ func _referee_rules() -> void:
 ## row marks judged or contact, by every organ; the run's numbers the referee judges
 ## by; the contact rules no table holds; the referee's own limits; the body plan.
 ## `Wire.RULES` is its SHA-256. A value added to the referee's judgement, or to what
-## the host decides a contact by, belongs here and there.
-func _rules_text() -> String:
+## the host decides a contact by, belongs here and there. **What one machine could
+## write otherwise** -- a float on a rounding edge, a kind of value the rules do not
+## write digit by digit -- is said in [param doubts], by its line ([method _rule_doubts]).
+func _rules_text(doubts: Array = []) -> String:
 	var lines: PackedStringArray = []
 	var put := func(name: String, value: Variant) -> void:
 		lines.append("%s=%s" % [name, _rule_value(value)])
+		_rule_doubts(name, value, doubts)
 	# **A stat two builds must agree on**: its row -- the fields of it that decide a
 	# body's value, read here by name, each as `name:value` -- then its table by every
 	# organ that provides it, the first under the name its table had as cell.gd's
@@ -3350,6 +3364,7 @@ func _rules_text() -> String:
 		for field: String in Rules.ROW_FIELDS:
 			if row.has(field):
 				items.append("%s:%s" % [field, _rule_value(row[field])])
+				_rule_doubts("stat.%s" % stat, row[field], doubts)
 		lines.append("stat.%s=%s" % [stat, ",".join(items)])
 		var providers := Catalogue.providers(stat)
 		for k in providers.size():
@@ -3438,30 +3453,83 @@ func _rules_text() -> String:
 	for name: String in Rules.REFEREE_LIMITS:
 		put.call("referee." + name, referee.get(name))
 	# **The body plan** (gene-catalogue.md §10.4): builds on other plans -- other slot
-	# counts, other arcs -- are other rules.
-	put.call("plan.fingerprint", BodyPlan.fingerprint())
+	# counts, other arcs -- are other rules. Its text written again here from its rows,
+	# so the game's fingerprint of it is held to them too.
+	put.call("plan.fingerprint", _plan_text(doubts).sha256_text())
 	return "\n".join(lines)
 
 
-## One value, written the same way on every machine: six places for a float, a
-## list comma-joined, a dictionary by its keys in order.
+## **The body plan's text, written again from its rows** (body_plan.gd's
+## `fingerprint`, whose SHA-256 is the rules' last line): the body's shape, then a line
+## a slot, every number a whole number of millionths, as the rules write a float --
+## and each held off a rounding edge as theirs are, in [param doubts].
+static func _plan_text(doubts: Array) -> String:
+	var lines := PackedStringArray()
+	var shape := [BodyPlan.OVOID_ALONG, BodyPlan.OVOID_ACROSS, BodyPlan.OVOID_PINCH]
+	_rule_doubts("plan.fingerprint, the shape", shape, doubts)
+	lines.append("shape=%s,%s,%s" % [_rule_value(shape[0]), _rule_value(shape[1]),
+		_rule_value(shape[2])])
+	for row: Dictionary in BodyPlan.rows():
+		var arc_of: Vector2 = row.get("arc", Vector2.ZERO)
+		var numbers := [arc_of.x, arc_of.y, float(row["earned"])]
+		_rule_doubts("plan.fingerprint, slot %s" % row["id"], numbers, doubts)
+		lines.append("%s|%s|%s|%s,%s|%s|%s" % [row["id"], row["place"],
+			row.get("anatomy", &""), _rule_value(numbers[0]), _rule_value(numbers[1]),
+			_rule_value(numbers[2]), row.get("home", &"")])
+	return "\n".join(lines)
+
+
+## One value, written the same way on every machine, by Godot alone: a float as a
+## whole number of millionths, a list comma-joined, a dictionary by its keys in order.
 static func _rule_value(value: Variant) -> String:
-	match typeof(value):
-		TYPE_FLOAT:
-			return "%.6f" % float(value)
-		TYPE_ARRAY:
-			var parts: PackedStringArray = []
-			for each: Variant in value:
-				parts.append(_rule_value(each))
-			return "[" + ",".join(parts) + "]"
-		TYPE_DICTIONARY:
-			var keys: Array = (value as Dictionary).keys()
-			keys.sort_custom(func(a: Variant, b: Variant) -> bool: return str(a) < str(b))
-			var parts: PackedStringArray = []
-			for key: Variant in keys:
-				parts.append("%s:%s" % [str(key), _rule_value(value[key])])
-			return "{" + ",".join(parts) + "}"
+	var kind := typeof(value)
+	if kind == TYPE_FLOAT:
+		return str(roundi(float(value) * 1e6))
+	if Rules.LISTS.has(kind):
+		var parts: PackedStringArray = []
+		for each: Variant in value:
+			parts.append(_rule_value(each))
+		return "[" + ",".join(parts) + "]"
+	if kind == TYPE_DICTIONARY:
+		var keys: Array = (value as Dictionary).keys()
+		keys.sort_custom(func(a: Variant, b: Variant) -> bool: return str(a) < str(b))
+		var parts: PackedStringArray = []
+		for key: Variant in keys:
+			parts.append("%s:%s" % [str(key), _rule_value(value[key])])
+		return "{" + ",".join(parts) + "}"
 	return str(value)
+
+
+## **How near a half a float's millionths may come** before the rules call it a tie
+## (rules.gd's note): a thousandth of a millionth, some thousand times the last bit
+## of the largest number they print, so no machine's last bit can tip one.
+const RULE_TIE := 1e-3
+
+
+## **What in [param value] one machine could write otherwise**, said in [param doubts]
+## under [param name]: a float whose millionths lie within [constant RULE_TIE] of a
+## half, or that is not finite; a dictionary keyed by anything but a whole number, a
+## bool or a name; and a value of any kind but those, a float and the lists and
+## dictionaries rules.gd's `value_text` writes item by item.
+static func _rule_doubts(name: String, value: Variant, doubts: Array) -> void:
+	var kind := typeof(value)
+	if kind == TYPE_FLOAT:
+		var x := float(value)
+		var off := absf(fposmod(x * 1e6, 1.0) - 0.5) if is_finite(x) else 0.0
+		if not is_finite(x) or off < RULE_TIE:
+			doubts.append("%s: %.9f, %s" % [name, x, "not a number it can write"
+				if not is_finite(x) else "its millionths %.6f from a half" % off])
+	elif kind == TYPE_DICTIONARY:
+		for key: Variant in value:
+			if not [TYPE_INT, TYPE_BOOL, TYPE_STRING, TYPE_STRING_NAME].has(typeof(key)):
+				doubts.append("%s: a key that is a %s" % [name, type_string(typeof(key))])
+			_rule_doubts(name, value[key], doubts)
+	elif Rules.LISTS.has(kind):
+		for each: Variant in value:
+			_rule_doubts(name, each, doubts)
+	elif not [TYPE_INT, TYPE_BOOL, TYPE_STRING, TYPE_STRING_NAME].has(kind):
+		doubts.append("%s: a %s, which the rules do not write digit by digit" % [name,
+			type_string(kind)])
 
 
 ## **The numbers the referee writes out, held to where they come from**, and its

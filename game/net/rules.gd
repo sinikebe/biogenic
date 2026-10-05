@@ -14,6 +14,30 @@ extends RefCounted
 ## and the text is the fingerprint. A gene that changes nothing judged -- a sense, a
 ## look, a stats line -- is not in it, and an older build keeps it as a name.
 ##
+## **Written the same on every machine, by construction.** A phone on arm64 or armv7,
+## a PC and the Linux server each work this text out for themselves, and one last
+## digit that came out otherwise on one of them would keep two honest builds apart,
+## with nothing on either screen to say why. So every line keeps three rules:
+##
+## - **its number is a literal, or comes from literals by + − × ÷ and sqrt only.** IEEE
+##   754 rounds each of those to the same bits on every chip, and the engine is built
+##   never to fuse a multiply and an add (`-ffp-contract=off`, `/fp:strict`). Anything
+##   else -- pow, exp, log, atan2 -- is the C library's, and libraries differ in the
+##   last bit;
+## - **cos and sin only at 0 and π**, the two angles at which every library returns
+##   the same, exact value;
+## - **no Vector2 or Transform method** -- `length`, `normalized`, `angle`, `rotated`:
+##   theirs is the engine's arithmetic in 32 bits, with the C library under some of
+##   it. A Vector2's components may be written and read: storing a double in one rounds
+##   it to the nearest 32-bit float, which IEEE fixes.
+##
+## **And it is written with Godot alone**: a float as a whole number of millionths,
+## `str(roundi(x * 1e6))` -- one product, one rounding to the nearest whole number and
+## Godot's own digits -- never through `%f`, which is the C library's printf on each
+## platform. `tools/net_probe.gd` fails a float whose millionths lie within a thousandth
+## of a half, naming its line, so no value is printed on an edge one machine's last bit
+## could tip; and a value of a kind [method value_text] does not write digit by digit.
+##
 ## **Written from the catalogue**, one line a value, in a fixed order:
 ##
 ## 1. every stat a row marks `judged` -- the referee judges a guest by it -- or
@@ -54,6 +78,10 @@ const Referee := preload("res://game/net/referee.gd")
 ## **The fingerprint's length**, in bytes: SHA-256's. The handshake carries it whole
 ## (wire.gd's `RULES_SIZE`).
 const SIZE := 32
+## **The kinds of list [method value_text] writes item by item**, so a float in one is
+## written as every float is.
+const LISTS: Array[int] = [TYPE_ARRAY, TYPE_PACKED_FLOAT64_ARRAY, TYPE_PACKED_FLOAT32_ARRAY,
+	TYPE_PACKED_INT32_ARRAY, TYPE_PACKED_INT64_ARRAY, TYPE_PACKED_STRING_ARRAY]
 
 ## **The fields of a stat's row that decide a body's value**, in the order its line
 ## writes them, each as `name:value`: the value with no provider, which way is better,
@@ -212,24 +240,25 @@ static func text() -> String:
 	return "\n".join(lines)
 
 
-## **One value, written the same way on every machine**: six places for a float, a
-## list comma-joined, a dictionary by its keys in order.
+## **One value, written the same way on every machine**, by Godot alone: a float as a
+## whole number of millionths, a list comma-joined, a dictionary by its keys in order,
+## and a whole number, a bool or a name as itself.
 static func value_text(value: Variant) -> String:
-	match typeof(value):
-		TYPE_FLOAT:
-			return "%.6f" % float(value)
-		TYPE_ARRAY:
-			var parts: PackedStringArray = []
-			for each: Variant in value:
-				parts.append(value_text(each))
-			return "[" + ",".join(parts) + "]"
-		TYPE_DICTIONARY:
-			var keys: Array = (value as Dictionary).keys()
-			keys.sort_custom(func(a: Variant, b: Variant) -> bool: return str(a) < str(b))
-			var parts: PackedStringArray = []
-			for key: Variant in keys:
-				parts.append("%s:%s" % [str(key), value_text(value[key])])
-			return "{" + ",".join(parts) + "}"
+	var kind := typeof(value)
+	if kind == TYPE_FLOAT:
+		return str(roundi(float(value) * 1e6))
+	if LISTS.has(kind):
+		var parts: PackedStringArray = []
+		for each: Variant in value:
+			parts.append(value_text(each))
+		return "[" + ",".join(parts) + "]"
+	if kind == TYPE_DICTIONARY:
+		var keys: Array = (value as Dictionary).keys()
+		keys.sort_custom(func(a: Variant, b: Variant) -> bool: return str(a) < str(b))
+		var parts: PackedStringArray = []
+		for key: Variant in keys:
+			parts.append("%s:%s" % [str(key), value_text(value[key])])
+		return "{" + ",".join(parts) + "}"
 	return str(value)
 
 

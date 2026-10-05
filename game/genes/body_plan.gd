@@ -406,17 +406,26 @@ static func migrate(order: Array, kept: PackedStringArray) -> Array:
 
 
 ## **This plan's fingerprint**: SHA-256 of every row and the body's shape, so two
-## builds on different plans can tell (§10.4). The handshake carries it from phase
-## 4 (§11.3); nothing reads it before then.
+## builds on different plans can tell (§10.4). The rules the handshake carries hold it
+## (§11.3; game/net/rules.gd), and nothing else in the game reads it. **Written as the
+## rules are**, by Godot alone: every number a whole number of millionths, never
+## through `%f`, which is the C library's printf on each platform -- and
+## `tools/net_probe.gd` writes it again from the rows and holds the two equal.
 static func fingerprint() -> String:
 	var lines := PackedStringArray()
-	lines.append("shape=%.6f,%.6f,%.6f" % [OVOID_ALONG, OVOID_ACROSS, OVOID_PINCH])
+	lines.append("shape=%s,%s,%s" % [_millionths(OVOID_ALONG), _millionths(OVOID_ACROSS),
+		_millionths(OVOID_PINCH)])
 	for row: Dictionary in _rows:
 		var arc_of: Vector2 = row.get("arc", Vector2.ZERO)
-		lines.append("%s|%s|%s|%.6f,%.6f|%.6f|%s" % [row["id"], row["place"],
-			row.get("anatomy", &""), arc_of.x, arc_of.y, float(row["earned"]),
-			row.get("home", &"")])
+		lines.append("%s|%s|%s|%s,%s|%s|%s" % [row["id"], row["place"],
+			row.get("anatomy", &""), _millionths(arc_of.x), _millionths(arc_of.y),
+			_millionths(float(row["earned"])), row.get("home", &"")])
 	return "\n".join(lines).sha256_text()
+
+
+## [param x] as a whole number of millionths, as the rules write a float.
+static func _millionths(x: float) -> String:
+	return str(roundi(x * 1e6))
 
 
 # --- Working it out -------------------------------------------------------------------------
