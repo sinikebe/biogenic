@@ -53,10 +53,24 @@ const Catalogue := preload("res://game/genes/catalogue.gd")
 ## of threat red (355), because those two are the only colours in the game whose
 ## meaning is a relationship rather than a name. The gene probe holds both.
 static var _looks: Dictionary = Catalogue.looks()
+## **Each key's hue and each key's shape** (the catalogue's `hues` and
+## `shape_by_key`), and **the live keys of each shape** (its `shapes`), held as the
+## looks are: what a body is drawn by, every organ, every body, every frame, each one
+## read of a dictionary this file already has -- as the old tables were.
+static var _hues: Dictionary = Catalogue.hues()
+static var _shape_of: Dictionary = Catalogue.shape_by_key()
+static var _shaped: Dictionary = Catalogue.shapes()
+## The shapes this file draws by (gene.gd).
+const MAT := Catalogue.MAT
+const OARS := Catalogue.OARS
+const LASH := Catalogue.LASH
+const SPINES := Catalogue.SPINES
 ## The shapes drawn on arcs of their own, whatever slot holds them (gene.gd).
-const HOME_SHAPES: Array[StringName] = [Catalogue.MAT, Catalogue.OARS, Catalogue.LASH]
-## An empty look: what a gene this build does not know, or a retired one, has.
+const HOME_SHAPES: Array[StringName] = [MAT, OARS, LASH]
+## An empty look: what a gene this build does not know has -- a retired one has the
+## catalogue's own empty look -- and no keys of a shape nothing is drawn as.
 const NO_LOOK := {}
+const NO_KEYS: Array[StringName] = []
 
 ## **No eye**: what every cell but the player's own passes to [method
 ## draw_cell], and the organ drawn as it always was. One shared, read-only
@@ -597,9 +611,7 @@ const TILE_COMPASS_R := 6.5
 ## arriving over an older binary in a content pack -- or a retired one takes the
 ## first reserved hue rather than drawing as nothing.
 static func hue(gene: StringName) -> Color:
-	var look: Variant = _looks.get(gene)
-	return (look as Dictionary).get("hue", RESERVED_HUES[0]) if look != null \
-		else RESERVED_HUES[0]
+	return _hues.get(gene, RESERVED_HUES[0])
 
 
 ## **The hue of the organ that provides [param stat]** -- the first, where several
@@ -615,12 +627,6 @@ static func hue_for(stat: StringName) -> Color:
 static func hue_on(channel: StringName) -> Color:
 	return hue(Catalogue.first_on(channel))
 
-
-## [param gene]'s look, its organ file's; [constant NO_LOOK] for a gene this build
-## does not know, or a retired one.
-static func _look(gene: StringName) -> Dictionary:
-	var look: Variant = _looks.get(gene)
-	return look if look != null else NO_LOOK
 
 
 ## A cell's fill and rim: self teal pulled toward whatever the body is most
@@ -745,7 +751,7 @@ static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 	_draw_fringe(canvas, at, fwd, stb, r, tiers, clock, fade, steer, unit, layout,
 		eye, tail, dose)
 	var mouth := Catalogue.worn_provider(tiers, &"gape")
-	draw_gape(canvas, at, fwd, stb, r, gape, mouth, Genome.tier_of(tiers, mouth),
+	draw_gape(canvas, at, fwd, stb, r, gape, mouth, int(tiers.get(mouth, 0)),
 		not is_self and gape > viewer_radius, fade, unit)
 	# **Venom at the front is on the lips**, drawn after them: a venom worn in a
 	# front slot, or worn nowhere, rides on the bite (food.gd's `toxins_of`
@@ -753,7 +759,7 @@ static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 	if gape <= 0.0:
 		return
 	for gene: StringName in tiers:
-		if _look(gene).get("shape", &"") != Catalogue.SPINES or Genome.is_inside_form(gene):
+		if _shape_of.get(gene, &"") != SPINES or Genome.is_inside_form(gene):
 			continue
 		var tier := int(tiers[gene])
 		var worn := layout.find(gene)
@@ -1182,20 +1188,20 @@ static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 	# **The home organs, found by their shape and not their name** (gene.gd): the
 	# mat round the mouth, the oars on both flanks and the lash at the stern, each
 	# on arcs of its own whatever slot holds it, in the order they always drew.
-	for gene: StringName in Catalogue.shaped(Catalogue.MAT):
-		var eat := Genome.tier_of(tiers, gene)
+	for gene: StringName in _shaped.get(MAT, NO_KEYS):
+		var eat := int(tiers.get(gene, 0))
 		if eat > 0:
-			var look := _look(gene)
+			var look: Dictionary = _looks[gene]
 			var mat := PackedVector2Array()
 			_gather_cytostome(mat, at, fwd, stb, r, eat, clock, int(look["count"]))
 			_stroke(canvas, mat, look["hue"],
 				ALPHA_CYTOSTOME * _tier(TIER_ALPHA, eat) * fade,
 				WIDTH_CYTOSTOME * unit)
 
-	for gene: StringName in Catalogue.shaped(Catalogue.OARS):
-		var turn := Genome.tier_of(tiers, gene)
+	for gene: StringName in _shaped.get(OARS, NO_KEYS):
+		var turn := int(tiers.get(gene, 0))
 		if turn > 0:
-			var look := _look(gene)
+			var look: Dictionary = _looks[gene]
 			var oars := PackedVector2Array()
 			_gather_cirrus(oars, at, fwd, stb, r, turn, clock, steer, 1.0,
 				int(look["count"]))
@@ -1204,10 +1210,10 @@ static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 			_stroke(canvas, oars, look["hue"],
 				ALPHA_CIRRUS * _tier(TIER_ALPHA, turn) * fade, WIDTH_CIRRUS * unit)
 
-	for gene: StringName in Catalogue.shaped(Catalogue.LASH):
-		var swim := Genome.tier_of(tiers, gene)
+	for gene: StringName in _shaped.get(LASH, NO_KEYS):
+		var swim := int(tiers.get(gene, 0))
 		if swim > 0:
-			var look := _look(gene)
+			var look: Dictionary = _looks[gene]
 			var tails := PackedVector2Array()
 			var own := not is_nan(tail.x)
 			_gather_flagellum(tails, at, fwd, stb, r, swim, tail.x if own else clock,
@@ -1223,7 +1229,7 @@ static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		var gene: StringName = layout[slot]
 		if gene == &"":
 			continue
-		var shape: StringName = _look(gene).get("shape", &"")
+		var shape: StringName = _shape_of.get(gene, &"")
 		if HOME_SHAPES.has(shape):
 			continue
 		var tier := int(tiers.get(gene, 0))
@@ -1233,7 +1239,7 @@ static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		# arc, and are drawn below; at the front they are on the lips, drawn with
 		# the gape; on a side or the stern they are barbs on the arc they guard --
 		# unless the switch has made a side venom inert, when they draw nothing.
-		if shape == Catalogue.SPINES:
+		if shape == SPINES:
 			if not Genome.is_inside_form(gene) and slot < Genome.INSIDE \
 					and not Genome.is_front(slot) and CellBody.VENOM_SIDES:
 				_draw_guard(canvas, at, fwd, stb, r, gene, tier,
@@ -1364,8 +1370,7 @@ static func _draw_earned(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		stb: Vector2, r: float, gene: StringName, tier: int, arc: Vector2,
 		fade: float, unit: float, clock: float = 0.0,
 		eye: Dictionary = NO_EYE) -> void:
-	var look := _look(gene)
-	var tone: Color = look.get("hue", RESERVED_HUES[0])
+	var tone := hue(gene)
 	var mid := deg_to_rad((arc.x + arc.y) * 0.5)
 	var seat := _surface(at, fwd, stb, r * PIGMENT_SEAT, mid)
 	var flare := clampf(float(eye.get("flare", 0.0)), 0.0, 1.0)
@@ -1395,7 +1400,8 @@ static func _draw_earned(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		_draw_bud(canvas, seat, _normal(fwd, stb, mid), r, tone, bud, rim, core,
 			clock, fade)
 
-	var count := _count(int(look.get("count", COUNT_EARNED)), tier)
+	var count := _count(int((_looks.get(gene, NO_LOOK) as Dictionary).get("count",
+		COUNT_EARNED)), tier)
 	var scale := _tier(TIER_LEN, tier)
 	var reach := lerpf(1.0, FLARE_REACH, flare)
 	var strokes := PackedVector2Array()
@@ -2211,9 +2217,9 @@ static func draw_tile_organ(canvas: CanvasItem, gene: StringName, tier: int,
 	# §2.5): venom four beaded rods standing out of the dome, poison the dome, the
 	# pigment and seven dots on an arc just outside it -- the granules, at a tile's
 	# size.
-	var look := _look(gene)
+	var look: Dictionary = _looks.get(gene, NO_LOOK)
 	var shape: StringName = look.get("shape", &"")
-	if shape == Catalogue.SPINES:
+	if shape == SPINES:
 		if Genome.is_inside_form(gene):
 			canvas.draw_circle(centre + Vector2(0.0, -arc_r * PIGMENT_SEAT),
 				TILE_PIGMENT * scale, Color(tone, 0.85 * ink), true, -1.0, true)
@@ -2251,12 +2257,12 @@ static func draw_tile_organ(canvas: CanvasItem, gene: StringName, tier: int,
 		var dir := Vector2(cos(angle), sin(angle))
 		var root := centre + dir * arc_r
 		var span := length
-		if shape == Catalogue.MAT:
+		if shape == MAT:
 			# The same metachronal wave the body wears, held still at clock 0.
 			span *= 0.80 + 0.30 * sin(u * CYTOSTOME_WAVE_U)
-		elif shape == Catalogue.OARS:
+		elif shape == OARS:
 			span *= 0.86 + 0.22 * cos(u * CIRRUS_WAVE_U)
-		elif shape == Catalogue.LASH:
+		elif shape == LASH:
 			span *= 0.82 + 0.26 * sin(u * FLAGELLUM_WAVE_U)
 		else:
 			span *= 0.88 + 0.14 * sin(u * PI)

@@ -166,8 +166,15 @@ static var _registered: Array = []
 ## every body drawn, every frame, so it is one lookup -- and **filled in place and
 ## never replaced**, as [member _provided] is, because cilia.gd holds it.
 static var _looks := {}
-## Shape to the live keys drawn as it, in order.
+## Shape to the live keys drawn as it, in order. **Filled in place and never
+## replaced**, as [member _looks] is, because cilia.gd holds it.
 static var _shaped := {}
+## **Key to its look's hue, and key to its look's shape**, for every key whose look
+## has one -- a retired key's has neither. Each is asked of every organ of every body
+## drawn, every frame, so each is one lookup; filled in place, as [member _looks] is,
+## because cilia.gd holds both.
+static var _hues := {}
+static var _shape_of := {}
 ## Key to its words (gene.gd's word tables): [constant KEY_WORDS]' names to the
 ## English, which the screens translate.
 static var _words := {}
@@ -450,6 +457,26 @@ static func shaped(shape: StringName) -> Array[StringName]:
 	return _shaped.get(shape, _none)
 
 
+## **Every shape's [method shaped], by shape**: the catalogue's own dictionary, which
+## cilia.gd holds once and reads every frame as its own, filled in place as
+## [method looks] is. Read it; never write it.
+static func shapes() -> Dictionary:
+	return _shaped
+
+
+## **Every key's hue, by key** -- its look's `hue` -- for the keys that have one: the
+## catalogue's own dictionary, held by cilia.gd as [method looks] is. Read it; never
+## write it.
+static func hues() -> Dictionary:
+	return _hues
+
+
+## **Every key's shape, by key** -- its look's `shape` -- for the keys that have one,
+## held by cilia.gd as [method hues] is.
+static func shape_by_key() -> Dictionary:
+	return _shape_of
+
+
 ## **The first live key on membrane [param channel]**, `&""` for none: whose hue a
 ## channel's lobe is drawn in (signal_bus.gd).
 static func first_on(channel: StringName) -> StringName:
@@ -524,10 +551,17 @@ static func _index() -> void:
 	_words = words
 	_freeze(part_words)
 	_part_words = part_words
-	# In place: cilia.gd holds this dictionary ([method looks]).
+	# In place: cilia.gd holds these dictionaries ([method looks], [method hues],
+	# [method shape_by_key]).
 	_looks.clear()
+	_hues.clear()
+	_shape_of.clear()
 	for record: Gene in resolved:
 		_looks[record.key] = record.look
+		if record.look.has("hue"):
+			_hues[record.key] = record.look["hue"]
+		if record.look.has("shape"):
+			_shape_of[record.key] = StringName(record.look["shape"])
 	var ordered := resolved.filter(func(one: Gene) -> bool: return one.order >= 0)
 	ordered.sort_custom(func(a: Gene, b: Gene) -> bool: return a.order < b.order)
 	var keys: Array[StringName] = []
@@ -561,16 +595,18 @@ static func _index() -> void:
 	_places = {}
 	for record: Gene in resolved:
 		_places[record.key] = record.place
-	_shaped = {}
+	# In place: cilia.gd holds this dictionary ([method shapes]).
+	var shaped := {}
 	for key: StringName in live:
 		var shape := StringName((records[key] as Gene).look.get("shape", &""))
 		if shape == &"":
 			continue
-		if not _shaped.has(shape):
-			_shaped[shape] = [] as Array[StringName]
-		(_shaped[shape] as Array).append(key)
-	for shape: StringName in _shaped:
-		_read_only(_shaped[shape])
+		if not shaped.has(shape):
+			shaped[shape] = [] as Array[StringName]
+		(shaped[shape] as Array).append(key)
+	_shaped.clear()
+	for shape: StringName in shaped:
+		_shaped[shape] = _read_only(shaped[shape])
 	_providers = {}
 	_channels = {}
 	var born := {}
