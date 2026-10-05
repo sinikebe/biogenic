@@ -18,9 +18,13 @@ extends Node
 ## declared, and every declared part wired in a water cell and in yours; what each
 ## mechanic asks of the organ it finds by a stat; and organs registered and
 ## forgotten -- forms, tags that add up, variants of no forms, an organ that calls
-## with no period, a part nothing wires. And -- a number, not yet a failure
-## (§12.2) -- how many gene names are still written into game/ outside
-## game/genes/.
+## with no period, a part nothing wires. Then what a gene looks like and says
+## (§7.1, §8): every live gene's look, its words and its parts' words, no word
+## table naming what is not its organ's, its numbers on the pause screen, and the
+## colours -- no two hues nearer than today's floor, none on self teal or threat
+## red, and every copy of a hue its organ's. And -- numbers, not yet failures
+## (§8.3, §12.2) -- the gene words with no French, and how many gene names are
+## still written into game/ outside game/genes/.
 ##
 ## Prints one line per check and `ALL PASS` only if every one held; CI asserts on
 ## that marker rather than on the exit code, because Godot exits 0 after a script
@@ -41,6 +45,13 @@ const Drop := preload("res://game/normal/drop.gd")
 const Rulebook := preload("res://game/mechanics/rulebook.gd")
 const Wire := preload("res://game/net/wire.gd")
 const Referee := preload("res://game/net/referee.gd")
+const GeneStats := preload("res://game/normal/gene_stats.gd")
+const Doses := preload("res://game/mechanics/doses.gd")
+## The views that draw a gene's hue, or keep one: what the colour checks read.
+const Cilia := preload("res://game/vision/cilia.gd")
+const SignalBus := preload("res://game/perception/signal_bus.gd")
+const Controls := preload("res://game/normal/controls.gd")
+const Earshot := preload("res://game/net/earshot.gd")
 
 ## **Every key that ever shipped, in its order** -- its place is its index -- and
 ## the ones retired before the catalogue, which have none. Keys are permanent
@@ -90,6 +101,27 @@ const TOGETHER: Array = [
 	[&"beam_range", &"beam_count", &"beam_fan_deg"],
 ]
 
+## **What a look may hold today** (gene.gd's `look`): phase 6 adds a kind's
+## parameters, and this list with them.
+const LOOK_FIELDS: Array[String] = ["shape", "hue", "count", "tile_count", "tile_length"]
+## **The colours as they are** (§12.1), as HSV hue in degrees (`Color.h`): no two
+## genes' hues nearer than [constant HUE_FLOOR_DEG] -- today's narrowest gap but the
+## pairs below, `cirrus` and `vacuole`'s 10.2, rounded down -- and none within
+## [constant CLEAR_DEG] of self teal (`Cilia.SELF_TINT`) or threat red
+## (`Cilia.PREDATOR_TINT`), the two colours whose meaning is a relationship. Two
+## forms of one strain are one colour on purpose, and are one hue here.
+const HUE_FLOOR_DEG := 10.0
+const CLEAR_DEG := 25.0
+## **The pairs that already break those rules**, two genes or a gene and `teal` or
+## `red`: kept as they are until phase 6, whose families replace both rules
+## (gene-looks.md §8). Nothing is added here to let a new gene through.
+const KEPT_UNTIL_FAMILIES: Array = [
+	[&"palp", &"crista"], [&"stigma", &"plastid"], [&"flagellum", &"trichocyst"],
+	[&"pellicle", &"teal"], [&"myoneme", &"red"],
+]
+## The game's French, whose missing gene words are listed (§8.3).
+const FRENCH := "res://game/i18n/fr.po"
+
 ## The folder the index must match, file for file.
 const ORGANS_DIR := "res://game/genes/organs"
 ## Where the gene names left in code are counted (§12.2), and what is exempt.
@@ -108,6 +140,11 @@ func _ready() -> void:
 	_wiring()
 	_mechanics()
 	_register()
+	_looks()
+	_words()
+	_lines()
+	_colours()
+	_untranslated()
 	_names_left()
 	print("[gene-probe] ALL PASS" if _failed == 0 else "[gene-probe] FAILED %d" % _failed)
 	get_tree().quit(0 if _failed == 0 else 1)
@@ -625,6 +662,260 @@ func _register() -> void:
 		and Array(Catalogue.keys()) == before)
 
 
+# --- Looks (§7.1) ----------------------------------------------------------------------------
+
+## **Every live gene's look**: a shape there is, a hue, its strokes where its
+## shape counts them and a home shape's tile, and nothing a look does not hold. A
+## retired gene has none, so that it draws as a gene this build does not know.
+func _looks() -> void:
+	var bad: Array[String] = []
+	for key: StringName in Catalogue.live():
+		var look := Catalogue.look(key)
+		var shape := StringName(look.get("shape", &""))
+		if not Gene.SHAPES.has(shape):
+			bad.append("%s's shape %s" % [key, shape if shape != &"" else &"(none)"])
+		if not look.get("hue") is Color:
+			bad.append("%s's hue" % key)
+		if Gene.COUNTED.has(shape) and not _counts(look.get("count")):
+			bad.append("%s's count" % key)
+		if Gene.HOME_SHAPES.has(shape) and not (_counts(look.get("tile_count"))
+				and float(look.get("tile_length", 0.0)) > 0.0):
+			bad.append("%s's tile" % key)
+		for field: Variant in look:
+			if not LOOK_FIELDS.has(String(field)):
+				bad.append("%s's look field %s" % [key, field])
+	for key: StringName in Catalogue.tagged(Catalogue.RETIRED):
+		if not Catalogue.look(key).is_empty():
+			bad.append("retired %s's look" % key)
+	var shapes := PackedStringArray()
+	for shape: StringName in Gene.SHAPES:
+		shapes.append("%s %d" % [shape, Catalogue.shaped(shape).size()])
+	_check(("every live gene has a look -- a shape there is, a hue, its strokes where its shape"
+		+ " counts them and a home shape's tile -- and every retired one none: %s%s") % [
+			", ".join(shapes), "" if bad.is_empty() else "; wrong: %s" % ", ".join(bad)],
+		bad.is_empty())
+
+
+# --- Words (§8.1) and lines (§8.4) -----------------------------------------------------------
+
+## **Every live gene's words**: a chip word and its line; its word and line in
+## hand where it is one form of several; every way's words where its levels fork;
+## and for every part it declares, its word -- a sense's or an action's -- its
+## line, and what an instinct says while the part waits for a level. And no word
+## table in an organ's file is keyed by a key, a part or a way not its organ's:
+## words for what nobody is, which nobody is shown.
+func _words() -> void:
+	var bad: Array[String] = []
+	for key: StringName in Catalogue.live():
+		var words := Catalogue.words(key)
+		var needed: Array[StringName] = [&"word", &"explains"]
+		if Catalogue.has_forms(key):
+			needed.append_array([&"carried", &"carried_explains"] as Array[StringName])
+		for name: StringName in needed:
+			if not _said(words.get(name)):
+				bad.append("%s's %s" % [key, name])
+		for way: Variant in Catalogue.levels(key).get("paths", []):
+			for name: StringName in [&"way_titles", &"way_says", &"paths"]:
+				if not _said((words.get(name, {}) as Dictionary).get(way)):
+					bad.append("%s's %s for %s" % [key, name, way])
+			var two: Variant = (words.get(&"way_lines", {}) as Dictionary).get(way)
+			if not (two is Array and (two as Array).size() == 2 and _said(two[0])
+					and _said(two[1])):
+				bad.append("%s's way_lines for %s" % [key, way])
+	var parts := _declared_parts()
+	for part: StringName in parts:
+		var said := Catalogue.part_words(part)
+		var decl: Dictionary = parts[part]
+		var needed: Array[StringName] = [&"sense" if decl["side"] == "in" else &"says",
+			&"explains"]
+		if decl.has("level"):
+			needed.append_array([&"asleep", &"needs"] as Array[StringName])
+		for name: StringName in needed:
+			if not _said(said.get(name)):
+				bad.append("%s's %s" % [part, name])
+	for organ: Gene in _organs():
+		var tables := (organ.get_script() as GDScript).get_script_constant_map()
+		var keys := _keys_of(organ)
+		var ways: Array = []
+		for key: StringName in keys:
+			ways.append_array(Catalogue.levels(key).get("paths", []))
+		var own := {}
+		for part: StringName in parts:
+			if keys.has(StringName(String(part).get_slice(".", 0))):
+				own[part] = true
+		for table: String in Catalogue.KEY_WORDS:
+			for entry: Variant in _table(tables, table):
+				if not keys.has(StringName(entry)):
+					bad.append("%s's %s says %s, not one of its keys" % [organ.organ, table, entry])
+				elif table == "EXPLAINS_PATH":
+					for way: Variant in _table(tables[table], entry):
+						if not ways.has(way):
+							bad.append("%s's %s has a way %s it has not" % [organ.organ, table, way])
+		for table: String in Catalogue.PART_WORDS:
+			for entry: Variant in _table(tables, table):
+				if not own.has(StringName(entry)):
+					bad.append("%s's %s says %s, not a part it declares" % [organ.organ, table, entry])
+		for table: String in Catalogue.WAY_WORDS:
+			for entry: Variant in _table(tables, table):
+				if not ways.has(entry):
+					bad.append("%s's %s has a way %s it has not" % [organ.organ, table, entry])
+	_check(("every live gene has its chip word and its line, its words in hand where it has"
+		+ " forms and every way's where it forks, and every one of the %d parts the genes"
+		+ " declare its word, its line and, waiting for a level, what it says; no word table"
+		+ " is keyed by what is not its organ's%s") % [parts.size(),
+			"" if bad.is_empty() else ": missing or stray: %s" % ", ".join(bad)], bad.is_empty())
+
+
+## **Every live gene has its numbers on the pause screen** -- what it does and what
+## it costs, at every copy count, and at its first level and down each way where it
+## levels -- and a retired gene, and a key this build does not know, draw nothing:
+## a row with nothing in it is drawn as nothing at all.
+func _lines() -> void:
+	var ctx := GeneStats.context({})
+	var bad: Array[String] = []
+	var rows_read := 0
+	for key: StringName in Catalogue.live():
+		var levels := Catalogue.levels(key)
+		var cases: Array = [[0, &""]]
+		if not levels.is_empty():
+			cases = [[1, &""]]
+			for way: Variant in levels.get("paths", []):
+				cases.append([int(levels.get("fork", 1)), StringName(way)])
+		for copies in range(1, Genome.TIER_MAX + 1):
+			for case: Array in cases:
+				var rows: Array = GeneStats.lines(key, copies, case[0], case[1], ctx)
+				rows_read += 1
+				if rows.size() != 2 or (rows[0] as Array).is_empty() or (rows[1] as Array).is_empty():
+					bad.append("%s at %d copies, level %d%s" % [key, copies, case[0],
+						" down " + String(case[1]) if case[1] != &"" else ""])
+	var silent: Array[StringName] = []
+	silent.append_array(Catalogue.tagged(Catalogue.RETIRED))
+	silent.append(&"probeunknown")
+	for key: StringName in silent:
+		if GeneStats.lines(key, 2, 0, &"", ctx) != [[], []]:
+			bad.append("%s draws a row" % key)
+	_check(("every live gene says what it does and what it costs on the pause screen -- %d"
+		+ " readings, every copy count, level and way -- and %s draw nothing%s") % [rows_read,
+			str(silent), "" if bad.is_empty() else ": wrong: %s" % ", ".join(bad)],
+		bad.is_empty())
+
+
+# --- Colours (§12.1) ---------------------------------------------------------------------
+
+## **No two genes' hues nearer than today's floor, and none within 25° of self teal
+## or threat red**, but the pairs that already were; and **every copy of a gene's
+## hue is its organ's**: the membrane's lobes are the hues of the organs on their
+## channels, its strains the hues of the forms that deliver them, the call code the
+## ping's, and each pad the organ it works through.
+func _colours() -> void:
+	var hues := {}
+	for key: StringName in Catalogue.live():
+		var hue: Variant = Catalogue.look(key).get("hue")
+		if hue is Color:
+			hues[key] = (hue as Color).h * 360.0
+	var marks := {&"teal": Cilia.SELF_TINT.h * 360.0, &"red": Cilia.PREDATOR_TINT.h * 360.0}
+	var close: Array[String] = []
+	var kept: Array[String] = []
+	var nearest := 360.0
+	var keys: Array = hues.keys()
+	for i in keys.size():
+		var a: StringName = keys[i]
+		for j in range(i + 1, keys.size()):
+			var b: StringName = keys[j]
+			if Catalogue.forms_of(a).has(b):
+				continue
+			var gap := _apart(float(hues[a]), float(hues[b]))
+			if _kept(a, b):
+				kept.append("%s and %s %.1f°" % [a, b, gap])
+			elif gap < HUE_FLOOR_DEG:
+				close.append("%s and %s %.1f°" % [a, b, gap])
+			else:
+				nearest = minf(nearest, gap)
+		for mark: StringName in marks:
+			var gap := _apart(float(hues[a]), float(marks[mark]))
+			if gap >= CLEAR_DEG:
+				continue
+			if _kept(a, mark):
+				kept.append("%s and %s %.1f°" % [a, mark, gap])
+			else:
+				close.append("%s and %s %.1f°" % [a, mark, gap])
+	_check(("no two genes' hues nearer than %.0f° -- the nearest now %.1f° -- and none within"
+		+ " %.0f° of self teal or threat red, but the %d kept until phase 6: %s%s") % [
+			HUE_FLOOR_DEG, nearest, CLEAR_DEG, kept.size(), ", ".join(kept),
+			"" if close.is_empty() else "; too near: %s" % ", ".join(close)],
+		close.is_empty() and kept.size() == KEPT_UNTIL_FAMILIES.size())
+	if kept.size() != KEPT_UNTIL_FAMILIES.size():
+		print("[gene-probe] NOTE kept until phase 6, and no longer near: take it off the list")
+	var wrong: Array[String] = []
+	var copies := 0
+	for lobe: Array in [[&"light", SignalBus.LIGHT_COLOR, Catalogue.LIGHT],
+			[&"beam", SignalBus.BEAM_COLOR, Catalogue.BEAM],
+			[&"ping", SignalBus.PING_COLOR, Catalogue.PING]]:
+		copies += 1
+		if not _same(lobe[1], Catalogue.first_on(lobe[2])):
+			wrong.append("the membrane's %s lobe" % lobe[0])
+	for kind in Doses.Kind.size():
+		var form := _delivering(kind)
+		if form == &"":
+			continue
+		copies += 1
+		var cilia := Cilia.dose_hue(kind)
+		if not _same(SignalBus.STRAIN_COLORS[kind], form) \
+				or not _same(Vector3(cilia.r, cilia.g, cilia.b), form):
+			wrong.append("the strain colour of %s" % Doses.Kind.keys()[kind])
+	for pad: Array in [[&"turn", Controls.TURN_HUE, &"turn_rate"],
+			[&"push", Controls.PUSH_HUE, &"push_accel"],
+			[&"hold", Controls.HOLD_HUE, &"impulse_speed"]]:
+		copies += 1
+		var tone: Color = pad[1]
+		if not _same(Vector3(tone.r, tone.g, tone.b), Catalogue.first_provider(pad[2])):
+			wrong.append("the %s pad" % pad[0])
+	copies += 1
+	var code: Color = Earshot.CODE_COLOR
+	if not _same(Vector3(code.r, code.g, code.b), Catalogue.first_on(Catalogue.PING)):
+		wrong.append("the earshot's call code")
+	_check(("every one of the %d copies of a gene's hue is its organ's -- the membrane's light,"
+		+ " beam and ping lobes, its strain colours, the three pads, the call code%s") % [copies,
+			"" if wrong.is_empty() else "; not: %s" % ", ".join(wrong)], wrong.is_empty())
+
+
+## **The gene words with no French** (§8.3), listed and never failed: a word not
+## yet translated ships in English, and the gene pass sees it here. A name on
+## screen is a scientific name, and is not translated.
+func _untranslated() -> void:
+	var fr := load(FRENCH) as Translation
+	if fr == null:
+		print("[gene-probe] NOTE no French at %s, so no gene word is checked for one" % FRENCH)
+		return
+	var missing := PackedStringArray()
+	var said := 0
+	var parts := _declared_parts()
+	for key: StringName in Catalogue.live():
+		var english: Array = []
+		var words := Catalogue.words(key)
+		for name: StringName in words:
+			if name != &"name":
+				_strings_into(english, words[name], "")
+		for part: StringName in parts:
+			if String(part).get_slice(".", 0) == String(key):
+				var own := Catalogue.part_words(part)
+				for name: StringName in own:
+					_strings_into(english, own[name], "sense" if name == &"sense" else "")
+		var lacking := PackedStringArray()
+		var seen := {}
+		for one: Array in english:
+			if seen.has(one):
+				continue
+			seen[one] = true
+			said += 1
+			if String(fr.get_message(StringName(one[0]), StringName(one[1]))).is_empty():
+				lacking.append("\"%s\"" % one[0])
+		if not lacking.is_empty():
+			missing.append("%s: %s" % [key, ", ".join(lacking)])
+	print("[gene-probe] NOTE gene words with no French, of %d: %s" % [said,
+		"none" if missing.is_empty() else "; ".join(missing)])
+
+
 # --- Gene names left in code (§12.2) ----------------------------------------------------------
 
 ## **How many gene names are left written into game/ outside game/genes/** --
@@ -661,6 +952,79 @@ func _names_left() -> void:
 
 
 # --- Helpers ----------------------------------------------------------------------------------
+
+## Every part the genes declare, by its qualified name: its declaration, and the
+## side it is on (`in`, a sense; `out`, an action) as `side`.
+func _declared_parts() -> Dictionary:
+	var out := {}
+	var declared := Catalogue.declares()
+	for key: StringName in declared:
+		for side: String in ["in", "out"]:
+			for part: Dictionary in (declared[key] as Dictionary).get(side, []):
+				var decl := part.duplicate()
+				decl["side"] = side
+				out[StringName("%s.%s" % [key, part["name"]])] = decl
+	return out
+
+
+## Whether [param value] is words: a string with something in it.
+static func _said(value: Variant) -> bool:
+	return value is String and not (value as String).strip_edges().is_empty()
+
+
+## Whether [param value] is a count of strokes: a whole number above nought.
+static func _counts(value: Variant) -> bool:
+	return value is int and int(value) > 0
+
+
+## The entries of an organ file's word table [param name] in [param tables], or of a
+## table's own inner table: none where it is not a dictionary.
+static func _table(tables: Variant, name: Variant) -> Array:
+	var table: Variant = (tables as Dictionary).get(name) if tables is Dictionary else null
+	return (table as Dictionary).keys() if table is Dictionary else []
+
+
+## How far apart two hues are, in degrees round the wheel.
+static func _apart(a: float, b: float) -> float:
+	var gap := absf(a - b)
+	return minf(gap, 360.0 - gap)
+
+
+## Whether [param a] and [param b] are a pair kept until phase 6.
+static func _kept(a: StringName, b: StringName) -> bool:
+	for pair: Array in KEPT_UNTIL_FAMILIES:
+		if (pair[0] == a and pair[1] == b) or (pair[0] == b and pair[1] == a):
+			return true
+	return false
+
+
+## Whether [param rgb], a copy of a hue as the shader takes it, is [param key]'s.
+static func _same(rgb: Vector3, key: StringName) -> bool:
+	var hue: Variant = Catalogue.look(key).get("hue")
+	return hue is Color and rgb.is_equal_approx(Vector3(hue.r, hue.g, hue.b))
+
+
+## The first live form that delivers a load of [param kind], `&""` for none.
+static func _delivering(kind: int) -> StringName:
+	for key: StringName in Catalogue.live():
+		var dose := Catalogue.dose_of(key)
+		if dose != &"" and Doses.kind_of(dose) == kind:
+			return key
+	return &""
+
+
+## Adds every string in [param value] -- a string, or a table or list of them --
+## to [param into], each as `[text, context]`.
+static func _strings_into(into: Array, value: Variant, context: String) -> void:
+	if value is String:
+		if not (value as String).is_empty():
+			into.append([value, context])
+	elif value is Dictionary:
+		for inner: Variant in (value as Dictionary).values():
+			_strings_into(into, inner, context)
+	elif value is Array:
+		for inner: Variant in value:
+			_strings_into(into, inner, context)
 
 ## A fresh instance of every organ file the index lists.
 func _organs() -> Array[Gene]:
