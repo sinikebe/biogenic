@@ -345,9 +345,9 @@ act from every provider (a beam per eye) is the gene pass's code to write, in th
 mechanic, when an organ needs it.
 
 **As built in phase 3** (§15.4), it is the first **in slot order**: a body with two
-eyes casts from the one in the lower slot. The layout is no longer read at every
-read, because each of these is read once a body -- the cell's by `body_version`, a
-water body's when its genome is written. `stats.gd`'s `SEATED` names the stats whose
+eyes casts from the one in the lower slot. Slot order no longer needs the layout at
+every read, because each of these is read once a body -- the cell's by
+`body_version`, a water body's when its genome is written. `stats.gd`'s `SEATED` names the stats whose
 mechanic has a place: `beam_range`, `ping_range`, `dart_range` and `smell_range`.
 Everything such a mechanic reads off its organ is that organ's: its arc, its tier, its
 level and path, its fork, its experience cap, its dart's stun. The mouth, the tail's
@@ -834,8 +834,8 @@ A grep gate in CI fails on any `&"<key>"` or `"<key>"` literal for a catalogue k
 `game/` outside `game/genes/`. Comments and `tools/` are exempt. It lands in phase 5,
 once nothing is left to move. Until then, the probe prints the count.
 
-**As built in phase 3** (§15.4), on the coordinator's word: CI's "Check the gene names"
-runs the gene probe with `-- --names`, which prints one failure for every such literal
+**As built in phase 3** (§15.4), as its brief asked: CI's "Check the gene names" runs
+the gene probe with `-- --names`, which prints one failure for every such literal
 -- its file, line and text -- and `ALL PASS` only for none. Comment lines and `tools/`
 are exempt, and retired keys count. There are none.
 
@@ -1455,6 +1455,199 @@ another's spread, p10 149.2 to 151.6 ms, so none was kept.
   - **The choosing screen's column** is `112 + (loci + 2) x 48` px, and its words
     under it: 658 px at today's eight loci, 706 at nine, past the 720 px canvas at
     ten. Phase 3's gene probe fails a plan it runs off (§15.4).
+  - **`drop_probe`'s floors check can fail by chance.** It holds that no drifter gene
+    is ever carried by nobody, over five minutes of one water at seed 1. On the
+    eight-slot plan it failed there, twice. Phase 3 ran the same water at seeds 1 to
+    6: today's plan loses a gene once (seed 3), the eight-slot plan five times (seeds
+    1, 3 and 5), and in all twelve the floor brings each back by the next count. So
+    the floor works on both, a plan change can fail the check at seed 1 without
+    breaking anything, and whether a bigger outside makes a lost gene likelier is
+    more than six seeds can say.
+
+### 15.4 As built: phase 3, 2026-10-05
+
+**A variant is one entry in its organ's file, for any organ, and the water, the genome,
+the body, the instincts, the stats screen, the wire and saves follow it. Nothing a
+player can notice changes.** By file:
+
+| file | now |
+|---|---|
+| `gene.gd` | `one_variant`, an organ's, off (§6.3); the tags `not_on_drifters` and `floor_by_peers` (§6.4); `dose_line`, what one stack of a key's own dose does |
+| `catalogue.gd` | an organ's weight in the water (`organ_weight`: its own, else its first variety's) and its varieties (`organs_in`, `of_organ`, `pick_variety`, which draws no number for an organ of one); a key's organ and an organ's keys, one lookup each (`organ_of`, `keys_of_organ`); `one_variant`; `seated_provider`, and `number_for` given a layout; `declares` by organ, `by_organ` and `first_key`; `declares` is no longer a field a variant sets, and every variant carries its organ's parts |
+| `stats.gd` | `SEATED`, the stats whose mechanic has a place; `organ`, the organ a mechanic acts from; `tier_of` |
+| `food.gd` | the water's draws and fills by organ, then strain; the floor's peer path by tag (`_peer_short`, `_give_back_by_peer`); `_seat_of`, the eye's ping tier and its beam by the organ acted from, and a water body's dart stun its seated dart's (`Body.seats`); the readers and triggers wired by part name (`wire_parts`); `_worn_of` by organ; `toxins_of` reads any key with a dose |
+| `genome.gd` | drift draws an organ, then a strain; `one_variant` writes over the other strains and keeps drift off a carried organ |
+| `drop.gd` | `TOXIN` gone: `take_drifter_gene` and `drifter_genes` by `not_on_drifters`; `give_toxin` is `give_back(tiers, gene, ...)`; the senses given by organ |
+| `cell.gd` | `provider` is `Stats.organ` over the body's layout (`seats`), `tier_for` that organ's copies, and `dart_stun` takes a layout |
+| `normal_mode.gd`, `replay.gd` | the gift by organ; the beam's fork and experience cap its own organ's; the replay's ping bearing its seated caller's |
+| `own_rules.gd`, `programs_page.gd`, `rulebook.gd` | your instincts' readers wired by part name, your parts counted by organ; the hold's mark and a part's verb found by its name; `part_of` |
+| `toxin.gd` | its two tags; `dose_line` read off its own dose |
+| `body_plan.gd` | a stamp of no ids is no stamp; the plan's note says a plan change moves `Wire.PROTOCOL` by hand until phase 4 |
+| `tools/gene_probe.gd` | 53 checks, 42 before: the synthetic gene and its variants, the faster tail and the second strain (§12.3), the dose and venom-word checks in two of the old ones, and `-- --names`, the gate (§12.2); the plan's checks start from `SHIPPED_PLAN`, and the choosing screen is held to the canvas (phase 2's review, below) |
+| `tools/drop_probe.gd`, `net_probe.gd`, `field_diff.gd` | the toxin by its key; the stub genomes answer `body_layout`; armour posed by its stat, the outside filled from the plan, a genome past the plan's count named by letter (phase 2's review) |
+| `.github/workflows/ci.yml` | "Check the gene names" (§12.2), asked for in phase 3's brief |
+
+**Where it differs from the design, and why** (the sections above say so too):
+
+- **A mechanic with a place acts from the first provider in slot order** (§5.2 said the
+  catalogue's), as phase 3's brief asked. The design's reason for the catalogue's --
+  the layout at every read -- is gone: each of these is read once a body. The beam,
+  the ping, the dart and the nose have a place; the mouth, the tail's level and hold
+  and the dash do not, and keep the catalogue's order.
+- **An organ's weight in the water** is its file's own `water.weight`, read before a
+  variant writes over it, or else its first variety's. Its strains share its draws: the
+  spawner draws the organ by that weight, then a strain by theirs, and fills a body
+  with one strain of an organ. **Drift draws the organ evenly** (§9), then a strain by
+  weight. With one strain to every organ today, both take the numbers they always took.
+- **`one_variant`'s rule** (§6.3 leaves its default to the gene pass): placing or
+  integrating a strain of such an organ writes over every other strain of it in the
+  DNA, both its places, and empties their slots; the body keeps what it wears until a
+  birth. Drift brings no strain of such an organ to a lineage that carries one.
+- **An organ's instinct parts are the organ's** (§6.2: a variant changes anything but
+  the mechanic): the rulebook's owners are organs, and a variant declares none of its
+  own. Every shipped organ goes by its own key, so every name, bit and saved list is
+  the one it was, and `by_organ` hands back the dictionary it was given.
+- **`toxins_of` reads the dose, not a tag** (§6.4 lists it with the cases that become
+  tags): it took a toxin for a key with forms, so a strain of one place would have been
+  worn and delivered nothing. It reads any key with a dose, which is what a toxin is.
+- **A second strain's lines are required, not derived** (the 1b review's finding 4
+  offered both): a stack's line is the organ's to write for each kind of dose, and the
+  probe fails a live strain whose kind has none, and a venom without its side and stern
+  words, rather than let `figure.gd` fall back to the front line.
+- **The gate landed in phase 3** (§12.2 said phase 5), as phase 3's brief asked, as a
+  mode of the gene probe rather than a tool of its own. It is the spec's literal match:
+  `drop.gd`'s `FOUNDERS`, rule text naming organs' parts (`ampulla.echo`) as a saved
+  list does, is no key literal and stays.
+- **A water body's dart stun reads its layout** when its genome is written, if it wears
+  a dart: its default order, 6 to 11 µs here. It is read only when several organs
+  dart, so the layout is made for nothing today, once a write for a body with a dart.
+
+**Checked: nothing changed** (§14), against `71938d6`, at `c56ceb5` -- the last commit
+that touched what the game does before the reviews' -- and again at `9144209`, the
+last that touches code:
+
+1. Every check `ci.yml` runs passes here but `net_drop` and the door of `net_fuzz`,
+   which need a network namespace this container refuses (left to CI, as before).
+   None was removed or loosened. The gene probe makes 53 checks, 42 before, and each
+   new one was seen to fail on a fault planted in a scratch copy: the water drawing
+   only an organ's first strain, a variant built in code losing its organ's parts,
+   the smell acting from the catalogue's first nose rather than the first in slot
+   order, a body's parts counted by key where a variant has its own, `one_variant`
+   writing over nothing, a strain of one place delivering no venom (`toxins_of`'s old
+   filter), a strain whose kind of dose has no stack line, a venom with no side words,
+   and a stamp of no ids taken; and the gate, on a gene named in `game/`.
+2. The empty library hashes to `7397a410…` under all three schemes, 69,349 lines.
+   `drop_probe` passes all 143, its ten pins holding -- `DEV_DRAWS` and
+   `DEV_MUTATIONS` among them, so the water, drift and the gift draw what they drew,
+   number for number.
+3. `Wire.RULES` is `46913eab9d0b76a0`, and `net_probe` passes all 441.
+4. `DropSave.rules()` is `e4213164b90d…`.
+5. **The 34 frames**, rendered at `71938d6`, at `c56ceb5` and at `9144209`: 0 px apart,
+   all three.
+6. The template is current, 531 messages, its translators' note on a slot rewritten
+   with no message changed; `fr.po` is untouched, and `--lint-all` passes.
+
+Also the same, to the byte: the 30,519 answers of every word, line and look; the
+stats' and the catalogue's 3,865; the rulebook's vocabulary as the game builds it --
+every owner and its bits, every input, output and claim, and what the water and your
+instincts wire -- 47 lines; `drive --fingerprint=3000` at seeds 7 and 12345, plain,
+sniffing and with seven genes on, the same six hashes and counts; the input path's
+three traces; every scene's boot; the levels, Back and fuzz probes; and every script
+compiling.
+
+**And a world, a cell mid-choice and a library of four instinct lists kept by
+`71938d6`**, the lists naming parts as a saved list does -- `ampulla.echo`,
+`myoneme.dash`, `flagellum.hold`, `chemocyte.smell`, `palp.touch`. Opened by `71938d6`
+and by phase 3, the 10,261 lines of four seconds are the same. Kept again by each, the
+files dump the same and the library is the same bytes; opened again by both, 10,260
+lines the same.
+
+**The cost.** The water's step is `drive --field-cost=600 --age=900`, seed 7, a sighted
+player of radius 30, p50 in µs: the median of six rounds, three with `71938d6` first and
+three with phase 3 first, and the spread of the six, on a machine running nothing else.
+`drop_probe` is its whole run, twice each, interleaved.
+
+| | full vision | point of view | `drop_probe` |
+|---|---|---|---|
+| `71938d6` | 2352 (2262 to 2459) | 2410 (2176 to 2537) | 363 and 371 s |
+| phase 3 | 2414 (2256 to 2611) | 2254 (2136 to 2317) | 375 and 369 s |
+
+A first pass at `c56ceb5`, with other probes on the machine, came out the same way:
+2505 against 2425 in full vision, 2339 against 2351 in point of view, and 403 and 379 s
+against 389 and 379.
+
+**The water's draws are the path phase 3 made dearer, and it was put back.** Drawing
+an organ and then its variety asked the catalogue for each key's organ through the key's
+record, and worked out a key's weight for every organ's, needed or not. The step's
+median does not show it -- a body is drawn when it is made, not every frame -- but
+`drop_probe`'s water check in the DNA section, which makes 40,000 drifters and 9,000
+peers, took 7.8 and 7.5 s against 4.3 and 3.9. A draw over the drifters cost 58 to 69 µs
+against 20 to 25 on this container, and a living peer's genome 180 to 220 against 50 to
+60: the water's whole fill at a drop's start, and every peer after. A key's organ and an
+organ's keys are one lookup each now (`organ_of`, `keys_of_organ`), and the draws cost
+about what they did, 22 to 24 µs and about 66; the check takes 4.4 and 4.6 s against 3.8
+and 4.1 in the table's rounds, what is left being the grouping by organ itself.
+
+**And the 1b review's finding 4**, in phase 3 as asked: a second strain of the toxin
+said harm's numbers for one stack and its front line on a flank. `toxin.gd`'s stack
+line is its own dose's now (`dose_line`), and the probe requires the rest (above).
+
+**And phase 2's review**, which made the owner's two example plan changes in scratch
+copies -- an eighth outside slot, and the fore diagonals swapped -- and found the
+tooling failing them for the wrong reasons. Each its own commit:
+
+- **F1**: `net_probe` named a genome past the plan's count by `"abcdefghij"[i]`, which
+  an eighth slot indexes past; aborting with its host bound, it failed about fifty
+  sessions after it. By letter now: on the eighth-slot plan it passes 440, and the one
+  that fails is its wire-size pin, which says to move it and the protocol (F6).
+- **F2**: the gene probe's broken plans and its synthetic plan started from today's
+  plan and its indexes. `SHIPPED_PLAN` pins the rows; the broken plans are made from
+  it by place, the synthetic cell is kept under it, and every expectation is written by
+  slot id. On both scratch plans only the check that holds today's plan to the pins
+  fails, saying what to move; with the pins moved, all 53 pass on both.
+- **F3**: `drop_probe` filled "the outside" with seven genes; it fills every slot the
+  plan has outside now. On the eighth-slot plan its DNA section fails only the digest
+  pin a new ladder moves.
+- **F5**: the gene probe fails a plan whose loci run the choosing screen off the canvas
+  (§15.3).
+- **F6**: until phase 4, a plan change moves `Wire.PROTOCOL` by hand; `body_plan.gd`,
+  the gene probe's pin and `net_probe`'s wire-size pin say so where the change is made
+  and where it fails -- and that an arcs-only change trips nothing on the wire side.
+- **F7**: retiring `pellicle` failed probe checks that posed it by name; they pose the
+  first live organ that provides armour now, and §15.3 and §16 say what a retirement
+  moves (the drop's pins, `RULES` and the protocol, the template). In scratch copies:
+  with `pellicle` retired, the six checks that need an armoured body -- one of
+  `drop_probe`'s, five of `net_probe`'s -- fail saying no live organ provides armour,
+  and what else fails is the seeded water's pins and the referee's rules; with its
+  strain retired beside a second strain that carries armour, they pass, posed with
+  the second, and `net_probe` passes all 441.
+- **F4** (migration giving a body more live slots than it earned) is recorded in §15.3
+  as a call to make before the first plan change. The comments that stated "seven" as
+  a slot fact say what the plan says, the translators' note among them, and a stamp of
+  no ids is refused.
+
+**Gene names left in `game/`** (§12.2): none. The 17 qualified part names
+(`"<gene>.<part>"`) and `drop.gd`'s `TOXIN` are gone, and CI fails on a name.
+
+**Deferred, and to which phase:**
+
+- **4**: the referee and the handshake, untouched here. `Wire.RULES` hangs on the
+  tables of every judged stat, every provider's, so a variant that changes one -- the
+  faster tail -- moves `PROTOCOL` with it until then, as `CLAUDE.md` says.
+- **The gene pass**: a mechanic that acts from every provider of a stat with a place
+  (a beam for each eye) is its code to write, in that mechanic, when an organ needs it.
+  And the first variant of an organ that declares parts moves every body's parts onto
+  `by_organ`'s other path, a dictionary made for each body's rules: the gene probe's
+  gland takes that path, but its cost in a full water is unmeasured.
+- **Not phase 3's, found while checking F7**: a water cell's division can change
+  neither daughter. The changed one tries a trade and a drift, in a shuffled order;
+  with every gene at one copy there is no trade, and a drift that picks the inside
+  poison to go needs a free outside slot, which a full body at forty has not got
+  (`genome.gd`'s `_mutate_drift`). `drop_probe`'s lineage 1 holds that every division
+  changes one daughter, and fails on it: once in 1,827 divisions of a scratch water
+  with a second armour strain, never in today's seeded waters. A gene change moves
+  those waters and can meet it. Whether the drift then picks another gene to go is the
+  lifecycle's call (dna-slots.md §5.5).
 
 ---
 
@@ -1494,9 +1687,13 @@ another's spread, p10 149.2 to 151.6 ms, so none was kept.
   so retiring one organ moves them to the next. Retiring the last one that provides
   a stat fails the checks that pose it, saying so: the mechanic has no organ left,
   which is a design call, not a fix.
-- **Changing the slots**: edit `body_plan.gd`; saves migrate (§10.3). Move the gene
-  probe's pins of the plan that shipped with it and, until phase 4, `Wire.PROTOCOL`
-  (§15.3).
+- **Changing the slots**: edit `body_plan.gd`; saves migrate (§10.3). In the same
+  commit, move what holds the plan that shipped: the gene probe's `SHIPPED_PLAN` and
+  the pins beside it, and `net_probe`'s wire sizes when the count changes -- both fail
+  saying what to move -- and `drop_probe`'s pins of the seeded water, which a change
+  of the ladder or the count moves. Until phase 4, bump `Wire.PROTOCOL` too: on a
+  change of arcs alone nothing on the wire side fails for it (§15.3, §15.4). First
+  settle what §15.3 lists for the first plan change.
 - **Balance**: the numbers a gene ships with are starting values with their reasons
   (`CLAUDE.md`, "Balance waits for players").
 - **Names**: a gene's key and its words are the owner's call when they are new names
