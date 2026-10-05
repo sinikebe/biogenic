@@ -12,8 +12,8 @@ The owner, 2026-10-04, after the readiness review (§0):
 > "You will prepare the code for the gene pass. THe gene pass is just adding/editing
 > genes, so it should be straightforward"
 
-**Status: phases 1a, 1b, 2 and 3 built** (§15.1 to §15.4, 2026-10-05); phases 4 to 7
-designed, not built.
+**Status: phases 1a, 1b, 2, 3 and 4 built** (§15.1 to §15.5, 2026-10-05); phases 5 to
+7 designed, not built.
 This document is the preparation. It turns the
 genes, their variants and the slots into data that every system reads, adds the checks
 that catch a half-wired gene, and writes the playbook the gene pass follows. Phases 1
@@ -682,8 +682,9 @@ the figure has room for fails the probe's layout check rather than overlapping i
 silence.
 
 **As built** (§15.3), a plan change also moves the gene probe's pins of the plan that
-shipped, in the same commit, as a new gene appends to `SHIPPED`; and it moves
-`Wire.PROTOCOL` by hand until phase 4 puts the fingerprint on the handshake. A plan that
+shipped, in the same commit, as a new gene appends to `SHIPPED`; and, since phase 4,
+`Wire.RULES`' pin, never `Wire.PROTOCOL`: the plan's fingerprint is in the rules the
+handshake carries, so builds on other plans refuse each other there (§15.5). A plan that
 seats the port flank takes the ring's one empty cell, which the pause screen's columns
 are shaped round. And a plan with fewer outside slots than a saved DNA has genes outside
 needs one more change first (§15.3).
@@ -733,6 +734,18 @@ the fingerprint.
 the stats screen or a look, is not in the fingerprint. An older host keeps it as a
 name, draws it and lets it do nothing, as today.
 
+**As built in phase 4** (§15.5): `game/net/rules.gd` writes the text from the
+catalogue -- every table a stat row marks `judged` or, new, `contact`, by every
+organ; the run's numbers the referee judges by; the contact rules no table holds
+(`BITE_GAP`, the flank, `bite_damage` and the doses' constants, by sample where a rule
+is a function); the referee's limits; the body plan's fingerprint -- and every
+handshake frame carries its SHA-256 and the sender's content version after the frozen
+prefix: HELLO 39 bytes, WELCOME 43, REFUSE 40. A refusal says which game is older by
+protocol, and on one protocol by content version, with the sentences that already
+said it. `net_probe` writes the text again from the real constants and holds the
+game's to it, line by line, and `Wire.RULES` stays as the pin that makes a change
+deliberate: its failure says to move it, and that no `PROTOCOL` goes with it.
+
 ### 11.4 Version skew, checked
 
 net_probe gains a check for each of these:
@@ -740,6 +753,13 @@ net_probe gains a check for each of these:
 - a guest on a catalogue with one more judged gene is refused at the handshake;
 - a guest with one more unjudged gene plays, and that gene arrives intact by name;
 - a name the wire would refuse cannot be in the catalogue (§12).
+
+**As built in phase 4** (§15.5): each is a check in `net_probe`'s skew section, with
+two builds modelled in one process -- a session takes its rules as it starts, so a
+guest that starts while one more organ is registered is a build whose catalogue has
+it. A faster tail is refused at the handshake both ways round, the older game told so
+by its content version; a palp that feels further plays, and its name reaches a host
+that never registered it, whole.
 
 ---
 
@@ -1448,7 +1468,7 @@ another's spread, p10 149.2 to 151.6 ms, so none was kept.
 
 - **3**: `Drop.TOXIN`, and every `"<gene>.<part>"` key.
 - **4**: the plan's fingerprint on the handshake (`BodyPlan.fingerprint()`), and with
-  it the end of moving `PROTOCOL` by hand for a plan change.
+  it the end of moving `PROTOCOL` by hand for a plan change. Done (§15.5).
 - **Before a plan drops below a body's genes**: `_sync_order` leaves a gene with no
   outside slot unseated (above).
 - **Before the first plan change** (phase 2's review, recorded in phase 3):
@@ -1749,19 +1769,21 @@ numbers, each seen in a scratch copy and none changed here.
 - **An organ with a new mechanic**: write the mechanic in `game/mechanics/`, reading
   stats by name. Add its stats to `stats.gd`. Then as above. If it is a sense on no
   existing channel, it brings a membrane lobe (§7.3).
-- **Editing a gene**: edit its file. If CI says the rules changed, nothing else needs
-  doing: the handshake handles it from phase 4. Until then it is `Wire.PROTOCOL` and
-  `Wire.RULES` in the same commit (`CLAUDE.md`) -- a second provider of a judged stat
-  is a new line of the rules too -- and a contact table (the gape, the bite, the
-  armour, the doses) is `Wire.PROTOCOL` by hand; each such table says so.
+- **Editing a gene**: edit its file. If CI says the rules changed, move `Wire.RULES`'
+  pin to the value its failure names, in the same commit, and nothing else: the
+  handshake keeps builds on other rules apart by itself (§11.3, §15.5), and
+  `Wire.PROTOCOL` moves only with a message's format. A second provider of a judged
+  or contact stat is a new line of the rules too. Moving the pin means a player on
+  the old content cannot play one on the new until both update: say so in the patch
+  note's line if a player can tell.
 - **Retiring a gene**: tag it `retired`. Never delete the file, and never reuse its
   key. A stat only it provided reads its value with no provider, and the probe names
   it. If it was on a list a draw or a bit reads -- a drifter, a sense, the gift, a
   declarer -- every seeded draw moves, and the probe fails until its `SHIPPED_LISTS`
   says so. **And what else it moves fails until it is moved**: `drop_probe`'s pins of
-  the seeded water, when it was a drifter; `Wire.RULES`, and `Wire.PROTOCOL` with it,
-  when it provided a table the rules list (`net_probe`'s referee check names the
-  line); and the translation template, whose room notes are measured with the widest
+  the seeded water, when it was a drifter; `Wire.RULES`' pin, when it provided a table
+  the rules list or was a gift (`net_probe`'s referee check names the value); and the
+  translation template, whose room notes are measured with the widest
   gene word, which `i18n_pot -- --write` writes again when `--check` says stale. The
   probes pose a mechanic by its stat -- the first live organ that provides armour --
   so retiring one organ moves them to the next. Retiring the last one that provides
@@ -1771,9 +1793,9 @@ numbers, each seen in a scratch copy and none changed here.
   commit, move what holds the plan that shipped: the gene probe's `SHIPPED_PLAN` and
   the pins beside it, and `net_probe`'s wire sizes when the count changes -- both fail
   saying what to move -- and `drop_probe`'s pins of the seeded water, which a change
-  of the ladder or the count moves. Until phase 4, bump `Wire.PROTOCOL` too: on a
-  change of arcs alone nothing on the wire side fails for it (§15.3, §15.4). First
-  settle what §15.3 lists for the first plan change.
+  of the ladder or the count moves -- and `Wire.RULES`' pin, which every plan change
+  moves, since the plan's fingerprint is in the rules the handshake carries. No
+  `Wire.PROTOCOL` (§15.5). First settle what §15.3 lists for the first plan change.
 - **Balance**: the numbers a gene ships with are starting values with their reasons
   (`CLAUDE.md`, "Balance waits for players").
 - **Names**: a gene's key and its words are the owner's call when they are new names
@@ -1792,7 +1814,10 @@ content**, and `binary_version` stays where it is.
 
 Phase 4 changes the wire, not the binary. Like every protocol bump, the dedicated
 server takes it when it next restarts empty, and until then builds on either side of
-it refuse each other with the version sentence.
+it refuse each other with the version sentence. **After it, so does any content
+release that changes the rules** -- a gene a body swims or bites with, a contact
+table, the body plan -- with no protocol bump: phones and servers on the old content
+and the new refuse each other until both update.
 
 ---
 
