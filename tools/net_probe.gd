@@ -4560,6 +4560,13 @@ class StubGenome extends Node:
 	func path_of(_gene: StringName) -> StringName:
 		return &""
 
+	# cell.gd finds the organ a mechanic with a place acts from in the body's
+	# slots (gene-catalogue.md §5.2); a hand-built cell wears its organs in none
+	# it knows, so the catalogue's order answers, as it did before there were
+	# seats.
+	func body_layout() -> Array[StringName]:
+		return []
+
 
 ## **The field, watched.** A seed, a seed-for, a retirement on the person's
 ## slot, or a meal with a person on either side, is counted -- and must never
