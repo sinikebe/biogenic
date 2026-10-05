@@ -127,8 +127,8 @@ each 2.
 12. **No protocol change and no binary.** The referee judges no draw. Content, in
     two pull requests: the structure with today's water kept to the byte, then the
     draws switched to the ladder (§8, §11).
-13. **One call is the owner's**: whether the game tells a player how rare a gene is
-    (§13).
+13. **One call was the owner's**: whether the game tells a player how rare a gene is.
+    Answered 2026-10-05: yes, in one word wherever the gene is named (§13).
 
 ---
 
@@ -970,6 +970,11 @@ GDScript and data under `game/` and `tools/`, and a hash in `ci.yml`. No
 | # | Question | Options | What it means |
 |---|---|---|---|
 | 1 | Does the game tell a player how rare a gene is? | **✓ Yes, in one word wherever the gene is named** (the pause screen, the choosing screen): *common*, *uncommon* or *rare* / No: the player learns it from how seldom they meet a gene | Yes: the first time you hold a rare gene you read that it is rare, learn what it looks like, and can go looking for the next one. No: you notice rarity only over many runs, and nothing tells you which genes are worth a hunt. |
+
+**Answered 2026-10-05: yes, as recommended.** The owner: *"Recommended"*. So the
+word is shown wherever the gene is named (the pause screen, the choosing screen),
+designed with the UX designer and translated as every gene word is
+(`gene-catalogue.md` §8); it is part of phase 7's build (§7, §11).
 
 **Why yes.** Row 3 asks for *"a hunt worth making"*, and a hunt needs a quarry a
 player can name. Among a hundred genes nobody can keep count of what they meet

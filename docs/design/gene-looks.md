@@ -43,8 +43,8 @@ moon): every strain wears the toxin's colour, and its accent tells it (§3.3).
    A player who cannot see the colour still sees the family. §1.
 2. **Five families: eating, moving, sensing, defending, metabolism.** `inside` is
    already the name of a place, the slot the poison goes in, so the fifth family takes
-   its real name. Family names are never shown on screen. The name is the owner's call
-   (§12).
+   its real name. Family names are never shown on screen. The owner chose `metabolism`
+   on 2026-10-05 (§12).
 3. **Colours are measured perceptually** (OKLCH): every family band at least 20° from
    every other, at least 30° from self teal and threat red, and the two pairs that
    colour blindness merges (moving and sensing, eating and metabolism) a lightness
@@ -647,6 +647,8 @@ pixels. Three renders of `one` differ by **0 pixels** (`det1`–`det3`).
 | # | Question | Options | What it means |
 |---|---|---|---|
 | 1 | What is the fifth family called? | `inside`, as in row 2 · **`metabolism` ✓ recommended** · another word | Sun, store and burn are the cell's machinery for food. `inside` is already the name of the slot only a toxin goes in, so the same word for these would say they go there, and they cannot. The name lives in each gene's file for the gene pass; no player reads it on screen. |
+
+**Answered 2026-10-05: `metabolism`, as recommended.** The owner: *"Recommended"*.
 
 Nothing else here is a name or changes what the game is. The colours, the shapes and
 the toxin leaving lime for orange are looks, decided above and photographed.
