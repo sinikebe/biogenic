@@ -938,7 +938,14 @@ organ's name and a variant's as well as a key (`&"toxin"`, `"corrosive"`), in si
 quotes too (`&'palp'`), alone or with a part (`&"flagellum.hold"`); and a name in a
 comment at the end of a line no longer fails it. **A name built by concatenation or a
 format** (`"%s.hold" % organ`) **cannot be caught** by reading lines, so the playbook
-says not to build one.
+says not to build one. Phase 5's review found one more way to write a name: a
+dictionary's key written bare, `{flagellum = 2}`, which GDScript reads as the string
+`"flagellum"` (`game/dev/frame_readout.gd` writes its own keys that way). The gate
+reads those too, following the braces from line to line, so a dictionary written over
+several is read whole; a parameter with a default, `func f(flagellum := 2)`, is no key.
+Still not caught, and listed in the playbook: a name built by concatenation or a
+format, a name inside a longer string (`"flagellum hold"`), and a string with an
+escaped quote in it.
 
 ### 12.3 Synthetic genes and plans, end to end
 

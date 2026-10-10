@@ -3208,31 +3208,111 @@ static func _bits_kept(before: Dictionary, now: Dictionary) -> String:
 ## the gate reads ([constant GATED]): a name the catalogue knows -- a key, retired ones
 ## too; an organ's, which is no key when its variants list their own (`toxin`); a
 ## variant's -- quoted alone, `"palp"`, `&"palp"`, `'palp'`, `&'palp'`, or with a part
-## it declares, `&"flagellum.hold"`. One `path:line: the line` for each. Comments
-## aside -- a line of one, and a line's tail from its marker on, outside a string --
-## and tools/ is not looked in: a probe names genes on purpose. **A name built by
-## concatenation or a format -- `"%s.hold" % organ` -- is not caught**: nothing read
-## line by line can, so the playbook says not to build one.
+## it declares, `&"flagellum.hold"`; or, in a script, written bare as a dictionary's
+## key, `{flagellum = 2}`, which GDScript reads as the string `"flagellum"`
+## ([method _bare_keys]). One `path:line: the line` for each. Comments aside -- a line
+## of one, and a line's tail from its marker on, outside a string -- and tools/ is not
+## looked in: a probe names genes on purpose. **A name built by concatenation or a
+## format -- `"%s.hold" % organ` -- is not caught**, nor one inside a longer string --
+## `"flagellum hold"` -- nor a string with an escaped quote in it: nothing read line by
+## line can tell those from words, so the playbook says not to write one.
 func _name_literals() -> Array[String]:
 	var out: Array[String] = []
 	var named := _names_pattern()
+	var names := {}
+	for name: String in _gene_names():
+		names[name] = true
 	for path: String in _texts_in(GAME_DIR):
 		if path.begins_with(GENES_DIR + "/"):
 			continue
 		var marker: String = GATED[path.get_extension()]
 		var lines := FileAccess.get_file_as_string(path).split("\n")
+		var codes: Array[String] = []
 		var block := false
 		for k in lines.size():
-			var code := ""
 			if marker == "//":
 				var cut := _shader_code(lines[k], block)
-				code = cut[0]
+				codes.append(cut[0])
 				block = cut[1]
 			else:
-				code = _code_of(lines[k], marker)
-			for found: RegExMatch in named.search_all(code):
+				codes.append(_code_of(lines[k], marker))
+		var bare: Array[int] = []
+		if path.get_extension() == "gd":
+			bare = _bare_keys(codes, names)
+		for k in lines.size():
+			for _each in named.search_all(codes[k]).size() + bare.count(k):
 				out.append("%s:%d: %s" % [path.trim_prefix(GAME_DIR + "/"), k + 1,
 					lines[k].strip_edges()])
+	return out
+
+
+## **A script's dictionary keys written bare that are gene names** -- `{flagellum = 2}`,
+## a Lua-style key, which GDScript reads as the string `"flagellum"` -- as the index of
+## the line each is on, once for each, read off [param codes], its lines without their
+## comments. A key is a name written right after a `{`, or after a `,` within one, and
+## followed by a lone `=`; strings are blanked first, and the braces are followed from
+## line to line, so a dictionary written over several is read whole. A parameter with a
+## default, `func f(flagellum := 2)`, is no key, and is not caught.
+static func _bare_keys(codes: Array[String], names: Dictionary) -> Array[int]:
+	var found: Array[int] = []
+	var open: Array[String] = []
+	var key_next := false
+	for k in codes.size():
+		var code := _blank_strings(codes[k])
+		var at := 0
+		while at < code.length():
+			var c := code[at]
+			if c == "{" or c == "[" or c == "(":
+				open.append(c)
+				key_next = c == "{"
+			elif c == "}" or c == "]" or c == ")":
+				if not open.is_empty():
+					open.pop_back()
+				key_next = false
+			elif c == ",":
+				key_next = not open.is_empty() and open.back() == "{"
+			elif c == "_" or (c >= "a" and c <= "z") or (c >= "A" and c <= "Z"):
+				var end := at + 1
+				while end < code.length() and (code[end] == "_" or (code[end] >= "a"
+						and code[end] <= "z") or (code[end] >= "A" and code[end] <= "Z")
+						or (code[end] >= "0" and code[end] <= "9")):
+					end += 1
+				var after := code.substr(end).strip_edges(true, false)
+				if key_next and names.has(code.substr(at, end - at)) \
+						and after.begins_with("=") and not after.begins_with("=="):
+					found.append(k)
+				key_next = false
+				at = end
+				continue
+			elif c != " " and c != "\t":
+				key_next = false
+			at += 1
+	return found
+
+
+## **[param code] with what its strings hold blanked**, quotes kept: so a brace, a comma
+## or a name in words is no code.
+static func _blank_strings(code: String) -> String:
+	var out := ""
+	var quote := ""
+	var k := 0
+	while k < code.length():
+		var c := code[k]
+		if quote != "":
+			if c == "\\":
+				out += "  "
+				k += 2
+				continue
+			if c == quote:
+				quote = ""
+				out += c
+			else:
+				out += " "
+		else:
+			if c == "\"" or c == "'":
+				quote = c
+			out += c
+		k += 1
 	return out
 
 
@@ -3342,8 +3422,9 @@ func _names_gate() -> void:
 	for one: String in found:
 		print("[gene-names] FAIL %s" % one)
 	print(("[gene-names] %d gene names in game/ outside game/genes/ -- the %d names of %d"
-		+ " keys, their organs and their variants looked for, alone or with a part, in %d"
-		+ " scripts, scenes, resources and shaders; comments and tools/ aside") % [found.size(),
+		+ " keys, their organs and their variants looked for, quoted alone or with a part"
+		+ " or written bare as a dictionary's key, in %d scripts, scenes, resources and"
+		+ " shaders; comments and tools/ aside") % [found.size(),
 		_gene_names().size(), Catalogue.keys().size(),
 		_texts_in(GAME_DIR).filter(func(path: String) -> bool:
 			return not path.begins_with(GENES_DIR + "/")).size()])
