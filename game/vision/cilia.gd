@@ -1216,8 +1216,13 @@ static func _draw_worn(canvas: CanvasItem, sk: Stretch, gene: StringName, copies
 			and Catalogue.provides(gene, &"impulse_speed"):
 		own = tail.x
 		sk.still = tail.y
-	var lit := lerpf(1.0, FLARE_INK, clampf(float(eye.get("flare", 0.0)), 0.0, 1.0))
-	var reach := lerpf(1.0, FLARE_REACH, clampf(float(eye.get("flare", 0.0)), 0.0, 1.0))
+	# Nothing to flare on nearly every organ drawn: no eye, no lookups.
+	var lit := 1.0
+	var reach := 1.0
+	if not eye.is_empty():
+		var arriving := clampf(float(eye.get("flare", 0.0)), 0.0, 1.0)
+		lit = lerpf(1.0, FLARE_INK, arriving)
+		reach = lerpf(1.0, FLARE_REACH, arriving)
 	var d := _drawn
 	d.clear()
 	_build(d, sk, look, copies, own, reach)
@@ -1548,22 +1553,45 @@ static func _sk_root(sk: Stretch, u: float) -> Vector2:
 	return _surface(sk.at, sk.fwd, sk.stb, sk.r, deg_to_rad(lerpf(sk.a0, sk.a1, u)))
 
 
-## The outward normal of [param sk] at [param u].
-static func _sk_normal(sk: Stretch, u: float) -> Vector2:
-	if sk.tile:
-		var a := lerpf(sk.a0, sk.a1, u)
-		return Vector2(cos(a), sin(a))
-	return _normal(sk.fwd, sk.stb, deg_to_rad(lerpf(sk.a0, sk.a1, u)))
+## **[param sk] at [param u], all at once**: its point ([member _at_root]), its
+## outward normal ([member _at_normal]) and **the way a stroke there leans as it
+## swings** ([member _at_lean]) -- toward the nose on a body, which is how every
+## swing in genes-and-cilia.md §4.2 is measured, and one way round on a tile. The
+## point is [method _sk_root]'s to the bit.
+static func _frame(sk: Stretch, u: float) -> void:
+	_frame_on(sk.tile, sk.at, sk.fwd, sk.stb, sk.r, sk.a0, sk.a1, u)
 
 
-## **The way a stroke at [param u] leans as it swings**: toward the nose on a body,
-## which is how every swing in genes-and-cilia.md §4.2 is measured, and one way
-## round on a tile.
-static func _sk_lean(sk: Stretch, u: float) -> Vector2:
-	if sk.tile:
-		var n := _sk_normal(sk, u)
-		return Vector2(n.y, -n.x)
-	return _toward_nose(sk.fwd, sk.stb, deg_to_rad(lerpf(sk.a0, sk.a1, u)))
+## **[method _frame], on a stretch already unpacked**: what the home organs' kinds
+## call, a stroke at a time. Every body in the water wears them, so this is most of
+## what a fringe costs to build (gene-looks.md §9.2), and a stretch's fields are
+## looked up by name each time they are read: one call and one normal a stroke,
+## from locals, where it was three calls, two normals and seventeen lookups.
+static func _frame_on(tile: bool, at: Vector2, fwd: Vector2, stb: Vector2, r: float,
+		a0: float, a1: float, u: float) -> void:
+	if tile:
+		var a := lerpf(a0, a1, u)
+		var n := Vector2(cos(a), sin(a))
+		_at_root = at + n * r
+		_at_normal = n
+		_at_lean = Vector2(n.y, -n.x)
+		return
+	var t := deg_to_rad(lerpf(a0, a1, u))
+	var normal := _normal(fwd, stb, t)
+	_at_root = _surface(at, fwd, stb, r, t)
+	_at_normal = normal
+	# The unit tangent toward the nose: the normal turned a quarter, in whichever
+	# sense reduces |t|. On the starboard flank that is one way round and on the
+	# port flank the other, so the two sides lean toward the same nose rather than
+	# mirroring each other into a shape that has no front.
+	_at_lean = Vector2(normal.y, -normal.x) if wrapf(t, -PI, PI) >= 0.0 \
+		else Vector2(-normal.y, normal.x)
+
+
+## What [method _frame] last found: read at once, before the next organ's.
+static var _at_root := Vector2.ZERO
+static var _at_normal := Vector2.UP
+static var _at_lean := Vector2.RIGHT
 
 
 ## The way [param sk] runs at [param u], toward its arc's far end.
@@ -1582,7 +1610,8 @@ static func _sk_hand(sk: Stretch) -> float:
 
 ## A point [param depth] body radii under [param sk] at [param u].
 static func _sk_inner(sk: Stretch, u: float, depth: float) -> Vector2:
-	return _sk_root(sk, u) - _sk_normal(sk, u) * (depth * sk.unit)
+	_frame(sk, u)
+	return _at_root - _at_normal * (depth * sk.unit)
 
 
 ## **A sense's pigment**, at the middle of its arc: the seat it has always had on a
@@ -1804,21 +1833,31 @@ static func _kind_mat(d: Drawn, sk: Stretch, look: Dictionary, tier: int, clock:
 		count = mini(count, TILE_MAT_MAX)
 	var length0 := _length_of(sk, look)
 	var scale := _tier(TIER_LEN, tier) * reach
+	var lines := d.lines
+	var tile := sk.tile
+	var at := sk.at
+	var fwd := sk.fwd
+	var stb := sk.stb
+	var r := sk.r
+	var unit := sk.unit
+	var a0 := sk.a0
+	var a1 := sk.a1
 	for i in count:
 		var u := (float(i) + 0.5) / float(count)
 		var wave := sin(u * CYTOSTOME_WAVE_U - clock * CYTOSTOME_WAVE_HZ)
-		var length := length0 * sk.unit * (0.80 + 0.30 * wave) * scale
-		var normal := _sk_normal(sk, u)
-		var nose := _sk_lean(sk, u)
+		var length := length0 * unit * (0.80 + 0.30 * wave) * scale
+		_frame_on(tile, at, fwd, stb, r, a0, a1, u)
+		var normal := _at_normal
+		var nose := _at_lean
 		var swing := deg_to_rad(CYTOSTOME_SWING_DEG) * wave
-		var root := _sk_root(sk, u) + normal * (sk.unit * CYTOSTOME_LIFT)
+		var root := _at_root + normal * (unit * CYTOSTOME_LIFT)
 		var mid := root + _swung(normal, nose, swing * CYTOSTOME_CURVE) \
 			* (length * 0.55)
 		var tip := mid + _swung(normal, nose, swing) * (length * 0.45)
-		d.lines.append(root)
-		d.lines.append(mid)
-		d.lines.append(mid)
-		d.lines.append(tip)
+		lines.append(root)
+		lines.append(mid)
+		lines.append(mid)
+		lines.append(tip)
 	_basal(d, sk, look)
 
 
@@ -1835,29 +1874,39 @@ static func _kind_oars(d: Drawn, sk: Stretch, look: Dictionary, tier: int, clock
 	var knee := float(look["knee"])
 	var bend := deg_to_rad(float(look["bend"]))
 	var flank := Vector2(sk.a0, sk.a1)
-	for side: float in ([1.0] if sk.tile else [1.0, -1.0]):
+	var lines := d.lines
+	var tile := sk.tile
+	var at := sk.at
+	var fwd := sk.fwd
+	var stb := sk.stb
+	var r := sk.r
+	var unit := sk.unit
+	for side: float in ([1.0] if tile else [1.0, -1.0]):
 		if side < 0.0:
 			sk.a0 = -flank.y
 			sk.a1 = -flank.x
+		var a0 := sk.a0
+		var a1 := sk.a1
 		var bias := 1.0 + CIRRUS_STEER_BIAS * clampf(-sk.steer * side, -1.0, 1.0)
 		for i in count:
 			var u := (float(i) + 0.5) / float(count)
 			var phase := clock * CIRRUS_HZ + u * CIRRUS_WAVE_U
 			if side < 0.0:
 				phase += PI
-			if sk.tile:
+			if tile:
 				phase += TILE_OARS_PHASE
-			var length := length0 * sk.unit * (0.86 + 0.22 * cos(phase)) * scale
-			var normal := _sk_normal(sk, u)
-			var nose := _sk_lean(sk, u)
+			var length := length0 * unit * (0.86 + 0.22 * cos(phase)) * scale
+			_frame_on(tile, at, fwd, stb, r, a0, a1, u)
+			var normal := _at_normal
+			var nose := _at_lean
 			var swing := deg_to_rad(CIRRUS_SWING_DEG) * sin(phase) * bias
 			var bent := _swung(normal, nose, swing + bend * signf(sin(phase)))
-			var root := _sk_root(sk, u)
+			var root := _at_root
 			var at_knee := root + _swung(normal, nose, swing) * (length * knee)
-			d.lines.append(root)
-			d.lines.append(at_knee)
-			d.lines.append(at_knee)
-			d.lines.append(at_knee + bent * (length * (1.0 - knee)))
+			lines.append(root)
+			lines.append(at_knee)
+			lines.append(at_knee)
+			lines.append(at_knee + bent * (length * (1.0 - knee)))
 		_basal(d, sk, look)
 	sk.a0 = flank.x
 	sk.a1 = flank.y
@@ -1881,21 +1930,31 @@ static func _kind_lash(d: Drawn, sk: Stretch, look: Dictionary, tier: int, clock
 	var points := FLAGELLUM_POINTS
 	if waves > 1.0:
 		points = ceili(float(FLAGELLUM_POINTS - 1) * waves) + 1
+	var lines := d.lines
+	var tile := sk.tile
+	var at := sk.at
+	var fwd := sk.fwd
+	var stb := sk.stb
+	var r := sk.r
+	var unit := sk.unit
+	var a0 := sk.a0
+	var a1 := sk.a1
 	for i in count:
 		var u := (float(i) + 0.5) / float(count)
 		var base := sin(u * FLAGELLUM_WAVE_U - clock * FLAGELLUM_WAVE_HZ)
-		var length := length0 * sk.unit * (0.82 + 0.26 * base) * scale
-		var dir := _sk_normal(sk, u)
+		var length := length0 * unit * (0.82 + 0.26 * base) * scale
+		_frame_on(tile, at, fwd, stb, r, a0, a1, u)
+		var dir := _at_normal
 		var side := Vector2(-dir.y, dir.x)
-		var root := _sk_root(sk, u)
+		var root := _at_root
 		var previous := root
 		for j in range(1, points):
 			var v := float(j) / float(points - 1)
 			var lash := sin(v * waves * FLAGELLUM_WAVE_V - clock * FLAGELLUM_WAVE_HZ
 				+ u * FLAGELLUM_WAVE_U) * length * wave * v * slack
 			var point := root + dir * (length * v) + side * lash
-			d.lines.append(previous)
-			d.lines.append(point)
+			lines.append(previous)
+			lines.append(point)
 			previous = point
 	_basal(d, sk, look)
 
@@ -1912,9 +1971,9 @@ static func _kind_coil(d: Drawn, sk: Stretch, look: Dictionary, tier: int, clock
 	var hand := _sk_hand(sk)
 	for i in count:
 		var u := (float(i) + 0.5) / float(count)
-		var root := _sk_root(sk, u)
-		var dir := _sk_normal(sk, u).rotated(deg_to_rad(COIL_LEAN) * (u - 0.5) * 2.0
-			* hand)
+		_frame(sk, u)
+		var root := _at_root
+		var dir := _at_normal.rotated(deg_to_rad(COIL_LEAN) * (u - 0.5) * 2.0 * hand)
 		var across := dir.orthogonal()
 		var length := span * (0.84 + 0.16 * sin(clock * COIL_BREATH + float(i) * 1.9))
 		var spring := PackedVector2Array([root])
@@ -1943,8 +2002,9 @@ static func _kind_tuft(d: Drawn, sk: Stretch, look: Dictionary, tier: int,
 	var hand := _sk_hand(sk)
 	for i in count:
 		var u := (float(i) + 0.5) / float(count)
-		var root := _sk_root(sk, u)
-		var normal := _sk_normal(sk, u).rotated(fan * (u - 0.5) * 2.0 * hand)
+		_frame(sk, u)
+		var root := _at_root
+		var normal := _at_normal.rotated(fan * (u - 0.5) * 2.0 * hand)
 		var length := span * (0.88 + 0.14 * sin(u * PI))
 		var stem := length
 		match tip:
@@ -2008,8 +2068,9 @@ static func _kind_lens(d: Drawn, sk: Stretch, look: Dictionary, tier: int,
 	for k in LENS_STEPS + 1:
 		var v := float(k) / float(LENS_STEPS)
 		var u := lerpf(LENS_FROM, 1.0 - LENS_FROM, v)
-		var root := _sk_root(sk, u)
-		var normal := _sk_normal(sk, u)
+		_frame(sk, u)
+		var root := _at_root
+		var normal := _at_normal
 		inner.append(root + normal * lift)
 		outer.append(root + normal * (lift + bulge * sin(v * PI)))
 	inner.reverse()
@@ -2040,8 +2101,9 @@ static func _kind_spines(d: Drawn, sk: Stretch, look: Dictionary, tier: int,
 	for i in count:
 		var w := (float(i) + 0.5) / float(count)
 		var u := lerpf(GUARD_FROM, 1.0 - GUARD_FROM, w)
-		var root := _sk_root(sk, u)
-		var dir := _sk_normal(sk, u).rotated(fan * lerpf(-1.0, 1.0, w) * hand)
+		_frame(sk, u)
+		var root := _at_root
+		var dir := _at_normal.rotated(fan * lerpf(-1.0, 1.0, w) * hand)
 		var end := root + dir * length
 		d.lines.append(root)
 		d.lines.append(end)
@@ -2076,13 +2138,15 @@ static func _kind_plates(d: Drawn, sk: Stretch, look: Dictionary, tier: int,
 		for k in 7:
 			var v := float(k) / 6.0
 			var u := clampf(c + (v - 0.5) * width, 0.0, 1.0)
-			plate.append(_sk_root(sk, u) + _sk_normal(sk, u) * (lift + thick * sin(v * PI)))
+			_frame(sk, u)
+			plate.append(_at_root + _at_normal * (lift + thick * sin(v * PI)))
 		d.paths.append(plate)
 	# The skin under them, doubled: a thickened rim.
 	var rim := PackedVector2Array()
 	for k in 9:
 		var u := float(k) / 8.0
-		rim.append(_sk_root(sk, u) + _sk_normal(sk, u) * lift)
+		_frame(sk, u)
+		rim.append(_at_root + _at_normal * lift)
 	d.paths.append(rim)
 	_basal(d, sk, look)
 
@@ -3240,21 +3304,11 @@ static func _stroke(canvas: CanvasItem, points: PackedVector2Array, tone: Color,
 	canvas.draw_multiline(points, Color(tone, alpha), width, true)
 
 
-## The unit tangent at [param t] that points toward the nose, which is the
-## direction every swing in §4.2 is measured in.
-## The outward normal turned [param angle] toward the nose. Every swing in §4.2
-## is measured this way, so there is one definition of which way a cilium leans.
+## The outward normal turned [param angle] toward the nose ([member _at_lean]).
+## Every swing in §4.2 is measured this way, so there is one definition of which
+## way a cilium leans.
 static func _swung(normal: Vector2, nose: Vector2, angle: float) -> Vector2:
 	return (normal * cos(angle) + nose * sin(angle)).normalized()
-
-
-static func _toward_nose(fwd: Vector2, stb: Vector2, t: float) -> Vector2:
-	var n := _normal(fwd, stb, t)
-	# Rotate the normal a quarter turn, in whichever sense reduces |t|. On the
-	# starboard flank that is one way round and on the port flank the other, so
-	# the two sides lean toward the same nose rather than mirroring each other
-	# into a shape that has no front.
-	return Vector2(n.y, -n.x) if wrapf(t, -PI, PI) >= 0.0 else Vector2(-n.y, n.x)
 
 
 static func _tier(ladder: Array[float], tier: int) -> float:
