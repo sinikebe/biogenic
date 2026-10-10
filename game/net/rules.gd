@@ -85,14 +85,15 @@ const LISTS: Array[int] = [TYPE_ARRAY, TYPE_PACKED_FLOAT64_ARRAY, TYPE_PACKED_FL
 
 ## **The fields of a stat's row that decide a body's value**, in the order its line
 ## writes them, each as `name:value`: the value with no provider, which way is better,
-## and how several providers combine -- what stats.gd's `of` and `top` read. Two
+## how several providers combine, and the group whose best provider a body takes the
+## whole of (gene-catalogue.md §5.1) -- what stats.gd's `of` and `top` read. Two
 ## builds whose rows combine two providers otherwise give one body two values, so a
 ## row is a rule as its tables are. **A field a later build reads to decide a value is
 ## one more name at the end of this list**, and so one more `name:value` item at the
-## end of every row's line that has it -- phase 5's `group` among them.
+## end of every row's line that has it, as `group` was in phase 5.
 ## `tools/net_probe.gd` fails on a field of a row that is neither here nor in
 ## [constant ROW_FIELDS_UNREAD].
-const ROW_FIELDS: Array[String] = ["none", "better", "combine"]
+const ROW_FIELDS: Array[String] = ["none", "better", "combine", "group"]
 ## **The fields of a row that decide no value**, each with why it is not written.
 const ROW_FIELDS_UNREAD := {
 	"unit": "what the stats screen counts the stat in",
