@@ -12,7 +12,9 @@ so the work is edits to that folder, its probe's pins, the translation template 
 the French.
 
 The commands below are run from the project root, after the one-time import in
-`CLAUDE.md` ("Run it"). Each probe passes only on its marker: grep for it.
+`CLAUDE.md` ("Run it"). **Every import rewrites `project.godot`: put it back at once**
+(`git checkout -- project.godot`), since a change there is a new binary and a gene is
+content. Each probe passes only on its marker: grep for it.
 
 ## 1. Settle the name
 
@@ -25,11 +27,14 @@ letters `a-z` and permanent once shipped.
 
 - **A variant**: one entry in its organ's `variants` -- a `variant` name, its `key`, the
   next `order`, what it changes, a `hue` of its own for now. `born` is 0 unless set; its
-  tags add to its organ's; its parts are its organ's. A strain of the toxin sets its
-  `dose`. README, "A variant".
+  tags add to its organ's; its parts are its organ's; its water `weight` is its share of
+  its organ's draws, and drift may bring it unless it is tagged `never_drifts`. A strain
+  of the toxin sets its `dose`. README, "A variant".
 - **An organ on mechanics the game has**: a copy of the nearest organ's file as
-  `organs/<key>.gd`, every field set, and one line in `catalogue.gd`'s `ORGANS`. README,
-  "An organ on mechanics the game has".
+  `organs/<key>.gd`, every field set, and one line in `catalogue.gd`'s `ORGANS`; then
+  import again (`xvfb-run -a ~/godot/godot --path . --import`), which writes the file's
+  `.uid` -- commit it, never write one by hand. README, "An organ on mechanics the game
+  has".
 - **A new mechanic**: the mechanic, reading stats by name; its rows in `stats.gd`
   (`none`, `better`, `combine`, `unit`, `judged`, `contact`, `group`); `SEATED` for one
   that acts from a place. README, "An organ with a new mechanic".
@@ -55,14 +60,22 @@ table has. Then write the template again, and add the French in `game/i18n/fr.po
 
 ## 4. Pins
 
-- A new key appends to `tools/gene_probe.gd`'s `SHIPPED`, and to each list of its
+- Append a new key to `tools/gene_probe.gd`'s `SHIPPED`, and to each list of its
   `SHIPPED_LISTS` it joins (`drifter`, `sense`, `gift`, `declares`).
 - **The rules**: when net_probe's referee section says the rules two builds agree on
   changed, set `Wire.RULES` (`game/net/wire.gd`) to the value it names, in the same
   commit. **Never `Wire.PROTOCOL`.**
+- **The referee's caps** hold over every provider of a judged stat: a tail faster than
+  the speed cap fails net_probe's check of them. Moving a cap changes the referee's own
+  limits, which needs the false-positive runs of `docs/design/net-hardening.md` again
+  (`CLAUDE.md`).
 - **The seeded runs**: a gene the water or drift can make moves the drop probe's pins
-  and `ci.yml`'s empty-library hash. Record them again from the checks' own output, and
-  say why. The workflow's pin is the lead's to move: ask.
+  and `ci.yml`'s empty-library hash, and a key added or retired adds or takes away its
+  column in the lineage lines four of those pins hold. Record them again from the
+  checks' own output, and say why. A new key that never drifts and is no drifter moves
+  only that column, and fails the drop probe's lineage 4 (every live variety carried):
+  anything more is a bug (README, "The seeded runs"). The workflow's pin is the lead's
+  to move: ask.
 
 ## 5. Run every check
 

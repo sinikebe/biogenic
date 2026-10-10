@@ -25,11 +25,19 @@ other systems ask.
 
 ## The checks
 
-Import once, as `CLAUDE.md` says ("Run it"), then from the project root. Each
-prints one line per check and passes only on its marker -- grep for it, as CI does,
-because Godot exits 0 after a script error too.
+From the project root, with Godot installed as `CLAUDE.md` says ("Run it"). Each
+probe prints one line per check and passes only on its marker -- grep for it, as CI
+does, because Godot exits 0 after a script error too -- and with no `SCRIPT ERROR`
+line anywhere in its output: CI fails most of these steps on one even under the
+marker.
 
 ```
+# Once, and again after adding a file: import the project. The import rewrites
+# project.godot -- reorders it, drops a default -- so put it back every time: a change
+# there is a new binary (CLAUDE.md), and a gene is content.
+xvfb-run -a ~/godot/godot --path . --import
+git checkout -- project.godot
+
 # The genes (CI's "Check the genes"): ends "[gene-probe] ALL PASS". Seconds.
 timeout 120 ~/godot/godot --headless --path . res://tools/gene_probe.tscn
 
@@ -93,10 +101,15 @@ organ's own key is its first variant, implicitly, and never leaves the catalogue
    - **`order`**, the next one, which the gene probe names. Without one it would take
      its organ's and tie it in `dominant_of`, and the probe fails it, saying so.
    - **What it changes**, and nothing else: it takes every field it does not set from
-     its organ. A table in `provides` is given whole. A dictionary field -- `water`,
-     `numbers`, `look` -- is written over key by key. **Tags add up**: a variant's
-     tags join its organ's, never replace them.
+     its organ. A dictionary field -- `provides`, `water`, `numbers`, `look` -- is
+     written over key by key, so a stat it names in `provides` takes its table whole
+     and the rest keep the organ's. **Tags add up**: a variant's tags join its
+     organ's, never replace them.
    - **`born`** is 0 unless it says otherwise: a newborn wears the organ, not both.
+   - **Its place in the water**: the water draws an organ first, then one of its
+     varieties by `water`'s `weight` -- the variant's share of its organ's draws.
+     `drifter` says whether a drifter may be made of it. **Drift may bring it** to a
+     lineage whatever its water says, unless it is tagged `never_drifts`.
    - **Two places** take `forms`: place to `{"key": ..., "order": ..., ...}`, each
      form keyed and ordered, the first its variety. A variant of one place needs none.
    - **A strain of a toxin** sets its `dose`. The probe asks for a stack line where its
@@ -113,7 +126,11 @@ organ's own key is its first variant, implicitly, and never leaves the catalogue
 6. **The template**: `i18n_pot -- --write`, then its French in `game/i18n/fr.po`. The
    gene probe lists every gene word with no French.
 7. **The rules**: a variant that provides a stat a row marks `judged` or `contact` is a
-   new line of the rules two builds must agree on (**Editing a gene**).
+   new line of the rules two builds must agree on (**Editing a gene**). And the
+   referee's caps are held over every provider of a judged stat: one past them -- a
+   tail faster than the speed cap -- fails net_probe's check of the caps until they
+   move, which is a change to the referee's own limits and needs the false-positive
+   runs of `docs/design/net-hardening.md` again (`CLAUDE.md`).
 8. **The seeded runs**: a gene the water or drift can make moves them (**Editing a
    gene**).
 9. **Run the checks, render it, and look.**
@@ -138,7 +155,9 @@ A new nose, a new armour: everything it does, some mechanic already does.
    the words and `lines` (its numbers on the pause screen). Write the comment the
    other files have beside each table and number.
 2. **Add one line to `catalogue.gd`'s `ORGANS`**, after the last live organ. The probe
-   fails on a file the index lacks, or a line with no file.
+   fails on a file the index lacks, or a line with no file. Import again: Godot writes
+   the file's `.uid`, which is committed beside it, as every organ's is -- never
+   written by hand.
 3. **Parts it declares** (`declares`) need a reader or a trigger in a water cell
    (`food.gd`'s `wire_parts`) and in yours (`own_rules.gd`), wired by the part's
    name, and their words (`GENE_SAYS`, `GENE_SENSES`, `GENE_EXPLAINS`, and
@@ -194,11 +213,20 @@ it is the tie-break of what a body is drawn as and what eating it gives.
   cannot play with one on the new until the older updates: say so in the patch note's
   line when a player can tell.
 - **The seeded runs.** A gene the water or drift can make -- a drifter, or any live
-  variety that does not `never_drifts` -- changes what a seeded water draws: the drop
+  variety not tagged `never_drifts` -- changes what a seeded water draws: the drop
   probe's pins of it (`DEV_LINES`, `DEV_DRAWS`, `DEV_MUTATIONS` and the rest) and
-  `ci.yml`'s empty-library hash. Each prints what this build gives where it fails, and
-  each is recorded again from that output in the same pull request, with a line saying
-  why.
+  `ci.yml`'s empty-library hash. And every new live key, made or not, adds its column
+  to the lineage lines four of those pins hold (`DEV_LINES`, `THREE_ONE_LINES`,
+  `PACK3_LINES`, `TAIL_LINES`): `<key> 0.00` where nothing wears it. Each pin prints
+  what this build gives where it fails, and each is recorded again from that output in
+  the same pull request, with a line saying why.
+
+  **A key that never drifts and is no drifter** is one nothing in a seeded run can
+  make: it leaves the water's every draw as it was. It moves only that column -- and
+  fails the drop probe's lineage 4, which holds that the water carries every live
+  variety at every census: a gene the water can never make is a new kind of gene, and
+  that check is the gene pass's to change, saying why. Anything else that moves is a
+  draw that counts the catalogue's keys: a bug to find, not a pin to record.
   A pin in a workflow is the lead's to move: a session edits `.github/workflows/`
   only when asked, so the pull request says it needs it.
 - **Words** are re-extracted (`i18n_pot -- --write`); a changed English message needs
@@ -216,7 +244,8 @@ What else moves fails until it is moved, each saying so:
 - `SHIPPED_LISTS`, where it was on a list a draw or a bit reads -- a drifter, a sense,
   the gift, a declarer;
 - the drop probe's pins and `ci.yml`'s hash (**The seeded runs**, above), when the
-  water or drift could make it;
+  water or drift could make it -- and the four pins that hold lineage lines whatever
+  it was, which lose its column;
 - `Wire.RULES`, when it provided a table the rules list or was a gift;
 - the template, whose room notes are measured with the widest gene word.
 
