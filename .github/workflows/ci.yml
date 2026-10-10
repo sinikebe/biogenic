@@ -408,9 +408,12 @@ jobs:
         # game/genes/. A mechanic asks the catalogue for an organ by its stat,
         # its tag or its channel, so a gene added, varied or retired is one
         # entry in its organ's file and nothing else moves -- and a name written
-        # anywhere else is a place it silently does not reach. Fails on any
-        # &"<key>" or "<key>" literal for a key the catalogue knows; comment
-        # lines and tools/ are exempt. The gene probe in its --names mode,
+        # anywhere else is a place it silently does not reach. Fails on any key,
+        # organ or qualified part name the catalogue knows, in either quote or
+        # as a dictionary key, in a script or a text resource (.tscn, .tres,
+        # .gdshader) under game/ outside game/genes/; comment text and tools/
+        # are exempt, and a name built by concatenation is past any static
+        # gate (game/genes/README.md). The gene probe in its --names mode,
         # static, a second. Grepped, not trusted to the exit code, for the
         # reason the Back probe gives.
         run: |
