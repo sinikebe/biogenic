@@ -445,6 +445,16 @@ its own is no key itself**: it lists its first variant too, as the toxin does, w
 first strain sits in two places, each form with its key and order. What else a variant
 brings is the playbook's (§16).
 
+**Retiring an organ's own key alone is a layout, not a tag** (phase 5's review,
+§15.6). Tags add up, so an organ tagged `retired` retires every variant it lists. To
+retire only its own key and keep its variants, lay it out as the toxin is: the organ's
+`order` -1 and no `retired` of its own, and its first variant listed first with the
+key, the order and the born the organ had and `"tags": [RETIRED]`, then the others,
+live. The old key keeps its place in the order and stays the first of its organ's keys,
+which is what phase 6's as-shipped look and explaining name read. The gene probe fails
+an organ tagged `retired` over a variant that does not say so too, with that recipe; to
+retire every one of them, each variant says it.
+
 The organ owns its mechanic, its shape and its family, so a variant reads as its organ
 at a glance and names itself on the pause screen (row 2).
 

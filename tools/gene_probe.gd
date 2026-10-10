@@ -11,7 +11,8 @@ extends Node
 ## **Static, and a few seconds**: it reads the catalogue and the files, and plays
 ## nothing. What it checks (§15): the keys -- names the wire carries, one form's
 ## each, in their shipped order, organ and variant names their own, every variant
-## at an order of its own; the index
+## at an order of its own, and an organ's own key retired alone only as the toxin is
+## laid out, never by a tag on the organ over a live variant; the index
 ## against the folder, and every tag, channel, place and field one there is; the
 ## water's weights, drifters, senses, gift and born cell, and the lists a draw or
 ## a bit reads in their shipped order; every stat table's length and first entry,
@@ -292,6 +293,7 @@ func _ready() -> void:
 		return
 	_keys()
 	_own_orders()
+	_retired_alone()
 	_index()
 	_water()
 	_tables()
@@ -400,6 +402,99 @@ func _keys() -> void:
 			and Catalogue.tagged(Catalogue.GIFT).find(key) < 0
 	_check("rhabdom and statocyst are known, retired, and in no list that makes a gene",
 		retired_ok)
+
+
+## **Retiring an organ's own key is not tagging the organ** (§4.4, §6.2): an organ's
+## tags are every variant's -- tags add up -- so an organ tagged `retired` retires every
+## variant it lists with its own key. One tagged so whose variants do not each say
+## `retired` too fails, saying how to retire its own key alone -- the toxin's layout --
+## or every one of them. Shown on organs of the probe's own: one tagged over a live
+## variant, which fails here and would retire the variant; and the same laid out as the
+## toxin is, which passes, its old key retired at its old order and still the first of
+## its keys (phase 6's `as_shipped`), its variant live.
+func _retired_alone() -> void:
+	var before := Array(Catalogue.keys())
+	var faults := _retire_faults(_organs())
+	var store := Catalogue.first_provider(&"store")
+	var script := Catalogue.gene(store).get_script() as GDScript
+	var shipped: Gene = script.new()
+	var kept := {"variant": &"probekeep", "order": 963, "look": {"accent": Kinds.MARK_RING}}
+	# Tagged: the organ retired over a live variant -- found, and the variant retired.
+	var tagged: Gene = script.new()
+	var tags: Array[StringName] = []
+	tags.assign(tagged.tags)
+	tags.append(Gene.RETIRED)
+	tagged.tags = tags
+	tagged.variants = [kept]
+	var found := _retire_faults([tagged])
+	Catalogue.register(tagged)
+	var dragged := Catalogue.has_tag(&"probekeep", Catalogue.RETIRED)
+	Catalogue.forget(tagged.organ)
+	# Laid out as the toxin is: no order of its own, its first variant listed first with
+	# the key, the order and the born it had, and retired.
+	var laid: Gene = script.new()
+	laid.order = -1
+	laid.variants = [{"variant": &"plain", "key": store, "order": shipped.order,
+		"born": shipped.born, "tags": [Gene.RETIRED]}, kept]
+	var clean := _retire_faults([laid])
+	Catalogue.register(laid)
+	var took := [Catalogue.has_tag(store, Catalogue.RETIRED), Catalogue.rank(store),
+		Catalogue.keys_of_organ(laid.organ)[0], Catalogue.live().has(&"probekeep"),
+		Catalogue.has_tag(&"probekeep", Catalogue.RETIRED)]
+	Catalogue.forget(laid.organ)
+	_check(("an organ's own key retires alone only as the toxin is laid out: %s; one of the"
+		+ " probe's own tagged retired over a live variant is found (%s), and registered"
+		+ " retires it too (%s); laid out as the toxin is -- no order of its own, its first"
+		+ " variant listed first with the key, order and born it had, retired -- %s retires"
+		+ " at its order and stays the first of its keys, its variant live: %s") % [
+		("none of the %d organs tags itself retired over a variant that does not say so"
+			% _organs().size()) if faults.is_empty() else _retire_how(faults),
+		", ".join(PackedStringArray(found)), dragged, store, str(took)],
+		faults.is_empty() and found == ["%s (probekeep)" % store] and dragged
+		and clean.is_empty()
+		and took == [true, shipped.order, store, true, false]
+		and Array(Catalogue.keys()) == before)
+
+
+## **Each organ of [param organs] tagged `retired` over a variant that does not say it
+## too**, as `organ (variants)`: tags add up, so the organ's tag retires each of them.
+static func _retire_faults(organs: Array) -> Array[String]:
+	var out: Array[String] = []
+	for organ: Gene in organs:
+		if not organ.tags.has(Gene.RETIRED):
+			continue
+		var silent: Array[String] = []
+		for entry: Dictionary in organ.variants:
+			if not _says_retired(entry):
+				silent.append(String(entry.get("variant", &"")))
+		if not silent.is_empty():
+			out.append("%s (%s)" % [organ.organ, ", ".join(PackedStringArray(silent))])
+	return out
+
+
+## Whether a variant's [param entry] tags itself `retired`: in its own tags, or in every
+## form's.
+static func _says_retired(entry: Dictionary) -> bool:
+	if (entry.get("tags", []) as Array).has(Gene.RETIRED):
+		return true
+	var forms: Dictionary = entry.get("forms", {})
+	for place: Variant in forms:
+		var form: Variant = forms[place]
+		if not (form is Dictionary
+				and ((form as Dictionary).get("tags", []) as Array).has(Gene.RETIRED)):
+			return false
+	return not forms.is_empty()
+
+
+## **What to do about [param faults]**, the failure's sentence.
+static func _retire_how(faults: Array[String]) -> String:
+	return ("%s -- each tagged retired, which retires every variant it lists with it. To"
+		% ", ".join(PackedStringArray(faults)) + " retire only its own key, lay it out as"
+		+ " the toxin is: the organ's `order = -1` and no `retired` of its own, and its"
+		+ " first variant listed first with the key, the order and the born the organ had,"
+		+ " retired -- `{\"variant\": &\"plain\", \"key\": &\"<organ>\", \"order\": <its order>,"
+		+ " \"born\": <its born>, \"tags\": [RETIRED]}` -- then the others, live. To retire"
+		+ " them all, tag each variant retired too")
 
 
 ## **Every variant an organ's file lists has an order of its own** (§6.2): set in its
