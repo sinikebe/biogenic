@@ -42,7 +42,10 @@ extends RefCounted
 ## (docs/design/gene-catalogue.md §10.2), and follow it. Everything else it needs
 ## of the game is written out here, and the probe holds each copy to its source.
 
-## **Bumped by hand, whenever the meaning of any byte below changes.**
+## **Bumped by hand, whenever the meaning of any byte below changes** -- and,
+## since protocol 8, for nothing else: what a host judges a guest by and decides a
+## contact by is the rules' fingerprint's to tell apart, on the handshake's tail
+## ([constant RULES]).
 ##
 ## Never derived from `content_version`, which is `git rev-list --count HEAD`
 ## and moves on a docs-only merge -- two identical builds would refuse each
@@ -117,33 +120,47 @@ extends RefCounted
 ## owns the guest's wound and decides its death. `Cause.POISONED` and
 ## `Contact.STUNG`'s number are kept for the same reason.
 ##
-## **Rule, until the ladder hash lands (shared-pond.md §7): any content change to
-## the gape and the bite (`GAPE_BY_TIER`, `BITE_BY_TIER`, the mouth's own, in
-## game/genes/organs/cytostome.gd), the armour (`ARMOR_BY_TIER`, pellicle.gd's),
-## `cell.gd`'s `BITE_GAP` and `bite_damage`, or the dose tables (the toxin's
-## `VENOM_STACKS_BY_TIER`, `POISON_STACKS_BY_TIER` and `SWALLOW_STACKS_BY_TIER`,
-## in organs/toxin.gd, and `cell.gd`'s `VENOM_ARC_DEG`, `VENOM_SIDES`,
-## `HARM_PER_STACK`, `DOSE_TAU_BY_KIND`, `DOSE_GONE` and `DOSE_SIZE`) must bump
-## this number**, or a host on one pack and a guest on another share a pond whose
-## contacts one of them misjudges.
-const PROTOCOL := 7
-## **The rules a host's referee judges a guest by, fingerprinted**
-## (net-hardening.md B.2, B.6): SHA-256 of every value in the game that
-## `referee.gd` judges a guest's word by or derives a limit from -- the radii,
-## growth per meal, mending, the grace, the causes of death, the ping tables,
-## the sister's ring, the free senses and their tier, the speed and turn tables
-## its caps sit over -- and of the referee's own limits.
+## **8: the handshake carries the rules** (docs/design/gene-catalogue.md §11.3;
+## the ladder hash shared-pond.md §7 planned). Every handshake frame gains a tail
+## after its three frozen bytes: the fingerprint of the rules its sender judges and
+## decides contacts by -- `game/net/rules.gd`'s, written from the catalogue: every
+## judged and contact table, by every organ, the referee's limits, the contact
+## rules and the body plan -- and its content version, which says which of two
+## builds is older. Two builds on one protocol whose rules differ refuse each other
+## at the handshake, with the sentence that names the update, by themselves. A 7
+## reads a tail as nothing, as it reads anything up to [constant HANDSHAKE_MAX], and
+## refuses an 8 by its prefix, as 1 to 6 are refused. **`RULES` moves with it**, for
+## the lines the tail made room for: the contact tables and rules that a hand rule
+## here bumped this number for until now, and the body plan.
+##
+## **So, from protocol 8, a change to what the referee judges, what the host decides
+## a contact by, or the body plan bumps nothing here**: it moves the rules, and the
+## handshake keeps builds on other rules apart. Move [constant RULES]' pin in the
+## same commit, as `tools/net_probe.gd` says. This number moves only when a
+## message's format does.
+const PROTOCOL := 8
+## **The rules a host's referee judges a guest by, and the host decides every
+## contact by, fingerprinted -- pinned** (net-hardening.md B.2, B.6;
+## docs/design/gene-catalogue.md §11.3): SHA-256 of `game/net/rules.gd`'s text,
+## which the game writes out from the catalogue -- every table a stat row marks
+## judged or contact, by every organ, the run's numbers the referee judges by, the
+## contact rules no table holds, the referee's own limits and the body plan.
 ##
 ## **A host judges its guests by its own copy of these.** A guest on other rules
-## is fouled, then cut and barred: a later content that grows five units a meal
-## instead of four is cut 1.05 s after its first meal by a host on this one,
-## measured. So **change any of them only with [constant PROTOCOL] bumped and
-## this updated, in the same commit**: two builds on different rules are then
-## refused at the handshake, with the sentence that names the update, instead
-## of cut in the middle of a game. `tools/net_probe.gd` recomputes this from the
-## real constants (`_rules_text`, run by `_referee_rules` in its `referee`
-## section) and fails until both are done.
-const RULES := "46913eab9d0b76a01b5ee460f0eb534b3692698553b4be378046e2620f576c8e"
+## would be fouled, then cut and barred: a later content that grows five units a
+## meal instead of four was cut 1.05 s after its first meal by a host on the old
+## one, measured. **Since protocol 8 that cannot happen**: the handshake carries the
+## fingerprint the game works out ([method tail]), and a host refuses a guest on
+## other rules before it is in the water, with the sentence that names the update.
+##
+## **This is the pin, not the value on the wire**: the game never reads it. It is
+## here so that a change to the rules is made on purpose -- `tools/net_probe.gd`
+## writes the text again from the real constants (`_rules_text`, run by
+## `_referee_rules` in its `referee` section), holds the game's to it, and fails
+## until this is moved, saying that no [constant PROTOCOL] bump goes with it. A build
+## on new rules plays every build on its own rules, and none on the old ones until
+## they update: that is what moving it means.
+const RULES := "c382d53197f7a8c7ac885baf51caa5d6f674c9c3e7e966208c60159ca90d88fa"
 
 # --- Frame kinds. Byte 0 of every frame. ------------------------------------
 ## Guest to host, first thing after the transport connects: *this is what I
@@ -227,8 +244,11 @@ const EVENT_SETTLE := 0x09
 const EVENT_CLEAR := 0x0A
 
 # --- Why a host hangs up. Byte 3 of a refusal. ------------------------------
-## The two builds do not speak the same protocol. The one case that matters,
-## and the reason the handshake exists at all.
+## The two builds do not speak the same protocol -- or, since protocol 8, speak it
+## by other rules: the tail's fingerprints differ ([method rules_of]). The one case
+## that matters, and the reason the handshake exists at all. Either way the two are
+## different versions, and the one that is older takes the update: the prefix says
+## which by protocol, and the tail by content ([method content_of]).
 const REFUSE_PROTOCOL := 0x01
 ## Somebody is already here. This game is two cells.
 const REFUSE_FULL := 0x02
@@ -248,11 +268,23 @@ const REFUSE_BROKEN := 0x04
 ## Only ever sent on the internet listener, which no protocol-4 build reaches.
 const REFUSE_INVITE := 0x05
 
+## **The three bytes that never move**, a HELLO's whole length before protocol 8.
+## Since then a HELLO is these and the [constant TAIL_SIZE] of its tail, 39 bytes.
 const HELLO_SIZE := 3
-## `kind | protocol | host id`. The id is four bytes because peer ids are random
-## 32-bit values -- measured in this container, a guest came up as 694971552 --
-## and the only id that is ever a small number is an accident of ENet that a
-## WebSocket or relay transport is under no obligation to repeat.
+## **The tail of every handshake frame since protocol 8**, after its fixed part:
+## the rules the sender judges a guest and decides a contact by, as
+## `game/net/rules.gd` fingerprints them ([constant RULES_SIZE] bytes), then its
+## content version, a u32 (BuildInfo's), which says which of two builds is older.
+## A build before 8 sends none, and a reader of 8 finds none in its frames. **A
+## refusal to a stranger** -- a caller on the internet listener that has proved no
+## invite -- carries zeros for the rules and a content version that says only which
+## game is older (net_session.gd's `_refuse_tail`).
+const RULES_SIZE := 32
+const TAIL_SIZE := RULES_SIZE + 4
+## `kind | protocol | host id`, then the tail. The id is four bytes because peer ids
+## are random 32-bit values -- measured in this container, a guest came up as
+## 694971552 -- and the only id that is ever a small number is an accident of ENet
+## that a WebSocket or relay transport is under no obligation to repeat.
 const WELCOME_SIZE := 7
 const REFUSE_SIZE := 4
 ## The internet handshake's pieces (net-hardening.md C): a nonce each way, the
@@ -455,9 +487,10 @@ enum Entry { ID, MEALS, FLAGS, AT, HEADING, RADIUS, WOUND, SPEED,
 ## **The two counts are the body plan's** (docs/design/gene-catalogue.md §10.2),
 ## worked out from it and read again whenever it changes ([method _read_plan]): a
 ## plan with one more slot sends and takes one more gene, one more outside slot
-## one more in an order, and every size below that holds a genome follows. Until
-## the handshake carries the plan's fingerprint (§11.3, phase 4), a build on
-## another plan is another protocol, and [constant PROTOCOL] moves by hand.
+## one more in an order, and every size below that holds a genome follows. **A
+## build on another plan is on other rules**: the plan's fingerprint is in the
+## rules the handshake carries (§11.3), so two such builds refuse each other there,
+## before either sends a genome the other's sizes do not fit.
 const BodyPlan := preload("res://game/genes/body_plan.gd")
 static var GENES_MAX: int = BodyPlan.SLOTS + 1
 static var ORDER_MAX: int = BodyPlan.SLOT_MAX
@@ -526,7 +559,8 @@ const CLEAR_SIZE := EVENT_HEADER + 4
 ## sentence instead of a shrug.
 ##
 ## **So a later protocol's HELLO must stay within these 64 bytes** to be told
-## why a host of this build refuses it. Longer, and the host hangs up before
+## why a host of this build refuses it. Protocol 8's is 39: the prefix and the
+## rules' tail ([constant TAIL_SIZE]). Longer, and the host hangs up before
 ## the handshake with no sentence at all; longer than [member GUEST_OTHER_MAX]
 ## (290), and it is the oversize cut, which bars the caller's address for a
 ## minute (net-hardening.md A.2).
@@ -598,29 +632,48 @@ static func _read_plan() -> void:
 # Writing.
 # ---------------------------------------------------------------------------
 
-static func hello(protocol: int) -> PackedByteArray:
+## **A handshake frame's tail** ([constant TAIL_SIZE]): [param rules], the
+## fingerprint (written as zeros unless it is [constant RULES_SIZE] bytes), then
+## [param content], the sender's content version.
+static func tail(rules: PackedByteArray, content: int) -> PackedByteArray:
+	var out := _exactly(rules, RULES_SIZE).duplicate()
+	out.resize(TAIL_SIZE)
+	_put_u32(out, RULES_SIZE, maxi(content, 0))
+	return out
+
+
+## HELLO: the frozen prefix, then [param rest] -- a [method tail], or none, as a
+## build before protocol 8 sends it and as a tool may.
+static func hello(protocol: int, rest: PackedByteArray = PackedByteArray()) -> PackedByteArray:
 	var out := PackedByteArray()
 	out.resize(HELLO_SIZE)
 	out[0] = KIND_HELLO
 	_put_u16(out, 1, protocol)
+	out.append_array(rest)
 	return out
 
 
-static func welcome(protocol: int, host_id: int) -> PackedByteArray:
+## WELCOME: `kind | protocol | host id`, then [param rest], a [method tail].
+static func welcome(protocol: int, host_id: int,
+		rest: PackedByteArray = PackedByteArray()) -> PackedByteArray:
 	var out := PackedByteArray()
 	out.resize(WELCOME_SIZE)
 	out[0] = KIND_WELCOME
 	_put_u16(out, 1, protocol)
 	_put_u32(out, 3, host_id)
+	out.append_array(rest)
 	return out
 
 
-static func refuse(protocol: int, reason: int) -> PackedByteArray:
+## REFUSE: `kind | protocol | reason`, then [param rest], a [method tail].
+static func refuse(protocol: int, reason: int,
+		rest: PackedByteArray = PackedByteArray()) -> PackedByteArray:
 	var out := PackedByteArray()
 	out.resize(REFUSE_SIZE)
 	out[0] = KIND_REFUSE
 	_put_u16(out, 1, protocol)
 	out[3] = reason & 0xFF
+	out.append_array(rest)
 	return out
 
 
@@ -997,6 +1050,40 @@ static func refuse_reason(frame: PackedByteArray) -> int:
 	if frame.size() < REFUSE_SIZE or frame[0] != KIND_REFUSE:
 		return 0
 	return frame[3]
+
+
+## **The rules out of a handshake frame's tail** ([constant RULES_SIZE] bytes), or
+## empty for a frame with no whole tail -- a build's before protocol 8, or one cut
+## short. Two builds on one protocol play only when theirs are the same.
+static func rules_of(frame: PackedByteArray) -> PackedByteArray:
+	var at := _tail_at(frame)
+	if at < 0 or frame.size() < at + TAIL_SIZE:
+		return PackedByteArray()
+	return frame.slice(at, at + RULES_SIZE)
+
+
+## **The content version out of a handshake frame's tail**, or -1 for a frame with
+## no whole tail. Only ever compared, to say which of two builds is older.
+static func content_of(frame: PackedByteArray) -> int:
+	var at := _tail_at(frame)
+	if at < 0 or frame.size() < at + TAIL_SIZE:
+		return -1
+	return _take_u32(frame, at + RULES_SIZE)
+
+
+## Where a handshake frame's tail starts -- after its fixed part -- or -1 for a frame
+## that is not one.
+static func _tail_at(frame: PackedByteArray) -> int:
+	if frame.is_empty():
+		return -1
+	match frame[0]:
+		KIND_HELLO:
+			return HELLO_SIZE
+		KIND_WELCOME:
+			return WELCOME_SIZE
+		KIND_REFUSE:
+			return REFUSE_SIZE
+	return -1
 
 
 ## The nonce out of a CHALLENGE, or empty for anything that is not exactly one.

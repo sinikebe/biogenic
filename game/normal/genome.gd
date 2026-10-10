@@ -61,8 +61,11 @@ enum Result {
 ## Three organs, three tiers. Tier 0 is "does not have this organ at all", which
 ## is a real state: drifters have no cytostome (§1.3), and §9.7 lets the player
 ## put a fourth gene over their own mouth and live with the consequences.
-## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
+## The host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const TIER_MAX := 3
+## **The copies the gift is worn at** ([method _express_gift]): one. The host's referee
+## judges a born body's gift by it (game/net/rules.gd).
+const GIFT_TIER := 1
 
 # **The order genes are ranked in** -- the tie-break of `dominant_of`, arc order
 # from §4.1, so the cell you can see is the gene you get -- is each gene's own
@@ -1334,9 +1337,7 @@ func _express_gift(gene: StringName, slot: int) -> void:
 	if gene == &"" or gene != _gift:
 		return
 	_gift = &""
-	# Tier 1: the host's referee judges by this -- change it with Wire.PROTOCOL
-	# and Wire.RULES (wire.gd).
-	_body[gene] = maxi(int(_body.get(gene, 0)), 1)
+	_body[gene] = maxi(int(_body.get(gene, 0)), GIFT_TIER)
 	body_version += 1
 	if slot >= 0:
 		_body_slots[gene] = slot

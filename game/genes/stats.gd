@@ -33,74 +33,77 @@ const PRODUCT := &"product"
 ## table that provides it, which means *does not have this organ*; `better`,
 ## which way is better; `combine`, how several providers combine; `unit`, what it
 ## is counted in, for the stats screen; `judged`, whether a shared pond's referee
-## judges a guest by it -- every table `Wire.RULES` fingerprints, so changing one
-## changes the protocol (wire.gd).
+## judges a guest by it; and `contact`, whether the host decides a contact by it --
+## a mouth, a skin, a bite, a dose, a dart -- which a guest feels by its own. **A table
+## either marks is one two builds in one pond must agree on**: it is in the rules
+## the handshake fingerprints (game/net/rules.gd), by every organ that provides it,
+## so a change to one keeps builds on the old table apart, by themselves.
 const ROWS := {
 	# The mouth.
 	&"gape": {"none": 0.58, "better": HIGHER, "combine": BEST, "unit": "x radius",
-		"judged": false},
+		"judged": false, "contact": true},
 	&"bite": {"none": 0.0, "better": HIGHER, "combine": BEST, "unit": "of a body",
-		"judged": false},
+		"judged": false, "contact": true},
 	# The tail.
 	&"impulse_speed": {"none": 118.0, "better": HIGHER, "combine": BEST,
-		"unit": "µm/s", "judged": true},
+		"unit": "µm/s", "judged": true, "contact": false},
 	&"impulse_gap_min": {"none": 2.0, "better": LOWER, "combine": BEST, "unit": "s",
-		"judged": true},
+		"judged": true, "contact": false},
 	&"impulse_gap_max": {"none": 4.3, "better": LOWER, "combine": BEST, "unit": "s",
-		"judged": false},
+		"judged": false, "contact": false},
 	# Steering.
 	&"turn_rate": {"none": 0.48, "better": HIGHER, "combine": BEST, "unit": "rad/s",
-		"judged": true},
+		"judged": true, "contact": false},
 	&"turn_response": {"none": 1.43, "better": LOWER, "combine": BEST, "unit": "s",
-		"judged": false},
+		"judged": false, "contact": false},
 	# The beam, by its level's rung.
 	&"beam_range": {"none": 0.0, "better": HIGHER, "combine": BEST, "unit": "µm",
-		"judged": false},
+		"judged": false, "contact": false},
 	&"beam_count": {"none": 0.0, "better": HIGHER, "combine": BEST, "unit": "rays",
-		"judged": false},
+		"judged": false, "contact": false},
 	&"beam_fan_deg": {"none": 0.0, "better": HIGHER, "combine": BEST, "unit": "deg",
-		"judged": false},
+		"judged": false, "contact": false},
 	# The nose.
 	&"smell_range": {"none": 0.0, "better": HIGHER, "combine": BEST, "unit": "µm",
-		"judged": false},
+		"judged": false, "contact": false},
 	# The ping.
 	&"ping_range": {"none": 0.0, "better": HIGHER, "combine": BEST, "unit": "µm",
-		"judged": true},
+		"judged": true, "contact": false},
 	&"ping_period": {"none": 0.0, "better": LOWER, "combine": BEST, "unit": "s",
-		"judged": true},
+		"judged": true, "contact": false},
 	&"ping_through": {"none": 0.0, "better": HIGHER, "combine": BEST,
-		"unit": "of a pulse", "judged": false},
+		"unit": "of a pulse", "judged": false, "contact": false},
 	# The push and the dash.
 	&"push_accel": {"none": 0.0, "better": HIGHER, "combine": SUM, "unit": "µm/s²",
-		"judged": true},
+		"judged": true, "contact": false},
 	&"dash_speed": {"none": 0.0, "better": HIGHER, "combine": BEST, "unit": "µm/s",
-		"judged": true},
+		"judged": true, "contact": false},
 	&"dash_cost": {"none": 0.0, "better": LOWER, "combine": BEST, "unit": "of a tank",
-		"judged": false},
+		"judged": false, "contact": false},
 	# The body's own: its armour, its tank, its burn and its light.
 	&"armor": {"none": 1.0, "better": HIGHER, "combine": PRODUCT, "unit": "x size",
-		"judged": false},
+		"judged": false, "contact": true},
 	&"store": {"none": 1.0, "better": HIGHER, "combine": PRODUCT, "unit": "x tank",
-		"judged": false},
+		"judged": false, "contact": false},
 	&"burn": {"none": 1.0, "better": LOWER, "combine": PRODUCT, "unit": "x upkeep",
-		"judged": false},
+		"judged": false, "contact": false},
 	&"sun": {"none": 0.0, "better": HIGHER, "combine": SUM, "unit": "of upkeep",
-		"judged": false},
+		"judged": false, "contact": false},
 	# Touch.
 	&"touch_range": {"none": 0.0, "better": HIGHER, "combine": BEST, "unit": "µm",
-		"judged": false},
+		"judged": false, "contact": false},
 	# The dart.
 	&"dart_range": {"none": 0.0, "better": HIGHER, "combine": BEST, "unit": "µm",
-		"judged": false},
+		"judged": false, "contact": true},
 	&"dart_cooldown": {"none": 0.0, "better": LOWER, "combine": BEST, "unit": "s",
-		"judged": false},
+		"judged": false, "contact": true},
 	# The toxin: venom outside, poison inside (docs/design/dna-slots.md §6).
 	&"venom_stacks": {"none": 0.0, "better": HIGHER, "combine": BEST, "unit": "stacks",
-		"judged": false},
+		"judged": false, "contact": true},
 	&"poison_stacks": {"none": 0.0, "better": HIGHER, "combine": BEST, "unit": "stacks",
-		"judged": false},
+		"judged": false, "contact": true},
 	&"swallow_stacks": {"none": 0.0, "better": HIGHER, "combine": BEST,
-		"unit": "stacks", "judged": false},
+		"unit": "stacks", "judged": false, "contact": true},
 }
 
 ## **The stats whose mechanic acts from a place** (gene-catalogue.md §5.2): the
@@ -246,6 +249,16 @@ static func judged() -> Array[StringName]:
 	var out: Array[StringName] = []
 	for stat: StringName in ROWS:
 		if bool((ROWS[stat] as Dictionary)["judged"]):
+			out.append(stat)
+	return out
+
+
+## **The stats the host decides a contact by** (a row's `contact`), in the rows'
+## order: with [method judged], every table the handshake's rules fingerprint.
+static func contact() -> Array[StringName]:
+	var out: Array[StringName] = []
+	for stat: StringName in ROWS:
+		if bool((ROWS[stat] as Dictionary)["contact"]):
 			out.append(stat)
 	return out
 

@@ -209,16 +209,16 @@ const BOOK_MAX := 4 * POND_SLOTS
 ## CONTACT), so they are written out rather than left to count.
 ## `GRAZED` is a floc swallowed, in the drop (ocean.md §7.3, §10.4): food, and
 ## no growth and no gene, so it is never a meal to the referee.
-## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
+## The host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 enum Contact { WAKED = 1, BITTEN = 2, STUNG = 3, DARTED = 4, ATE = 5, KILLED = 6,
 	GRAZED = 7 }
 ## How a person died, on [signal person_died]. `POISONED` is a dose: the harm a
 ## venom or a poison left in it made its wound whole (docs/design/dna-slots.md
 ## §6.2), which §2's three-cause DIED did not name.
-## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
+## The host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 enum Cause { SWALLOWED = 1, CHEWED = 2, STARVED = 3, POISONED = 4 }
 ## Whose mouth it was.
-## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
+## The host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 enum By { WATER = 1, FRIEND = 2 }
 ## The anchors a pond can have (§1.4): this device's own cell and the person --
 ## and on a dedicated host, which has no cell, the person in each of its slots:
@@ -915,7 +915,7 @@ const NOTICE_RANGE := 1900.0
 ## anything (see THREAT_LOW); what keeps the opening quiet instead is [method
 ## _seed]'s rule that **nothing seeded at setup that could eat you starts inside
 ## DREAD_RANGE**. Danger has to arrive, and arriving is continuous.
-## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
+## The host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const FIRST_DELAY := 42.0
 ## How long a hunter keeps swimming at prey that has just outgrown its mouth.
 ##
@@ -6455,9 +6455,9 @@ const RUN_CLOCKS := 10
 ## rows 15 and 5), as the build ships them: a mouth swallows a player that fits
 ## on contact, hunting or not; and `pellicle` makes every body bigger to a mouth.
 ## The host decides both and tells the guest, so the referee judges neither --
-## but net_probe fingerprints a sample of each into `Wire.RULES`, through
-## [method swallows_player] and [method armoured_size], which the field itself
-## decides by, so two builds that disagree on them refuse each other at HELLO.
+## but the rules the handshake carries hold a sample of each (game/net/rules.gd),
+## through [method swallows_player] and [method armoured_size], which the field
+## itself decides by, so two builds that disagree on them refuse each other at HELLO.
 const CONTACT_SWALLOW := true
 const ARMOUR_SWALLOW := true
 ## **Where the authored first drifter may be placed**: not within this of the

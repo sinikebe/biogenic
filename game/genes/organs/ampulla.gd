@@ -48,7 +48,7 @@ const U := Readout.Unit
 ## the hum now breathes from full to empty exactly once per call at **every**
 ## tier. Under the old ladder a tier-3 period was a tenth of its trip and the
 ## hum sat nearly flat. ping-as-outline.md §10 row 1 is the table.
-## The host's referee judges by these: change them with Wire.PROTOCOL and Wire.RULES (wire.gd).
+## The host's referee judges by these: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const PING_RANGE_BY_TIER: Array[float] = [0.0, 1100.0, 1500.0, 1900.0]
 const PING_PERIOD_BY_TIER: Array[float] = [0.0, 8.8, 12.0, 15.2]
 

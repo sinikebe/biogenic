@@ -75,6 +75,13 @@ const WEIGHT_DIED := 2.0
 ## a cheat that lies on every one of twenty state frames a second is struck
 ## twice a second, not twenty times.
 const FOUL_EVERY := 0.5
+## **The ledger the weights are counted against** (A.4): a guest is cut at ten
+## points, and forgets one a second. `net_session.gd`'s ledger keeps every strike
+## by these -- its own `STRIKE_CUT` and `STRIKE_DECAY` are these two -- and since
+## they turn the weights above into a cut, a host judges a guest by them as by the
+## weights: they are rules, in the text the handshake carries (game/net/rules.gd).
+const STRIKE_CUT := 10.0
+const STRIKE_DECAY := 1.0
 
 # --- Movement: the path the guest claims ---------------------------------------
 ## **1,100 units a second, 1.5 s of it held, and 100 of slack.** Every speed-up

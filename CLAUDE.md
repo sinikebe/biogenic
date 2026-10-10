@@ -278,23 +278,32 @@ In a shared pond, `game/net/referee.gd` judges every guest by copies of the
 game's own rules and cuts one that keeps breaking them. The rules it copies are
 growth per meal and its cap, the division radius, the daughter's size and
 distance, the free senses and the gift, the speed and turn tables, ping reach
-and period by tier, the grace, the causes of death, and the order in which a
-guest announces a new body. A host judges by *its own* copy. So a phone that
-has already updated gets judged by the old rules. It is cut a second after its
-first meal and barred for a minute. A dedicated server is always the last to
-update, because it only restarts once its pond is empty.
+and period by tier, the grace and the causes of death. A host judges by *its
+own* copy, so a guest on other rules would be cut a second after its first
+meal and barred for a minute.
 
-- **Changing a rule the referee copies changes the protocol.** Bump
-  `Wire.PROTOCOL` and update `Wire.RULES` in the same commit. Mismatched builds
-  then refuse each other at the handshake with the version sentence, instead of
-  one cutting the other mid-game.
-- **Changing only the referee's own limits** needs `Wire.RULES` updated and the
-  false-positive runs in `docs/design/net-hardening.md` repeated. It does not
-  need a protocol bump.
+So since protocol 8 the handshake carries the rules. `game/net/rules.gd` writes
+them out from the gene catalogue -- every table the referee judges or a contact
+reads, for every organ that provides it, the run's numbers, the contact rules,
+the referee's own limits and the body plan's fingerprint -- and every HELLO,
+WELCOME and REFUSE carries their fingerprint and the sender's content version.
+Two builds on other rules refuse each other at the handshake, with the version
+sentence. A dedicated server is always the last to update, because it only
+restarts once its pond is empty.
 
-CI holds this. `Wire.RULES` in `game/net/wire.gd` is a fingerprint of every
-value the referee judges by. net_probe's `referee` section recomputes it and
-fails until both are done.
+- **Changing a rule the referee copies, a contact table, the body plan or the
+  referee's own limits moves the `Wire.RULES` pin, never `Wire.PROTOCOL`.**
+  `Wire.RULES` in `game/net/wire.gd` is a pin, not the value on the wire:
+  net_probe's `referee` section fails until it is moved to the value it names,
+  so the change is made on purpose. Moving it means players on the old content
+  and the new cannot play together until the older one updates. Say so in the
+  patch note's line when a player can tell.
+- **`Wire.PROTOCOL` moves when a message's format changes, or the order a
+  guest sends them in.** The order in which a guest announces a new body is
+  behaviour the referee judges (`judge_person`, `STALE_FOR`), not a number the
+  rules can carry, so changing it is a protocol change.
+- **Changing the referee's own limits** also needs the false-positive runs in
+  `docs/design/net-hardening.md` repeated.
 
 If an honest phone is ever cut, `enforce_referee` and `enforce_budgets` in
 `net_session.gd` are the switches to watch mode. It logs what it *would* have

@@ -45,7 +45,7 @@ signal dashed(cost: float)
 ## number in the game that means three things at once: what can eat me, what I
 ## can eat, and how much genome I can carry.
 ## docs/design/genes-and-cilia.md §1.1 and §3.1.
-## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
+## The host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const BASE_RADIUS := 26.0
 ## One meal, four units of radius. **A generation is three meals**, which is the
 ## owner's "divide the split requirements by four": a daughter is born at 28.28
@@ -62,7 +62,7 @@ const BASE_RADIUS := 26.0
 ## faster too -- docs/design/genes-and-cilia.md §1.2 gets louder rather than
 ## being switched off for everything except the player, which is the one thing
 ## §1.3 forbids.
-## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
+## The host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const GROWTH_PER_MEAL := 4.0
 
 var radius := BASE_RADIUS
@@ -78,7 +78,7 @@ var radius := BASE_RADIUS
 ## bitten. Slow enough that a fight is not undone by swimming away for a moment,
 ## fast enough that surviving one means something. **The first number to move if
 ## biting feels wrong**, ahead of the bite table below.
-## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
+## The host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const MEND_SECONDS := 75.0
 
 ## Seconds between bites from one mouth. One mouth, one bite, whatever it is
@@ -101,6 +101,7 @@ const FLANK_ASTERN := 2.10
 ## rule is a defence with no position: **a dart in a rear slot is the answer to
 ## being flanked**, and placement becomes a defensive decision rather than only
 ## an offensive one. §2.
+## The host decides every contact by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const DART_ARC_DEG := 110.0
 
 ## 0 is whole and 1 is a body that has come apart. There is no bar for this
@@ -157,7 +158,7 @@ static func _read_plan() -> void:
 # argument stands on its own and is the only one left.
 
 ## Where a body divides, and where its radius stops.
-## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
+## The host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const DIVIDE_RADIUS := 40.0
 ## Two meals out, and where the nucleus starts to double.
 ##
@@ -171,7 +172,7 @@ const DIVIDE_WARN_RADIUS := 32.0
 ## slots_for(28.28) is 3, the same room to manoeuvre a run starts with. None of
 ## that was arranged; it falls out of conserving area on a ladder that was
 ## already there.
-## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
+## The host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const DIVIDE_SPLIT := 0.5
 
 
@@ -205,10 +206,10 @@ const SPREAD_LOSS := 0.945
 ## The organelle does not aim well: each impulse strays this far off the heading
 ## and kicks the heading itself by about this much.
 const IMPULSE_SPREAD := 0.24
-## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
+## The host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const IMPULSE_KICK := 0.16
 ## Water is thick at this scale. Velocity loses 1/e of itself every 1/DRAG s.
-## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
+## The host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const DRAG := 0.74
 
 # --- What the earned genes buy ----------------------------------------------
@@ -228,7 +229,7 @@ const DRAG := 0.74
 const PUSH_CHASE_SHARE := 0.5
 
 ## The dash's cooldown.
-## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
+## The host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const DASH_COOLDOWN := 1.4
 ## A press shorter than this, that moved less than this far, is a tap and not a
 ## steer. Both halves matter: a thumb that slid is steering.
@@ -270,7 +271,7 @@ const VENOM_SIDES := true
 # --- Steering --------------------------------------------------------------
 ## The water pushes back: a slow random walk on the heading the player never
 ## asked for and cannot switch off.
-## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
+## The host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const WANDER_RATE := 0.13
 const WANDER_TAU := 2.6
 

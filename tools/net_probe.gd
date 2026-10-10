@@ -506,6 +506,34 @@ func _check_wire() -> void:
 			and Wire.refuse_reason(refuse) == Wire.REFUSE_PROTOCOL,
 		"a refusal carries the refuser's protocol and its reason")
 
+	# **The tail, since protocol 8** (gene-catalogue.md §11.3): the rules a build
+	# judges and decides contacts by, and its content version, after the frozen
+	# prefix of every handshake frame -- and a HELLO with it still within
+	# HANDSHAKE_MAX, so a host of any build reads its prefix and refuses it by name.
+	var rules8 := Rules.fingerprint()
+	var tail8 := Wire.tail(rules8, 4242)
+	var hello8 := Wire.hello(Wire.PROTOCOL, tail8)
+	var welcome8 := Wire.welcome(Wire.PROTOCOL, big, tail8)
+	var refuse8 := Wire.refuse(Wire.PROTOCOL, Wire.REFUSE_PROTOCOL, tail8)
+	var read8 := true
+	for each8: PackedByteArray in [hello8, welcome8, refuse8]:
+		read8 = read8 and Wire.rules_of(each8) == rules8 \
+			and Wire.content_of(each8) == 4242 and Wire.protocol_of(each8) == Wire.PROTOCOL \
+			and each8.size() <= Wire.HANDSHAKE_MAX
+	var bare7 := Wire.hello(Wire.PROTOCOL - 1)
+	var cut8 := hello8.slice(0, hello8.size() - 1)
+	_says(read8 and hello8.size() == Wire.HELLO_SIZE + Wire.TAIL_SIZE
+			and Wire.welcome_host_id(welcome8) == big
+			and Wire.refuse_reason(refuse8) == Wire.REFUSE_PROTOCOL
+			and Wire.rules_of(bare7).is_empty() and Wire.content_of(bare7) == -1
+			and Wire.rules_of(cut8).is_empty() and Wire.content_of(cut8) == -1
+			and rules8.size() == Wire.RULES_SIZE and Rules.SIZE == Wire.RULES_SIZE
+			and Wire.tail(PackedByteArray([1, 2]), 7).size() == Wire.TAIL_SIZE,
+		"the handshake's tail: a HELLO with the rules and the content version is %d"
+		% hello8.size() + " bytes of the %d any host reads, a WELCOME %d and a REFUSE"
+		% [Wire.HANDSHAKE_MAX, welcome8.size()] + " %d, each read back whole; a frame" % refuse8.size()
+		+ " with no tail, as a 7 sends, or one cut short of it, has no rules and no content")
+
 	var alive := Wire.state(70000, true, Vector2(-1806.5, 942.25), 2.25, 33.5,
 		Vector2(-121.5, 64.25), -0.625)
 	var dead := Wire.state(70001, false)
@@ -1036,8 +1064,8 @@ func _check_sister_wire() -> void:
 		Wire.guest_cap(padded.call(Wire.KIND_EVENT, Wire.EVENT_SISTER, Wire.SISTER_MIN)),
 		Wire.guest_cap(PackedByteArray())]
 	# **1378 is the pin a plan change moves**: the body plan's slot count is in every
-	# size that holds a genome. Until phase 4 puts the plan's fingerprint on the
-	# handshake, the protocol moves with it -- said where it fails.
+	# size that holds a genome. The plan's fingerprint rides in the handshake's rules
+	# since protocol 8, so no protocol moves with it -- said where it fails.
 	var pinned := Wire.SISTER_MAX == 1378
 	_says(Wire.MOST_RULES == FoodField.Drop.MOST_RULES and alphabet
 			and Wire.RULE_BYTES.length() == 40 and Wire.RULE_BYTES_MAX == 128
@@ -1055,8 +1083,9 @@ func _check_sister_wire() -> void:
 		% Wire.SISTER_MAX + " guest frame that may pass the %d every other keeps"
 		% Wire.GUEST_OTHER_MAX + " (caps read %s)" % str(caps) + ("" if pinned
 			else " -- the body plan's slots changed (%d genes cross now): move the 1378 here"
-			% Wire.GENES_MAX + " and bump Wire.PROTOCOL in the same commit, until phase 4"
-			+ " puts the plan's fingerprint on the handshake (body_plan.gd)"))
+			% Wire.GENES_MAX + " and Wire.RULES in the same commit -- no Wire.PROTOCOL: the"
+			+ " plan is in the rules the handshake carries, and builds on other plans refuse"
+			+ " each other there (body_plan.gd)"))
 
 	# **Every line this build can write crosses**: each word a rule's line is
 	# made of -- every name the declarations give, the tests, the references,
@@ -1744,15 +1773,243 @@ func _check_skew() -> void:
 		if await _one_skew(theirs):
 			named.append(theirs)
 	# **Check 26** (automation.md §18.3): every older protocol refused by name,
-	# and the rules the referee judges by just as they were -- protocol 6 moved
-	# the shape of one message, and nothing a host judges a guest by.
+	# and the rules a host judges by pinned -- since protocol 8 they ride on the
+	# handshake, and moving them is the pin's to say, not a protocol's.
 	_says(named == older + [Wire.PROTOCOL + 1]
 			and _rules_text().sha256_text() == Wire.RULES,
 		"handshake (check 26): a guest on each of protocols %s is refused by a host"
 		% ", ".join(PackedStringArray(older.map(func(p: int) -> String: return str(p))))
 		+ " on %d by name, with the sentence that names the update, as is one on %d;"
-		% [Wire.PROTOCOL, Wire.PROTOCOL + 1] + " and the referee judges by the rules"
-		+ " it did, Wire.RULES %s" % Wire.RULES.left(16))
+		% [Wire.PROTOCOL, Wire.PROTOCOL + 1] + " and the rules it judges by are the"
+		+ " ones pinned, Wire.RULES %s" % Wire.RULES.left(16))
+	await _rules_skew()
+	await _welcome_skew()
+
+
+## **This build's HELLO, as a session sends it** (protocol 8): the frozen prefix
+## and the rules' tail, content version 0. What a bare client says to be greeted.
+static func _hello() -> PackedByteArray:
+	return Wire.hello(Wire.PROTOCOL, Wire.tail(Rules.fingerprint(), 0))
+
+
+## **A faster tail**, filed as the tail's own organ with one variant whose speed is
+## its own -- one more gene the referee judges, as the gene probe files one.
+## Registered by the caller, and forgotten by its organ's name.
+static func _faster_tail() -> Object:
+	var plain := Catalogue.first_provider(&"impulse_speed")
+	var speed: Array = Catalogue.table(plain, &"impulse_speed")
+	var swift: Array = []
+	for value: Variant in speed:
+		swift.append(float(value) * 1.6)
+	swift[0] = speed[0]
+	var tail: Object = (Catalogue.gene(plain).get_script() as GDScript).new()
+	tail.set(&"variants", [{"variant": &"probeswift", "order": 920, "born": 0,
+		"provides": {&"impulse_speed": swift}}])
+	return tail
+
+
+## **A palp that feels further**, the palp's own organ with one variant whose reach
+## is its own: one more gene that changes nothing a host judges or decides a
+## contact by.
+static func _longer_palp() -> Object:
+	var plain := Catalogue.first_provider(&"touch_range")
+	var reach: Array = Catalogue.table(plain, &"touch_range")
+	var longer: Array = []
+	for value: Variant in reach:
+		longer.append(float(value) * 1.5)
+	var palp: Object = (Catalogue.gene(plain).get_script() as GDScript).new()
+	palp.set(&"variants", [{"variant": &"probefeel", "order": 921, "born": 0,
+		"provides": {&"touch_range": longer}}])
+	return palp
+
+
+## **Version skew under one protocol** (gene-catalogue.md §11.4), with two builds
+## modelled in one process: a session takes its rules as it starts, so a guest
+## that starts while one more organ is registered is a build whose catalogue has
+## it, against a host that started without.
+##
+## - **One more judged gene** -- a faster tail -- and the two refuse each other at
+##   the handshake, the guest refused by name and told which game is older by the
+##   content version on the tail, both ways round;
+## - **one more gene that judges nothing** -- a palp that feels further -- and the
+##   rules are the same, so the two play, and the gene crosses by its name to a
+##   host that has never heard of it, which keeps it as a name;
+## - and **a name the wire would refuse cannot be in the catalogue**: the gene
+##   probe holds every key to the wire's alphabet and length, and this holds the
+##   two probes' bounds to one another.
+func _rules_skew() -> void:
+	var ours := Rules.fingerprint()
+	Catalogue.register(_faster_tail())
+	var judged := Rules.fingerprint()
+	Catalogue.forget(Catalogue.organ_of(&"probeswift"))
+	Catalogue.register(_longer_palp())
+	var unjudged := Rules.fingerprint()
+	Catalogue.forget(Catalogue.organ_of(&"probefeel"))
+	_says(judged != ours and unjudged == ours and Rules.fingerprint() == ours,
+		"skew: one more gene the referee judges, a faster tail, makes other rules"
+		+ " (%s against %s); one more that judges nothing, a palp that feels further,"
+		% [judged.hex_encode().left(8), ours.hex_encode().left(8)]
+		+ " leaves them as they are, and so does taking each out again")
+	var named := 0
+	for pair: Array in [[5, 6], [7, 6]]:
+		if await _one_rules_skew(int(pair[0]), int(pair[1])):
+			named += 1
+	_says(named == 2, "skew (§11.4): a guest on one more judged gene is refused at the"
+		+ " handshake on one protocol, by name, both ways round -- the older game, by its"
+		+ " content version, told to take the update")
+	await _unjudged_plays()
+	var alphabet := true
+	for key: StringName in Catalogue.keys():
+		var text := String(key)
+		alphabet = alphabet and text.length() >= 1 and text.length() <= Wire.NAME_MAX
+		for c: String in text:
+			alphabet = alphabet and c >= "a" and c <= "z"
+	_says(alphabet, "skew (§11.4): every name in the catalogue, the %d keys, is one the"
+		% Catalogue.keys().size() + " wire carries -- 1 to %d letters of a-z" % Wire.NAME_MAX)
+
+
+## **The guest's half of the rules check, on the LAN** (§11.3; net_session.gd's
+## `_take_welcome`): a host that welcomes it on other rules -- another build's tail,
+## one more judged gene on a later content -- or with no tail at all is a host whose
+## own check let it through, and the guest refuses it from its end with the version
+## sentence, told which game is older by the content on the WELCOME, and never plays.
+func _welcome_skew() -> void:
+	for case: Array in [["another build's tail, on a later content", _other_tail(6),
+			"yours", "its own"], ["no tail at all", PackedByteArray(), "theirs", "the host's"]]:
+		var ended: Array = await _welcomed_by_other("Welcome%d" % (case[1] as PackedByteArray).size(),
+			case[1], {})
+		_says(int(ended[0]) == NetSession.Link.REFUSED and str(ended[1]) == "different versions"
+				and str(ended[3]).contains("launcher") and str(ended[3]).contains(str(case[2]))
+				and not bool(ended[4]),
+			"skew (§11.3): a guest on content 5 welcomed with %s gives up on the WELCOME as"
+			% case[0] + " different versions, told it is %s game that is older ('%s'), and"
+			% [case[3], ended[3]] + " is never together with that host -- it %s" % ("was, for"
+				+ " a while" if bool(ended[4]) else "never was"))
+
+
+## **A host whose every handshake frame carries a tail not its own** -- another
+## build's, or none -- as a host whose own check let a guest through would welcome
+## it: its refusal path broken, or a build that never had one. Its check of a guest's
+## HELLO is the real one, against its real rules, so it welcomes this build's guest.
+class OtherTail extends "res://game/net/net_session.gd":
+	var other := PackedByteArray()
+
+	func _tail() -> PackedByteArray:
+		return other
+
+
+## **Another build's handshake tail**: the rules of a catalogue with one more judged
+## gene -- the faster tail -- and [param content], its content version.
+static func _other_tail(content: int) -> PackedByteArray:
+	Catalogue.register(_faster_tail())
+	var rules := Rules.fingerprint()
+	Catalogue.forget(Catalogue.organ_of(&"probeswift"))
+	return Wire.tail(rules, content)
+
+
+## **A guest on content 5 welcomed with [param tail]** by an [OtherTail] host -- a
+## phone's on the LAN, or, given [param invite], a server's that it calls by it and
+## proves it to: `[the link it ended on, its trouble, its trouble key, the sentence
+## under it, whether it was ever together]`.
+func _welcomed_by_other(named: String, tail: PackedByteArray, invite: Dictionary) -> Array:
+	var host := OtherTail.new()
+	host.name = named + "Host"
+	host.other = tail
+	_tally_on(host)
+	get_tree().root.add_child.call_deferred(host)
+	await host.ready
+	var guest: Node = await _session(named + "Guest")
+	guest.content_override = 5
+	var links: Array = []
+	guest.link_changed.connect(func(to: int) -> void: links.append(to))
+	if invite.is_empty():
+		host.host()
+		guest.join("127.0.0.1")
+		await _until_link(guest, NetSession.Link.REFUSED)
+	else:
+		host.host(NetSession.GUESTS_MAX)
+		host.listen_internet(_inv_key, _inv_cert)
+		host.set_invites(InviteBook.table(INVITES_ROOT))
+		await _invites_call(guest, invite)
+	var ended := [int(guest.link), str(guest.trouble), str(guest.trouble_key),
+		str(guest.because), links.has(NetSession.Link.TOGETHER)]
+	host.close()
+	guest.close()
+	await _wait(0.4)
+	return ended
+
+
+## One guest on [param guest_content] with one more judged gene, against a host on
+## [param host_content] without it: true when it was refused by name, told which
+## game is older, and every line below passed.
+func _one_rules_skew(guest_content: int, host_content: int) -> bool:
+	var failed := _failed
+	var host: Node = await _session("HostRules%d" % guest_content)
+	var guest: Node = await _session("GuestRules%d" % guest_content)
+	host.content_override = host_content
+	guest.content_override = guest_content
+	host.host()
+	Catalogue.register(_faster_tail())
+	guest.join("127.0.0.1")
+	Catalogue.forget(Catalogue.organ_of(&"probeswift"))
+	await _until_link(guest, NetSession.Link.REFUSED)
+	var guest_older := guest_content < host_content
+	_says(int(guest.link) == NetSession.Link.REFUSED and guest.trouble == "different versions"
+			and int(guest.refused_for) == Wire.REFUSE_PROTOCOL,
+		"a guest on content %d with one more judged gene is refused by a host on %d,"
+		% [guest_content, host_content] + " on one protocol, as different versions")
+	_says(guest.because.contains("launcher") and guest.because.contains(
+			"yours" if guest_older else "theirs"),
+		"and told it is %s game that is older: '%s'" % ["its own" if guest_older
+			else "the host's", guest.because])
+	_says(host.trouble == "different versions" and host.because.contains(
+			"theirs" if guest_older else "yours") and host.peer_count() == 0
+			and int(host.link) != NetSession.Link.TOGETHER,
+		"the host is told too, the other way round, and keeps nothing of it: '%s'"
+		% host.because)
+	_says(guest.heard.is_empty() and guest.peer_track().is_empty(),
+		"nothing from the refused guest's host reached its game")
+	host.close()
+	guest.close()
+	await _wait(0.4)
+	return _failed == failed
+
+
+## **One more gene that judges nothing, and they play**: a guest that started with a
+## palp that feels further is welcomed by a host that started without it, and its
+## PERSON names the palp to a host that does not know it -- the name whole, its
+## copies and its slot.
+func _unjudged_plays() -> void:
+	var host: Node = await _session("HostUnjudged")
+	var guest: Node = await _session("GuestUnjudged")
+	host.host()
+	Catalogue.register(_longer_palp())
+	guest.join("127.0.0.1")
+	Catalogue.forget(Catalogue.organ_of(&"probefeel"))
+	await _until_link(guest, NetSession.Link.TOGETHER)
+	var born := Catalogue.born_order()
+	var tiers := Catalogue.born().duplicate()
+	tiers[&"probefeel"] = 2
+	var order: Array = Array(born) + [&"probefeel"]
+	guest.send_event(Wire.EVENT_PERSON, Wire.person_payload(true, tiers, order))
+	var until := _now() + SETTLE
+	while _now() < until and (host.pond_events as Array).is_empty():
+		await get_tree().process_frame
+	var got: Array = []
+	for frame: PackedByteArray in host.pond_events:
+		got = Wire.take_person(frame)
+		if not got.is_empty():
+			break
+	var kept := not got.is_empty() and int((got[1] as Dictionary).get(&"probefeel", 0)) == 2 \
+		and (got[2] as Array).has(&"probefeel") and not Catalogue.known(&"probefeel")
+	_says(int(guest.link) == NetSession.Link.TOGETHER and int(host.link) == NetSession.Link.TOGETHER
+			and kept,
+		"skew (§11.4): a guest with one more gene that judges nothing plays -- the two"
+		+ " are together, the rules the same -- and its PERSON names it to a host that"
+		+ " does not know it, whole: %s" % (str(got[1]) if not got.is_empty() else "nothing"))
+	host.close()
+	guest.close()
+	await _wait(0.4)
 
 
 ## One guest on [param theirs] against a host on this build: true when it was
@@ -1889,6 +2146,14 @@ class Rogue extends Node:
 		var raw := PackedByteArray([NetSession.RAW])
 		raw.append_array(frame)
 		send_raw(raw, reliable)
+
+	## The refusal it was sent, its frame without the RAW byte, or empty.
+	func refusal() -> PackedByteArray:
+		for packet: PackedByteArray in got:
+			if packet.size() >= 1 + Wire.REFUSE_SIZE and packet[0] == NetSession.RAW \
+					and packet[1] == Wire.KIND_REFUSE:
+				return packet.slice(1)
+		return PackedByteArray()
 
 	## The reason in the refusal it was sent, or -1.
 	func refused_for() -> int:
@@ -2275,7 +2540,7 @@ func _limits_commands() -> void:
 	var host: Node = await _limits_host("LimitsCommandsHost")
 	var rogue := _limits_rogue("LimitsCommandsRogue")
 	await _limits_until(func() -> bool: return rogue.connected())
-	rogue.send(Wire.hello(Wire.PROTOCOL))
+	rogue.send(_hello())
 	await _limits_until(func() -> bool: return rogue.welcomed())
 	var path := PackedByteArray([1, 7, 0, 0, 0])
 	path.append_array("root/NetSession".to_utf8_buffer())
@@ -2385,7 +2650,7 @@ func _limits_greeted_gone() -> void:
 	host.set("silence_cut", 1.5)
 	var rogue := _limits_rogue("GoneRogue")
 	await _limits_until(func() -> bool: return rogue.connected())
-	rogue.send(Wire.hello(Wire.PROTOCOL))
+	rogue.send(_hello())
 	await _limits_until(func() -> bool:
 		return int(host.link) == NetSession.Link.TOGETHER and int(host.company()) == 1)
 	var greeted := int(host.company()) == 1 and int(host.peer_count()) == 1
@@ -2942,6 +3207,8 @@ func _limits_unclean(all: Array) -> String:
 # ---------------------------------------------------------------------------
 
 const Referee := preload("res://game/net/referee.gd")
+## **The rules two builds must agree on, as the game writes them** (§11.3).
+const Rules := preload("res://game/net/rules.gd")
 ## R2's and R3's link: `tools/net_lag.gd`'s `rough`, modelled here with no
 ## socket -- 10-50 ms of flight, 5% of frames lost, a 5% chance of 100-250 ms
 ## more, and a reliable frame resent after 150 ms, doubling, with every
@@ -3031,52 +3298,160 @@ static func _ref_rules(fouls: Array) -> Array:
 	return fouls.map(func(foul: Array) -> String: return str(foul[0]))
 
 
-## **The rules the referee judges by, held to `Wire.RULES`** (net-hardening.md
-## B.6). A host judges its guests by its own copy of them, so a guest on other
-## rules is fouled and then cut: the fingerprint moving is what says a PROTOCOL
-## has to move with it, before a release does it for us.
+## **The rules two builds in one pond must agree on** (gene-catalogue.md §11.3):
+## the game writes them out itself (game/net/rules.gd) and the handshake carries their
+## fingerprint, so two builds on other rules refuse each other there. Here they are
+## written again from the real constants, by name, and held three ways: every table a
+## row marks judged or contact is in them, by every organ; the game's text is this
+## one, line for line; and `Wire.RULES` pins their SHA-256, so they change on purpose.
 func _referee_rules() -> void:
-	var text := _rules_text()
+	var doubts: Array = []
+	var text := _rules_text(doubts)
 	var now := text.sha256_text()
-	# Every stat a row marks as judged is in the text, by every provider.
+	# Every stat a row marks as judged or contact is in the text, by every provider.
 	var unwritten: Array[String] = []
-	for stat: StringName in Stats.judged():
+	var shared := Stats.judged() + Stats.contact()
+	for stat: StringName in shared:
+		if not ("\n" + text).contains("\nstat.%s=" % stat):
+			unwritten.append("stat." + String(stat))
 		var providers := Catalogue.providers(stat)
 		for k in providers.size():
 			var label := Stats.label(stat) + ("" if k == 0 else "." + String(providers[k]))
 			if not ("\n" + text).contains("\n%s=" % label):
 				unwritten.append(label)
 	_says(unwritten.is_empty(), "referee: every table of the %d stats the referee judges"
-		% Stats.judged().size() + " is in the rules it is fingerprinted by, one line an"
-		+ " organ that provides it%s" % ("" if unwritten.is_empty()
+		% Stats.judged().size() + " and the %d the host decides a contact by" % Stats.contact().size()
+		+ " is in the rules the handshake fingerprints, one line an organ that provides"
+		+ " it, after the stat's row%s" % ("" if unwritten.is_empty()
 			else "; not %s -- write it in _rules_text" % ", ".join(unwritten)))
+	# **Every constant of referee.gd is a limit the rules write, or one named as no
+	# limit with why** (rules.gd's REFEREE_LIMITS and REFEREE_NOT_LIMITS): a limit
+	# added to the referee's judgement fails here until it is in the rules or said
+	# not to be, and a name either list keeps after referee.gd lost it fails too.
+	var constants := {}
+	for key: Variant in (Referee as Script).get_script_constant_map():
+		constants[String(key)] = true
+	var neither: Array[String] = []
+	var twice: Array[String] = []
+	var gone: Array[String] = []
+	for name: String in constants:
+		var limit := Rules.REFEREE_LIMITS.has(name)
+		var no_limit := Rules.REFEREE_NOT_LIMITS.has(name)
+		if limit and no_limit:
+			twice.append(name)
+		elif not limit and not no_limit:
+			neither.append(name)
+		elif no_limit and str(Rules.REFEREE_NOT_LIMITS[name]).strip_edges().is_empty():
+			neither.append(name + " (no reason given)")
+	for name: Variant in Rules.REFEREE_LIMITS + Rules.REFEREE_NOT_LIMITS.keys():
+		if not constants.has(String(name)):
+			gone.append(String(name))
+	var sorted := neither.is_empty() and twice.is_empty() and gone.is_empty()
+	_says(sorted, ("referee: every one of referee.gd's %d constants is sorted -- the %d"
+		% [constants.size(), Rules.REFEREE_LIMITS.size()] + " limits the rules write, and"
+		+ " %d named as no limit, with why: the scripts it loads, its rules' names and"
+		% Rules.REFEREE_NOT_LIMITS.size() + " its budgets' class") if sorted
+		else ("referee: referee.gd's constants are not all sorted -- in neither list: %s;"
+			% (", ".join(neither) if not neither.is_empty() else "none") + " in both: %s;"
+			% (", ".join(twice) if not twice.is_empty() else "none") + " listed, and not"
+			+ " referee.gd's: %s -- a limit goes in rules.gd's REFEREE_LIMITS, which moves"
+			% (", ".join(gone) if not gone.is_empty() else "none") + " the pin, and"
+			+ " anything else in REFEREE_NOT_LIMITS, with why"))
+	# **A row's fields are each written or said not to decide a value**: a field
+	# stats.gd's rows gain -- phase 5's `group` -- fails here until it is one or the
+	# other, so how two providers combine cannot change with no line moving.
+	var unsorted: Array[String] = []
+	var fields := {}
+	for stat: StringName in Stats.ROWS:
+		for field: Variant in Stats.ROWS[stat]:
+			fields[String(field)] = true
+			var written := Rules.ROW_FIELDS.has(String(field))
+			if written == Rules.ROW_FIELDS_UNREAD.has(String(field)):
+				unsorted.append("%s.%s" % [stat, field])
+	for field: String in Rules.ROW_FIELDS + Rules.ROW_FIELDS_UNREAD.keys():
+		if not fields.has(field):
+			unsorted.append("%s, which no row has" % field)
+	_says(unsorted.is_empty(), ("referee: every field of stats.gd's %d rows is written on"
+		% Stats.ROWS.size() + " the row's line -- %s -- or named as deciding no value, with"
+		% ", ".join(Rules.ROW_FIELDS) + " why -- %s" % ", ".join(Rules.ROW_FIELDS_UNREAD.keys()))
+		if unsorted.is_empty() else ("referee: a field of stats.gd's rows is not sorted: %s"
+			% ", ".join(unsorted) + " -- a field that decides a body's value goes at the end"
+			+ " of rules.gd's ROW_FIELDS, which moves the pin, and one that does not in"
+			+ " ROW_FIELDS_UNREAD, with why"))
+	# **The game's own text is this one**: what it carries on the handshake is what is
+	# written here from the constants themselves.
+	var game := Rules.text()
+	var ours := text.split("\n")
+	var theirs := game.split("\n")
+	var first := -1
+	for k in maxi(ours.size(), theirs.size()):
+		if k >= ours.size() or k >= theirs.size() or ours[k] != theirs[k]:
+			first = k
+			break
+	_says(first < 0, ("referee: the game writes the %d lines of its rules as this probe"
+		% theirs.size() + " does from the real constants (%s)" % Rules.hex().left(16)) if first < 0
+		else ("referee: the game's rules (game/net/rules.gd) and this probe's differ at line"
+			+ " %d: the game's '%s', this probe's '%s' -- write the same value in both"
+			% [first + 1, theirs[first] if first < theirs.size() else "",
+			ours[first] if first < ours.size() else ""]))
+	# **Written the same on every machine** (rules.gd's note): every float as whole
+	# millionths by Godot alone, none within RULE_TIE of a rounding edge -- the body
+	# plan's own numbers too, inside its fingerprint -- and nothing of a kind the rules
+	# would hand to the C library to write.
+	_says(doubts.is_empty(), ("referee: every value of the %d lines is one every machine"
+		% ours.size() + " writes alike -- each float as whole millionths, by Godot alone,"
+		+ " and none within %s of a half, the plan's own numbers in its line too" % RULE_TIE)
+		if doubts.is_empty() else ("referee: the rules print values one machine could"
+			+ " write otherwise: %s -- move a sample off its edge, or write the value as"
+			% "; ".join(PackedStringArray(doubts)) + " rules.gd's note says"))
+	# **The tripwire**: a build's rules move only on purpose. No PROTOCOL moves with
+	# them any more -- the handshake keeps builds on other rules apart by itself.
 	var ok := now == Wire.RULES
-	_says(ok, ("referee: the %d rules it judges a guest by fingerprint to Wire.RULES"
-		% text.split("\n").size() + " (%s)" % now.left(16)) if ok
-		else ("referee: a rule the referee judges by changed: bump Wire.PROTOCOL and"
-			+ " update Wire.RULES in the same commit -- they fingerprint to %s now, and"
-			% now + " Wire.RULES says %s. A host on the old rules fouls, then cuts, an"
-			% Wire.RULES + " honest guest on the new ones (wire.gd, RULES)"))
+	_says(ok, ("referee: the %d rules two builds must agree on fingerprint to Wire.RULES"
+		% ours.size() + " (%s)" % now.left(16)) if ok
+		else ("referee: the rules two builds must agree on changed -- they fingerprint to %s"
+			% now + " now, and Wire.RULES says %s. A build on these refuses every build"
+			% Wire.RULES + " on the old ones at the handshake, with the version sentence,"
+			+ " until both update: if that is meant, set Wire.RULES to the new value in the"
+			+ " same commit. No Wire.PROTOCOL bump -- that moves only when a message's format"
+			+ " does (wire.gd)"))
 
 
-## **Every value the referee judges a guest by or derives a limit from**, one per
-## line, where it is defined -- and the referee's own limits. `Wire.RULES` is its
-## SHA-256. A value added to the referee's judgement belongs here too.
-func _rules_text() -> String:
+## **Every value two builds in one pond must agree on**, one per line, written from
+## where each is defined, in the order game/net/rules.gd writes them: every table a
+## row marks judged or contact, by every organ; the run's numbers the referee judges
+## by; the contact rules no table holds; the referee's own limits; the body plan.
+## `Wire.RULES` is its SHA-256. A value added to the referee's judgement, or to what
+## the host decides a contact by, belongs here and there. **What one machine could
+## write otherwise** -- a float on a rounding edge, a kind of value the rules do not
+## write digit by digit -- is said in [param doubts], by its line ([method _rule_doubts]).
+func _rules_text(doubts: Array = []) -> String:
 	var lines: PackedStringArray = []
 	var put := func(name: String, value: Variant) -> void:
 		lines.append("%s=%s" % [name, _rule_value(value)])
-	# **A stat the referee judges, by every organ that provides it**: the first
-	# under the name its table had as cell.gd's (stats.gd's `label`), any other
-	# after it with its key, as drop_save.gd writes them. A second organ that
-	# calls, or swims, is a new line -- and a new fingerprint, so its PROTOCOL
-	# moves with it.
-	var put_stat := func(stat: StringName) -> void:
+		_rule_doubts(name, value, doubts)
+	# **A stat two builds must agree on**: its row -- the fields of it that decide a
+	# body's value, read here by name, each as `name:value` -- then its table by every
+	# organ that provides it, the first under the name its table had as cell.gd's
+	# (stats.gd's `label`), any other after it with its key, as drop_save.gd writes
+	# them. A second organ that calls, or swims, or bites, is a new line -- and new
+	# rules, which the handshake keeps apart.
+	for stat: StringName in Stats.ROWS:
+		if not Stats.judged().has(stat) and not Stats.contact().has(stat):
+			continue
+		var row: Dictionary = Stats.ROWS[stat]
+		var items: PackedStringArray = []
+		for field: String in Rules.ROW_FIELDS:
+			if row.has(field):
+				items.append("%s:%s" % [field, _rule_value(row[field])])
+				_rule_doubts("stat.%s" % stat, row[field], doubts)
+		lines.append("stat.%s=%s" % [stat, ",".join(items)])
 		var providers := Catalogue.providers(stat)
 		for k in providers.size():
 			put.call(Stats.label(stat) + ("" if k == 0 else "." + String(providers[k])),
 				Catalogue.table(providers[k], stat))
-	# cell.gd: size, growth, division and mending.
+	# cell.gd: size, growth, division and mending; and the motion the caps sit over
+	# (`_referee_agrees`).
 	put.call("cell.BASE_RADIUS", CellBody.BASE_RADIUS)
 	put.call("cell.GROWTH_PER_MEAL", CellBody.GROWTH_PER_MEAL)
 	put.call("cell.DIVIDE_RADIUS", CellBody.DIVIDE_RADIUS)
@@ -3084,18 +3459,9 @@ func _rules_text() -> String:
 	put.call("cell.daughter_radius", CellBody.daughter_radius(CellBody.DIVIDE_RADIUS))
 	put.call("cell.MEND_SECONDS", CellBody.MEND_SECONDS)
 	put.call("cell.mended(0.5,10)", CellBody.mended(0.5, 10.0))
-	# The calls: how far and how often.
-	put_stat.call(&"ping_range")
-	put_stat.call(&"ping_period")
-	# The speed and turn tables the caps sit over (`_referee_agrees`).
-	put_stat.call(&"impulse_speed")
-	put_stat.call(&"impulse_gap_min")
 	put.call("cell.IMPULSE_KICK", CellBody.IMPULSE_KICK)
 	put.call("cell.DRAG", CellBody.DRAG)
-	put_stat.call(&"push_accel")
-	put_stat.call(&"dash_speed")
 	put.call("cell.DASH_COOLDOWN", CellBody.DASH_COOLDOWN)
-	put_stat.call(&"turn_rate")
 	put.call("cell.WANDER_RATE", CellBody.WANDER_RATE)
 	# food.gd: the grace, and what a contact and a death are called.
 	put.call("food.FIRST_DELAY", FoodField.FIRST_DELAY)
@@ -3106,9 +3472,8 @@ func _rules_text() -> String:
 	# never a meal to the referee; the rim holds a body in -- by a sample value,
 	# as `cell.mended` is -- which is where a claim past it is held and a sister
 	# near it is put; and the two eating rules a guest is held to, which the host
-	# decides and the referee never judges, one sample each, so two builds that
-	# disagree on them refuse each other at HELLO: a mouth swallows a player
-	# that fits on contact, hunting or not (row 15), and `pellicle` makes a body
+	# decides and the referee never judges, one sample each: a mouth swallows a
+	# player that fits on contact, hunting or not (row 15), and armour makes a body
 	# bigger to a mouth (row 5).
 	put.call("drop.FLOC_GROWTH", FoodField.Drop.FLOC_GROWTH)
 	var held: Vector2 = FoodField.Drop.new().meniscus.contain(Vector2(7000.0, 125.0),
@@ -3119,13 +3484,12 @@ func _rules_text() -> String:
 		FoodField.swallows_player(false, FoodField.CONTACT_SWALLOW, 20.0, 30.0))
 	put.call("food.armoured_size(r30, pellicle 2)",
 		FoodField.armoured_size(30.0, Stats.at(&"armor", 2), FoodField.ARMOUR_SWALLOW))
-	# normal_mode.gd: the sister's ring; and the free senses, the catalogue's
-	# `gift` tag since there was a catalogue, under the name they had.
+	# normal_mode.gd: the sister's ring, the run's own; and the free senses, the
+	# catalogue's `gift` tag since there was a catalogue, under the name they had.
 	put.call("run.SISTER_DISTANCE", NormalMode.SISTER_DISTANCE)
 	put.call("run.FIRST_SENSES", Catalogue.tagged(Catalogue.GIFT))
 	# genome.gd: the tiers, a born body -- each organ's own `born` -- and the
-	# gift's tier, a literal in `_express_gift`, so it is measured on a real
-	# genome.
+	# gift's tier, measured on a real genome rather than read off its constant.
 	put.call("genome.TIER_MAX", Genome.TIER_MAX)
 	put.call("genome.BORN", Catalogue.born())
 	var genome: Node = Genome.new()
@@ -3134,41 +3498,118 @@ func _rules_text() -> String:
 	genome.place(0)
 	put.call("genome.gift_tier", int((genome.tiers() as Dictionary).get(&"stigma", 0)))
 	genome.free()
-	# referee.gd: its own limits, and its copies of the run's numbers. **The
-	# gift's senses are no copy any more**: the referee reads the catalogue's
-	# `gift` tag (gene-catalogue.md §11.1), so its line is written from there,
-	# under the name and in the place it always had.
+	# **The contact rules no table holds** (shared-pond.md §7; wire.gd's rule under
+	# PROTOCOL until protocol 8): the bite's gap and flank, `bite_damage` by two
+	# samples, the doses' constants, with how a dose is felt by one, and the dart.
+	put.call("cell.BITE_GAP", CellBody.BITE_GAP)
+	put.call("cell.FLANK_AHEAD", CellBody.FLANK_AHEAD)
+	put.call("cell.FLANK_ASTERN", CellBody.FLANK_ASTERN)
+	put.call("cell.bite_damage(0.3,20,r30,1.3,ahead)",
+		CellBody.bite_damage(0.3, 20.0, 30.0, 1.3, 0.0))
+	put.call("cell.bite_damage(0.3,40,r30,1,astern)",
+		CellBody.bite_damage(0.3, 40.0, 30.0, 1.0, PI))
+	put.call("cell.VENOM_ARC_DEG", CellBody.VENOM_ARC_DEG)
+	put.call("cell.VENOM_SIDES", CellBody.VENOM_SIDES)
+	put.call("cell.HARM_PER_STACK", CellBody.HARM_PER_STACK)
+	put.call("cell.DOSE_TAU_BY_KIND", CellBody.DOSE_TAU_BY_KIND)
+	put.call("cell.DOSE_GONE", CellBody.DOSE_GONE)
+	put.call("cell.DOSE_SIZE", CellBody.DOSE_SIZE)
+	put.call("doses.felt(2,r30)", FoodField.Doses.felt(2.0, 30.0, CellBody.DOSE_SIZE))
+	# **The dart** (behaviour.md §4.3), which the host fires for a guest as for its own
+	# cell: the arc it answers on, and what each organ that darts stuns for -- its own
+	# number, read off the organ here rather than through `dart_stun`.
+	put.call("cell.DART_ARC_DEG", CellBody.DART_ARC_DEG)
+	var darts := Catalogue.providers(&"dart_range")
+	for k in darts.size():
+		var stun: Variant = Catalogue.number(darts[k], &"stun")
+		put.call("cell.dart_stun" + ("" if k == 0 else "." + String(darts[k])),
+			float(stun) if stun != null else 0.0)
+	# referee.gd: its own limits, and its copies of the run's numbers, by the one list
+	# of them (rules.gd's REFEREE_LIMITS), each read here off referee.gd by name.
+	# `_referee_rules` sorts every constant referee.gd has by that list and the list of
+	# those that are not limits. **The gift's senses are no copy any more**: the
+	# referee reads the catalogue's `gift` tag (§11.1), which `run.FIRST_SENSES` is.
 	var referee: Dictionary = (Referee as Script).get_script_constant_map()
-	for name: String in ["MOVE_RATE", "MOVE_HOLD", "MOVE_SLACK", "TURN_RATE", "TURN_HOLD",
-			"TURN_SLACK", "SPEED_MAX", "TURNING_MAX", "RADIUS_SLACK", "DAUGHTER_RADIUS",
-			"OUT_STILL", "BIRTH_WAIT", "SISTER_DISTANCE", "SISTER_RING", "SHOUT_REACH",
-			"SHOUT_PAST", "SHOUT_BANK", "SHOUT_EARLY", "ENTER_BANK", "ENTER_EVERY",
-			"RADIUS_EPSILON", "PERSON_RATE", "PERSON_BANK", "FIRST_SENSES", "STALE_FOR",
-			"REENTRY_KEEPS_WOUND", "REENTRY_WITHIN", "STALL_CREDIT"]:
-		put.call("referee." + name, Catalogue.tagged(Catalogue.GIFT) if name == "FIRST_SENSES"
-			else referee[name])
+	for name: String in Rules.REFEREE_LIMITS:
+		put.call("referee." + name, referee.get(name))
+	# **The body plan** (gene-catalogue.md §10.4): builds on other plans -- other slot
+	# counts, other arcs -- are other rules. Its text written again here from its rows,
+	# so the game's fingerprint of it is held to them too.
+	put.call("plan.fingerprint", _plan_text(doubts).sha256_text())
 	return "\n".join(lines)
 
 
-## One value, written the same way on every machine: six places for a float, a
-## list comma-joined, a dictionary by its keys in order.
+## **The body plan's text, written again from its rows** (body_plan.gd's
+## `fingerprint`, whose SHA-256 is the rules' last line): the body's shape, then a line
+## a slot, every number a whole number of millionths, as the rules write a float --
+## and each held off a rounding edge as theirs are, in [param doubts].
+static func _plan_text(doubts: Array) -> String:
+	var lines := PackedStringArray()
+	var shape := [BodyPlan.OVOID_ALONG, BodyPlan.OVOID_ACROSS, BodyPlan.OVOID_PINCH]
+	_rule_doubts("plan.fingerprint, the shape", shape, doubts)
+	lines.append("shape=%s,%s,%s" % [_rule_value(shape[0]), _rule_value(shape[1]),
+		_rule_value(shape[2])])
+	for row: Dictionary in BodyPlan.rows():
+		var arc_of: Vector2 = row.get("arc", Vector2.ZERO)
+		var numbers := [arc_of.x, arc_of.y, float(row["earned"])]
+		_rule_doubts("plan.fingerprint, slot %s" % row["id"], numbers, doubts)
+		lines.append("%s|%s|%s|%s,%s|%s|%s" % [row["id"], row["place"],
+			row.get("anatomy", &""), _rule_value(numbers[0]), _rule_value(numbers[1]),
+			_rule_value(numbers[2]), row.get("home", &"")])
+	return "\n".join(lines)
+
+
+## One value, written the same way on every machine, by Godot alone: a float as a
+## whole number of millionths, a list comma-joined, a dictionary by its keys in order.
 static func _rule_value(value: Variant) -> String:
-	match typeof(value):
-		TYPE_FLOAT:
-			return "%.6f" % float(value)
-		TYPE_ARRAY:
-			var parts: PackedStringArray = []
-			for each: Variant in value:
-				parts.append(_rule_value(each))
-			return "[" + ",".join(parts) + "]"
-		TYPE_DICTIONARY:
-			var keys: Array = (value as Dictionary).keys()
-			keys.sort_custom(func(a: Variant, b: Variant) -> bool: return str(a) < str(b))
-			var parts: PackedStringArray = []
-			for key: Variant in keys:
-				parts.append("%s:%s" % [str(key), _rule_value(value[key])])
-			return "{" + ",".join(parts) + "}"
+	var kind := typeof(value)
+	if kind == TYPE_FLOAT:
+		return str(roundi(float(value) * 1e6))
+	if Rules.LISTS.has(kind):
+		var parts: PackedStringArray = []
+		for each: Variant in value:
+			parts.append(_rule_value(each))
+		return "[" + ",".join(parts) + "]"
+	if kind == TYPE_DICTIONARY:
+		var keys: Array = (value as Dictionary).keys()
+		keys.sort_custom(func(a: Variant, b: Variant) -> bool: return str(a) < str(b))
+		var parts: PackedStringArray = []
+		for key: Variant in keys:
+			parts.append("%s:%s" % [str(key), _rule_value(value[key])])
+		return "{" + ",".join(parts) + "}"
 	return str(value)
+
+
+## **How near a half a float's millionths may come** before the rules call it a tie
+## (rules.gd's note): a thousandth of a millionth, some thousand times the last bit
+## of the largest number they print, so no machine's last bit can tip one.
+const RULE_TIE := 1e-3
+
+
+## **What in [param value] one machine could write otherwise**, said in [param doubts]
+## under [param name]: a float whose millionths lie within [constant RULE_TIE] of a
+## half, or that is not finite; a dictionary keyed by anything but a whole number, a
+## bool or a name; and a value of any kind but those, a float and the lists and
+## dictionaries rules.gd's `value_text` writes item by item.
+static func _rule_doubts(name: String, value: Variant, doubts: Array) -> void:
+	var kind := typeof(value)
+	if kind == TYPE_FLOAT:
+		var x := float(value)
+		var off := absf(fposmod(x * 1e6, 1.0) - 0.5) if is_finite(x) else 0.0
+		if not is_finite(x) or off < RULE_TIE:
+			doubts.append("%s: %.9f, %s" % [name, x, "not a number it can write"
+				if not is_finite(x) else "its millionths %.6f from a half" % off])
+	elif kind == TYPE_DICTIONARY:
+		for key: Variant in value:
+			if not [TYPE_INT, TYPE_BOOL, TYPE_STRING, TYPE_STRING_NAME].has(typeof(key)):
+				doubts.append("%s: a key that is a %s" % [name, type_string(typeof(key))])
+			_rule_doubts(name, value[key], doubts)
+	elif Rules.LISTS.has(kind):
+		for each: Variant in value:
+			_rule_doubts(name, each, doubts)
+	elif not [TYPE_INT, TYPE_BOOL, TYPE_STRING, TYPE_STRING_NAME].has(kind):
+		doubts.append("%s: a %s, which the rules do not write digit by digit" % [name,
+			type_string(kind)])
 
 
 ## **The numbers the referee writes out, held to where they come from**, and its
@@ -9286,6 +9727,22 @@ func _check_server() -> void:
 			and (net.guests() as Array).size() == 2,
 		"server: a third is refused with '%s', and the two stay" % c_net.trouble)
 	c_net.close()
+	# **One protocol, other rules** (gene-catalogue.md §11.3): a guest whose
+	# catalogue held one more judged gene as it called -- a faster tail -- is
+	# refused by the dedicated server on the version check, ahead of the count of
+	# its room, and the two stay.
+	var rules_net: Node = await _session("ServerGuestRules")
+	Catalogue.register(_faster_tail())
+	rules_net.join("127.0.0.1")
+	Catalogue.forget(Catalogue.organ_of(&"probeswift"))
+	await _until_link(rules_net, NetSession.Link.REFUSED)
+	_says(int(rules_net.link) == NetSession.Link.REFUSED
+			and str(rules_net.trouble) == "different versions"
+			and int(rules_net.refused_for) == Wire.REFUSE_PROTOCOL
+			and (net.guests() as Array).size() == 2,
+		"server: a guest on one more judged gene is refused with '%s' on the version"
+		% rules_net.trouble + " check, ahead of the room's count, and the two stay")
+	rules_net.close()
 
 	# **A call crosses to the other guest**, as the numbers sent, and never
 	# back to the one who made it. Before the runs exist, which drain it.
@@ -9818,6 +10275,26 @@ func _check_server() -> void:
 		+ " recorded, on nodes of its own %s" % str(f_bound))
 	var fresh := int(food.drop_bodies())
 	var kept_before := int(server.get("rooms_kept"))
+	# **Each sister as the room keeps her** (check 27), read in the frame the stop
+	# keeps the room in -- `shut_down` keeps it first thing -- so the next start is
+	# held to what was kept. Not to what came at check 24: she has been a water body
+	# since, and a meal there writes its gene to her DNA (food.gd's `_grow`), which
+	# failed this check about one run in seven. **A sister the water has eaten since
+	# is put back as she came**, through the door the pond put her in by, so the
+	# room has her to keep: the harness reaching into the world, as `_hold` does,
+	# for a check about the file rather than the water.
+	var kept_sisters: Array = []
+	for said: Dictionary in [e_sister, f_sister]:
+		var b: Object = _body_of(food, int(said.get("id", -1)))
+		var again := false
+		if b == null and said.has("body_dna"):
+			var slot := int(food.place_sister(said["at"], float(said["heading"]),
+				float(said["radius"]), said["genome"], said["body_dna"], PackedInt32Array(),
+				pond.sister_list(_list_said(said.get("brain"))[0])))
+			b = food.bodies()[slot] if slot >= 0 else null
+			again = b != null
+		kept_sisters.append({} if b == null else {"id": int(b.get("id")),
+			"dna": (b.get("dna") as Dictionary).duplicate(), "again": again})
 	server.shut_down()
 	var stopped_age := float(food.drop_age())
 	var kept_at_stop := int(server.get("rooms_kept")) - kept_before
@@ -9887,19 +10364,29 @@ func _check_server() -> void:
 	# to her, read again, with her DNA; the sister on the founders' stays on them.
 	var stop_lists: Array = ((stop_kept.get("drop", {}) as Dictionary).get("behaviours",
 		{}) as Dictionary).get("lists", [])
-	var e_again: Object = _body_of(again_food, int(e_sister.get("id", -1)))
-	var f_again: Object = _body_of(again_food, int(f_sister.get("id", -1)))
+	var e_kept: Dictionary = kept_sisters[0]
+	var f_kept: Dictionary = kept_sisters[1]
+	var e_again: Object = _body_of(again_food, int(e_kept.get("id", -1)))
+	var f_again: Object = _body_of(again_food, int(f_kept.get("id", -1)))
 	var e_back: Array = _list_said(e_again.get("brain") if e_again != null else null)
+	var put_back := PackedStringArray()
+	for k in kept_sisters.size():
+		if bool((kept_sisters[k] as Dictionary).get("again", false)):
+			put_back.append(["the first guest's", "the second guest's"][k])
 	_says(stop_lists.has(PackedStringArray(SISTER_LINES)) and e_again != null
 			and f_again != null and e_back[0] == PackedStringArray(SISTER_LINES)
 			and e_back[1] == [false, false, true, false]
-			and _by_name(e_again.get("dna")) == _by_name(e_sister.get("body_dna"))
+			and _by_name(e_again.get("dna")) == _by_name(e_kept.get("dna"))
 			and f_again.get("brain") == null
-			and _by_name(f_again.get("dna")) == _by_name(f_sister.get("body_dna")),
+			and _by_name(f_again.get("dna")) == _by_name(f_kept.get("dna")),
 		"server (check 27): stopped, the room kept the first guest's sister's list as"
 		+ " it came -- the rule it cannot read among it -- and loaded, she has it back,"
-		+ " %d lines, one never firing, with her DNA; the second's sister is on the"
-		% (e_back[0] as PackedStringArray).size() + " founders' rules still")
+		+ " %d lines, one never firing, with her DNA as the room kept it; the second's"
+		% (e_back[0] as PackedStringArray).size() + " sister is on the founders' rules"
+		+ " still%s" % ("" if put_back.is_empty() else (" (both sisters put back as they"
+			+ " came: the water ate them before the stop)") if put_back.size() > 1
+			else " (%s sister put back as she came: the water ate her before the stop)"
+			% put_back[0]))
 	again.set("room_path", "")
 	again.shut_down()
 	again.queue_free()
@@ -9911,11 +10398,12 @@ func _check_server() -> void:
 		"server: no ENet peer's packet throttle fell under the section's load --"
 		+ " lowest %d of %d over %d readings, the server's and every guest's"
 		% [_throttle_lowest, ENetPacketPeer.PACKET_THROTTLE_SCALE, _throttle_reads])
-	# The third guest is refused with "already two", which is the handshake's
-	# sentence and not the door's: nothing here is an offence.
+	# The third guest is refused with "already two", and the fourth -- on other
+	# rules -- with "different versions", which are the handshake's sentences and
+	# not the door's: nothing here is an offence.
 	var tally: Array = _tally_end()
-	_says(_limits_clean(tally[0]) and int(tally[1]) == 7,
-		"server: across the server and all six guests the gate struck nothing,"
+	_says(_limits_clean(tally[0]) and int(tally[1]) == 8,
+		"server: across the server and all seven guests the gate struck nothing,"
 		+ " dropped nothing, cut nothing and refused nobody at the door, and the"
 		+ " budgets it watches would have done none of it either -- its"
 		+ " socket took %.1f KB and %d datagrams in its busiest second%s"
@@ -9969,8 +10457,18 @@ func _server_sisters(pond: Object, food: Node, first: Node, second: Node) -> Arr
 	var program := int(library.call(&"add_new"))
 	library.call(&"set_lines", program, PackedStringArray(SISTER_LINES))
 	first.call(&"_library_changed")
+	# **Each sister as she is placed**, read in the signal, before the water's next
+	# step: she is a water body from then on, and a meal writes its gene to a water
+	# body's DNA (food.gd's `_grow`), so read a step later she can already be other
+	# than what her mother sent -- one run in 25 here.
 	var placed: Array = []
-	var on_placed := func(slot: int) -> void: placed.append(slot)
+	var on_placed := func(slot: int) -> void:
+		var b: Object = food.bodies()[slot]
+		placed.append({"id": int(b.get("id")), "parent": int(b.get("parent")),
+			"generation": int(b.get("generation")), "lineage": int(b.get("lineage")),
+			"body_dna": (b.get("dna") as Dictionary).duplicate(), "brain": b.get("brain"),
+			"genome": (b.get("genome") as Dictionary).duplicate(), "at": b.get("pos"),
+			"heading": float(b.get("heading")), "radius": float(b.get("radius"))})
 	pond.connect(&"sister_placed", on_placed)
 	for pin: Array in pins:
 		await _pond_feed(food, pin[0], pins)
@@ -9987,14 +10485,26 @@ func _server_sisters(pond: Object, food: Node, first: Node, second: Node) -> Arr
 			return int(run.get("_split")) == NormalMode.Split.CHOOSING), 3.0, [])
 	var out: Array = []
 	var taken := {}
+	# **Each guest's mark is a gene neither declined daughter carries**, in her DNA
+	# or on her body: one the other sister also carried would match her too, and a
+	# record would then be the wrong sister's -- as CI once had it, both ids alike.
+	var declined_all: Array = []
+	for run: Node in runs:
+		if int(run.get("_split")) == NormalMode.Split.CHOOSING:
+			declined_all.append((run.get("_daughters") as Array)[1])
+	var marks: Array[StringName] = [&"ampulla", &"stigma", &"palp", &"ocellus",
+		&"chemocyte"]
+	for key: StringName in Catalogue.live():
+		if not marks.has(key) and not Catalogue.born().has(key):
+			marks.append(key)
 	for run: Node in runs:
 		var said := {"unworn": &"", "id": -1}
 		if int(run.get("_split")) == NormalMode.Split.CHOOSING:
 			var declined: Dictionary = (run.get("_daughters") as Array)[1]
-			for gene: StringName in [&"ampulla", &"stigma", &"palp", &"ocellus",
-					&"chemocyte"]:
-				if not taken.has(gene) and not (declined["body"] as Dictionary).has(gene) \
-						and not (declined["tiers"] as Dictionary).has(gene):
+			for gene: StringName in marks:
+				if not taken.has(gene) and declined_all.all(func(d: Dictionary) -> bool:
+						return not (d["body"] as Dictionary).has(gene) \
+							and not (d["tiers"] as Dictionary).has(gene)):
 					said["unworn"] = gene
 					break
 			taken[said["unworn"]] = true
@@ -10010,15 +10520,11 @@ func _server_sisters(pond: Object, food: Node, first: Node, second: Node) -> Arr
 		return placed.size() >= 2 and runs.all(func(run: Node) -> bool:
 			return int(run.get("_split")) == NormalMode.Split.NONE), 3.0, [])
 	pond.disconnect(&"sister_placed", on_placed)
-	for slot: int in placed:
-		var b: Object = food.bodies()[slot]
+	for one: Dictionary in placed:
 		for said: Dictionary in out:
-			if said["unworn"] != &"" and (b.get("dna") as Dictionary).has(said["unworn"]):
-				said.merge({"id": int(b.get("id")), "parent": int(b.get("parent")),
-					"generation": int(b.get("generation")), "lineage": int(b.get("lineage")),
-					"body_dna": (b.get("dna") as Dictionary).duplicate(),
-					"brain": b.get("brain"), "genome": (b.get("genome") as Dictionary).duplicate()},
-					true)
+			if said["unworn"] != &"" \
+					and int((one["body_dna"] as Dictionary).get(said["unworn"], 0)) == 2:
+				said.merge(one, true)
 	return out
 
 
@@ -10556,6 +11062,7 @@ func _check_invites() -> void:
 	_invites_format()
 	await _invites_calls()
 	await _invites_strangers()
+	await _invites_welcome()
 	await _invites_doors()
 	await _invites_room()
 	await _invites_house_closed()
@@ -11195,7 +11702,7 @@ func _invites_strangers() -> void:
 		if quiet.connected() and float(connected_at[0]) < 0.0:
 			connected_at[0] = _now()
 		return quiet.connected() and mute.connected())
-	quiet.send(Wire.hello(Wire.PROTOCOL))
+	quiet.send(_hello())
 	await _limits_until(func() -> bool: return not quiet.challenge().is_empty())
 	var challenged := quiet.challenge().size() == Wire.NONCE_SIZE
 	# S9, meanwhile: what the server's updater would wait for, beside what
@@ -11264,7 +11771,7 @@ func _invites_strangers() -> void:
 		await _limits_until(func() -> bool: return rogue.connected())
 		var cuts := int(host.gate_counts["cuts"])
 		if what != "a PROOF before any CHALLENGE":
-			rogue.send(Wire.hello(Wire.PROTOCOL))
+			rogue.send(_hello())
 			await _limits_until(func() -> bool: return not rogue.challenge().is_empty())
 		match what:
 			"a STATE before its PROOF":
@@ -11272,7 +11779,7 @@ func _invites_strangers() -> void:
 			"a PROOF before any CHALLENGE":
 				rogue.send(Wire.proof(bob["key_id"], PackedByteArray(), PackedByteArray()))
 			"a second HELLO":
-				rogue.send(Wire.hello(Wire.PROTOCOL))
+				rogue.send(_hello())
 		var gone := await _limits_until(func() -> bool: return rogue.down(), 2.0)
 		if gone >= 0.0 and int(host.gate_counts["cuts"]) == cuts + 1 and not rogue.welcomed():
 			early.append(what)
@@ -11314,11 +11821,43 @@ func _invites_strangers() -> void:
 		% (Wire.PROTOCOL - 1) + " check before it is ever challenged, and barred for"
 		+ " %.0f s -- and %.0f s the next time, not ten minutes -- and a guest reads"
 		% [old_held, again_held] + " '%s: %s'" % [old_guest.trouble, old_guest.because])
+	# S8b (gene-catalogue.md §11.4): one protocol and other rules -- a guest whose
+	# catalogue held one more judged gene as it called -- is refused on the same
+	# check, before any CHALLENGE, and reads the far sentence for whichever end is
+	# older by content version: this game, or the server.
+	var keys: Array[String] = []
+	var proved := 0
+	for pair: Array in [[5, 6], [7, 6]]:
+		if net_book.has("127.0.0.1"):
+			(net_book["127.0.0.1"] as Dictionary)["barred_until"] = _now()
+		host.content_override = int(pair[1])
+		var skewed: Node = await _session("InvRulesGuest%d" % int(pair[0]))
+		skewed.content_override = int(pair[0])
+		Catalogue.register(_faster_tail())
+		skewed.call_invite(bob)
+		Catalogue.forget(Catalogue.organ_of(&"probeswift"))
+		await _limits_until(func() -> bool: return int(skewed.link) != NetSession.Link.REACHING,
+			NetSession.INVITE_REACH_TIMEOUT + NetSession.RESOLVE_TIMEOUT + 2.0)
+		keys.append("%s %s %d" % [str(skewed.trouble_key), "refused"
+			if int(skewed.link) == NetSession.Link.REFUSED else "not refused",
+			int(skewed.refused_for)])
+		# A guest by invite answers a CHALLENGE with its one PROOF: none here.
+		proved += 1 if bool(skewed.get("_proved")) else 0
+		await _limits_close([skewed])
+	host.content_override = -1
+	if net_book.has("127.0.0.1"):
+		(net_book["127.0.0.1"] as Dictionary)["barred_until"] = _now()
+	_says(keys == ["game_older refused %d" % Wire.REFUSE_PROTOCOL,
+			"server_older refused %d" % Wire.REFUSE_PROTOCOL] and proved == 0,
+		"invites S8b: a caller on protocol %d by other rules -- one more judged gene --"
+		% Wire.PROTOCOL + " is refused on the compatibility check before it is challenged,"
+		+ " and reads that its game is older, or the server, by content version (%s)"
+		% ", ".join(keys))
 	# S6: a good PROOF, then another -- cut, told and barred.
 	var twice_from := "127.0.0.8"
 	var twice := _invites_stranger("InvStrangerTwice", twice_from, 47288)
 	await _limits_until(func() -> bool: return twice.connected())
-	twice.send(Wire.hello(Wire.PROTOCOL))
+	twice.send(_hello())
 	await _limits_until(func() -> bool: return not twice.challenge().is_empty())
 	var mine := Crypto.new().generate_random_bytes(Wire.NONCE_SIZE)
 	var proof := Wire.proof(bob["key_id"], mine, Invite.proof_mac(bob["secret"], Wire.PROTOCOL,
@@ -11333,7 +11872,85 @@ func _invites_strangers() -> void:
 			and int(host.gate_counts["proofs"]) == proofs_before + 1,
 		"invites S6: a caller that proves bob's invite and is welcomed, then sends a second"
 		+ " PROOF, is cut with REFUSE_BROKEN and barred")
-	await _limits_close([host, quiet, mute, old, old_again, old_guest, twice])
+	# S8d (gene-catalogue.md §11.3): before a PROOF, a refusal on the internet listener
+	# says which game is older and nothing else of the server's build -- its rules all
+	# zeros, and for a content version 0 where the server is the older, CONTENT_NEWER
+	# where it is the newer, and the caller's own on a tie -- while a caller on the LAN
+	# listener is told the server's whole tail, as before. Three strangers on other
+	# rules, at contents either side of the server's 6 and on it, each from an address
+	# of its own so that no bar is another's; and a real guest on the tie, by invite,
+	# reads the sentence it always did.
+	host.content_override = 6
+	var other_rules := _other_tail(0).slice(0, Wire.RULES_SIZE)
+	var said: Array = []
+	var says: Array = []
+	for theirs: int in [7, 5, 6]:
+		var stranger := _invites_stranger("InvStrangerSays%d" % theirs,
+			"127.0.0.%d" % (9 + said.size()), 47280 + said.size())
+		said.append(stranger)
+		await _limits_until(func() -> bool: return stranger.connected())
+		stranger.send(Wire.hello(Wire.PROTOCOL, Wire.tail(other_rules, theirs)))
+		await _limits_until(func() -> bool: return not stranger.refusal().is_empty())
+		var told := stranger.refusal()
+		says.append([Wire.refuse_reason(told) if not told.is_empty() else -1,
+			Wire.rules_of(told).hex_encode(), Wire.content_of(told)])
+	var near := Rogue.new()
+	near.name = "InvLanSays"
+	add_child(near)
+	near.call_host()
+	await _limits_until(func() -> bool: return near.connected())
+	near.send(Wire.hello(Wire.PROTOCOL, Wire.tail(other_rules, 7)))
+	await _limits_until(func() -> bool: return not near.refusal().is_empty())
+	var lan_told := near.refusal()
+	if net_book.has("127.0.0.1"):
+		(net_book["127.0.0.1"] as Dictionary)["barred_until"] = _now()
+	var tied: Node = await _session("InvRulesGuestTie")
+	tied.content_override = 6
+	Catalogue.register(_faster_tail())
+	tied.call_invite(bob)
+	Catalogue.forget(Catalogue.organ_of(&"probeswift"))
+	await _limits_until(func() -> bool: return int(tied.link) != NetSession.Link.REACHING,
+		NetSession.INVITE_REACH_TIMEOUT + NetSession.RESOLVE_TIMEOUT + 2.0)
+	host.content_override = -1
+	if net_book.has("127.0.0.1"):
+		(net_book["127.0.0.1"] as Dictionary)["barred_until"] = _now()
+	var zeros := Wire.tail(PackedByteArray(), 0).slice(0, Wire.RULES_SIZE).hex_encode()
+	var versions := Wire.REFUSE_PROTOCOL
+	_says(says == [[versions, zeros, 0], [versions, zeros, NetSession.CONTENT_NEWER],
+			[versions, zeros, 6]] and Wire.refuse_reason(lan_told) == versions
+			and Wire.rules_of(lan_told) == (host.get("_rules") as PackedByteArray)
+			and Wire.content_of(lan_told) == 6
+			and int(tied.link) == NetSession.Link.REFUSED
+			and str(tied.trouble_key) == "server_older",
+		"invites S8d: before a PROOF, a refusal on the internet listener says which game is"
+		+ " older and nothing else -- strangers on other rules at contents 7, 5 and 6, the"
+		+ " server on 6, are refused with rules of zeros and content 0, %d and 6 (%s) --"
+		% [NetSession.CONTENT_NEWER, str(says.map(func(one: Array) -> int: return one[2]))]
+		+ " while a LAN caller is told the server's own rules and content (%d); and a guest"
+		% Wire.content_of(lan_told) + " on the tie, by invite, reads '%s: %s'"
+		% [tied.trouble, tied.because])
+	await _limits_close([host, quiet, mute, old, old_again, old_guest, twice, near, tied]
+		+ said)
+
+
+## **S8c: the guest's half of the rules check, by invite** (gene-catalogue.md §11.3):
+## a server whose WELCOME, after the guest proved bob's invite, carries another build's
+## tail -- one more judged gene on a later content -- or none at all, is refused from
+## the guest's end in the server's own words, this game older or the server, and the
+## guest never plays there.
+func _invites_welcome() -> void:
+	var bob := Invite.parse(FileAccess.get_file_as_string(
+		InviteBook.line_path("bob", INVITES_ROOT)))
+	for case: Array in [["another build's tail, on a later content", _other_tail(6),
+			"game_older"], ["no tail at all", PackedByteArray(), "server_older"]]:
+		var ended: Array = await _welcomed_by_other("InvWelcome%d"
+			% (case[1] as PackedByteArray).size(), case[1], bob)
+		_says(int(ended[0]) == NetSession.Link.REFUSED and str(ended[2]) == str(case[2])
+				and not bool(ended[4]),
+			"invites S8c: a guest on content 5 that proved bob's invite and was welcomed with"
+			+ " %s gives up on the WELCOME, told %s -- '%s: %s' -- and is never together"
+			% [case[0], case[2], ended[1], ended[3]] + " with that server -- it %s"
+			% ("was, for a while" if bool(ended[4]) else "never was"))
 
 
 ## **D1-D3: the doors.** The LAN-only guard is the LAN listener's alone; a
@@ -11480,7 +12097,7 @@ func _invites_room() -> void:
 	# the second a good while after the first, so which is the elder is plain.
 	var talker := _invites_stranger("InvRoomTalker", "127.0.0.2", 47310)
 	await _limits_until(func() -> bool: return talker.connected() and peers.has(talker.id))
-	talker.send(Wire.hello(Wire.PROTOCOL))
+	talker.send(_hello())
 	await _wait(0.3)
 	var mute := _invites_stranger("InvRoomMute", "127.0.0.3", 47311)
 	await _limits_until(func() -> bool: return mute.connected() and peers.has(mute.id))
@@ -11539,7 +12156,7 @@ func _invites_room() -> void:
 	var quitter := _invites_stranger("InvRoomQuitter", "127.0.0.4", 47312)
 	await _limits_until(func() -> bool:
 		return quitter.connected() and peers.has(quitter.id))
-	quitter.send(Wire.hello(Wire.PROTOCOL))
+	quitter.send(_hello())
 	await _limits_until(func() -> bool: return not quitter.challenge().is_empty())
 	var refused_barred := int(host.gate_counts["net_refused_barred"])
 	quitter.hang_up()

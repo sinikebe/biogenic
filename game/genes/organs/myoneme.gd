@@ -10,7 +10,7 @@ const Readout := preload("res://game/mechanics/readout.gd")
 const U := Readout.Unit
 
 ## **The burst**, by tier.
-## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
+## The host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const DASH_SPEED_BY_TIER: Array[float] = [0.0, 190.0, 240.0, 300.0]
 ## **What a dash costs, as a share of a born cell's tank**: 2.2, 1.6 and 1.2 s
 ## of rest. The run pays it as those seconds, through metabolism.gd's `spend`,

@@ -96,6 +96,7 @@ const NetSession := preload("res://game/net/net_session.gd")
 const Pond := preload("res://game/net/pond.gd")
 const Lan := preload("res://game/net/lan.gd")
 const Wire := preload("res://game/net/wire.gd")
+const Rules := preload("res://game/net/rules.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const CellBody := preload("res://game/normal/cell.gd")
 const Updater := preload("res://game/server/updater.gd")
@@ -243,7 +244,7 @@ func _ready() -> void:
 			int(info.binary_version) if info != null else 0,
 			int(info.content_version) if info != null else 0,
 			str(info.commit) if info != null else "?"]
-		+ " protocol %d, Godot %s" % [Wire.PROTOCOL,
+		+ " protocol %d, rules %s, Godot %s" % [Wire.PROTOCOL, Rules.hex().left(16),
 			str(Engine.get_version_info().get("string", "?"))])
 	if info != null and not str(info.pack_error).is_empty():
 		print("[server] the staged content pack did not mount: %s" % str(info.pack_error))

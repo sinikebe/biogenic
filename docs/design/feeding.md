@@ -251,7 +251,9 @@ Only if row 11 goes that way. It needs phase 5 first, and lands as phase 5b.
 - **The wire and the referee**: `net_probe`'s `_rules_text` fingerprints
   `genome.BORN`, and adds `BORN_BODY`, so `Wire.RULES` moves, and with it
   `PROTOCOL`. It shares phase 5's bump if the two land together. The referee
-  takes any body at a birth, so `judge_person` needs nothing.
+  takes any body at a birth, so `judge_person` needs nothing. *(2026-10-10:
+  since protocol 8 the handshake carries the rules' fingerprint, so this moves
+  `Wire.RULES`' pin alone and no `PROTOCOL` -- see the note at the head of §7.)*
 - **Saves.** A life saved under the old start keeps its mouth, and the next
   life starts without one. `DropSave.rules()` does not hash `BORN`, so kept
   drops and the server's room load as they are. The library is untouched.
@@ -466,7 +468,9 @@ plays wrong:
 
 - the levers are `GAPE_BY_TIER[0]` and `ABSORB`;
 - `wire.gd` names `GAPE_BY_TIER` with the bite tables, so moving it is a
-  `PROTOCOL` bump.
+  `PROTOCOL` bump. *(2026-10-10: no longer, since protocol 8: the gape is a
+  contact table in the rules the handshake carries, so moving it moves
+  `Wire.RULES`' pin alone -- see the note at the head of §7.)*
 
 ### 5.7 Cost
 
@@ -494,6 +498,14 @@ water's own design, not this pack's.
 
 ## 7. Saves, the pond, the referee and the wire
 
+> **Since gene-catalogue.md phase 4 (protocol 8, 2026-10-05)** the handshake carries
+> the rules a host judges and decides contacts by (`game/net/rules.gd`), so a change to
+> them moves `Wire.RULES`' pin and keeps older builds apart by itself. `PROTOCOL` moves
+> only when a message's format does: a new byte, bit or message. Read the bumps planned
+> here that way: one planned only for a judged or contact rule is the pin alone; a new
+> contact rule is a sample line in `rules.gd` and in `net_probe`'s `_rules_text`; and a
+> format change takes the next free number, 9 at the time of writing.
+
 **Phase 5:**
 
 | what | change |
@@ -513,6 +525,8 @@ water's own design, not this pack's.
 ---
 
 ## 8. Phases and the release
+
+The table's `PROTOCOL` column predates protocol 8: see the note at the head of §7.
 
 Shared with `dna-slots.md` §20.2. Each phase is one pull request into `dev`, and
 is played on the dev app before the next one begins.

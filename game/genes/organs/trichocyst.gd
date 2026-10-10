@@ -12,12 +12,14 @@ const U := Readout.Unit
 
 ## **How close a cell hunting you gets before the dart goes off, and how long
 ## before there is another one**, by tier.
+## The host decides every contact by these: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const DART_RANGE_BY_TIER: Array[float] = [0.0, 130.0, 190.0, 260.0]
 const DART_COOLDOWN_BY_TIER: Array[float] = [0.0, 26.0, 18.0, 11.0]
 ## **What a dart does to what it hits** (docs/design/behaviour.md §4.3): it rests
 ## this long with its rules unread, and feels the dart as a `hit` at its
 ## bearing. Today's darts broke off a run and left the hunter resting for the
 ## same five seconds; with no run to break, the dart stuns. A starting value.
+## The host decides every contact by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const DART_STUN := 5.0
 
 

@@ -1078,7 +1078,10 @@ heals that.
   `wire.gd`'s `PROTOCOL`: any content change to `GAPE_BY_TIER`, `ARMOR_BY_TIER`
   or the bite tables (`BITE_BY_TIER`, `BITE_GAP`, `VENOM_BITE_BACK_BY_TIER`,
   `VENOM_COST_BY_TIER`, `bite_damage`, `venom_back`) bumps the protocol, which
-  turns the same skew into the refusal it would have been.
+  turns the same skew into the refusal it would have been. **Built in
+  gene-catalogue.md phase 4, protocol 8**: the HELLO and WELCOME tails carry the
+  fingerprint of `game/net/rules.gd`'s text -- the contact tables and rules among
+  everything the referee judges -- and that hand rule is gone.
 - **Android backgrounding stops the pond** for both players. Nothing in content
   fixes it (`multiplayer.md` §3; a foreground service is a binary change), so
   the held pond and the takeover are the whole mitigation.
