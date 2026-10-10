@@ -2,7 +2,7 @@
   "_comment": "Written by ci/sync_launcher.sh. Do not edit addons/launcher/ or ci/ by hand -- the next sync overwrites them.",
   "source": "sinikebe/godot-launcher-template",
   "ref": "main",
-  "commit": "6cfb78f5c398ecd573e786fda099c1984b6c9bc9",
-  "subject": "Make the existing-game install steps produce a working, separate game (#78)",
-  "synced_at": "2026-10-03T09:51:32Z"
+  "commit": "1400038f63501d114fbf50fe7c1bceb825bdcfc7",
+  "subject": "Merge pull request #83 from sinikebe/13b-gdscript-tests",
+  "synced_at": "2026-10-10T08:36:07Z"
 }
