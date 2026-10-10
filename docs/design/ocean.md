@@ -2025,7 +2025,10 @@ entries on its serials under the same cap.
 - **A graze is not a meal to the referee**: `pond.gd` calls `referee.ate()` only
   for ATE, never for GRAZED, so a guest that ate flocs is still expected at the
   radius its live meals give it. `drop.FLOC_GROWTH` = 0 goes in the fingerprint,
-  so a pack that let flocs grow a body changes the protocol.
+  so a pack that let flocs grow a body changes the protocol. *(2026-10-10: since
+  protocol 8, gene-catalogue.md §11.3, such a pack moves `Wire.RULES`' pin, which
+  the handshake carries, and keeps older builds apart by itself; `PROTOCOL` moves
+  only when a message's format does.)*
 - **The eating rule a guest is held to changes**: swallowed without a run (row
   15) and armoured prey (row 5); venom stays today's (row 12). The host decides
   both and tells the guest; the referee judges neither, since a guest never

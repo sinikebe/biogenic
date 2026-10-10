@@ -273,7 +273,9 @@ release that changes one of them (a new gene a body can swim or bite with, say)
 splits phones on the old content from the server on the new until both have it.
 The log line says which: `it speaks protocol 7, this 8`, or `it judges by other
 rules`, with both fingerprints and both content versions -- the lower content is
-the older. The server's first line names its own: `protocol 8, rules 95c66e7e…`.
+the older. The server's first line names its own: `protocol 8, rules 95c66e7e…`. A
+caller from the internet that has not proved an invite is told less: only which game
+is older, never the server's fingerprint or its content version.
 
 ## 5. The port
 

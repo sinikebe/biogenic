@@ -251,7 +251,9 @@ Only if row 11 goes that way. It needs phase 5 first, and lands as phase 5b.
 - **The wire and the referee**: `net_probe`'s `_rules_text` fingerprints
   `genome.BORN`, and adds `BORN_BODY`, so `Wire.RULES` moves, and with it
   `PROTOCOL`. It shares phase 5's bump if the two land together. The referee
-  takes any body at a birth, so `judge_person` needs nothing.
+  takes any body at a birth, so `judge_person` needs nothing. *(2026-10-10:
+  since protocol 8 the handshake carries the rules' fingerprint, so this moves
+  `Wire.RULES`' pin alone and no `PROTOCOL` -- see the note at the head of §7.)*
 - **Saves.** A life saved under the old start keeps its mouth, and the next
   life starts without one. `DropSave.rules()` does not hash `BORN`, so kept
   drops and the server's room load as they are. The library is untouched.
@@ -466,7 +468,9 @@ plays wrong:
 
 - the levers are `GAPE_BY_TIER[0]` and `ABSORB`;
 - `wire.gd` names `GAPE_BY_TIER` with the bite tables, so moving it is a
-  `PROTOCOL` bump.
+  `PROTOCOL` bump. *(2026-10-10: no longer, since protocol 8: the gape is a
+  contact table in the rules the handshake carries, so moving it moves
+  `Wire.RULES`' pin alone -- see the note at the head of §7.)*
 
 ### 5.7 Cost
 

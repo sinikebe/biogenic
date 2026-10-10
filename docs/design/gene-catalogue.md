@@ -744,7 +744,11 @@ prefix: HELLO 39 bytes, WELCOME 43, REFUSE 40. A refusal says which game is olde
 protocol, and on one protocol by content version, with the sentences that already
 said it. `net_probe` writes the text again from the real constants and holds the
 game's to it, line by line, and `Wire.RULES` stays as the pin that makes a change
-deliberate: its failure says to move it, and that no `PROTOCOL` goes with it.
+deliberate: its failure says to move it, and that no `PROTOCOL` goes with it. **After
+phase 4's review** (§15.5) each stat's row -- how its providers combine -- is a line
+before its tables, the dart is among the contacts, every limit of the referee's is in
+the text, every float is written in whole millionths by Godot alone, and a refusal to a
+stranger on the internet listener says only which game is older.
 
 ### 11.4 Version skew, checked
 
@@ -1750,17 +1754,19 @@ body plan moves `Wire.RULES`' pin and nothing else. By file:
 
 | file | now |
 |---|---|
-| `game/net/rules.gd` (new) | the text, written from the catalogue in a fixed order: every table a stat row marks `judged` or `contact`, by every organ that provides it; the run's numbers the referee judges by; the contact rules no table holds -- `BITE_GAP`, the flank, `bite_damage` and the doses' constants, by sample where a rule is a function; the referee's own limits; the body plan's fingerprint. `fingerprint()`, its 32 bytes, and `hex()`. 1.6 ms the first time and 0.4 ms after, once a session |
-| `stats.gd` | `contact`, a row's: the gape, the bite, the armour and the three dose tables; `contact()` |
+| `game/net/rules.gd` (new) | the text, written from the catalogue in a fixed order: every table a stat row marks `judged` or `contact`, by every organ that provides it; the run's numbers the referee judges by; the contact rules no table holds -- `BITE_GAP`, the flank, `bite_damage` and the doses' constants, by sample where a rule is a function; the referee's own limits; the body plan's fingerprint. `fingerprint()`, its 32 bytes, and `hex()`. 1.6 ms the first time and 0.4 ms after, once a session. After phase 4's review (below): each stat's row before its tables, the dart's arc and stun, every limit of the referee's, and every float in whole millionths, written by Godot alone |
+| `stats.gd` | `contact`, a row's: the gape, the bite, the armour and the three dose tables -- and the dart's two, after phase 4's review (below); `contact()` |
+| `body_plan.gd` | its fingerprint writes every number in whole millionths, by Godot alone (phase 4's review, below) |
 | `genome.gd` | `GIFT_TIER`, the gift's copies, which `_express_gift` wears and the rules read |
 | `wire.gd` | `PROTOCOL` 8; the tail after every handshake frame's frozen prefix -- the rules' fingerprint, then the sender's content version (`RULES_SIZE`, `TAIL_SIZE`, `tail`, `rules_of`, `content_of`): HELLO 39 bytes, WELCOME 43, REFUSE 40; `REFUSE_PROTOCOL` covers other rules on one protocol; `RULES` is the pin; the hand rule under `PROTOCOL` is gone |
-| `net_session.gd` | the rules taken as a session starts; the tail on every HELLO, WELCOME and REFUSE; a host refuses a guest on other rules on the version check, before any invite is asked for, and a guest a welcome on other rules; which game is older, by protocol and then by content version; the log line says which; `content_override`, a test seam |
+| `net_session.gd` | the rules taken as a session starts; the tail on every HELLO, WELCOME and REFUSE; a host refuses a guest on other rules on the version check, before any invite is asked for, and a guest a welcome on other rules; which game is older, by protocol and then by content version; the log line says which; `content_override`, a test seam; a refusal to a caller on the internet listener that has proved no invite says only which game is older, and the ledger's cut and decay are the referee's (phase 4's review, below) |
+| `referee.gd` | the ledger its weights are counted against, `STRIKE_CUT` and `STRIKE_DECAY`, which were the session's (phase 4's review, below) |
 | `server.gd` | its first line names its rules beside its protocol |
-| every judged or contact table's note | "a change moves Wire.RULES, not Wire.PROTOCOL", for "change it with Wire.PROTOCOL"; the plan's note too |
-| `tools/net_probe.gd` | `_rules_text` in the game's order, with the new lines; three rules checks; the tail's; every bare client's HELLO with this build's tail; the skew checks of §11.4 on a phone's host, the dedicated server and by invite |
+| every judged or contact table's note | "a change moves Wire.RULES, not Wire.PROTOCOL", for "change it with Wire.PROTOCOL"; the plan's note too; and the dart's numbers' (phase 4's review, below) |
+| `tools/net_probe.gd` | `_rules_text` in the game's order, with the new lines; three rules checks; the tail's; every bare client's HELLO with this build's tail; the skew checks of §11.4 on a phone's host, the dedicated server and by invite. After phase 4's review (below): the rows' fields and the referee's constants sorted, every value printed held off a rounding edge, the plan's text written again from its rows, the guest's check of a WELCOME on the LAN and by invite, a stranger's refusal, and check 27 held to the room as it was kept |
 | `tools/gene_probe.gd` | the row check asks for `contact`; the faster tail is read through the game's rules; the plan's message says the pin, not the protocol |
-| `tools/net_fuzz.gd`, its corpus | its handshake frames carry this build's tail -- now and then none, or another build's -- and its guest takes its rules; its saved door cases say hello on 8, as every bump has moved them |
-| docs | `docs/server.md`; dated notes on the plans that schedule bumps for judged rules (`dna-slots.md` §14.3, `feeding.md` §7 and §8); `shared-pond.md` §7 and `net-hardening.md` B record the hand rule gone; here, §10.4, §11.3, §11.4, the playbook (§16) and §17 |
+| `tools/net_fuzz.gd`, its corpus | its handshake frames carry this build's tail -- now and then none, or another build's -- and its guest takes its rules; its saved door cases say hello on 8, as every bump has moved them; its guest run holds every WELCOME on other rules or with none refused (phase 4's review, below) |
+| docs | `docs/server.md`; dated notes on the plans that schedule bumps for judged rules (`dna-slots.md` §14.3, `feeding.md` §7 and §8); `shared-pond.md` §7 and `net-hardening.md` B record the hand rule gone; here, §10.4, §11.3, §11.4, the playbook (§16) and §17. After phase 4's review: dated notes where a passage still said a rules change bumps the protocol (`feeding.md` §3.3 and §5.6, `ocean.md` §10.5, `dna-slots.md` §0 and §1, `net-hardening.md` B.2) |
 
 **Where it differs from the design, and why** (§11 says so too):
 
@@ -1797,8 +1803,8 @@ body plan moves `Wire.RULES`' pin and nothing else. By file:
 - **The text is reordered**, stats first: all 60 lines it had are in it, value for
   value, and 19 are added.
 
-**Checked** at `922967f`, the last commit to change what the game does, and the gene
-probe and its gate again at `f2809cc`, the last to change a probe or a comment:
+**Checked** on phase 4's code as built, before its review, and the gene probe and its
+gate again after its last change to a probe or a comment:
 
 1. Every check `ci.yml` runs passes here but `net_drop` and the door of `net_fuzz`,
    which need a network namespace this container refuses (left to CI, as before).
@@ -1825,8 +1831,8 @@ probe and its gate again at `f2809cc`, the last to change a probe or a comment:
    by invite, before any CHALLENGE; one more gene that judges nothing plays, and its
    name crosses whole to a host that never had it. HELLO is 39 bytes of the 64
    every build reads; WELCOME 43; REFUSE 40.
-4. **And in two, each build on its own code**: phase 3's (`9144209`, protocol 7)
-   and this one, on a branch channel's ports. Same and same play, on a phone's host
+4. **And in two, each build on its own code**: phase 3's code (protocol 7) and this
+   one, on a branch channel's ports. Same and same play, on a phone's host
    and on the dedicated server. Old and new refuse each other both ways, as either:
    "different versions", the phase-3 end told its game is the older ("yours") and
    this one the other's ("theirs"); a server of this build logs `it speaks protocol
@@ -1835,18 +1841,17 @@ probe and its gate again at `f2809cc`, the last to change a probe or a comment:
    the server, logged `it judges by other rules: c6b216a0 at content 7, this 95c66e7e
    at content 0`; the end on content 0 reads "yours", the end on 7 "theirs", and
    both read "theirs" when the two are on one content.
-5. Everything else as it was against `71938d6`: the empty library hashes to
-   `7397a410…` under all three schemes, 69,349 lines; `drop_probe` passes all 143,
-   its ten pins holding; `DropSave.rules()` is `e4213164b90d…`; **the 34 frames** are
-   0 px from `71938d6`'s; the 30,519 answers of every word, line and look, the
-   3,865 of the stats and the 47 lines of the rulebook's vocabulary, to the byte;
-   `drive --fingerprint=3000`'s six hashes and counts; the input path's three
-   traces; every scene's boot; the levels, Back and fuzz probes; the gene probe's
-   53, and the gate; the template current, 531 messages, from 91 files; and a
-   world, a cell mid-choice and a library kept by `71938d6`: opened by both builds,
-   the 10,261 lines of four seconds are the same; kept again by each, the files dump
-   the same and the library is the same bytes; opened again by both, 10,260 lines
-   are the same.
+5. Everything else as it was against the base, phase 2's code: the empty library
+   hashes to `7397a410…` under all three schemes, 69,349 lines; `drop_probe` passes
+   all 143, its ten pins holding; `DropSave.rules()` is `e4213164b90d…`; **the 34
+   frames** are 0 px from the base's; the 30,519 answers of every word, line and look,
+   the 3,865 of the stats and the 47 lines of the rulebook's vocabulary, to the byte;
+   `drive --fingerprint=3000`'s six hashes and counts; the input path's three traces;
+   every scene's boot; the levels, Back and fuzz probes; the gene probe's 53, and the
+   gate; the template current, 531 messages, from 91 files; and a world, a cell
+   mid-choice and a library kept by the base: opened by both builds, the 10,261 lines
+   of four seconds are the same; kept again by each, the files dump the same and the
+   library is the same bytes; opened again by both, 10,260 lines are the same.
 6. **On the owner's eighth-slot plan**, the gene probe fails its plan pin alone, and
    `net_probe` its wire size and `Wire.RULES`, each saying what to move and that no
    protocol goes with it.
@@ -1866,23 +1871,124 @@ nobody in its water. **After this phase, a content release that changes the rule
 does the same on one protocol**, with the same words: a phone that has not taken it
 cannot play with one that has, until it does.
 
+**And phase 4's review**, which read every line of the rules for what another machine
+could print otherwise, planted faults in scratch copies of the session, the wire and
+the rules, and played this build against phase 3's in two processes. Each its own
+commit:
+
+- **The dart is a contact the host decides.** It fires a guest's dart by its own
+  `dart_range` and `dart_cooldown` tables, its own `DART_ARC_DEG` and the organ's own
+  stun, and none of them was in the rules. The two rows are `contact` now, and the
+  rules carry the arc and the stun of each organ that darts, at one copy:
+  `cell.dart_stun`, and `.key` after the first, as the tables are written.
+- **A stat's row is a line of the rules.** How two providers combine decides a body's
+  value as its tables do, so each judged or contact stat's row comes before its
+  tables -- `stat.armor=none:1000000,better:higher,combine:product` -- written from
+  rules.gd's `ROW_FIELDS`, the fields `Stats.of` and `top` read. A field a later
+  build reads to decide a value -- phase 5's `group` -- is one more name at the end
+  of that list and one more item at the end of the line. `net_probe` fails on a field
+  of any row that is neither written nor named in `ROW_FIELDS_UNREAD`, with why.
+- **Every referee limit is in the text.** The hand list, kept twice, had missed what
+  each foul weighs (`WEIGHT_*`) and how often one rule may foul (`FOUL_EVERY`), and
+  the review then asked for the ledger they are counted on: its cut and its decay,
+  `STRIKE_CUT` and `STRIKE_DECAY`, which were `net_session.gd`'s and are referee.gd's
+  now, the session taking its own from there. The wire's own strikes stay out: an
+  honest guest on one protocol never earns one, and they guard the wire as the door's
+  limits do. `REFEREE_LIMITS` is now every limit referee.gd declares, in its order --
+  the one list the game and the probe write from -- and `REFEREE_NOT_LIMITS` names its
+  every other constant with why: the scripts it loads, its rules' names, its budgets'
+  class. `net_probe` sorts all 57 and fails on one in neither, one in both, a name
+  either keeps that referee.gd lost, and a reason left empty. `referee.FIRST_SENSES`
+  left the text: it is no constant of the referee's since it reads the catalogue's
+  `gift` tag, which `run.FIRST_SENSES` says.
+- **The same text on every machine, by construction.** It was so in fact -- no
+  printed value lay near a rounding tie -- but nothing kept it so, and its floats went
+  through `%f`, the C library's printf. Every float is a whole number of millionths
+  now, `str(roundi(x * 1e6))`, by Godot alone, and so is every number in the body
+  plan's fingerprint, which only the rules read. rules.gd opens with the rule and its
+  reason: a line's number is a literal or comes from literals by + − × ÷ and sqrt;
+  cos and sin only at 0 and π; no Vector2 or Transform method. `net_probe` fails a
+  float whose millionths lie within a thousandth of a half, one that is not finite,
+  and a value of a kind the text does not write digit by digit, naming the line; and
+  it writes the plan's text again from its rows.
+- **The guest's check of a WELCOME is tested.** The review's planted fault -- a guest
+  that reads a WELCOME's protocol alone -- passed all 465 checks. Now a host whose
+  WELCOME carries another build's tail, or none, meets a guest that gives up on it,
+  on the LAN (`_welcome_skew`) and by invite (S8c): "different versions", or
+  `game_older` and `server_older`, and never together. `net_fuzz`'s guest run holds
+  the same of every such WELCOME the gate lets through, 69 at seed 1. Each check
+  fails on the fault.
+- **A stranger refused before an invite learns only which game is older.** Every
+  REFUSE carried the server's rules fingerprint and content version, to anyone who
+  called its internet listener. For privacy, a refusal to a caller there that has
+  proved no invite carries zeros for the rules and, for a content version, 0 where
+  the server is the older, 0xFFFFFFFF where it is the newer and the caller's own on a
+  tie -- all a guest's sentence reads, so a real guest's is worded as before. A LAN
+  caller and a friend who proved an invite get the whole tail. `net_probe`'s S8d
+  holds both, and fails on the old refusal.
+- **Check 27's flake was the probe's.** A guest's sister is a water body from the
+  frame she is placed in, and a meal writes its gene to a water body's DNA
+  (`food.gd`'s `_grow`, lineage.md §3.2). The probe compared her DNA across up to 3 s
+  of the room's life (check 24) and across the second before the stop (check 27). In
+  a loop, in a network namespace: one failure in 25 runs, check 24's, a sister fed
+  between her placement and the record; with 8 s more of the room before the stop,
+  check 27 failed 3 runs in 10 -- two meals, and a sister eaten. Each sister is read
+  now in the signal that places her, check 27 holds the next start to the room as it
+  was kept, and a sister the water ate before the stop is put back as she came,
+  through the pond's own door. With the fix: checks 24 and 27 pass at the real
+  window; with 30 s more of the room, 10 runs in 10, three of them with a sister fed;
+  and with one sister or both taken out of the water before the stop, each is put
+  back and check 27 passes.
+- **The docs.** This section names what its citations were, where it named commits a
+  squash removes; and the passages that still said a rules change bumps the protocol
+  carry a dated note (`feeding.md` §3.3 and §5.6, `ocean.md` §10.5, `dna-slots.md`
+  §0 and §1, `net-hardening.md` B.2).
+
+**And `CLAUDE.md`**, which this phase left deferred when it was built, says in this
+pull request what it should: a change to a rule the referee copies, a contact table,
+the body plan or the referee's own limits moves `Wire.RULES`' pin, never `PROTOCOL`,
+which moves when a message's format changes or the order a guest sends them in.
+
+**`Wire.RULES` moved once, at the end of the round**, `95c66e7e…` to `c382d531…`,
+and no `PROTOCOL` with it: protocol 8 has not been released. The text is 111 lines
+where it was 79 -- the 15 stats' rows, the dart's two tables, its arc and its stun,
+the referee's eleven weights, `FOUL_EVERY` and the ledger's cut and decay, less
+`referee.FIRST_SENSES` -- and every float in it is written anew.
+
+**Checked**, the round as a whole, on its last commit:
+
+1. Every check `ci.yml` runs passes, `net_drop` and the door of `net_fuzz` among
+   them, each in a network namespace of its own here, as CI runs them. `net_probe`
+   makes 473 checks where it made 465 -- the three rules checks, the WELCOME's four
+   and the stranger's one -- in about 19,000 of CI's 24,000 frames. The gene probe
+   makes its 55, and the gate passes.
+2. **Each new check was seen to fail on a fault planted in a scratch copy**: a
+   constant added to referee.gd, a field added to a stat's row, a value on a rounding
+   edge, the plan's fingerprint written with `%f` again, the dart's arc missing from
+   the game's text (named at its line), the review's guest that reads a WELCOME's
+   protocol alone (the two WELCOME checks on the LAN, the two by invite, and the
+   fuzzer's guest run, which shrinks it to one 27-byte WELCOME), and the old refusal
+   that told a stranger the server's rules and content.
+3. `drop_probe` passes all 143, its ten pins holding, and `DropSave.rules()` is
+   `e4213164b90d…`: the drop's own fingerprint did not move with the handshake's.
+4. **And in two processes**, phase 3's code (protocol 7) against this build's, each
+   way round, as a phone's host and as the dedicated server: refused by name, with
+   the sentence each end has always said, the older game named on both.
+
 **Deferred:**
 
-- **`CLAUDE.md`'s "The host's referee copies the game's rules"** still says to bump
-  `Wire.PROTOCOL` with `Wire.RULES`, and that a change to the referee's own limits
-  needs no bump. It is not this phase's to edit: it should say that a change to a
-  rule the referee copies, a contact table, the body plan or the referee's own limits
-  moves `Wire.RULES`' pin, which the handshake carries, and that `PROTOCOL` moves only
-  with a message's format.
 - **A referee's limit is a rule too**, as §11.3 asked, so a change to one splits
   builds at the handshake, where before it split none. Most of them copy a rule of the
   run or bound what a guest does -- its motion, its shouts, its arrivals, its bodies
   -- so a change to one usually comes with a change to what a guest does, and the
   split is right. A slack loosened alone, after a false positive, splits builds for
   nothing a guest does; if that cost is ever felt, the pure slacks can leave the
-  handshake's text and stay under the pin.
-- **net_fuzz's door and `net_drop`** need a network namespace this container refuses:
-  CI runs them. The door's HELLOs carry this build's tail; it does not try other
+  handshake's text and stay under the pin. Since phase 4's review the foul weights,
+  `FOUL_EVERY` and the ledger's cut and decay are in it too: they decide how soon a
+  guest that breaks a rule is cut.
+- **net_fuzz's door and `net_drop`** needed a network namespace this container
+  refused when this phase was built, so CI ran them; phase 4's review ran both in one
+  here (above). The door's HELLOs carry this build's tail; it does not try other
   rules at the door, which `net_probe` covers by invite.
 
 ---
