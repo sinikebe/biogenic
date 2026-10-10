@@ -2561,6 +2561,224 @@ phase 5 with the launcher at `b2f6ba4d`:
   a second number. The other holds an organ's live varieties in the pool or out of it
   together, with a gene-probe check. The README says so where a variant sets its water.
 
+### 15.8 As built: phase 7-2, 2026-10-10
+
+**Every draw of the water is by class now -- a drifter's, a peer's and a drift's -- in
+floats, and a variety the water never makes takes nothing of its organ's place there.**
+This is `gene-rarity.md`'s second pull request (its §11.2), the one a player can feel:
+the light and ping senses weigh an uncommon's 2 where they weighed 3, drift is weighted
+by class, and `water.weight` is gone, so a gene's class is the whole of its place in the
+water. The word for a class on screen is a pull request of its own. By file:
+
+| file | now |
+|---|---|
+| `game/genes/catalogue.gd` | `water_weight`, an organ's place shared among its varieties **in the water's pool** (`drifters()`), 0 for one out of it; **`drift_weight`** (new), the same organ's place -- the commons' third and all -- shared among every live variety drift may bring, the `never_drifts` left out; `pick_variety`, the gift's pick among one organ's varieties, by each one's class's share, in floats; `weight`, `organ_weight` and phase 1a's organ weights gone |
+| `game/genes/gene.gd` | `water`'s `weight` gone; `drifter` is whether the water makes a variety, and says what one out of the pool takes: nothing in the water, its share in drift |
+| `game/genes/organs/*.gd` | `"weight"` out of every organ's water; the light and ping senses' comments say they weigh 2 now; the toxin's strain sets `{"drifter": true}` alone |
+| `game/normal/food.gd` | `_draw_gene` by `water_weight`, one float roll over the pool in its order -- a drifter's draw, a peer's and today's water's alike |
+| `game/normal/genome.gd` | `_mutate_drift` draws what comes by `drift_weight` (`_drift_brings`), from every live variety weighing something in drift that the lineage lacks; what goes is drawn evenly, as before |
+| `game/normal/drop.gd`, `normal_mode.gd` | the gift's comments: flat by organ, a variety by its share |
+| `tools/rarity_specimens.gd` (new) | **the mixed hundred** of table 5.1 -- 20 new organs (2 common, 6 uncommon, 12 rare) and 65 rare variants dealt round every organ the drifters carry -- filed and forgotten, for the drop probe and the eco probe |
+| `tools/gene_probe.gd` | *"a weight of its own in the water"* gone, and in its place: a variant the water never makes taking nothing of its organ's place in the water and only its share in drift, the review's finding, held (`_out_of_pool`); a weight in drift for every variety drift may bring and none for the mouth; drift's weights the water's where every variety of an organ is in the pool and drifts, under the commons' third too; a pick among an organ's varieties by class (the rare kind); no `water` field nothing reads, a stale `weight` above all, and an organ planted with one found; the probe's own organs without `weight`. 82 checks, as before: one went, one came |
+| `tools/drop_probe.gd` | the section `rarity`, items 1 to 3 of §11.3 (`--rarity-only` runs it alone); check 6 counting a form as its variety, and its rare clause from the count the floor first catches up with the first fill (`SETTLED_WITHIN`); check 10's water dart posed toward the drop's middle; the ten seeded-water pins re-recorded; a pinned digest that moved printed in full; each five-minute drop's drifters by class printed. 148 checks, from 144 |
+| `tools/eco_probe.gd` | `--genes=crowded`, the mixed hundred filed before the drop is made |
+| `tools/looks_specimens.gd` | its room organs without `weight` |
+| `.github/workflows/ci.yml` | check 8's hash, re-pinned with its reason |
+| docs | `gene-rarity.md`'s status; `game/genes/README.md`'s variant step and **Rarity**; the skill; here |
+
+**The review's finding, settled** (§15.7, deferred): a variety outside the water's pool
+took a share of its organ's place, which thinned its siblings' draw and, through the
+commons' third, rescaled every uncommon. **Fixed by sharing an organ's place among the
+varieties of each draw**, the first of the two fixes §15.7 named: `water_weight` among
+the organ's varieties in the water's pool, so one the water never makes weighs 0 there
+and its siblings keep the whole; and a second number, `drift_weight`, among every
+variety drift may bring, in the pool or not, by the same classes and the same third.
+The second fix held an organ's live varieties all in the pool or all out, one number
+and a gene-probe check. It was not taken because of the playbook's promises: that a
+variant changes nothing outside its organ is kept either way, but that **drift may
+bring a variety the water never makes** would then hold for whole organs only, and the
+gene pass's first drift-only variant of a shipped organ would fail the probe. The cost
+of the first is a
+second number for drift to read, and it is the first's wherever every variety of an
+organ is in the pool and drifts -- every organ today -- which the gene probe holds, under
+a crowd that binds the third too. Its check fails the fault: a variant of `cirrus`
+registered with `"drifter": false` moves no key's `water_weight` and weighs 0 itself,
+and in drift takes 2.00 of `cirrus`'s 4.00, no other key's drift weight moving.
+
+**The gift** reads neither number: it is flat by organ (§3.4), and among one organ's
+varieties it picks by class (`pick_variety`), so a variant of a sense stays a gift
+*"whatever its water and drift say"*, as the playbook has it, and a rare one is rare
+among its siblings there too.
+
+**Where it differs from the design, and why:**
+
+- **§2.2's share is per draw** (above): *"the sum over every variant v' of the same
+  organ"* is over the varieties of the water's pool for the water's weight and over
+  those drift may bring for drift's.
+- **A peer's born organs keep phase 5's rule** (§15.6, call 6): each takes only its own
+  variety out of the peer's pool, so a peer may draw a variant of a born organ beside
+  it -- unless the organ holds one variant to a body. *"One of each organ"* (§3.1) holds
+  for what a peer draws: a variety drawn takes its organ out of the pool, as phase 3's
+  `_erase_organ` already did. So rarity 1 asks that no peer draws two varieties of one
+  organ, and reads two as a born key beside its variant: of 2,000 peers at r40, 273
+  wear such a pair and none any other.
+- **A drifter's draw walks the pool**, one float roll, as a peer's does: §9's running
+  sums and binary search are not built. At the mixed hundred a draw is about two
+  hundred lookups, and the water makes some thirty-six draws a second, so there was
+  nothing to buy, and one function keeps every draw of the water in one place, where a
+  habitat will act (§6).
+- **Check 6 counts a form as its variety**, as the floor does. It counted keys, so a
+  drop whose toxin was all worn as venom read as carrying none: the crowded drop's did,
+  at three counts running, while the floor, counting the variety, rightly saw two. 7-1's
+  drops never had all their toxin as venom at a count, so it never showed.
+- **The rare clause holds once the floor has caught up with the first fill**: check 6
+  and the crowded drop ask that a count find nothing short within the first minute
+  (`SETTLED_WITHIN`, thirty counts) and that no rare variety be short three counts
+  running after it. The first fill draws every body at once, before any count, and at
+  a hundred genes it leaves about a fifth of the rare varieties on no body -- 14 of 77
+  in the crowded drop -- which the floor gives back at its budget, one drifter in four.
+  Measured: the queue first empties at count 9 (18 s); thirteen rare varieties were
+  short three to five counts running, every run over by 14 s; none after. §3.3's
+  promise is for a floor under its budget, and through the fill it is not. Today's
+  drops catch up at their first count.
+- **Rarity 1's catalogue is the mixed hundred and a little more**: two uncommon organs,
+  because the mixed hundred alone holds the commons at a third to the last digit, which
+  does not bind (20 of 60); a variant that sets no class beside a new common organ and
+  beside a new uncommon one; and one the water never makes. 103 varieties in the
+  drifters' pool. *"A variant's draws are its organ's times its share"* is checked for
+  every one expected 2,000 times or more, 22 of them, within 10 %.
+- **The crowded drop's commons are a common organ's every variety**, as the third
+  counts them, and the floor's drifters count among the drifters made.
+- **Check 10's water dart is posed toward the drop's middle**, 1,600 from you, where it
+  was 1,600 east. A run starts where the water round it is quietest, so the start moved
+  with the draws -- here to within 1,600 of the rim on its east side -- and the rim pulled
+  both posed bodies in, 455 and 636 units, in their first frame, so the dart never saw
+  the one coming. A start is 1,000 from the rim at least, so toward the middle is always
+  water. 7-1's tree passes the moved check as it passed the old.
+- **A pinned digest that moves prints in full**, as a pinned line always did, so every
+  pin is recorded from the check's own output.
+- **The gene probe fails a `water` field nothing reads** -- a `weight` left beside a
+  class, above all, which a session copying an older organ would carry over and which
+  would then do nothing at all. §11.3 has no such check; `water.weight` going made it
+  worth one.
+
+**Checked** at `63a4c67`, against `4c029f7` -- phase 7-1 with its review's fixes:
+
+1. **Every check `ci.yml` runs passes**, the network's three each in a network namespace
+   of its own with CI's address: the gene probe's 82 checks and its gate, 0 names in 76
+   files; the levels and Back probes; the translation template, current at 531 messages
+   from 95 files, with every catalog linted; every scene's boot, seven, no error; the
+   input path under all three schemes, a daughter committed each time; check 8, the
+   empty library, `701cc268…`, 69,549 lines, the same under all three schemes; the drop
+   probe's 148 checks, from 144, in 480 s on a machine another build was using -- the
+   rarity section's share of it 115 s, 95 of them the crowded drop's five minutes, whose
+   frames cost about what any drop's do (the eco probe's p50 3.3 to 4.1 ms a frame over
+   thirty minutes of it, and 3.8 ms over five of today's catalogue, on the same shared
+   machine); `net_probe`, 477 checks in 19,043 frames of the 24,000
+   CI allows (7-1's 477 in 18,336); `net_fuzz` at seed 1, its door too; and `net_drop`.
+2. **The seeded-water pins, re-recorded from the checks' own output**, each with the
+   reason above it -- every draw is a float draw by `water_weight` now, so a seeded run
+   differs from `dev`'s from the first body the water seeds; `stigma` and `ampulla`
+   weigh 2; drift is weighted, so the mutations differ from their first drift:
+
+   | pin | was | now |
+   |---|---|---|
+   | `DEV_LINES` (check 1, pack 2's hunter) | sums `258203678`, `1364254319`; 379 and 732 divisions, drift 174 and 341 | `2795563066`, `2813236354`; 424 and 763, drift 217 and 377 |
+   | `IDENTITY_LINES` (lineage 10) | sums `2237031724` … `2616815844` | `3789751589` … `344104199` |
+   | `THREE_ONE_LINES` (determinism 6) | sums `694399153`, `3659374607` | `1940964098`, `2393542290` |
+   | `PACK3_LINES` (tail 1, the switch off) | sum `772568307`, 605 divisions | `1897911749`, 629 |
+   | `TAIL_LINES` (tail 1, the game's water) | sum `3086148374`, 677 divisions, 333 daughters tailless | `3707739755`, 668, 234 |
+   | `DEV_MEMBRANE` | `67a6afe6…` | `322be6f6…` |
+   | `PACK3_TRACE`, `TAIL_TRACE` | `78b3447e…`, `d6fed1db…` | `5318b683…`, `e15da595…` |
+   | `DEV_DRAWS`, `DEV_DRAWS_TOXIC` (dna 8) | `f2be9c30…`, 793 of 3,000 drawing the toxin | `46cce4f8…`, 850 |
+   | `DEV_MUTATIONS`, `DEV_MUTATIONS_CAME` (dna 1) | `756d76d5…`, 236 of 4,000 bringing it | `b60f6f99…`, 226 |
+   | `ci.yml` check 8 | `7397a410…`, 69,349 lines | `701cc268…`, 69,549 |
+
+   dna 1 and dna 8 assert what they did beyond the digests: a genome with no toxin draws
+   and mutates as the pin says, and a body that draws the toxin is set apart. More peers
+   draw it, 850 of 3,000 where 793 did: the light and ping senses' 3 went to 2, so every
+   other variety of a peer's pool is a little larger a share, the toxin's 2 of 34 where
+   it was 2 of 36. Check 8's trace is 7-1's for its first two lines, the cell's own, and
+   moves at its first look at the water, 0.52 s in: cell 0, the first body seeded, has
+   the radius it had and another gene, and the run starts at another quiet point.
+3. **`drive --fingerprint=3000`** at seeds 7 and 12345, plain, sniffing and with seven
+   genes on: `ec682034…`, `66a6b7c3…`, `82b8dbd3…`, `31ed3a73…`, `722cce3e…` and
+   `bf7a44b6…` (the first run twice, the same), where 7-1 gave `cd0d5d1d…`,
+   `f37d3aec…`, `72f5cda5…`, `901b9fd8…`, `54cbe11d…` and `eaca0505…` -- the water the
+   cell swims through is drawn by the new weights from its first body. All six cells are
+   alive at fifty seconds.
+4. **`Wire.RULES` is `843c9d81…` and `Wire.PROTOCOL` 8, `DropSave.rules()` `e4213164…`**,
+   as at `4c029f7`, and net_probe's referee section passes: no rule the referee copies
+   is a draw, and rarity is in neither text. `binary_version` stays 7: 7-2 is content.
+5. **Each new check was seen to fail on the fault it guards**, planted in a scratch
+   copy. In the gene probe, six: an organ's place shared among every live variety
+   again, as 7-1 had it, which moves 14 other keys' weights when a variant out of the
+   pool is filed; drift's share among the pool alone, so that variant never comes by
+   drift -- each failing the out-of-pool check; drift's weights given to the mouth,
+   which item 4 finds, and the probe's never-drifting organ too; drift's weights left
+   out of the commons' third, which the crowded commons find on 15 keys; the gift's
+   pick even, 4,446 of 9,000 where its share is 1,000; and a `weight` left in
+   `stigma`'s water. In the drop probe's rarity section, eight: the water's draw even
+   (the commons' class 5.94 % of the draws, against 27.26 %) and by each key's class,
+   unshared (the rare 37.56 %, against 31.93 %), each failing rarity 1 and the crowded
+   drop; drift even (the rare 77.61 % of what came, against 39.72 %) and by the
+   water's weights (the variant out of the pool coming 0 times of 541), each failing
+   rarity 2; a peer's draw that leaves its organ's other varieties in its pool, 199
+   peers wearing two any other way; check 6 counting keys again, the crowded drop's
+   toxin carried by nobody at 3 counts; a floor of one drifter in forty, which never
+   catches up with the fill; and no budget with three carriers kept of a rare gene --
+   the floor 858 of 1,807 drifters made, the commons at 70 % of their third.
+6. **The water, as built.** The gene probe's arithmetic: common 3 varieties, 53.8 / 41.6
+   / 29.3 drifters each in a newborn's, a sighted and a fully sighted player's drop of
+   458 / 353 / 249; uncommon 11, 26.9 / 20.8 / 14.7 each; rare none; the senses 29.4 %
+   of the draw; the floor's expected share 0.0 % at all three -- §4's table to the
+   decimal. Measured, in the drop probe's three five-minute drops, of the drifters the
+   draw made: the commons 34.8 %, 35.5 % and 35.7 % (35.3 % by weight) in a newborn's
+   drop, a sighted player's and a fully sighted one's, the uncommons the rest; standing
+   at five minutes, 51.3 / 42.3 / 26.7 drifters to each common variety (53.5 / 41.3 /
+   28.8 by weight) and 27.4 / 20.4 / 15.0 to each uncommon one (26.8 / 20.6 / 14.4). The
+   floor gave none of the 1,822, 2,572 and 1,894 drifters made, as in 7-1.
+7. **The rarity section**: the draw, 100,000 drifters from the 103 varieties of rarity
+   1's catalogue -- common 27.47 %, uncommon 40.56 %, rare 31.97 %, against 27.26, 40.81
+   and 31.93 % by weight; 24 varieties expected 2,000 times or more, the worst 5.1 % off;
+   the commons 33.58 % against COMMON_SHARE's 33.33 %, where the ladder alone gives them
+   31.25 %; the variant the water never makes drawn 0 times. Drift, 50,000 drifts of a
+   water cell carrying §5.2's line and venom: common 13.99 %, uncommon 46.35 %, rare
+   39.66 %, against 14.08, 46.20 and 39.72 % by drift's weights over what it lacks, none
+   a variety it carries, the mouth or a retired gene; the variant the water never makes
+   came 489 times, 541 by its share. **The crowded drop**, the mixed hundred, 99
+   varieties, a fully sighted player's five minutes: at 146 counts no common or
+   uncommon variety carried by nobody nor short two counts running; the floor caught
+   up with the fill at count 9 and no rare variety was short three counts running after
+   it; **the floor's drifters 161 of 1,818 made, 8.9 %**, against table 5.1's 10.6 %
+   and the gene probe's arithmetic for the same catalogue, 10.6 % -- less, since hunters
+   carry genes too, as §5 said they would; every one rare; the commons 32.4 % of every
+   drifter made, 97 % of their third. Each class's share of the draw's drifters: common
+   27.2 % (26.7 by weight), uncommon 37.6 % (37.8), rare 35.2 % (35.6). The gene probe's
+   arithmetic for the same catalogue is table 5.1's mixed row: each common variety 24.4 /
+   18.9 / 13.3 drifters, each uncommon 10.2 / 7.9 / 5.5, each rare 1.3-3.1 / 1.0-2.4 /
+   0.7-1.7, the senses 16.7 % of the draw. **Thirty minutes of it** (`eco_probe
+   --genes=crowded --sensed=1 --until=1800`, by hand): the floor's share of the drifters
+   made 8.9, 9.4, 8.9, 8.8, 8.7 and 8.2 % at each five minutes, every one but one of
+   1,104 a rare gene's; 72 to 77 of the 77 rare varieties in the drop at each census, the
+   rest on their way back; and the rare ones spreading as the hunters' families take them
+   up, from 3.5 carriers each at five minutes to 16.1 at thirty.
+
+**Deferred:**
+
+- **The word for a class on screen**: its own pull request.
+- **A variant tagged `not_on_drifters` on its own** (none is: the toxin's tag is its
+  organ's, so all its strains are out together). It takes its share in the water's
+  pool, so the drifters' draw carries its organ less; and if the organ is common, the
+  commons' third then scales the uncommons, as the toxin does at the organ level. With
+  the first such variant, share each of the water's two draws among its own pool.
+- **The first fill and the floor**: a fresh drop of a hundred genes starts with about a
+  fifth of its rare varieties on no body, and the floor takes ten to twenty seconds to
+  give them back. Nothing a player can tell -- no one counts the rare genes of a drop
+  just made -- so nothing is changed. Were it ever to matter, the fill could seed the
+  floor's genes first, or the budget be open through it: a mechanism, not a number.
+- **§14 stands as written**: what was measured is what it said to watch for.
+
 ---
 
 ## 16. The playbook (what the gene pass will do)
@@ -2571,7 +2789,8 @@ runs them, and how to render a gene; and the steps for a variant, an organ on me
 the game has, an organ with a new mechanic, an edit, a retirement and a change of the
 slots -- each with the pins it moves and why -- then the looks (a family, a kind and,
 for a variant, an accent: `gene-looks.md`), rarity (a class on the ladder, and when
-unsure, rare: `gene-rarity.md` §11.4, from phase 7-1, §15.7), names, balance, and
+unsure, rare: `gene-rarity.md` §11.4, from phase 7-1, §15.7, and the whole of a gene's
+place in the water from phase 7-2, §15.8), names, balance, and
 content or binary.
 **Where this document and the README
 disagree on a step, the README is the one kept current**; this document keeps the
