@@ -6202,6 +6202,11 @@ func _draw_genome(body_radius: float, sensed: float) -> Dictionary:
 	# loop fills the outside to its capacity as it always did.
 	while Genome.count_outside(tiers) < capacity and not pool.is_empty():
 		var gene := _draw_gene(pool)
+		# A pool with nothing left that weighs anything draws nothing: stop, and
+		# never write an empty key. The gene probe holds every variety of the
+		# pool above 0, so no shipped catalogue gets here.
+		if gene == &"":
+			break
 		_erase_organ(pool, gene)
 		var tier := _draw_tier(sensed)
 		tiers[_place_toxin(gene)] = tier
@@ -9773,6 +9778,11 @@ func _draw_living(body_radius: float, sensed: float) -> Dictionary:
 	# that drew the toxin.
 	while Genome.count_outside(tiers) < capacity and not pool.is_empty():
 		var gene := _draw_gene(pool)
+		# A pool with nothing left that weighs anything draws nothing: stop, and
+		# never write an empty key. The gene probe holds every variety of the
+		# pool above 0, so no shipped catalogue gets here.
+		if gene == &"":
+			break
 		_erase_organ(pool, gene)
 		var tier := _draw_tier(sensed)
 		tiers[_place_toxin(gene)] = tier

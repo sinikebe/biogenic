@@ -489,17 +489,21 @@ jobs:
         # it shows in a render -- a grid that misses one body in ten thousand
         # is a hunter that never sees you -- and a player would find it an
         # hour into a run. About three and a half minutes here since pack 3's
-        # rules (3-1), which read every hunter's senses, and about four since
-        # pack 4's tail (4-1), which runs a pack-3 drop of its own beside the
-        # new water: 235 s here at 4-1 and 192 s at 4-2's programs, and 319 to
-        # 329 s on a quiet local machine, against the 600 s timeout below.
+        # rules (3-1), which read every hunter's senses, about four since pack
+        # 4's tail (4-1), which runs a pack-3 drop of its own beside the new
+        # water, and a minute or two more since gene-rarity phase 7-2's own
+        # section -- the draw, drift and a crowded drop of a hundred genes:
+        # 292 to 332 s here at 7-1, and 432 s against 7-1's 340 s on one
+        # local machine at 7-2, so about 370 to 425 s here. Against the 900 s
+        # timeout below, raised from 600 at 7-2 so that the gene pass's genes
+        # have room.
         # Grepped, not trusted to the exit code, for the reason the Back probe
         # gives.
         run: |
           set -uo pipefail
           # timeout: a parse error leaves Godot running rather than exiting,
           # and a job that waits on it waits for GitHub's six hours.
-          out=$(timeout 600 ~/godot/godot --headless --path . res://tools/drop_probe.tscn 2>&1) || true
+          out=$(timeout 900 ~/godot/godot --headless --path . res://tools/drop_probe.tscn 2>&1) || true
           grep -E "^\[drop-probe\]" <<< "$out" || true
           if ! grep -q "^\[drop-probe\] ALL PASS$" <<< "$out"; then
             grep -E -A2 "SCRIPT ERROR|Parse Error|ERROR:" <<< "$out" || true

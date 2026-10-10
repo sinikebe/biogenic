@@ -52,8 +52,8 @@ timeout 120 ~/godot/godot --headless --path . res://tools/i18n_pot.tscn -- --che
 timeout 120 ~/godot/godot --headless --path . res://tools/i18n_pot.tscn -- --lint-all
 
 # The drop -- the seeded water, its pins and its rules (CI's "Check the drop"):
-# "[drop-probe] ALL PASS". About seven or eight minutes.
-timeout 600 ~/godot/godot --headless --path . res://tools/drop_probe.tscn
+# "[drop-probe] ALL PASS". About seven or eight minutes on a busy machine.
+timeout 900 ~/godot/godot --headless --path . res://tools/drop_probe.tscn
 
 # The referee and the rules two builds must agree on: net_probe's referee section,
 # "[net-probe] NOTE --referee-only: 0 failed". CI runs the whole probe, the same line

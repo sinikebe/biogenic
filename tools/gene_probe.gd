@@ -1241,22 +1241,40 @@ static func _arithmetic() -> String:
 		_percents(_floor_loads(_pool_weights()))]
 
 
+## **A common organ to pose a variant on, alone** (gene-catalogue.md §15.8): the first
+## organ of the drifters' pool whose class is the commonest and whose own key is its
+## variety, filed again with its variants set aside -- so a check that gives it one more
+## measures against the organ alone, however many variants it ships with once the gene
+## pass adds them. Its key, or `&""` with none; [method Catalogue.forget] puts the shipped
+## organ back.
+func _plain_common() -> StringName:
+	for key: StringName in _drifters_pool():
+		if Catalogue.organ_of(key) == key and Catalogue.organ_rarity(key) == Rarity.commonest():
+			var plain: Gene = (Catalogue.gene(key).get_script() as GDScript).new()
+			plain.variants = []
+			Catalogue.register(plain)
+			return key
+	return &""
+
+
 ## **A rare kind of a common organ** (gene-rarity.md §2.2): the first common organ of
 ## the drifters' pool given one more variant, rare, one entry in its own file -- its
 ## place in the water taken from its organ alone, `4 × ½ ÷ 4½` of it, every other gene's
 ## weight what it was; rare itself, kept at one carrier, its organ's own key still common;
 ## and the catalogue as it was once it is forgotten.
 func _rare_kind() -> void:
+	var shipped := _weights_now()
+	var common := _plain_common()
+	if common == &"":
+		_check("a rare kind of a common organ: no common organ whose own key is in the"
+			+ " water's pool to pose one on", false)
+		return
 	var before := _weights_now()
-	var common := &""
-	for key: StringName in _drifters_pool():
-		if Catalogue.rarity_of(key) == Rarity.commonest():
-			common = key
-			break
 	var organ: Gene = (Catalogue.gene(common).get_script() as GDScript).new()
 	var rarest: StringName = Rarity.classes()[Rarity.LADDER.size() - 1]
-	organ.variants = organ.variants + [{"variant": &"probescarce", "order": 985,
+	organ.variants = [{"variant": &"probescarce", "order": 985,
 		"look": {"accent": Kinds.MARK_BAR}, "water": {"rarity": rarest}}]
+	Catalogue.forget(common)
 	Catalogue.register(organ)
 	var w_common := Rarity.weight(Rarity.commonest())
 	var w_rare := Rarity.weight(rarest)
@@ -1279,6 +1297,7 @@ func _rare_kind() -> void:
 	var picks_expected := float(PICKS) * w_rare / (w_common + w_rare)
 	Catalogue.forget(Catalogue.organ_of(common))
 	var after := _weights_now()
+	before = shipped
 	_check(("a rare kind of %s, one entry in its file, takes its place in the water from its"
 		+ " organ alone: %.3f of it to %.3f left (%.3f), %d other genes' weights moved; a pick"
 		+ " among the organ's varieties, the gift's, takes it %d times in %d (%.0f by its"
@@ -1374,18 +1393,19 @@ func _crowded_commons() -> void:
 ## its class's against its sibling's, from that sibling alone, every other key's drift
 ## weight what it was. And forgotten, every weight is back.
 func _out_of_pool() -> void:
+	var shipped := [_weights_now(), _drift_weights_now()]
+	var common := _plain_common()
+	if common == &"":
+		_check("a variant the water never makes: no common organ whose own key is in the"
+			+ " water's pool to pose one on", false)
+		return
 	var before := _weights_now()
 	var drifts_before := _drift_weights_now()
 	var share_before := _commons_share()
-	var common := &""
-	for key: StringName in _drifters_pool():
-		if Catalogue.organ_rarity(Catalogue.organ_of(key)) == Rarity.commonest() \
-				and Catalogue.keys_of_organ(Catalogue.organ_of(key)).size() == 1:
-			common = key
-			break
 	var organ: Gene = (Catalogue.gene(common).get_script() as GDScript).new()
-	organ.variants = organ.variants + [{"variant": &"probeaside", "order": 993,
+	organ.variants = [{"variant": &"probeaside", "order": 993,
 		"look": {"accent": Kinds.MARK_RING}, "water": {"drifter": false}}]
+	Catalogue.forget(common)
 	Catalogue.register(organ)
 	var during := _weights_now()
 	var drifts := _drift_weights_now()
@@ -1403,7 +1423,7 @@ func _out_of_pool() -> void:
 		Catalogue.drifters().has(&"probeaside"), _commons_share(),
 		Catalogue.rarity_of(&"probeaside"), Catalogue.floor_of(&"probeaside")]
 	Catalogue.forget(Catalogue.organ_of(common))
-	var after := [_weights_now() == before, _drift_weights_now() == drifts_before]
+	var after := [_weights_now() == shipped[0], _drift_weights_now() == shipped[1]]
 	_check(("and a variant of %s the water never makes, one entry in its file with"
 		+ " `\"drifter\": false`, takes nothing of its organ's place in the water -- it"
 		+ " weighs %.2f there, in no pool (%s), and %d other keys' weights moved, the commons"

@@ -198,7 +198,7 @@ func _init() -> void:
 	family = &"defending"                    # row 2 (phase 6); colour comes from here
 	look = {"shape": &"plates", "count": 3}  # a kind and its parameters (phase 6)
 	provides = {&"armor": [1.0, 1.14, 1.30, 1.52]}     # stat -> by tier, [0] = absent
-	water = {"weight": 2, "drifter": true}   # §9
+	water = {"rarity": &"uncommon", "drifter": true}   # §9; gene-rarity.md
 	tags = []
 	# TRANSLATORS notes live with the words, as they do today.
 	word = "armor"                           # the chip on the body and tile
@@ -215,7 +215,7 @@ A gene with variants or places lists them:
 		# phase 3 of dna-slots.md would add, as data:
 		# {"variant": &"paralysing", "dose": &"paralysis",
 		#  "forms": {&"inside": &"paraneux", &"outside": &"paracyst"},
-		#  "look": {"accent": &"diamond"}, "water": {"weight": 1}, "word": ...},
+		#  "look": {"accent": &"diamond"}, "water": {"rarity": &"rare"}, "word": ...},
 	]
 ```
 
@@ -635,7 +635,7 @@ Each organ, or variant, carries its own entry in the water:
 
 | Field | Was | Where |
 |---|---|---|
-| `water.weight` | `GENE_WEIGHTS` | `food.gd` |
+| `water.rarity` (phase 7; `water.weight` until 7-2) | `GENE_WEIGHTS` | `food.gd` |
 | `water.drifter` | `DRIFTER_GENES` | `food.gd` |
 | `tags: sense` | `SENSE_GENES` | `food.gd` |
 | `tags: gift` | `FIRST_SENSES` | `normal_mode.gd` and `referee.gd` |
@@ -2764,9 +2764,31 @@ among its siblings there too.
    rest on their way back; and the rare ones spreading as the hunters' families take them
    up, from 3.5 carriers each at five minutes to 16.1 at thirty.
 
+**After the review** (one focused read, nothing blocking; the branch rebased on the word
+on screen, `6b1323d`, whose gene probe brought one check more, so 83):
+
+- **Two loops that could not end** -- a peer's draw and a drifter's living draw, each
+  filling a body until it is full or the pool is empty -- now stop when the draw comes
+  back empty. `_draw_gene` returns nothing when every variety left weighs 0, which no
+  catalogue the gene probe passes can reach. But a loop that would write an empty key
+  forever is not one to leave to a probe.
+- **The drop's CI step**: its comment gives 7-2's time, and its timeout is 900 s from 600,
+  so that the gene pass's genes have room. The README's line says so.
+- **§4.2's template and §9's table** name `water.rarity`, not `weight`, which the gene
+  probe now fails.
+- **The rare kind and the variant out of the pool pose their own plain organ**: the
+  first common organ of the pool whose own key is its variety, filed again with its
+  variants set aside. Each measures against that organ alone, and its end against the
+  shipped weights. Before, the first found no organ, and failed with a script error, as
+  soon as every common organ had a variant. The second's arithmetic was wrong for one
+  that had.
+
 **Deferred:**
 
-- **The word for a class on screen**: its own pull request.
+- **A weighted pick, four times over** (`rulebook`'s, the drifters' draw, drift's, the
+  gift's pick), where CLAUDE.md asks for one generic mechanic. A shared one in
+  `game/mechanics/` changes no draw if it takes the same one roll; worth doing with the
+  first habitat, which acts in two of them (§6: the water's and drift's weights).
 - **A variant tagged `not_on_drifters` on its own** (none is: the toxin's tag is its
   organ's, so all its strains are out together). It takes its share in the water's
   pool, so the drifters' draw carries its organ less; and if the organ is common, the
