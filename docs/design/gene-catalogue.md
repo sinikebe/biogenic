@@ -1757,7 +1757,9 @@ numbers, each seen in a scratch copy and none changed here.
 - **11. The colour floor asks every variant for a hue of its own**
   (`gene_probe.gd:137`), where `gene-looks.md` §3 keeps its organ's colour and gives it
   an accent; and a mechanic's marks stay its first provider's hue (`cilia.gd:605`,
-  `612`).
+  `612`). **Answered in phase 6** (`gene-looks.md` §13): the probe asks a variant for
+  an accent and fails a hue, and a mechanic's marks are its providers' family colour,
+  which check 10 holds to one family.
 - **12. A person's genome is written before its order** (`food.gd:4880-4881`,
   `4433-4434`), so what it buys is read under the order before. Only `stat_dart_stun`
   reads the order there, and nothing reads that for a person.
