@@ -2147,6 +2147,14 @@ class Rogue extends Node:
 		raw.append_array(frame)
 		send_raw(raw, reliable)
 
+	## The refusal it was sent, its frame without the RAW byte, or empty.
+	func refusal() -> PackedByteArray:
+		for packet: PackedByteArray in got:
+			if packet.size() >= 1 + Wire.REFUSE_SIZE and packet[0] == NetSession.RAW \
+					and packet[1] == Wire.KIND_REFUSE:
+				return packet.slice(1)
+		return PackedByteArray()
+
 	## The reason in the refusal it was sent, or -1.
 	func refused_for() -> int:
 		for packet: PackedByteArray in got:
@@ -11816,7 +11824,65 @@ func _invites_strangers() -> void:
 			and int(host.gate_counts["proofs"]) == proofs_before + 1,
 		"invites S6: a caller that proves bob's invite and is welcomed, then sends a second"
 		+ " PROOF, is cut with REFUSE_BROKEN and barred")
-	await _limits_close([host, quiet, mute, old, old_again, old_guest, twice])
+	# S8d (gene-catalogue.md §11.3): before a PROOF, a refusal on the internet listener
+	# says which game is older and nothing else of the server's build -- its rules all
+	# zeros, and for a content version 0 where the server is the older, CONTENT_NEWER
+	# where it is the newer, and the caller's own on a tie -- while a caller on the LAN
+	# listener is told the server's whole tail, as before. Three strangers on other
+	# rules, at contents either side of the server's 6 and on it, each from an address
+	# of its own so that no bar is another's; and a real guest on the tie, by invite,
+	# reads the sentence it always did.
+	host.content_override = 6
+	var other_rules := _other_tail(0).slice(0, Wire.RULES_SIZE)
+	var said: Array = []
+	var says: Array = []
+	for theirs: int in [7, 5, 6]:
+		var stranger := _invites_stranger("InvStrangerSays%d" % theirs,
+			"127.0.0.%d" % (9 + said.size()), 47280 + said.size())
+		said.append(stranger)
+		await _limits_until(func() -> bool: return stranger.connected())
+		stranger.send(Wire.hello(Wire.PROTOCOL, Wire.tail(other_rules, theirs)))
+		await _limits_until(func() -> bool: return not stranger.refusal().is_empty())
+		var told := stranger.refusal()
+		says.append([Wire.refuse_reason(told) if not told.is_empty() else -1,
+			Wire.rules_of(told).hex_encode(), Wire.content_of(told)])
+	var near := Rogue.new()
+	near.name = "InvLanSays"
+	add_child(near)
+	near.call_host()
+	await _limits_until(func() -> bool: return near.connected())
+	near.send(Wire.hello(Wire.PROTOCOL, Wire.tail(other_rules, 7)))
+	await _limits_until(func() -> bool: return not near.refusal().is_empty())
+	var lan_told := near.refusal()
+	if net_book.has("127.0.0.1"):
+		(net_book["127.0.0.1"] as Dictionary)["barred_until"] = _now()
+	var tied: Node = await _session("InvRulesGuestTie")
+	tied.content_override = 6
+	Catalogue.register(_faster_tail())
+	tied.call_invite(bob)
+	Catalogue.forget(Catalogue.organ_of(&"probeswift"))
+	await _limits_until(func() -> bool: return int(tied.link) != NetSession.Link.REACHING,
+		NetSession.INVITE_REACH_TIMEOUT + NetSession.RESOLVE_TIMEOUT + 2.0)
+	host.content_override = -1
+	if net_book.has("127.0.0.1"):
+		(net_book["127.0.0.1"] as Dictionary)["barred_until"] = _now()
+	var zeros := Wire.tail(PackedByteArray(), 0).slice(0, Wire.RULES_SIZE).hex_encode()
+	var versions := Wire.REFUSE_PROTOCOL
+	_says(says == [[versions, zeros, 0], [versions, zeros, NetSession.CONTENT_NEWER],
+			[versions, zeros, 6]] and Wire.refuse_reason(lan_told) == versions
+			and Wire.rules_of(lan_told) == (host.get("_rules") as PackedByteArray)
+			and Wire.content_of(lan_told) == 6
+			and int(tied.link) == NetSession.Link.REFUSED
+			and str(tied.trouble_key) == "server_older",
+		"invites S8d: before a PROOF, a refusal on the internet listener says which game is"
+		+ " older and nothing else -- strangers on other rules at contents 7, 5 and 6, the"
+		+ " server on 6, are refused with rules of zeros and content 0, %d and 6 (%s) --"
+		% [NetSession.CONTENT_NEWER, str(says.map(func(one: Array) -> int: return one[2]))]
+		+ " while a LAN caller is told the server's own rules and content (%d); and a guest"
+		% Wire.content_of(lan_told) + " on the tie, by invite, reads '%s: %s'"
+		% [tied.trouble, tied.because])
+	await _limits_close([host, quiet, mute, old, old_again, old_guest, twice, near, tied]
+		+ said)
 
 
 ## **S8c: the guest's half of the rules check, by invite** (gene-catalogue.md §11.3):

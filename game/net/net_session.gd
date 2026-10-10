@@ -301,6 +301,10 @@ const TRACK_GAP := 2.0
 ## second on a screen nobody is playing on, and buys the one message a player
 ## cannot work out for themselves.
 const REFUSE_LINGER := 1.0
+## **The content version a stranger's refusal says when this game is the newer**
+## ([method _refuse_tail]): the most a tail's u32 holds, which every caller's own is
+## below, so it reads its game as the older and is told to take the update.
+const CONTENT_NEWER := 0xFFFFFFFF
 ## **ENet may not throttle a single state frame or snapshot away: deceleration
 ## 0**, on every peer, from the moment the transport connects (issue #61).
 ##
@@ -1914,6 +1918,8 @@ func _on_peer_connected(id: int, via: int = VIA_LAN) -> void:
 	_peers[id] = {
 		"id": id,
 		"protocol": 0,
+		# Its content version, as its HELLO's tail says it: -1 for none yet.
+		"content": -1,
 		"greeted": false,
 		"since": _now(),
 		"heard": _now(),
@@ -2095,6 +2101,7 @@ func _take_hello(id: int, frame: PackedByteArray) -> void:
 	peer["protocol"] = theirs
 	var their_rules := Wire.rules_of(frame)
 	var their_content := Wire.content_of(frame)
+	peer["content"] = their_content
 	if theirs != _speaks() or their_rules != _rules:
 		# **The refusal that matters.** Updates are opt-in (multiplayer.md
 		# §0.1), so the other device may be months behind and may stay there
@@ -2367,7 +2374,7 @@ func _skew_detail(theirs: int, rules: PackedByteArray, content: int) -> String:
 func _refuse(id: int, reason: int, detail: String = "") -> void:
 	var peer: Dictionary = _peers.get(id, {})
 	var from := str(peer.get("address", ""))
-	_to(id, Wire.refuse(_speaks(), reason, _tail()))
+	_to(id, Wire.refuse(_speaks(), reason, _refuse_tail(peer)))
 	_peers.erase(id)
 	_hanging_up[id] = _now() + REFUSE_LINGER
 	var key := _note_key(peer, from)
@@ -2375,6 +2382,29 @@ func _refuse(id: int, reason: int, detail: String = "") -> void:
 		key += " %d" % reason
 	_note("hung up", key, "[net] hung up on %d (%s): %s%s"
 		% [id, from, Wire.reason_says(reason), detail])
+
+
+## **The tail a refusal to [param peer] carries**: this end's own -- but to a caller on
+## the internet listener that has proved no invite, one that says which game is older
+## and nothing else (gene-catalogue.md §11.3). A stranger at the door learns no more of
+## this server's build than that: the rules are all zeros, and the content version is 0
+## where this game is the older of the two, [constant CONTENT_NEWER] where it is the
+## newer, and the caller's own on a tie -- all a guest's sentence reads, so a real
+## guest's is worded as it always was ([method _mine_is_older]). Older is by protocol,
+## then by content, as the guest decides it; 0 where the caller has said nothing to
+## compare. A LAN caller, and a friend who proved an invite, get this end's whole tail.
+func _refuse_tail(peer: Dictionary) -> PackedByteArray:
+	if int(peer.get("via", VIA_LAN)) != VIA_NET or not str(peer.get("key_id", "")).is_empty():
+		return _tail()
+	var theirs := int(peer.get("protocol", 0))
+	var content := int(peer.get("content", -1))
+	var says := 0
+	if theirs > 0 and theirs != _speaks():
+		says = 0 if _speaks() < theirs else CONTENT_NEWER
+	elif content >= 0:
+		says = 0 if _content() < content else (CONTENT_NEWER if _content() > content
+			else content)
+	return Wire.tail(PackedByteArray(), says)
 
 
 ## **The log limiter's key for [param peer]** (A.6): the address it calls from

@@ -275,7 +275,10 @@ const HELLO_SIZE := 3
 ## the rules the sender judges a guest and decides a contact by, as
 ## `game/net/rules.gd` fingerprints them ([constant RULES_SIZE] bytes), then its
 ## content version, a u32 (BuildInfo's), which says which of two builds is older.
-## A build before 8 sends none, and a reader of 8 finds none in its frames.
+## A build before 8 sends none, and a reader of 8 finds none in its frames. **A
+## refusal to a stranger** -- a caller on the internet listener that has proved no
+## invite -- carries zeros for the rules and a content version that says only which
+## game is older (net_session.gd's `_refuse_tail`).
 const RULES_SIZE := 32
 const TAIL_SIZE := RULES_SIZE + 4
 ## `kind | protocol | host id`, then the tail. The id is four bytes because peer ids
