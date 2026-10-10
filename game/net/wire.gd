@@ -405,7 +405,8 @@ const POND_HEADER := 10
 ## Stacks per step of a POND load byte.
 const POND_LOAD_SCALE := 4.0
 ## How many loads the header carries: doses.gd's KINDS, written out because this
-## file loads nothing but the body plan, and the probe holds the two equal.
+## file loads nothing of the game but the body plan and a gene's shape, and the probe
+## holds the two equal.
 const POND_LOADS := 3
 ## One body: `id(u32) | meals(u8) | flags(u8) | x(f32) | y(f32) | heading(u8)
 ## | radius(u16, /64) | wound(u8, /255) | speed(u8, x2 u/s)`.
@@ -428,9 +429,9 @@ const POND_BODY := 19
 const POND_PERSON := POND_BODY + 12
 ## **The send set: the sixty water bodies nearest the guest, and every one
 ## hunting it wherever it is** (ocean.md §10.4) -- `food.gd`'s SEND_MAX, written
-## out because this file loads nothing but the body plan. 58 lie within 1,940
-## units on average at
-## the drop's density, more in a thick patch.
+## out because this file loads nothing of the game but the body plan and a gene's
+## shape. 58 lie within 1,940 units on average at the drop's density, more in a
+## thick patch.
 const SEND_MAX := 60
 ## How many bodies one snapshot may carry: the send set and the person.
 const POND_BODIES_MAX := SEND_MAX + 1
@@ -462,10 +463,10 @@ const POND_SPEED_STEP := 2.0
 ## **One body of a snapshot, as an Array indexed by these.** The same order as
 ## `food.gd`'s `Entry` enum, so a snapshot goes from `pond_entries()` to these
 ## bytes and from these bytes to `apply_pond()` with no copy in between. This
-## file loads nothing but the body plan, so the order is written out and the probe
-## checks the two agree. `VELOCITY` and `TURNING` read zero for a water cell. An entry may carry
-## more after `TURNING` -- the host's own slot for the body -- and none of it is
-## written.
+## file loads nothing of the game but the body plan and a gene's shape, so the order
+## is written out and the probe checks the two agree. `VELOCITY` and `TURNING` read
+## zero for a water cell. An entry may carry more after `TURNING` -- the host's own
+## slot for the body -- and none of it is written.
 enum Entry { ID, MEALS, FLAGS, AT, HEADING, RADIUS, WOUND, SPEED,
 	VELOCITY, TURNING }
 
@@ -495,14 +496,17 @@ const BodyPlan := preload("res://game/genes/body_plan.gd")
 static var GENES_MAX: int = BodyPlan.SLOTS + 1
 static var ORDER_MAX: int = BodyPlan.SLOT_MAX
 const NAME_MAX := 16
-## **The highest tier that crosses**: genome.gd's TIER_MAX, written out because
-## this file loads nothing but the body plan, and the probe holds the two equal.
-const TIER_TOP := 3
+## **The shape of a gene** (game/genes/gene.gd), which loads nothing: its most copies.
+const Gene := preload("res://game/genes/gene.gd")
+## **The highest tier that crosses**: a gene's most copies, gene.gd's TIER_MAX --
+## which genome.gd's is -- read from the one file that holds it, so the wire loads
+## nothing of the game but the body plan and a gene's shape, and copies nothing.
+const TIER_TOP := Gene.TIER_MAX
 
 # --- A list of rules, by line (protocol 6, docs/design/automation.md §10.3) ----
 ## **The most rules a list holds**: `drop.gd`'s MOST_RULES, eight, written out
-## because this file loads nothing but the body plan, and the probe holds the two
-## equal. A SISTER carrying more is refused whole.
+## because this file loads nothing of the game but the body plan and a gene's shape,
+## and the probe holds the two equal. A SISTER carrying more is refused whole.
 const MOST_RULES := 8
 ## **The longest line one rule may be**, in bytes. The longest line today's
 ## vocabulary can write is under ninety -- `net_probe` measures it -- so a later

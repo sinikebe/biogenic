@@ -31,6 +31,13 @@ extends RefCounted
 
 # --- The words fields are written in ------------------------------------------------
 
+## **The most copies of a gene a body carries**: three tiers, and tier 0 for none.
+## Every table an organ [member provides] has an entry for each, and `genome.gd`'s
+## TIER_MAX is this one -- here, in the file of a gene's shape, which loads nothing,
+## so that the wire reads it too (`wire.gd`'s TIER_TOP) and nothing copies it. The
+## host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL.
+const TIER_MAX := 3
+
 ## **The two places** (docs/design/dna-slots.md §2): the slots round the body,
 ## and the one inside it. `genome.gd`'s OUTSIDE_PLACE and INSIDE_PLACE are
 ## these.
@@ -131,7 +138,7 @@ var order := -1
 
 ## **The stats it provides** (§5): stat to its value at each tier, index 0 being
 ## the stat's value with no provider -- `stats.gd`'s row -- and one entry for each
-## copy up to `genome.gd`'s TIER_MAX. Every body's stat is read through
+## copy up to [constant TIER_MAX]. Every body's stat is read through
 ## `stats.gd`, which knows no gene; the fingerprints that list every table
 ## (`drop_save.gd`'s rules, `tools/net_probe.gd`'s RULES) read them from here.
 var provides := {}
