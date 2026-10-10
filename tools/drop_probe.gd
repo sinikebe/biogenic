@@ -94,6 +94,16 @@ extends Node
 ## data** (docs/design/gene-rarity.md §11.3): the floor by class -- a rare variety kept
 ## at one carrier, the gene short longest first, one drifter in four, one peer a count --
 ## check 6 and lineage 4 by class, and the floor's queue and budget kept with a drop.
+## **And phase 7-2**, the draws by rarity (§11.3 items 1 to 3; gene-catalogue.md §15.8),
+## the section `rarity`: 1, 100,000 drifters drawn from a hundred genes land at each
+## class's share of the water's weights, the commons at their third, a variant at its
+## share of its organ, one the water never makes never, and no peer draws two varieties
+## of one organ; 2, 50,000 drifts bring each class at its share of drift's weights over
+## what the DNA lacks, never a variety it carries, the mouth or a retired gene, and the
+## variant the water never makes at its share; 3, five minutes of a fully sighted
+## player's drop of the mixed hundred keep check 6's floors and the floor's budget, the
+## commons unflattened. Check 6 counts a form as its variety, and holds its rare clause
+## once the floor has caught up with the first fill, within the first minute.
 ##
 ## **Every check here fails with its fix taken out**, and was shown to by
 ## mutation when it was written: a grid that forgets the edge buckets stand for
@@ -161,7 +171,11 @@ extends Node
 ## queue that serves the short in the pool's order alone, a budget always open, the
 ## last short gene first again, every peer-borne variety due at once, the floor at two
 ## for every class, a drifter that may take the toxin, and a drop kept without its
-## floor's queue and budget.
+## floor's queue and budget. And 7-2's: the water's draw even, and by each key's class
+## unshared; drift even again, and by the water's weights; a peer's draw that leaves an
+## organ's other varieties in its pool; check 6 counting keys, not varieties; a floor of
+## one drifter in forty, which never catches up with the fill; and no budget with three
+## carriers kept of a rare gene, which flattens the draw.
 ##
 ## Headless and deterministic: one seed, set first. Prints one line per check
 ## and `ALL PASS` only if every one held; CI asserts on that marker rather than
@@ -264,10 +278,22 @@ class WatchedDrop extends "res://game/normal/food.gd":
 	## **The floor by class** (docs/design/gene-rarity.md §3.3, §11.3): the varieties
 	## a class keeps at one carrier found short three counts running, each variety's
 	## counts running short so far, and the drifters made -- against which the floor's
-	## budget is held.
+	## budget is held. **And the count that first found nothing short** -- the floor
+	## caught up with the drop's first fill, which draws every body at once and before
+	## any count (gene-catalogue.md §15.8) -- from which a rare variety's runs are held;
+	## -1 before it.
 	var rare_runs := 0
 	var _short_runs := {}
 	var drifters_made := 0
+	var settled_at := -1
+	## **What the drifters were made of** (gene-rarity.md §5, §11.3): of every drifter the
+	## drop made, the class of the variety it carries -- its own (`rarity_of`), and its
+	## organ's (`organ_rarity`), which the commons' third goes by -- the draw's and the
+	## floor's apart.
+	var drawn_kinds := {}
+	var drawn_organs := {}
+	var floor_kinds := {}
+	var floor_organs := {}
 	## The slot the last body came in by: a sister, which nothing returns.
 	var last_spawned := -1
 	# --- Pack 2 (docs/design/lineage.md §11.3): every division judged as it
@@ -555,6 +581,22 @@ class WatchedDrop extends "res://game/normal/food.gd":
 				made_gape = maxf(made_gape, _gape(b))
 		return index
 
+	## **Every drifter the drop makes, by class** (gene-rarity.md §11.3): the floor's when
+	## the floor gave its gene, the draw's otherwise. Draws nothing.
+	func _seed_drifter(b: Body) -> void:
+		var given := int(stats.get(&"gene_floor", 0))
+		super._seed_drifter(b)
+		if _drop == null or b.genome.is_empty():
+			return
+		var gene := Genome.variety(StringName(b.genome.keys()[0]))
+		var by_floor := int(stats.get(&"gene_floor", 0)) > given
+		var kinds: Dictionary = floor_kinds if by_floor else drawn_kinds
+		var organs: Dictionary = floor_organs if by_floor else drawn_organs
+		var kind := Catalogue.rarity_of(gene)
+		kinds[kind] = int(kinds.get(kind, 0)) + 1
+		var organ := Catalogue.organ_rarity(Catalogue.organ_of(gene))
+		organs[organ] = int(organs.get(organ, 0)) + 1
+
 	func _drop_lose(index: int, cause: int) -> void:
 		var b: Body = _cells[index]
 		if b.seeded and not b.inert:
@@ -663,23 +705,28 @@ class WatchedDrop extends "res://game/normal/food.gd":
 			fled += 1
 
 	## **Every count of the floor, judged by class** (check 6; gene-rarity.md §11.3): a
-	## variety its class keeps at one -- a rare one -- never short three counts running;
-	## every other carried at every count and back at its class's count by the next.
+	## variety its class keeps at one -- a rare one -- never short three counts running,
+	## once the floor has caught up with the first fill; every other carried at every
+	## count and back at its class's count by the next. **Carriers by variety**, as the
+	## floor counts them: a venom and a poison are two carriers of one toxin.
 	func _count_genes() -> void:
 		super._count_genes()
 		counts += 1
+		if settled_at < 0 and _gene_floor.short.is_empty():
+			settled_at = counts
 		var carriers := {}
 		for b in _cells:
 			if b.seeded and not b.inert:
 				for gene: StringName in b.genome:
-					carriers[gene] = int(carriers.get(gene, 0)) + 1
+					var kind := Genome.variety(gene)
+					carriers[kind] = int(carriers.get(kind, 0)) + 1
 		for gene: StringName in Catalogue.drifters():
 			var n := int(carriers.get(gene, 0))
 			var keeps := Catalogue.floor_of(gene)
 			if keeps == 1:
 				var run := int(_short_runs.get(gene, 0)) + 1 if n < keeps else 0
 				_short_runs[gene] = run
-				if run >= 3:
+				if run >= 3 and settled_at > 0:
 					rare_runs += 1
 				continue
 			if n == 0:
@@ -715,6 +762,14 @@ func _ready() -> void:
 	if OS.get_cmdline_user_args().has("--dna-only"):
 		await _dna_slots()
 		print("[drop-probe] NOTE --dna-only: %d failed" % _failed)
+		get_tree().quit(0 if _failed == 0 else 1)
+		return
+	# `--rarity-only` is for working on the draws by rarity (docs/design/gene-rarity.md
+	# §11.3, items 1 to 3): their own section, and nothing else. CI never passes it, and
+	# it never prints ALL PASS.
+	if OS.get_cmdline_user_args().has("--rarity-only"):
+		_rarity_draws()
+		print("[drop-probe] NOTE --rarity-only: %d failed" % _failed)
 		get_tree().quit(0 if _failed == 0 else 1)
 		return
 	# `--cells-only` is for working on your cells (docs/design/cells.md §6.3): the
@@ -760,6 +815,7 @@ func _ready() -> void:
 	await _cells()
 	await _sister_lineage()
 	await _dna_slots()
+	_rarity_draws()
 	print("[drop-probe] ALL PASS" if _failed == 0
 		else "[drop-probe] FAILED %d" % _failed)
 	get_tree().quit(0 if _failed == 0 else 1)
@@ -1881,17 +1937,27 @@ func _containment() -> void:
 
 # --- 5, 6 and 11: five minutes of a drop ----------------------------------------------------
 
+## **The floor catches up with a drop's first fill within its first minute**: thirty
+## counts (docs/design/gene-rarity.md §3.3; gene-catalogue.md §15.8). The first fill
+## draws every body at once, before any count, so a catalogue of many rare varieties
+## starts with some on no body at all, and the floor gives them back at its budget, one
+## drifter in GENE_FLOOR_GAP; until a count first finds nothing short, the floor is past
+## its budget, and a rare variety's runs are held only from then on.
+const SETTLED_WITHIN := 30
+
 ## **Five minutes of a drop made for a fully sighted player** (§14.3), with a
 ## still ghost player in it, watched from inside:
 ##
 ## - 5, growth: no body over DIVIDE_RADIUS, and none *made* with a mouth wider
 ##   than ARRIVAL_GAPE_MAX -- a grown one may have it (row 5);
 ## - 6, the floors (docs/design/gene-rarity.md §11.3): every common and uncommon
-##   variety carried at every count, and one found short back at its class's count
-##   by the next; no rare variety short three counts running; the floor's drifters at
-##   most one in GENE_FLOOR_GAP of those made, counting from a full budget; a living
-##   drifter within the floor's reach of the still player every second; no drifter
-##   made with a gene tagged `not_on_drifters`;
+##   variety carried at every count -- a form as its variety -- and one found short
+##   back at its class's count by the next; the floor caught up with the first fill,
+##   a count finding nothing short, within the first minute ([constant
+##   SETTLED_WITHIN]), and from then on no rare variety short three counts running;
+##   the floor's drifters at most one in GENE_FLOOR_GAP of those made, counting from a
+##   full budget; a living drifter within the floor's reach of the still player every
+##   second; no drifter made with a gene tagged `not_on_drifters`;
 ## - 11, one body: every body that left the drop living left by one of the four
 ##   causes or by dividing, and nothing else, and every body made or born is
 ##   living or left; **on rules** (behaviour.md §4.5) no body faster than its own
@@ -1947,14 +2013,16 @@ func _five_minutes() -> void:
 		and field.made_gape <= FoodField.ARRIVAL_GAPE_MAX and field.made > 1000)
 	var floor_made := int(field.stats.get(&"gene_floor", 0))
 	_check(("6. the floors: at %d gene counts a common or uncommon variety carried by nobody"
-		+ " %d times and one still short at the count after %d, a rare one short three"
-		+ " counts running %d times; the floor's drifters %d of %d made (at most one in %d);"
-		+ " a living drifter within the floor's reach of the still player at %d of %d"
-		+ " checks; drifters made with a gene no drifter may carry %d, living with venom"
-		+ " %d") % [field.counts, field.lost_genes, field.still_short, field.rare_runs,
+		+ " %d times and one still short at the count after %d; the floor caught up with the"
+		+ " first fill at count %d (by %d), and a rare one was short three counts running %d"
+		+ " times after it; the floor's drifters %d of %d made (at most one in %d); a living"
+		+ " drifter within the floor's reach of the still player at %d of %d checks; drifters"
+		+ " made with a gene no drifter may carry %d, living with venom %d") % [field.counts,
+		field.lost_genes, field.still_short, field.settled_at, SETTLED_WITHIN, field.rare_runs,
 		floor_made, field.drifters_made, Drop.GENE_FLOOR_GAP, floor_checks - floor_missed,
 		floor_checks, field.venom_drifters, venomous],
 		field.counts >= 140 and field.lost_genes == 0 and field.still_short == 0
+		and field.settled_at > 0 and field.settled_at <= SETTLED_WITHIN
 		and field.rare_runs == 0 and field.drifters_made > 1000
 		and Drop.GENE_FLOOR_GAP * floor_made <= field.drifters_made + Drop.GENE_FLOOR_GAP - 1
 		and floor_missed == 0 and floor_checks >= 300 and field.venom_drifters == 0
@@ -2071,6 +2139,7 @@ func _lineage_summary(field: WatchedDrop, named: String, seen: Dictionary) -> Di
 	out["gifted"] = int((field.get("stats") as Dictionary).get(&"born_gifted", 0))
 	out["lineage"] = field.lineage_line()
 	out["rarity"] = field.rarity_line()
+	out["by_class"] = _drifters_by_class(field)
 	return out
 
 
@@ -2271,6 +2340,8 @@ func _lineage() -> void:
 	for run: Dictionary in runs:
 		print("[drop-probe] (%s drop at five minutes) %s" % [run["name"], run["lineage"]])
 		print("[drop-probe] (%s drop at five minutes) %s" % [run["name"], run["rarity"]])
+		print("[drop-probe] (%s drop at five minutes) NOTE %s" % [run["name"],
+			run["by_class"]])
 
 
 ## **The food whatever the hunters number** (check 4): a newborn's drop, a
@@ -2639,13 +2710,20 @@ func _determinism() -> void:
 ## the four free arcs on an empty home arc. Nothing else moved: a genome without
 ## the toxin draws and mutates as `dev`'s did, mutation for mutation, and a draw
 ## differs from `dev`'s only on a body that drew it (checks 1 and 8 there).
+## **Re-recorded at gene-rarity.md phase 7-2** (its §11.2 and §11.3; gene-catalogue.md
+## §15.8), from the check's own output, because the water's draws changed on purpose:
+## every draw of the water is a float draw by `water_weight` now, so a seeded run
+## differs from `dev`'s from the first body the water seeds; `stigma` and `ampulla`
+## weigh an uncommon's 2, not 3; and drift is weighted by `drift_weight`, not even.
+## Nothing else moved: the rules two builds agree on, the floor and the senses' sum
+## are phase 7-1's.
 const THREE_ONE_LINES: Array[String] = [
-	"[census] t 40  living 550 (drifters 353, hunters 197)  flocs 102  | hunters at r40 0, mean r 29.1, hunger 0.47  | could swallow r26/r34/r40 96/30/15  dread 1.49/0.50/0.20  genes 17  | spawned 843  died: swallowed 235 chewed 0 starved 95 (r40 0) poisoned 0  | grazed by the water 25, by drifters 1, dissolved 0, snow kept 3, remains 95  | runs 0 at you 0 misses 0 darts 3 dashes 0  floors: gene 0+0 drifter 0  | sum 694399153",
-	"[lineage] t 40  hunters 197, born 56  generation mean 1.29 max 3  families 175 (largest 2)  dna apart 84  | cruise 67.6 notice 818 mouth 1.42 upkeep 1.26 genes worn 4.38 carried 4.92  tails 180 sighted 197 at r40 0  | divisions 37 (trade 15 drift 22 faithfully 0), daughters 74: tailless 21, given a sense 22  | the spawner's peers 113 (for the floor 113, for venom 0), drifters 175, left to births 0  | worn cyto 1.42 cirr 1.30 flag 1.34 stig 0.24 ocel 0.27 chem 0.31 ampu 0.34 axon 0.05 palp 0.05 myon 0.07 tric 0.07 pell 0.08 vene 0.08 plas 0.05 vacu 0.10 cris 0.10 toxi 0.02  | commonest 16x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 11x cytostome:1,cirrus:1,flagellum:1,chemocyte:1 ; 11x cytostome:1,cirrus:1,flagellum:1,ocellus:1",
-	"[behaviour] t 40  hunters 197: on the founders' rules 197, other lists 0  | founders' rules fired 7297/15415/624/661/4026/35516/1162  | meals of hunters with a nose 81, radar 76, laser 84  | water darts 3, stuns 3, your wakes 0  | now holding a heading 66, resting 91, swimming 105, pushing 5, stunned 1, echoes in flight 114",
-	"[census] t 40  living 552 (drifters 458, hunters 94)  flocs 76  | hunters at r40 0, mean r 29.3, hunger 0.49  | could swallow r26/r34/r40 35/4/2  dread 0.47/0.08/0.04  genes 17  | spawned 695  died: swallowed 101 chewed 0 starved 54 (r40 0) poisoned 0  | grazed by the water 7, by drifters 2, dissolved 0, snow kept 1, remains 54  | runs 0 at you 0 misses 0 darts 2 dashes 0  floors: gene 0+0 drifter 0  | sum 3659374607",
-	"[lineage] t 40  hunters 94, born 21  generation mean 1.22 max 2  families 85 (largest 2)  dna apart 46  | cruise 66.6 notice 768 mouth 1.16 upkeep 1.15 genes worn 4.23 carried 4.64  tails 88 sighted 94 at r40 0  | divisions 12 (trade 7 drift 5 faithfully 0), daughters 24: tailless 8, given a sense 6  | the spawner's peers 34 (for the floor 34, for venom 0), drifters 106, left to births 0  | worn cyto 1.16 cirr 1.07 flag 1.28 stig 0.19 ocel 0.35 chem 0.32 ampu 0.23 axon 0.10 palp 0.05 myon 0.05 tric 0.03 pell 0.04 vene 0.04 plas 0.04 vacu 0.05 cris 0.03 toxi 0.02  | commonest 14x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 11x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 11x cytostome:1,cirrus:1,flagellum:1,chemocyte:1",
-	"[behaviour] t 40  hunters 94: on the founders' rules 94, other lists 0  | founders' rules fired 3364/7304/359/313/2016/19879/330  | meals of hunters with a nose 30, radar 23, laser 39  | water darts 2, stuns 2, your wakes 0  | now holding a heading 32, resting 39, swimming 55, pushing 1, stunned 0, echoes in flight 39",
+	"[census] t 40  living 545 (drifters 352, hunters 193)  flocs 95  | hunters at r40 1, mean r 29.2, hunger 0.51  | could swallow r26/r34/r40 99/27/18  dread 1.37/0.40/0.17  genes 17  | spawned 837  died: swallowed 235 chewed 0 starved 86 (r40 0) poisoned 0  | grazed by the water 25, by drifters 0, dissolved 0, snow kept 4, remains 86  | runs 0 at you 0 misses 0 darts 3 dashes 0  floors: gene 0+0 drifter 0  | sum 1940964098",
+	"[lineage] t 40  hunters 193, born 41  generation mean 1.22 max 3  families 180 (largest 2)  dna apart 89  | cruise 69.5 notice 784 mouth 1.44 upkeep 1.25 genes worn 4.32 carried 4.83  tails 177 sighted 193 at r40 1  | divisions 29 (trade 11 drift 18 faithfully 0), daughters 58: tailless 21, given a sense 11  | the spawner's peers 112 (for the floor 112, for venom 0), drifters 170, left to births 0  | worn cytostome 1.44 cirrus 1.21 flagellum 1.38 stigma 0.21 ocellus 0.28 chemocyte 0.30 ampulla 0.33 axoneme 0.08 palp 0.04 myoneme 0.09 trichocyst 0.05 pellicle 0.09 veneneux 0.04 plastid 0.07 vacuole 0.04 crista 0.12 toxicyst 0.04  | commonest 16x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 8x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 7x cytostome:1,cirrus:1,flagellum:1,chemocyte:1",
+	"[behaviour] t 40  hunters 193: on the founders' rules 193, other lists 0  | founders' rules fired 7658/15495/618/701/3931/35113/1715  | meals of hunters with a nose 65, radar 82, laser 81  | water darts 3, stuns 3, your wakes 0  | now holding a heading 73, resting 73, swimming 118, pushing 5, stunned 1, echoes in flight 106",
+	"[census] t 40  living 549 (drifters 454, hunters 95)  flocs 80  | hunters at r40 0, mean r 30.0, hunger 0.46  | could swallow r26/r34/r40 43/2/2  dread 0.63/0.06/0.02  genes 17  | spawned 709  died: swallowed 117 chewed 0 starved 55 (r40 0) poisoned 0  | grazed by the water 6, by drifters 2, dissolved 0, snow kept 3, remains 55  | runs 0 at you 0 misses 0 darts 6 dashes 0  floors: gene 0+1 drifter 0  | sum 2393542290",
+	"[lineage] t 40  hunters 95, born 21  generation mean 1.23 max 3  families 85 (largest 2)  dna apart 58  | cruise 61.2 notice 765 mouth 1.19 upkeep 1.14 genes worn 4.26 carried 4.88  tails 86 sighted 95 at r40 0  | divisions 12 (trade 7 drift 5 faithfully 0), daughters 24: tailless 10, given a sense 6  | the spawner's peers 32 (for the floor 31, for venom 1), drifters 122, left to births 0  | worn cytostome 1.19 cirrus 1.18 flagellum 1.12 stigma 0.22 ocellus 0.32 chemocyte 0.25 ampulla 0.33 axoneme 0.02 palp 0.04 myoneme 0.03 trichocyst 0.08 pellicle 0.07 veneneux 0.03 plastid 0.03 vacuole 0.07 crista 0.03 toxicyst 0.03  | commonest 16x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 7x cytostome:1,cirrus:1,flagellum:1,chemocyte:1 ; 6x cytostome:1,cirrus:1,flagellum:1,ocellus:1",
+	"[behaviour] t 40  hunters 95: on the founders' rules 95, other lists 0  | founders' rules fired 3803/7001/377/316/2107/20015/285  | meals of hunters with a nose 19, radar 41, laser 43  | water darts 6, stuns 6, your wakes 0  | now holding a heading 38, resting 40, swimming 53, pushing 1, stunned 0, echoes in flight 55",
 ]
 ## What phase 3-2's behaviour line adds after phase 3-1's, for a water whose
 ## rules never changed: one behaviour, every hunter on it, no change made.
@@ -5695,12 +5773,19 @@ const IDENTITY_DNA := {&"cytostome": 2, &"cirrus": 1, &"flagellum": 1, &"chemocy
 ## the four free arcs on an empty home arc. Nothing else moved: a genome without
 ## the toxin draws and mutates as `dev`'s did, mutation for mutation, and a draw
 ## differs from `dev`'s only on a body that drew it (checks 1 and 8 there).
+## **Re-recorded at gene-rarity.md phase 7-2** (its §11.2 and §11.3; gene-catalogue.md
+## §15.8), from the check's own output, because the water's draws changed on purpose:
+## every draw of the water is a float draw by `water_weight` now, so a seeded run
+## differs from `dev`'s from the first body the water seeds; `stigma` and `ampulla`
+## weigh an uncommon's 2, not 3; and drift is weighted by `drift_weight`, not even.
+## Nothing else moved: the rules two builds agree on, the floor and the senses' sum
+## are phase 7-1's.
 const IDENTITY_LINES: Array[String] = [
-	"[census] t 30  living 528 (drifters 435, hunters 93)  flocs 34  | hunters at r40 7, mean r 30.7, hunger 0.50  | could swallow r26/r34/r40 49/11/7  dread 0.74/0.22/0.11  genes 17  | spawned 661  died: swallowed 123 chewed 0 starved 10 (r40 0) poisoned 0  | grazed by the water 9, by drifters 0, dissolved 0, snow kept 3, remains 10  | runs 261 at you 0 misses 122 darts 5 dashes 5  floors: gene 0+0 drifter 0  | sum 2237031724",
-	"[census] t 60  living 531 (drifters 438, hunters 93)  flocs 48  | hunters at r40 36, mean r 32.9, hunger 0.51  | could swallow r26/r34/r40 61/18/16  dread 1.06/0.37/0.16  genes 16  | spawned 827  died: swallowed 262 chewed 0 starved 34 (r40 1) poisoned 0  | grazed by the water 20, by drifters 0, dissolved 0, snow kept 4, remains 34  | runs 517 at you 0 misses 236 darts 6 dashes 17  floors: gene 0+0 drifter 0  | sum 4056899393",
-	"[census] t 30  living 506 (drifters 322, hunters 184)  flocs 49  | hunters at r40 20, mean r 30.6, hunger 0.45  | could swallow r26/r34/r40 112/48/28  dread 2.04/0.84/0.42  genes 17  | spawned 779  died: swallowed 245 chewed 1 starved 27 (r40 0) poisoned 0  | grazed by the water 10, by drifters 0, dissolved 0, snow kept 2, remains 27  | runs 561 at you 0 misses 260 darts 5 dashes 18  floors: gene 0+0 drifter 0  | sum 1045810138",
-	"[census] t 60  living 508 (drifters 324, hunters 184)  flocs 54  | hunters at r40 49, mean r 32.5, hunger 0.47  | could swallow r26/r34/r40 122/56/45  dread 2.22/1.14/0.70  genes 17  | spawned 1078  died: swallowed 501 chewed 5 starved 64 (r40 4) poisoned 0  | grazed by the water 42, by drifters 0, dissolved 0, snow kept 2, remains 64  | runs 1100 at you 0 misses 509 darts 11 dashes 46  floors: gene 0+0 drifter 0  | sum 210996958",
-	"[census] t 30  living 541 (drifters 498, hunters 43)  flocs 39  | hunters at r40 3, mean r 30.4, hunger 0.47  | could swallow r26/r34/r40 22/2/0  dread 0.30/0.04/0.00  genes 16  | spawned 605  died: swallowed 58 chewed 0 starved 6 (r40 0) poisoned 0  | grazed by the water 0, by drifters 0, dissolved 0, snow kept 3, remains 6  | runs 124 at you 0 misses 68 darts 2 dashes 0  floors: gene 0+2 drifter 0  | sum 2616815844",
+	"[census] t 30  living 527 (drifters 434, hunters 93)  flocs 34  | hunters at r40 11, mean r 31.2, hunger 0.46  | could swallow r26/r34/r40 49/13/10  dread 0.83/0.41/0.28  genes 17  | spawned 666  died: swallowed 131 chewed 1 starved 7 (r40 0) poisoned 0  | grazed by the water 4, by drifters 1, dissolved 0, snow kept 2, remains 7  | runs 221 at you 0 misses 81 darts 0 dashes 18  floors: gene 0+0 drifter 0  | sum 3789751589",
+	"[census] t 60  living 530 (drifters 437, hunters 93)  flocs 37  | hunters at r40 34, mean r 34.3, hunger 0.48  | could swallow r26/r34/r40 64/19/17  dread 1.12/0.41/0.25  genes 17  | spawned 841  died: swallowed 287 chewed 1 starved 23 (r40 3) poisoned 0  | grazed by the water 15, by drifters 3, dissolved 0, snow kept 2, remains 23  | runs 498 at you 0 misses 192 darts 4 dashes 50  floors: gene 0+0 drifter 0  | sum 3241488951",
+	"[census] t 30  living 505 (drifters 321, hunters 184)  flocs 43  | hunters at r40 25, mean r 31.0, hunger 0.45  | could swallow r26/r34/r40 110/48/29  dread 1.77/0.67/0.29  genes 17  | spawned 781  died: swallowed 249 chewed 2 starved 25 (r40 0) poisoned 0  | grazed by the water 13, by drifters 0, dissolved 0, snow kept 1, remains 25  | runs 516 at you 0 misses 229 darts 3 dashes 51  floors: gene 0+0 drifter 0  | sum 3602418240",
+	"[census] t 60  living 503 (drifters 321, hunters 182)  flocs 56  | hunters at r40 65, mean r 33.7, hunger 0.45  | could swallow r26/r34/r40 133/58/45  dread 2.31/0.96/0.58  genes 17  | spawned 1102  died: swallowed 532 chewed 3 starved 64 (r40 2) poisoned 0  | grazed by the water 39, by drifters 0, dissolved 0, snow kept 1, remains 64  | runs 1091 at you 0 misses 518 darts 10 dashes 131  floors: gene 0+0 drifter 0  | sum 1849568188",
+	"[census] t 30  living 543 (drifters 498, hunters 45)  flocs 34  | hunters at r40 4, mean r 31.5, hunger 0.49  | could swallow r26/r34/r40 25/2/1  dread 0.27/0.02/0.00  genes 15  | spawned 610  died: swallowed 65 chewed 0 starved 2 (r40 0) poisoned 0  | grazed by the water 0, by drifters 1, dissolved 0, snow kept 3, remains 2  | runs 101 at you 0 misses 36 darts 1 dashes 0  floors: gene 0+0 drifter 0  | sum 344104199",
 ]
 
 
@@ -5720,11 +5805,18 @@ const IDENTITY_LINES: Array[String] = [
 ## the four free arcs on an empty home arc. Nothing else moved: a genome without
 ## the toxin draws and mutates as `dev`'s did, mutation for mutation, and a draw
 ## differs from `dev`'s only on a body that drew it (checks 1 and 8 there).
+## **Re-recorded at gene-rarity.md phase 7-2** (its §11.2 and §11.3; gene-catalogue.md
+## §15.8), from the check's own output, because the water's draws changed on purpose:
+## every draw of the water is a float draw by `water_weight` now, so a seeded run
+## differs from `dev`'s from the first body the water seeds; `stigma` and `ampulla`
+## weigh an uncommon's 2, not 3; and drift is weighted by `drift_weight`, not even.
+## Nothing else moved: the rules two builds agree on, the floor and the senses' sum
+## are phase 7-1's.
 const DEV_LINES: Array[String] = [
-	"[census] t 300  living 547 (drifters 455, hunters 92)  flocs 58  | hunters at r40 0, mean r 31.8, hunger 0.49  | could swallow r26/r34/r40 62/15/7  dread 0.76/0.23/0.09  genes 17  | spawned 1918  died: swallowed 1478 chewed 52 starved 216 (r40 0) poisoned 4  | grazed by the water 154, by drifters 1, dissolved 55, snow kept 18, remains 220  | runs 2893 at you 0 misses 1344 darts 32 dashes 350  floors: gene 0+1 drifter 0  | sum 258203678",
-	"[lineage] t 300  hunters 92, born 73  generation mean 5.48 max 15  families 45 (largest 6)  dna apart 66  | cruise 84.4 notice 1234 mouth 1.29 upkeep 1.80 genes worn 5.62 carried 6.66  tails 76 sighted 92 at r40 0  | divisions 379 (trade 205 drift 174 faithfully 0), daughters 758: tailless 225, given a sense 104  | the spawner's peers 60 (for the floor 59, for venom 1), drifters 1303, left to births 0  | worn cyto 1.29 cirr 1.89 flag 1.71 stig 0.33 ocel 0.77 chem 1.21 ampu 0.80 axon 0.23 palp 0.45 myon 0.24 tric 0.15 pell 0.41 vene 0.03 plas 0.36 vacu 0.28 cris 0.47 toxi 0.05  | commonest 4x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 3x cytostome:1,cirrus:1,flagellum:1,stigma:1 ; 2x cytostome:1,cirrus:1,flagellum:1,ampulla:1",
-	"[census] t 300  living 544 (drifters 352, hunters 192)  flocs 71  | hunters at r40 0, mean r 30.5, hunger 0.46  | could swallow r26/r34/r40 120/43/29  dread 1.95/1.01/0.54  genes 17  | spawned 3316  died: swallowed 3048 chewed 63 starved 386 (r40 0) poisoned 7  | grazed by the water 324, by drifters 3, dissolved 38, snow kept 13, remains 393  | runs 5611 at you 0 misses 2730 darts 51 dashes 597  floors: gene 0+0 drifter 0  | sum 1364254319",
-	"[lineage] t 300  hunters 192, born 114  generation mean 3.53 max 16  families 148 (largest 6)  dna apart 129  | cruise 79.7 notice 1045 mouth 1.56 upkeep 1.57 genes worn 4.99 carried 5.91  tails 161 sighted 192 at r40 0  | divisions 732 (trade 391 drift 341 faithfully 0), daughters 1464: tailless 411, given a sense 240  | the spawner's peers 543 (for the floor 543, for venom 0), drifters 2218, left to births 0  | worn cyto 1.56 cirr 1.33 flag 1.54 stig 0.43 ocel 0.49 chem 0.64 ampu 0.67 axon 0.24 palp 0.20 myon 0.26 tric 0.14 pell 0.17 vene 0.07 plas 0.22 vacu 0.23 cris 0.27 toxi 0.07  | commonest 8x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 6x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 6x cytostome:1,cirrus:1,flagellum:1,chemocyte:1",
+	"[census] t 300  living 547 (drifters 455, hunters 92)  flocs 53  | hunters at r40 1, mean r 31.8, hunger 0.49  | could swallow r26/r34/r40 65/20/9  dread 0.81/0.30/0.11  genes 17  | spawned 1968  died: swallowed 1600 chewed 51 starved 189 (r40 0) poisoned 5  | grazed by the water 137, by drifters 3, dissolved 45, snow kept 14, remains 194  | runs 2758 at you 0 misses 1221 darts 31 dashes 479  floors: gene 0+1 drifter 0  | sum 2795563066",
+	"[lineage] t 300  hunters 92, born 81  generation mean 7.04 max 13  families 33 (largest 14)  dna apart 62  | cruise 89.1 notice 1326 mouth 1.45 upkeep 2.11 genes worn 5.95 carried 6.95  tails 70 sighted 92 at r40 1  | divisions 424 (trade 207 drift 217 faithfully 0), daughters 848: tailless 292, given a sense 134  | the spawner's peers 53 (for the floor 52, for venom 1), drifters 1360, left to births 0  | worn cytostome 1.45 cirrus 1.68 flagellum 1.78 stigma 0.34 ocellus 0.57 chemocyte 1.32 ampulla 1.15 axoneme 0.33 palp 0.51 myoneme 0.46 trichocyst 0.33 pellicle 0.65 veneneux 0.08 plastid 0.52 vacuole 0.88 crista 0.18 toxicyst 0.16  | commonest 2x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 2x cytostome:1,cirrus:1,flagellum:1,stigma:1 ; 1x cytostome:1,chemocyte:2,ampulla:3,axoneme:2,vacuole:1",
+	"[census] t 300  living 546 (drifters 351, hunters 195)  flocs 62  | hunters at r40 1, mean r 30.9, hunger 0.43  | could swallow r26/r34/r40 126/65/44  dread 2.06/1.15/0.73  genes 17  | spawned 3375  died: swallowed 3146 chewed 65 starved 371 (r40 0) poisoned 10  | grazed by the water 325, by drifters 3, dissolved 33, snow kept 12, remains 381  | runs 5348 at you 0 misses 2503 darts 53 dashes 369  floors: gene 0+0 drifter 0  | sum 2813236354",
+	"[lineage] t 300  hunters 195, born 119  generation mean 3.56 max 15  families 153 (largest 6)  dna apart 117  | cruise 82.3 notice 975 mouth 1.70 upkeep 1.62 genes worn 4.99 carried 5.85  tails 170 sighted 195 at r40 1  | divisions 763 (trade 386 drift 377 faithfully 0), daughters 1526: tailless 442, given a sense 264  | the spawner's peers 603 (for the floor 603, for venom 0), drifters 2217, left to births 0  | worn cytostome 1.70 cirrus 1.55 flagellum 1.74 stigma 0.44 ocellus 0.38 chemocyte 0.65 ampulla 0.55 axoneme 0.16 palp 0.18 myoneme 0.10 trichocyst 0.19 pellicle 0.39 veneneux 0.03 plastid 0.18 vacuole 0.28 crista 0.24 toxicyst 0.04  | commonest 8x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 6x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 5x cytostome:1,cirrus:1,flagellum:1,chemocyte:1",
 ]
 
 
@@ -5838,7 +5930,12 @@ const MEMBRANE: Array[String] = ["concentration", "taste_level", "shadow", "shad
 ## they read is not -- its peers draw the toxin as venom or poison, every bite and
 ## swallow doses, and a water cell's default order seats its genes by place (the
 ## lines above say how, and what did not move).
-const DEV_MEMBRANE := "67a6afe687b3b316baf0be513527b7e7f4d21827ea8cd6a71b848b45187a5eca"
+## **Re-recorded at gene-rarity.md phase 7-2** (its §11.2 and §11.3; gene-catalogue.md
+## §15.8), from the check's own output: the senses' arithmetic is the same, and the
+## water they read is not -- every draw of the water is a float draw by `water_weight`
+## now, `stigma` and `ampulla` weigh 2, and drift is weighted (the lines above say what
+## did not move).
+const DEV_MEMBRANE := "322be6f6cab0160d237cc898c97c67b2ebaf05a24e1f72aabe895f1c75aa8fa1"
 
 
 ## **1. With the rules off it is pack 2, the membrane** (behaviour.md §12.3):
@@ -5851,6 +5948,8 @@ const DEV_MEMBRANE := "67a6afe687b3b316baf0be513527b7e7f4d21827ea8cd6a71b848b451
 func _membrane() -> void:
 	var digest := _membrane_digest(false)
 	seed(20260930)
+	if digest != DEV_MEMBRANE:
+		print("[drop-probe] check 1, membrane, this build: %s" % digest)
 	_check(("1. with the rules off it is pack 2, the membrane: forty seconds of a cell"
 		+ " crossing a sighted player's drop with a nose, an eyespot, three rays, a call and"
 		+ " a palp, every sense it is fed each frame -- digest %s, %s") % [digest.left(16),
@@ -6299,8 +6398,13 @@ func _coming_for_you() -> void:
 				from + PI)) < 1e-6
 		field.take_out(k)
 	# A trichocyst in the water, resting, out of your wake's reach, its dart's arc
-	# on each in turn, 200 off.
-	var d_at := p + Vector2(1600.0, 0.0)
+	# on each in turn, 200 off -- toward the drop's middle from you, so that it and
+	# what comes at it are in the water wherever the run starts. A run starts where the
+	# water round it is quietest, at least START_INSET from the rim, so a fixed bearing
+	# could put them past it, and the rim would pull them in.
+	var centre: Vector2 = field.basin().get(&"center")
+	var inward := (centre - p).normalized() if centre.distance_to(p) > 1.0 else Vector2.RIGHT
+	var d_at := p + inward * 1600.0
 	var defender := _pose(field, d_at, 30.0, {&"cytostome": 1, &"trichocyst": 3}, 0.4, 0.6)
 	var db: Object = cells[defender]
 	var arc := float(db.get("heading")) + float(db.get("dart_bearing"))
@@ -6837,10 +6941,17 @@ func _modular() -> void:
 ## the four free arcs on an empty home arc. Nothing else moved: a genome without
 ## the toxin draws and mutates as `dev`'s did, mutation for mutation, and a draw
 ## differs from `dev`'s only on a body that drew it (checks 1 and 8 there).
+## **Re-recorded at gene-rarity.md phase 7-2** (its §11.2 and §11.3; gene-catalogue.md
+## §15.8), from the check's own output, because the water's draws changed on purpose:
+## every draw of the water is a float draw by `water_weight` now, so a seeded run
+## differs from `dev`'s from the first body the water seeds; `stigma` and `ampulla`
+## weigh an uncommon's 2, not 3; and drift is weighted by `drift_weight`, not even.
+## Nothing else moved: the rules two builds agree on, the floor and the senses' sum
+## are phase 7-1's.
 const PACK3_LINES: Array[String] = [
-	"[census] t 300  living 541 (drifters 250, hunters 291)  flocs 220  | hunters at r40 0, mean r 29.1, hunger 0.51  | could swallow r26/r34/r40 186/93/47  dread 3.12/1.39/0.61  genes 16  | spawned 4139  died: swallowed 3046 chewed 10 starved 1137 (r40 0) poisoned 10  | grazed by the water 848, by drifters 5, dissolved 107, snow kept 3, remains 1147  | runs 0 at you 0 misses 0 darts 40 dashes 0  floors: gene 0+0 drifter 0  | sum 772568307",
-	"[lineage] t 300  hunters 291, born 67  generation mean 1.43 max 9  families 278 (largest 2)  dna apart 108  | cruise 75.3 notice 840 mouth 1.85 upkeep 1.47 genes worn 4.33 carried 4.72  tails 269 sighted 291 at r40 0  | divisions 605 (trade 303 drift 302 faithfully 0), daughters 1210: tailless 293, given a sense 308  | the spawner's peers 2157 (for the floor 2157, for venom 0), drifters 1427, left to births 2  | worn cyto 1.85 cirr 1.60 flag 1.61 stig 0.26 ocel 0.31 chem 0.32 ampu 0.39 axon 0.08 palp 0.09 myon 0.10 tric 0.08 pell 0.11 vene 0.00 plas 0.04 vacu 0.07 cris 0.08 toxi 0.01  | commonest 9x cytostome:2,cirrus:1,flagellum:1,ampulla:1 ; 8x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 6x cytostome:1,cirrus:1,flagellum:1,chemocyte:1",
-	"[behaviour] t 300  hunters 291: on the founders' rules 252, other lists 39  | founders' rules fired 88210/149087/6050/9231/33130/336662/10057  | meals of hunters with a nose 1049, radar 1267, laser 1209  | water darts 40, stuns 40, your wakes 0  | now holding a heading 100, resting 125, swimming 166, pushing 5, stunned 1, echoes in flight 200  | behaviours 26, unchanged 86.6 %  | rules changed 605: nudge 303, replace 144, swap 50, copy 64, drop 44",
+	"[census] t 300  living 548 (drifters 250, hunters 298)  flocs 176  | hunters at r40 0, mean r 29.0, hunger 0.51  | could swallow r26/r34/r40 170/87/58  dread 2.80/1.49/0.94  genes 17  | spawned 4220  died: swallowed 3175 chewed 12 starved 1106 (r40 0) poisoned 8  | grazed by the water 855, by drifters 9, dissolved 111, snow kept 7, remains 1114  | runs 0 at you 0 misses 0 darts 51 dashes 0  floors: gene 0+0 drifter 0  | sum 1897911749",
+	"[lineage] t 300  hunters 298, born 71  generation mean 1.47 max 10  families 286 (largest 3)  dna apart 114  | cruise 76.2 notice 812 mouth 1.76 upkeep 1.47 genes worn 4.36 carried 4.69  tails 287 sighted 298 at r40 0  | divisions 629 (trade 327 drift 302 faithfully 0), daughters 1258: tailless 293, given a sense 322  | the spawner's peers 2195 (for the floor 2195, for venom 0), drifters 1470, left to births 2  | worn cytostome 1.76 cirrus 1.71 flagellum 1.66 stigma 0.27 ocellus 0.31 chemocyte 0.36 ampulla 0.33 axoneme 0.09 palp 0.11 myoneme 0.08 trichocyst 0.04 pellicle 0.03 veneneux 0.01 plastid 0.06 vacuole 0.10 crista 0.09 toxicyst 0.05  | commonest 8x cytostome:1,cirrus:1,flagellum:1,chemocyte:1 ; 7x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 7x cytostome:1,cirrus:2,flagellum:1,ampulla:1",
+	"[behaviour] t 300  hunters 298: on the founders' rules 258, other lists 40  | founders' rules fired 91798/151244/6048/8324/35028/335291/12456  | meals of hunters with a nose 1127, radar 1244, laser 1194  | water darts 51, stuns 51, your wakes 0  | now holding a heading 98, resting 136, swimming 162, pushing 7, stunned 1, echoes in flight 180  | behaviours 32, unchanged 86.6 %  | rules changed 629: nudge 313, replace 126, swap 60, copy 62, drop 68",
 ]
 ## **The same five minutes in the game's water** (row 37), pinned as
 ## [constant DEV_LINES] pins pack 2's: [method _five_minutes]' drop, seed 1, as
@@ -6856,10 +6967,17 @@ const PACK3_LINES: Array[String] = [
 ## the four free arcs on an empty home arc. Nothing else moved: a genome without
 ## the toxin draws and mutates as `dev`'s did, mutation for mutation, and a draw
 ## differs from `dev`'s only on a body that drew it (checks 1 and 8 there).
+## **Re-recorded at gene-rarity.md phase 7-2** (its §11.2 and §11.3; gene-catalogue.md
+## §15.8), from the check's own output, because the water's draws changed on purpose:
+## every draw of the water is a float draw by `water_weight` now, so a seeded run
+## differs from `dev`'s from the first body the water seeds; `stigma` and `ampulla`
+## weigh an uncommon's 2, not 3; and drift is weighted by `drift_weight`, not even.
+## Nothing else moved: the rules two builds agree on, the floor and the senses' sum
+## are phase 7-1's.
 const TAIL_LINES: Array[String] = [
-	"[census] t 300  living 540 (drifters 247, hunters 293)  flocs 204  | hunters at r40 1, mean r 28.8, hunger 0.53  | could swallow r26/r34/r40 181/111/58  dread 2.84/1.50/0.69  genes 17  | spawned 4459  died: swallowed 3433 chewed 7 starved 1148 (r40 0) poisoned 8  | grazed by the water 896, by drifters 8, dissolved 81, snow kept 3, remains 1156  | runs 0 at you 0 misses 0 darts 53 dashes 1  floors: gene 0+0 drifter 0  | sum 3086148374",
-	"[lineage] t 300  hunters 293, born 84  generation mean 1.69 max 13  families 273 (largest 5)  dna apart 124  | cruise 78.8 notice 762 mouth 1.92 upkeep 1.53 genes worn 4.37 carried 4.80  tails 269 sighted 293 at r40 1  | divisions 677 (trade 343 drift 334 faithfully 0), daughters 1354: tailless 333, given a sense 356  | the spawner's peers 2269 (for the floor 2269, for venom 0), drifters 1635, left to births 17  | worn cyto 1.92 cirr 1.70 flag 1.72 stig 0.31 ocel 0.27 chem 0.36 ampu 0.30 axon 0.11 palp 0.06 myon 0.10 tric 0.04 pell 0.13 vene 0.03 plas 0.14 vacu 0.13 cris 0.06 toxi 0.01  | commonest 10x cytostome:1,cirrus:1,flagellum:2,ampulla:1 ; 7x cytostome:1,cirrus:1,flagellum:2,chemocyte:1 ; 5x cytostome:1,cirrus:1,flagellum:2,ocellus:1",
-	"[behaviour] t 300  hunters 293: on the founders' rules 239, other lists 54  | founders' rules fired 96916/126891/6481/10204/33993/348139/11388  | meals of hunters with a nose 1211, radar 1380, laser 1294  | water darts 53, stuns 53, your wakes 0  | now holding a heading 102, resting 116, swimming 223, pushing 10, stunned 0, echoes in flight 146  | behaviours 39, unchanged 82.3 %  | rules changed 677: nudge 328, replace 152, swap 77, copy 56, drop 64",
+	"[census] t 300  living 536 (drifters 245, hunters 291)  flocs 192  | hunters at r40 1, mean r 29.5, hunger 0.49  | could swallow r26/r34/r40 189/91/49  dread 3.23/1.65/0.83  genes 17  | spawned 4473  died: swallowed 3457 chewed 3 starved 1137 (r40 0) poisoned 8  | grazed by the water 897, by drifters 11, dissolved 80, snow kept 5, remains 1145  | runs 0 at you 0 misses 0 darts 44 dashes 0  floors: gene 0+0 drifter 0  | sum 3707739755",
+	"[lineage] t 300  hunters 291, born 88  generation mean 1.69 max 10  families 271 (largest 4)  dna apart 113  | cruise 76.7 notice 786 mouth 1.83 upkeep 1.53 genes worn 4.55 carried 4.94  tails 279 sighted 291 at r40 1  | divisions 668 (trade 334 drift 334 faithfully 0), daughters 1336: tailless 234, given a sense 360  | the spawner's peers 2266 (for the floor 2266, for venom 0), drifters 1652, left to births 8  | worn cytostome 1.83 cirrus 1.73 flagellum 1.70 stigma 0.29 ocellus 0.37 chemocyte 0.34 ampulla 0.32 axoneme 0.06 palp 0.06 myoneme 0.09 trichocyst 0.14 pellicle 0.21 veneneux 0.04 plastid 0.10 vacuole 0.17 crista 0.04 toxicyst 0.03  | commonest 10x cytostome:2,cirrus:1,flagellum:1,chemocyte:1 ; 6x cytostome:1,cirrus:1,flagellum:1,stigma:1 ; 6x cytostome:1,cirrus:1,flagellum:2,ocellus:1",
+	"[behaviour] t 300  hunters 291: on the founders' rules 238, other lists 53  | founders' rules fired 95680/127454/5962/10479/34719/348321/11844  | meals of hunters with a nose 1197, radar 1287, laser 1458  | water darts 44, stuns 44, your wakes 0  | now holding a heading 100, resting 132, swimming 207, pushing 5, stunned 1, echoes in flight 150  | behaviours 41, unchanged 81.8 %  | rules changed 668: nudge 313, replace 140, swap 74, copy 66, drop 75",
 ]
 ## **The player's seeded trace** ([method _tail_trace]): forty seconds of a cell
 ## stepped by its own drive, wearing a tail of two copies that nobody holds,
@@ -6872,8 +6990,13 @@ const TAIL_LINES: Array[String] = [
 ## they read is not -- its peers draw the toxin as venom or poison, every bite and
 ## swallow doses, and a water cell's default order seats its genes by place (the
 ## lines above say how, and what did not move).
-const PACK3_TRACE := "78b3447e4eb64a800d818add8e8782cc71ce8f728564b4f8f31f0b5935efcf88"
-const TAIL_TRACE := "d6fed1db6bd5befd550cc032dee852022eef36a1020db70f1d31dc13eb4c24fa"
+## **Re-recorded at gene-rarity.md phase 7-2** (its §11.2 and §11.3; gene-catalogue.md
+## §15.8), from the check's own output: the senses' arithmetic is the same, and the
+## water they read is not -- every draw of the water is a float draw by `water_weight`
+## now, `stigma` and `ampulla` weigh 2, and drift is weighted (the lines above say what
+## did not move).
+const PACK3_TRACE := "5318b6836801fa1ab0e11aa5e2bc45edec4d51394e331cf57fc19296dd83483b"
+const TAIL_TRACE := "e15da59546f5affdad41eef03eb20505aa1c6457abd3e887a405ba26ad220985"
 ## A tail of two copies, the level a tail can be held still at, on a born body.
 const TWO_TAILS := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2}
 const ONE_TAIL := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
@@ -6939,6 +7062,10 @@ func _tail_pack3() -> void:
 			moved += 1
 			print("[drop-probe] tail 1, row 37, line %d, this build: %s" % [k + 1, ours])
 			print("[drop-probe] tail 1, row 37, line %d, pinned:     %s" % [k + 1, pinned])
+	if traces[0] != PACK3_TRACE:
+		print("[drop-probe] tail 1, pack 3, trace, this build: %s" % traces[0])
+	if traces[1] != TAIL_TRACE:
+		print("[drop-probe] tail 1, row 37, trace, this build: %s" % traces[1])
 	var switched: bool = not _tail_on_lines.is_empty() and _tail_on_lines[0] != PACK3_LINES[0] \
 		and traces[1] != PACK3_TRACE
 	_check(("tail 1. pack 3, to the byte, with the switch off: five minutes of a sighted"
@@ -8999,14 +9126,23 @@ const HARM := 0
 ## brought the toxin in. Worked out by running that same function on `dev`'s
 ## own genome.gd; a genome with no toxin must draw exactly this
 ## (dna-slots.md §5.5, §20.3 check 1).
-const DEV_MUTATIONS := "756d76d53e65d8a1d22626185755e24f995be3365c58bab7da9b85c76f15925a"
-const DEV_MUTATIONS_CAME := 236
+## **Re-recorded at gene-rarity.md phase 7-2** (its §11.2; gene-catalogue.md §15.8),
+## from the check's own output: drift is weighted by `drift_weight` now, not even, so
+## this differs from the first drift. A genome with no toxin draws and mutates as it
+## says, mutation for mutation.
+const DEV_MUTATIONS := "b60f6f99a16c0ee03967d6c4607380eb30678e7661fefbae20a6a53d78ab0213"
+const DEV_MUTATIONS_CAME := 226
 ## **What `dev`'s water draws** (d08b0c3), for [method draw_digest]'s 3,000
 ## bodies: the digest of those that drew no toxin, and how many drew it. Worked
 ## out on `dev`'s own food.gd; a draw may differ from it only on a body that drew
 ## the toxin (§9, §20.3 check 8).
-const DEV_DRAWS := "f2be9c30903816fccaa586e644d935ed31eba43485761db60702a914cfa0f4ce"
-const DEV_DRAWS_TOXIC := 793
+## **Re-recorded at gene-rarity.md phase 7-2** (its §11.2; gene-catalogue.md §15.8),
+## from the check's own output: every draw of the water is a float draw by
+## `water_weight` now, and `stigma` and `ampulla` weigh 2, not 3, so a body's draw
+## differs from its first gene. A draw still differs only where it should: a body that
+## draws the toxin is set apart, as before.
+const DEV_DRAWS := "46cce4f831513a10f3380c1a0049f8ed101d176baf0c591d1413a8c4336663ab"
+const DEV_DRAWS_TOXIC := 850
 
 ## **The DNA's slots, phase 1** (docs/design/dna-slots.md §20.3): the forms
 ## follow their places, and every genome that makes passes the referee's slot
@@ -9426,6 +9562,8 @@ func _dna_random() -> void:
 ## mutation ([constant DEV_MUTATIONS]).
 func _dna_mutations() -> void:
 	var ours := mutation_digest(GenomeNode, 4000)
+	if ours[0] != DEV_MUTATIONS or int(ours[1]) != DEV_MUTATIONS_CAME:
+		print("[drop-probe] dna 1, this build: %s, %d" % [ours[0], int(ours[1])])
 	_check(("dna 1. a genome with no toxin draws what dev draws, mutation for mutation: 4,000"
 		+ " daughters and water cells, %d bringing the toxin in (dev %d), digest %s (dev %s)")
 		% [int(ours[1]), DEV_MUTATIONS_CAME, String(ours[0]).left(16), DEV_MUTATIONS.left(16)],
@@ -10029,6 +10167,8 @@ func _dna_water() -> void:
 	# And against dev: a draw differs only on a body that drew the toxin.
 	var ours := draw_digest(today, 3000)
 	today.free()
+	if ours[0] != DEV_DRAWS or int(ours[1]) != DEV_DRAWS_TOXIC:
+		print("[drop-probe] dna 8, this build: %s, %d" % [ours[0], int(ours[1])])
 	_check(("dna 8. the water: of 20,000 drifters, %d of today's water and %d of the drop's"
 		+ " carry a form of the toxin; the floor gives it back through a peer as venom %d"
 		+ " times and as poison %d of 40, the drop short of it after %d, %d over their room;"
@@ -10286,3 +10426,384 @@ func _dna_replay() -> void:
 		and clean_drawn.is_empty() and clean_slot >= 0 and own.has("felt"))
 	(rig[0] as Node).queue_free()
 	await get_tree().process_frame
+
+
+# --- Phase 7-2 of the genes as data: the draws by rarity (docs/design/gene-rarity.md §11.3) ---
+
+## The mixed hundred of gene-rarity.md table 5.1, filed for the section below; a gene's
+## shape, for the organs it files besides; and the ladder.
+const RaritySpecimens := preload("res://tools/rarity_specimens.gd")
+const Gene := preload("res://game/genes/gene.gd")
+const Rarity := preload("res://game/genes/rarity.gd")
+## **What table 5.1 worked out for the mixed hundred** (§5.3): the floor's share of the
+## drifters made in a fully sighted player's drop, an expected value and no measurement,
+## which [method _rarity_crowded] prints its own measure beside.
+const MIXED_FLOOR_SHARE := 0.106
+## **The draw's tolerance** (§11.3 item 1): each class's share of 100,000 draws within
+## 2 % of its share of the weights, and each variety expected 2,000 times or more within
+## 10 %; and drift's (item 2), each class within 5 % over what the DNA lacks.
+const DRAW_CLASS_TOLERANCE := 0.02
+const DRAW_KIND_TOLERANCE := 0.10
+const DRAW_KIND_LEAST := 2000.0
+const DRIFT_CLASS_TOLERANCE := 0.05
+
+## **The draws by rarity** (docs/design/gene-rarity.md §3.1, §3.2, §11.3, items 1 to 3):
+## the water's draw and drift's on a catalogue of a hundred genes, each against the
+## weights the catalogue works out -- the draw within 2 % of each class's share, drift
+## within 5 % -- and five minutes of a fully sighted player's drop on it, the floor's
+## hardest case, under check 6's floors and its budget, the commons not flattened.
+## Leaves the catalogue as it was.
+func _rarity_draws() -> void:
+	var before := Array(Catalogue.keys())
+	var extra := _rarity_extra()
+	var organs := RaritySpecimens.file_mixed(extra[0])
+	for organ: Gene in extra[1]:
+		Catalogue.register(organ)
+		organs.append(organ.organ)
+	_rarity_draw()
+	_rarity_drift()
+	RaritySpecimens.forget(organs)
+	organs = RaritySpecimens.file_mixed()
+	_rarity_crowded()
+	RaritySpecimens.forget(organs)
+	_check(("rarity: the catalogue is as it was once the mixed hundred is forgotten (%d keys)")
+		% Catalogue.keys().size(), Array(Catalogue.keys()) == before)
+	seed(20260930)
+
+
+## **What items 1 and 2 file beside the mixed hundred**: `[entries by organ name, organs]`
+## -- a variant that sets no class beside a new common organ and a new uncommon one, each
+## so sharing its organ evenly; one the water never makes (`"drifter": false`) beside the
+## uncommon; and two uncommon organs more, so that the commons' third binds (the mixed
+## hundred alone holds them at a third to the last digit).
+func _rarity_extra() -> Array:
+	var common: StringName = RaritySpecimens.new_organs(&"common")[0]
+	var uncommon: StringName = RaritySpecimens.new_organs(&"uncommon")[0]
+	var entries := {
+		common: [{"variant": &"probecom", "key": &"probecom", "order": 3900}],
+		uncommon: [{"variant": &"probeunc", "key": &"probeunc", "order": 3901},
+			{"variant": &"probeaway", "key": &"probeaway", "order": 3902,
+				"water": {"drifter": false}}],
+	}
+	var more: Array[Gene] = []
+	for k in 2:
+		var organ := Gene.new()
+		organ.organ = [&"probewidea", &"probewideb"][k]
+		organ.order = 3910 + k
+		organ.water = {"rarity": Rarity.classes()[1], "drifter": true}
+		more.append(organ)
+	return [entries, more]
+
+
+## **1. The draw** (§11.3 item 1), static: the mixed hundred filed with [method
+## _rarity_extra]'s, 100,000 drifters' draws from one seed by `food.gd`'s own
+## `_draw_gene`, over the drifters' pool. Each class's share of the draws within 2 % of
+## its share of `water_weight`, and each variety expected 2,000 times or more within 10
+## %; every variant's share of its organ's draws its share of the organ's weight, for
+## each expected 2,000 times or more; the commons -- every variety of a common organ --
+## at COMMON_SHARE, which the ladder alone leaves them under; the variant the water
+## never makes never drawn. And of 2,000 peers made at r40 (`_draw_living`), none draws
+## two varieties of one organ: a peer wears two only as a born key and a variant of it
+## (gene-catalogue.md §15.6, call 6).
+func _rarity_draw() -> void:
+	var pool := Drop.drifter_genes(Catalogue.drifters())
+	var total := 0.0
+	var by_class := {}
+	var by_organ := {}
+	var commons := 0.0
+	var ladder := [0.0, 0.0]
+	var seen_organs := {}
+	for key: StringName in pool:
+		var weight := Catalogue.water_weight(key)
+		total += weight
+		by_class[Catalogue.rarity_of(key)] = float(by_class.get(Catalogue.rarity_of(key), 0.0)) \
+			+ weight
+		var organ := Catalogue.organ_of(key)
+		by_organ[organ] = float(by_organ.get(organ, 0.0)) + weight
+		var common := Catalogue.organ_rarity(organ) == Rarity.commonest()
+		if common:
+			commons += weight
+		if not seen_organs.has(organ):
+			seen_organs[organ] = true
+			ladder[0 if common else 1] += Rarity.weight(Catalogue.organ_rarity(organ))
+	const DRAWS := 100000
+	seed(7202)
+	var counts := {}
+	for i in DRAWS:
+		var drawn := FoodField._draw_gene(pool)
+		counts[drawn] = int(counts.get(drawn, 0)) + 1
+	var measured := {}
+	var organ_counts := {}
+	var common_draws := 0
+	for key: Variant in counts:
+		var gene := StringName(key)
+		measured[Catalogue.rarity_of(gene)] = int(measured.get(Catalogue.rarity_of(gene), 0)) \
+			+ int(counts[key])
+		organ_counts[Catalogue.organ_of(gene)] = int(organ_counts.get(Catalogue.organ_of(gene),
+			0)) + int(counts[key])
+		if Catalogue.organ_rarity(Catalogue.organ_of(gene)) == Rarity.commonest():
+			common_draws += int(counts[key])
+	var classes := PackedStringArray()
+	var classes_ok := true
+	for name: StringName in Rarity.classes():
+		var share := float(by_class.get(name, 0.0)) / total
+		var got := float(measured.get(name, 0)) / float(DRAWS)
+		var off := absf(got / share - 1.0) if share > 0.0 else (0.0 if got == 0.0 else INF)
+		classes_ok = classes_ok and off <= DRAW_CLASS_TOLERANCE
+		classes.append("%s %.2f %% (%.2f %%)" % [name, 100.0 * got, 100.0 * share])
+	var kinds_checked := 0
+	var worst := 0.0
+	var worst_kind := &""
+	var shares_checked := 0
+	var worst_share := 0.0
+	var worst_variant := &""
+	for key: StringName in pool:
+		var expected := float(DRAWS) * Catalogue.water_weight(key) / total
+		if expected >= DRAW_KIND_LEAST:
+			kinds_checked += 1
+			var off := absf(float(counts.get(key, 0)) / expected - 1.0)
+			if off > worst:
+				worst = off
+				worst_kind = key
+		# A variant's draws are its organ's times its share (§11.3 item 1).
+		var organ := Catalogue.organ_of(key)
+		if Catalogue.of_organ(pool, organ).size() > 1 and expected >= DRAW_KIND_LEAST:
+			shares_checked += 1
+			var share := Catalogue.water_weight(key) / float(by_organ[organ])
+			var off := absf(float(counts.get(key, 0)) / (float(organ_counts.get(organ, 0))
+				* share) - 1.0)
+			if off > worst_share:
+				worst_share = off
+				worst_variant = key
+	var away := [int(counts.get(&"probeaway", 0)), Catalogue.water_weight(&"probeaway"),
+		Catalogue.drifters().has(&"probeaway")]
+	var commons_share := commons / total
+	var ladder_share := float(ladder[0]) / (float(ladder[0]) + float(ladder[1]))
+	var commons_got := float(common_draws) / float(DRAWS)
+	# Peers: no organ drawn twice.
+	var field := FoodField.new()
+	seed(7203)
+	var plan := Drop.peer_plan()
+	var twice_born := 0
+	var twice_drawn := 0
+	var said: Array[String] = []
+	for i in 2000:
+		var peer: Dictionary = field.call(&"_draw_living", CellBody.DIVIDE_RADIUS, 1.0)
+		var of := {}
+		for gene: Variant in peer:
+			var organ := Catalogue.organ_of(StringName(gene))
+			if not of.has(organ):
+				of[organ] = []
+			(of[organ] as Array).append(Catalogue.variety(StringName(gene)))
+		for organ: Variant in of:
+			var varieties: Array = of[organ]
+			var unique := {}
+			for kind: Variant in varieties:
+				unique[kind] = true
+			if unique.size() < 2:
+				continue
+			var born_kinds := 0
+			for kind: Variant in unique:
+				if plan.has(StringName(kind)):
+					born_kinds += 1
+			if unique.size() == 2 and born_kinds == 1 \
+					and not Catalogue.one_variant(StringName(organ)):
+				twice_born += 1
+			else:
+				twice_drawn += 1
+				if said.size() < 3:
+					said.append(str(peer))
+	field.free()
+	_check(("rarity 1. the draw: 100,000 drifters' draws from %d varieties of the mixed hundred"
+		+ " -- %s, against their shares of the weights in brackets -- each class within %.0f"
+		+ " %% (%s); %d varieties expected %d times or more, the worst %s %.1f %% off; %d"
+		+ " variants of an organ with siblings, each its organ's draws times its share, the"
+		+ " worst %s %.1f %% off; the commons, every variety of a common organ, drawn %.2f %%,"
+		+ " their weights %.2f %% -- COMMON_SHARE, where the ladder alone gives them %.2f %%;"
+		+ " a variant the water never makes drawn %d times, weighing %.2f, in its pool %s; and"
+		+ " of 2,000 peers at r40, %d wear two varieties of an organ as a born key and a"
+		+ " variant of it, %d any other way%s") % [pool.size(), ", ".join(classes),
+		100.0 * DRAW_CLASS_TOLERANCE, "within" if classes_ok else "NOT WITHIN", kinds_checked,
+		int(DRAW_KIND_LEAST), worst_kind, 100.0 * worst, shares_checked, worst_variant,
+		100.0 * worst_share, 100.0 * commons_got, 100.0 * commons_share, 100.0 * ladder_share,
+		away[0], away[1], str(away[2]), twice_born, twice_drawn,
+		"" if said.is_empty() else " -- " + "; ".join(said)],
+		classes_ok and kinds_checked >= 10 and worst <= DRAW_KIND_TOLERANCE
+		and shares_checked >= 3 and worst_share <= DRAW_KIND_TOLERANCE
+		and is_equal_approx(commons_share, Rarity.COMMON_SHARE)
+		and ladder_share < Rarity.COMMON_SHARE
+		and absf(commons_got / commons_share - 1.0) <= DRAW_CLASS_TOLERANCE
+		and away == [0, 0.0, false] and twice_drawn == 0 and twice_born > 0)
+
+
+## **2. Drift** (§11.3 item 2), static, on the same catalogue: 50,000 drifts of one water
+## cell's DNA -- §5.2's line, the mouth, the cirrus, the tail, the nose, the eye and the
+## plates, with the toxin as venom -- by `genome.gd`'s own `_mutate_drift`. None brings a
+## variety the DNA carries in any form, the toxin's poison included, the mouth or a
+## retired gene; each class's share of what came lands within 5 % of its share of
+## `drift_weight` over the varieties the DNA lacks; and the variant the water never makes
+## comes, at its share of its organ in drift.
+func _rarity_drift() -> void:
+	var dna := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"chemocyte": 1, &"ocellus": 1,
+		&"pellicle": 1, &"toxicyst": 1}
+	var carried := {}
+	for gene: StringName in dna:
+		carried[Catalogue.variety(gene)] = true
+	var lacks := 0.0
+	var by_class := {}
+	for gene: StringName in Catalogue.live():
+		if Catalogue.variety(gene) != gene or carried.has(gene):
+			continue
+		var weight := Catalogue.drift_weight(gene)
+		lacks += weight
+		by_class[Catalogue.rarity_of(gene)] = float(by_class.get(Catalogue.rarity_of(gene),
+			0.0)) + weight
+	const DRIFTS := 50000
+	seed(7204)
+	var came := {}
+	var wrong := 0
+	var bad: Array[String] = []
+	for i in DRIFTS:
+		var tiers := dna.duplicate()
+		if not GenomeNode._mutate_drift(tiers, [] as Array[StringName]):
+			wrong += 1
+			continue
+		for gene: StringName in tiers:
+			if dna.has(gene):
+				continue
+			var kind := Catalogue.variety(gene)
+			came[kind] = int(came.get(kind, 0)) + 1
+			if carried.has(kind) or Catalogue.has_tag(gene, Catalogue.NEVER_DRIFTS) \
+					or Catalogue.has_tag(gene, Catalogue.RETIRED) or not Catalogue.known(gene):
+				wrong += 1
+				if bad.size() < 3:
+					bad.append(String(gene))
+	var measured := {}
+	var drifts := 0
+	for kind: Variant in came:
+		var name := Catalogue.rarity_of(StringName(kind))
+		measured[name] = int(measured.get(name, 0)) + int(came[kind])
+		drifts += int(came[kind])
+	var classes := PackedStringArray()
+	var classes_ok := drifts > 0
+	for name: StringName in Rarity.classes():
+		var share := float(by_class.get(name, 0.0)) / lacks
+		var got := float(measured.get(name, 0)) / float(maxi(drifts, 1))
+		var off := absf(got / share - 1.0) if share > 0.0 else (0.0 if got == 0.0 else INF)
+		classes_ok = classes_ok and off <= DRIFT_CLASS_TOLERANCE
+		classes.append("%s %.2f %% (%.2f %%)" % [name, 100.0 * got, 100.0 * share])
+	var away := float(came.get(&"probeaway", 0))
+	var away_expected := float(drifts) * Catalogue.drift_weight(&"probeaway") / lacks
+	_check(("rarity 2. drift: 50,000 drifts of a water cell carrying %s bring %s, against"
+		+ " their shares of drift's weights over what it lacks in brackets -- each class"
+		+ " within %.0f %% (%s); %d brought a variety it carries, the mouth or a retired gene"
+		+ "%s; and the variant the water never makes came %d times (%.0f by its share of its"
+		+ " organ in drift)") % [str(dna.keys()), ", ".join(classes),
+		100.0 * DRIFT_CLASS_TOLERANCE, "within" if classes_ok else "NOT WITHIN", wrong,
+		"" if bad.is_empty() else " (%s)" % ", ".join(bad), int(away), away_expected],
+		classes_ok and drifts == DRIFTS and wrong == 0 and away_expected > 50.0
+		and absf(away / away_expected - 1.0) <= 0.25)
+
+
+## **3. The crowded drop** (§11.3 item 3): the mixed hundred filed, five minutes of a drop
+## made for a fully sighted player, seed 1, on the rules, as check 6's -- the floor's
+## hardest case (§5.3). Check 6's floors: every common and uncommon variety carried at
+## every count and back at its class's count by the next, the floor caught up with the
+## first fill within the first minute and no rare one short three counts running after
+## it, no drifter made with a gene no drifter may carry; the floor's drifters at
+## most one in GENE_FLOOR_GAP of those made; and of every drifter made, the floor's
+## included, the commons -- every variety of a common organ -- at least nine tenths of
+## their share of the draw, so the floor has not flattened it. Prints the floor's share
+## of the drifters made beside table 5.1's arithmetic and the gene probe's for this
+## catalogue, and what each class's drifters were.
+func _rarity_crowded() -> void:
+	var pool := Drop.drifter_genes(Catalogue.drifters())
+	var total := 0.0
+	var commons := 0.0
+	for key: StringName in pool:
+		total += Catalogue.water_weight(key)
+		if Catalogue.organ_rarity(Catalogue.organ_of(key)) == Rarity.commonest():
+			commons += Catalogue.water_weight(key)
+	var GeneProbe := load("res://tools/gene_probe.gd")
+	var loads: Array = GeneProbe.call(&"_floor_loads", GeneProbe.call(&"_pool_weights"))
+	print("[drop-probe] NOTE rarity 3, the mixed hundred by the gene probe's arithmetic: %s"
+		% GeneProbe.call(&"_arithmetic"))
+	seed(1)
+	var water := _water(0.0, 1.0)
+	var field: WatchedDrop = water[0]
+	for f in 5 * 60 * 60:
+		field._process(1.0 / 60.0)
+	var floor_made := int(field.stats.get(&"gene_floor", 0))
+	var made := field.drifters_made
+	var common_made := int(field.drawn_organs.get(Rarity.commonest(), 0)) \
+		+ int(field.floor_organs.get(Rarity.commonest(), 0))
+	var share := commons / total
+	var got := float(common_made) / float(maxi(made, 1))
+	var by_class := _drifters_by_class(field)
+	var rarity_line := field.rarity_line()
+	_done(water)
+	seed(20260930)
+	print("[drop-probe] NOTE rarity 3, the crowded drop at five minutes: %s" % by_class)
+	print("[drop-probe] NOTE rarity 3, the crowded drop at five minutes: %s" % rarity_line)
+	_check(("rarity 3. the crowded drop: the mixed hundred, %d varieties in the drifters' pool,"
+		+ " five minutes of a fully sighted player's drop, seed 1, on the rules -- at %d gene"
+		+ " counts a common or uncommon variety carried by nobody %d times and one still short"
+		+ " at the count after %d; the floor caught up with the first fill at count %d (by %d),"
+		+ " and a rare one was short three counts running %d times after it; drifters"
+		+ " made with a gene no drifter may carry %d; the floor's drifters %d of %d made, %.1f"
+		+ " %% (at most one in %d; table 5.1 worked out %.1f %% for this catalogue, the gene"
+		+ " probe's arithmetic %.1f %%); the commons %.1f %% of every drifter made, %.0f %% of"
+		+ " their %.1f %% of the draw (at least 90 %%)") % [pool.size(), field.counts,
+		field.lost_genes, field.still_short, field.settled_at, SETTLED_WITHIN, field.rare_runs,
+		field.venom_drifters, floor_made,
+		made, 100.0 * float(floor_made) / float(maxi(made, 1)), Drop.GENE_FLOOR_GAP,
+		100.0 * MIXED_FLOOR_SHARE, 100.0 * float(loads[2]), 100.0 * got,
+		100.0 * got / share, 100.0 * share],
+		field.counts >= 140 and field.lost_genes == 0 and field.still_short == 0
+		and field.settled_at > 0 and field.settled_at <= SETTLED_WITHIN
+		and field.rare_runs == 0 and field.venom_drifters == 0 and made > 1000
+		and Drop.GENE_FLOOR_GAP * floor_made <= made + Drop.GENE_FLOOR_GAP - 1
+		and got >= 0.9 * share)
+
+
+## **The drifters a drop made, by class** (gene-rarity.md §5, §11.3), in words: each
+## class's share of those the draw made against its share of the water's weights over the
+## drifters' pool, those the floor gave apart, and each class's drifters standing at the
+## end, a variety's mean against what its weight gives a drop of that many drifters.
+func _drifters_by_class(field: WatchedDrop) -> String:
+	var pool := Drop.drifter_genes(Catalogue.drifters())
+	var total := 0.0
+	var weights := {}
+	var kinds := {}
+	for key: StringName in pool:
+		var name := Catalogue.rarity_of(key)
+		total += Catalogue.water_weight(key)
+		weights[name] = float(weights.get(name, 0.0)) + Catalogue.water_weight(key)
+		kinds[name] = int(kinds.get(name, 0)) + 1
+	var drawn := 0
+	for name: Variant in field.drawn_kinds:
+		drawn += int(field.drawn_kinds[name])
+	var given := 0
+	for name: Variant in field.floor_kinds:
+		given += int(field.floor_kinds[name])
+	var standing := {}
+	var drifters := 0
+	for b: Object in field.get("_cells"):
+		if b.get("seeded") and not b.get("inert") and b.get("drifter"):
+			drifters += 1
+			for gene: Variant in b.get("genome"):
+				var name := Catalogue.rarity_of(Catalogue.variety(StringName(gene)))
+				standing[name] = int(standing.get(name, 0)) + 1
+	var said := PackedStringArray()
+	for name: StringName in Rarity.classes():
+		if int(kinds.get(name, 0)) == 0:
+			continue
+		var n := int(kinds[name])
+		said.append(("%s %d: %.1f %% of the draw's (%.1f %% by weight), the floor's %d; %.1f"
+			+ " standing each (%.1f by weight)") % [name, n,
+			100.0 * float(field.drawn_kinds.get(name, 0)) / float(maxi(drawn, 1)),
+			100.0 * float(weights[name]) / total, int(field.floor_kinds.get(name, 0)),
+			float(standing.get(name, 0)) / float(n),
+			float(drifters) * float(weights[name]) / total / float(n)])
+	return "drifters made %d, the draw's %d and the floor's %d, %d standing -- %s" % [
+		drawn + given, drawn, given, drifters, "; ".join(said)]

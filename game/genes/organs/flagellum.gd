@@ -105,7 +105,7 @@ func _init() -> void:
 		&"impulse_gap_min": IMPULSE_GAP_MIN_BY_TIER,
 		&"impulse_gap_max": IMPULSE_GAP_MAX_BY_TIER}
 	numbers = {&"hold_level": HOLD_LEVEL}
-	water = {"rarity": &"common", "weight": 4, "drifter": true}
+	water = {"rarity": &"common", "drifter": true}
 	born = 1
 	# **The hold** (automation.md §4.3): it holds the tail still and only the
 	# tail, claiming the `swimming` trigger `body.swim` claims, from the second

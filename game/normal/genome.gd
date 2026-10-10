@@ -1728,8 +1728,14 @@ static func _mutate_trade(tiers: Dictionary) -> bool:
 ## not, and a daughter born without one is a choice no one would make rather than
 ## a choice between two builds.
 ##
+## **What comes is drawn by its weight in drift** (docs/design/gene-rarity.md §3.2;
+## `Catalogue.drift_weight`), not evenly: its organ's place in the water, by class,
+## shared among the varieties drift may bring. So a rare gene comes by drift as seldom
+## as the water makes it, and a line that lost a common organ -- its tail, its nose --
+## wins it back twice as often as any one uncommon. The gene that goes is still even.
+##
 ## **The toxin, by three rules** (dna-slots.md §5.5), and a genome with no toxin
-## draws exactly what it always drew:
+## draws what it would without them:
 ##
 ## - **what comes is a gene, not a form**: the pool leaves out every form but each
 ##   variety's first, and any variety the lineage carries in any form -- so the
@@ -1752,25 +1758,21 @@ static func _mutate_drift(tiers: Dictionary, seats: Array[StringName]) -> bool:
 			goes.append(gene)
 		carried[variety(gene)] = true
 		organs_carried[Catalogue.organ_of(gene)] = true
-	# **What may come**: every live gene by the catalogue's order, a variety and
-	# not yet carried -- and none of an organ that holds one variant to a body
+	# **What may come**: every live gene by the catalogue's order, a variety, not yet
+	# carried and weighing something in drift -- never one tagged `never_drifts`, nor
+	# one of no class -- and none of an organ that holds one variant to a body
 	# (`one_variant`) while the lineage carries any of it.
 	var comes: Array[StringName] = []
 	for gene: StringName in Catalogue.live():
 		var organ := Catalogue.organ_of(gene)
-		if not Catalogue.has_tag(gene, Catalogue.NEVER_DRIFTS) and variety(gene) == gene \
+		if variety(gene) == gene and Catalogue.drift_weight(gene) > 0.0 \
 				and not carried.has(gene) \
 				and not (Catalogue.one_variant(organ) and organs_carried.has(organ)):
 			comes.append(gene)
 	if goes.is_empty() or comes.is_empty():
 		return false
 	var out: StringName = goes[randi() % goes.size()]
-	# **An organ first -- an even draw, as it always was -- then one of its
-	# varieties by their weights** (gene-catalogue.md §6.1): with one variety to
-	# an organ, which is every organ today, the draw it always was.
-	var organs := Catalogue.organs_in(comes)
-	var into := Catalogue.pick_variety(Catalogue.of_organ(comes,
-		organs[randi() % organs.size()]))
+	var into := _drift_brings(comes)
 	var water := seats.is_empty()
 	var form := into
 	if has_forms(into):
@@ -1800,3 +1802,24 @@ static func _mutate_drift(tiers: Dictionary, seats: Array[StringName]) -> bool:
 	if slot >= 0:
 		seats[slot] = &"" if is_inside_form(form) else form
 	return true
+
+
+## **The gene a drift brings, of [param comes]** (docs/design/gene-rarity.md §3.2): one
+## variety by its weight in drift (`Catalogue.drift_weight`), one roll of the global
+## stream, in floats, over [param comes] in its order -- every one of which weighs
+## something.
+static func _drift_brings(comes: Array[StringName]) -> StringName:
+	var total := 0.0
+	for gene: StringName in comes:
+		total += Catalogue.drift_weight(gene)
+	var roll := randf() * total
+	var drawn: StringName = comes[comes.size() - 1]
+	for gene: StringName in comes:
+		var weight := Catalogue.drift_weight(gene)
+		# A roll past the last boundary by a rounding error lands on the last, as
+		# rulebook.gd's `changed` draws its kinds.
+		drawn = gene
+		if roll < weight:
+			break
+		roll -= weight
+	return drawn

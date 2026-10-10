@@ -116,8 +116,9 @@ func _init() -> void:
 	# **Uncommon, as every organ a run is built from** (gene-rarity.md §4): the
 	# organ's class, which every strain shares unless it sets its own -- a strain that
 	# sets none splits the toxin's place in the water evenly with its siblings, the
-	# die dna-slots.md §8.3 asks for. Its strain's weight and its drifter flag are the
-	# strain's own, below.
+	# die dna-slots.md §8.3 asks for. Its drifter flag is the strain's own, below: a
+	# strain that sets none is no part of the water's pool, and takes nothing of its
+	# siblings' place there (gene-catalogue.md §15.8).
 	water = {"rarity": &"uncommon"}
 	variants = [
 		# The first form listed is the variety: the name the toxin goes by where no
@@ -125,7 +126,7 @@ func _init() -> void:
 		# in the tray found to be one. `veneneux` was the gene before there were
 		# places, so it is the inside form and comes first.
 		{"variant": &"corrosive", "dose": &"harm",
-			"water": {"weight": 2, "drifter": true},
+			"water": {"drifter": true},
 			"forms": {
 				INSIDE: {"key": &"veneneux", "order": 12,
 					"provides": {&"poison_stacks": POISON_STACKS_BY_TIER,

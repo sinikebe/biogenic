@@ -13,16 +13,21 @@ just adding/editing genes, so it should be straightforward"*, that is the brief:
 gene's rarity is a field on the gene, and adding a gene never needs anything else
 retuned by hand**, whether it is the 18th or the 118th.
 
-**Status: phase 7-1 built** (`gene-catalogue.md` §15.7, 2026-10-10): the classes on
-the genes, the ladder, the floor by class with its queue and its budget, the gift's two
-tags and the senses by channel, with today's water kept to the byte. **Phase 7-2**, the
-draws by class, **designed, not built.** Written from the code on `dev` at `77f90c3` and
-from the numbers earlier specs measured. Nothing was prototyped or measured for it (the
-owner, 2026-10-02: *"Don't measure in prototypes. I'll playtest."*). §5 is
-arithmetic: expected values worked from the code's own draws and the drop's measured
-populations. It says so wherever it appears, and none of it is a measurement. It is
-built on what `gene-catalogue.md` phases 1 to 3 leave: one file per organ, its
-variants and forms, and its `water` entry.
+**Status: phases 7-1 and 7-2 built.** 7-1 (`gene-catalogue.md` §15.7, 2026-10-10): the
+classes on the genes, the ladder, the floor by class with its queue and its budget, the
+gift's two tags and the senses by channel, with today's water kept to the byte. 7-2
+(`gene-catalogue.md` §15.8, 2026-10-10): every draw of the water by class, in floats,
+drift weighted, `water.weight` gone -- and §2.2's share settled for a variety the water
+never makes: an organ's place is shared among the varieties of each draw, so one out of
+the water's pool takes nothing of it there and only its share in drift (§15.8 says how
+and why). §15.8 has what §11.3's probes measured of this design. The word for a class on
+screen is its own pull request (`rarity-word-ux.md`). Written from the code on `dev` at
+`77f90c3` and from the numbers earlier specs measured. Nothing was prototyped or
+measured for it (the owner, 2026-10-02: *"Don't measure in prototypes. I'll
+playtest."*). §5 is arithmetic: expected values worked from the code's own draws and the
+drop's measured populations. It says so wherever it appears, and none of it is a
+measurement. It is built on what `gene-catalogue.md` phases 1 to 3 leave: one file per
+organ, its variants and forms, and its `water` entry.
 
 **What it replaces.** Where these say otherwise, this document wins:
 

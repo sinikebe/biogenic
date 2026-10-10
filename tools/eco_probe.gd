@@ -14,6 +14,11 @@ extends SceneTree
 ##   surroundings are stepped every frame and the spawner hides from it.
 ## - `--death-log`: one line per hunter that starves -- its age, meals, radius,
 ##   upkeep, reach and speed (§5.4's table).
+## - `--genes=crowded`: the water of a hundred genes, filed before the drop is made --
+##   the mixed hundred of docs/design/gene-rarity.md table 5.1 (`tools/rarity_specimens.gd`)
+##   -- to watch the floor keep them over a long run in its `[rarity]` lines:
+##   `--genes=crowded --sensed=1 --until=1800`, a fully sighted player's drop, the
+##   floor's hardest case (§5.3, §11.3).
 ## - the drop's own switches, as `tools/drive.gd` takes them: `--lod=`,
 ##   `--half-rate=`, `--near-first=`, `--skip-still=`, `--own-speed=`,
 ##   `--notice=senses|fixed`, `--flight=none|all`, `--absorb=`,
@@ -44,6 +49,8 @@ extends SceneTree
 
 const CellBody := preload("res://game/normal/cell.gd")
 const Genome := preload("res://game/normal/genome.gd")
+## The catalogues `--genes=` files (docs/design/gene-rarity.md §11.3).
+const RaritySpecimens := preload("res://tools/rarity_specimens.gd")
 
 
 ## **The field, with one line for every hunter that starves**, when asked.
@@ -73,6 +80,7 @@ func _initialize() -> void:
 	var sensed := 0.2
 	var empty := false
 	var logged := false
+	var genes := ""
 	var sets := {}
 	for a: String in OS.get_cmdline_user_args():
 		var v := a.get_slice("=", 1)
@@ -88,6 +96,8 @@ func _initialize() -> void:
 			empty = true
 		elif a == "--death-log":
 			logged = true
+		elif a.begins_with("--genes="):
+			genes = v
 		elif a.begins_with("--notice="):
 			sets[&"notice_by_senses"] = v != "fixed"
 		elif a.begins_with("--flight="):
@@ -119,6 +129,11 @@ func _initialize() -> void:
 					"contact-swallow", "armour-swallow"]:
 				if a.begins_with("--%s=" % name):
 					sets[StringName(name.replace("-", "_"))] = v == "1"
+	var filed: Array[StringName] = []
+	if genes == "crowded":
+		filed = RaritySpecimens.file_mixed()
+	elif genes != "":
+		push_error("[eco] --genes=%s: no such catalogue (crowded is the one)" % genes)
 	seed(seed_value)
 	cell = CellBody.new()
 	cell.radius = CellBody.BASE_RADIUS
@@ -133,8 +148,10 @@ func _initialize() -> void:
 	food.setup_drop(cell)
 	food.in_water = false
 	food.anchored = not empty
-	print("[eco] seed %d  sensed %.2f  %s  switches %s" % [seed_value, sensed,
-		"an empty room" if empty else "a ghost player, anchored", sets])
+	print("[eco] seed %d  sensed %.2f  %s  switches %s%s" % [seed_value, sensed,
+		"an empty room" if empty else "a ghost player, anchored", sets,
+		"" if filed.is_empty() else "  genes: the mixed hundred, %d varieties in the water's pool"
+		% food.get(&"_drifter_pool").size()])
 	print(food.census_line())
 	print(food.lineage_line())
 	print(food.rarity_line())

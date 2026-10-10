@@ -77,7 +77,7 @@ func _init() -> void:
 	# water, the two that change the most about a run; the weight they shipped never
 	# made them so, and making them `rare` is a balance change, made from play
 	# (gene-rarity.md §12).
-	water = {"rarity": &"uncommon", "weight": 2, "drifter": true}
+	water = {"rarity": &"uncommon", "drifter": true}
 	declares = {"out": [{"name": &"push", "claims": [&"push"], "options": [0.5, 1.0]}]}
 	# **Its look** (gene-looks.md §6): the flagellum's evolution, so it is the tail's
 	# build -- one whip carrying two waves, smooth where the dash's spring is sharp.

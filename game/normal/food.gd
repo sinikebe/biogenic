@@ -6165,9 +6165,9 @@ func _seed_drifter(b: Body) -> void:
 	# **Drifters carry neither form in today's water either** (docs/design/
 	# dna-slots.md §0 item 12): the first water's drifter could carry the old
 	# `veneneux` and be swallowed safely, but poison now doses whatever swallows
-	# it, and a drifter is the food. Drawn by today's weights as it always was, and
-	# a toxin drawn is drawn again from the rest -- one more number, on that
-	# drifter alone.
+	# it, and a drifter is the food. Drawn by the water's weights, as a drop's
+	# drifter is, and a toxin drawn is drawn again from the rest -- one more number,
+	# on that drifter alone.
 	var gene := _draw_gene(Catalogue.drifters())
 	if Catalogue.has_tag(gene, Catalogue.NOT_ON_DRIFTERS):
 		gene = _draw_gene(Drop.drifter_genes(Catalogue.drifters()))
@@ -6202,6 +6202,11 @@ func _draw_genome(body_radius: float, sensed: float) -> Dictionary:
 	# loop fills the outside to its capacity as it always did.
 	while Genome.count_outside(tiers) < capacity and not pool.is_empty():
 		var gene := _draw_gene(pool)
+		# A pool with nothing left that weighs anything draws nothing: stop, and
+		# never write an empty key. The gene probe holds every variety of the
+		# pool above 0, so no shipped catalogue gets here.
+		if gene == &"":
+			break
 		_erase_organ(pool, gene)
 		var tier := _draw_tier(sensed)
 		tiers[_place_toxin(gene)] = tier
@@ -6223,24 +6228,30 @@ func _place_toxin(gene: StringName) -> StringName:
 	return gene if randi() % 2 == 0 else Genome.form_in(gene, Genome.OUTSIDE_PLACE)
 
 
-## **A gene drawn from [param pool]**, varieties all: **an organ first, by its
-## weight, then one of its varieties by theirs** (docs/design/gene-catalogue.md §6.1;
-## dna-slots.md §8.3) -- one roll for the organ, and a second only for an organ the
-## pool holds more than one variety of. Every organ has one today, so this draws
-## what drawing the varieties by their own weights always drew, roll for roll.
+## **A gene drawn from [param pool]**, varieties all, **by each one's weight in the
+## water** (`Catalogue.water_weight`; docs/design/gene-rarity.md §3.1): one roll of the
+## global stream, in floats, over the pool in its order. So an organ comes as often as
+## its varieties in the pool weigh together -- its class's place in the water -- and a
+## variant as its share of it (dna-slots.md §8.3: the toxin's strains share the toxin's
+## place, and do not add to it). A variety that weighs nothing -- one the water never
+## makes, or of no class -- is never drawn; `&""` from a pool of none.
 static func _draw_gene(pool: Array[StringName]) -> StringName:
-	var organs := Catalogue.organs_in(pool)
-	var total := 0
-	for organ: StringName in organs:
-		total += Catalogue.organ_weight(organ)
-	var roll := randi_range(1, maxi(total, 1))
-	var drawn: StringName = organs[organs.size() - 1] if not organs.is_empty() else &""
-	for organ: StringName in organs:
-		roll -= Catalogue.organ_weight(organ)
-		if roll <= 0:
-			drawn = organ
+	var total := 0.0
+	for key: StringName in pool:
+		total += Catalogue.water_weight(key)
+	var roll := randf() * total
+	var drawn: StringName = &""
+	for key: StringName in pool:
+		var weight := Catalogue.water_weight(key)
+		if weight <= 0.0:
+			continue
+		# A roll past the last boundary by a rounding error lands on the last that
+		# weighs something, as rulebook.gd's `changed` draws its kinds.
+		drawn = key
+		if roll < weight:
 			break
-	return Catalogue.pick_variety(Catalogue.of_organ(pool, drawn))
+		roll -= weight
+	return drawn
 
 
 ## **[param gene]'s organ, out of [param pool]**: every variety of it, so one body's
@@ -9767,6 +9778,11 @@ func _draw_living(body_radius: float, sensed: float) -> Dictionary:
 	# that drew the toxin.
 	while Genome.count_outside(tiers) < capacity and not pool.is_empty():
 		var gene := _draw_gene(pool)
+		# A pool with nothing left that weighs anything draws nothing: stop, and
+		# never write an empty key. The gene probe holds every variety of the
+		# pool above 0, so no shipped catalogue gets here.
+		if gene == &"":
+			break
 		_erase_organ(pool, gene)
 		var tier := _draw_tier(sensed)
 		tiers[_place_toxin(gene)] = tier

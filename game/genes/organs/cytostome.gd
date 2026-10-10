@@ -59,12 +59,11 @@ func _init() -> void:
 	organ = &"cytostome"
 	order = 0
 	provides = {&"gape": GAPE_BY_TIER, &"bite": BITE_BY_TIER}
-	# **Never drawn from**: §1.3 gives every peer a mouth and no drifter one, so
-	# the only pool a weight is ever read from has none. Kept because it is §3.4's
-	# number, and the genome strip uses the same four. Common, as every organ a
-	# cell is born with (gene-rarity.md §4): a class no pool reads either, but the
-	# word a player would read for it.
-	water = {"rarity": &"common", "weight": 3, "drifter": false}
+	# **Never drawn from**: §1.3 gives every peer a mouth and no drifter one, so it
+	# is in no pool the water draws from, and drift never brings it (below). Common,
+	# as every organ a cell is born with (gene-rarity.md §4): a class no pool reads,
+	# but the word a player would read for it.
+	water = {"rarity": &"common", "drifter": false}
 	# **Always expressed, never drifted**: a daughter born with no mouth is not
 	# one of two builds to choose between, it is a body that cannot feed itself,
 	# and nobody would pick it.

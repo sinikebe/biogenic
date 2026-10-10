@@ -50,7 +50,7 @@ func _init() -> void:
 	# **The three starting organs stay the commonest thing in the water**: a genome
 	# that fills up with exotica before it has a mouth is a run that cannot eat.
 	# Common: what every run needs (gene-rarity.md §4).
-	water = {"rarity": &"common", "weight": 4, "drifter": true}
+	water = {"rarity": &"common", "drifter": true}
 	born = 1
 	# **Its look** (gene-looks.md §6): oars, rowing strokes with a knee, on both flanks
 	# whatever slot holds it -- the kind's defaults are the oars it always drew -- in

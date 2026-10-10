@@ -2141,8 +2141,9 @@ func _step_sense_grant(delta: float) -> void:
 ## for none: **by two tags** (docs/design/gene-rarity.md §3.4). Whether it needs one is
 ## whether it wears any sense at all, the `sense` tag's; what it is given is one of the
 ## `gift` tag's four, the organ [param roll] names among theirs -- an organ, then one of
-## its varieties by weight (gene-catalogue.md §6.1), which with one variety to an organ,
-## every sense today, is the draw it always was. Today both tags name the same four.
+## its varieties by its share of the organ (`Catalogue.pick_variety`; gene-catalogue.md
+## §6.1), which with one variety to an organ, every sense today, is the draw it always
+## was. Today both tags name the same four.
 ## [param roll] is called once, and only for a cell that needs the gift, so one that
 ## does not draws no number.
 static func free_sense(tiers: Dictionary, roll: Callable) -> StringName:

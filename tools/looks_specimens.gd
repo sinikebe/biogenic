@@ -103,7 +103,7 @@ static func file_room() -> Array[StringName]:
 		organ.order = order
 		organ.family = row[1]
 		organ.look = row[2]
-		organ.water = {"weight": 1, "drifter": false}
+		organ.water = {"drifter": false}
 		Catalogue.register(organ)
 		organs.append(organ.organ)
 		order += 1
