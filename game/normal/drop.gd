@@ -429,7 +429,7 @@ static func daughter_dna(dna: Dictionary) -> Array:
 ## rulebook.gd's word for the change, empty for a list nothing can change. Draws
 ## from the global stream: a division is the simulation's.
 static func daughter_behaviours(list: Rulebook.Behaviour, vocab: Rulebook.Vocabulary,
-		owners: int) -> Array:
+		owners: PackedInt64Array) -> Array:
 	var rolled: Array = Rulebook.changed(list, vocab, owners, CHANGES, MOST_RULES)
 	return [list, rolled[0], rolled[1]]
 

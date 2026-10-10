@@ -6346,17 +6346,26 @@ func _flaws(list: RefCounted, vocab: RefCounted) -> String:
 		if StringName(output.get("needs")) == Rulebook.BEARING \
 				and (input == null or not bool(input.get("bearing"))):
 			return "a turn on %s, which carries no bearing" % name
-		var needs := _needed(output, vocab)
-		if input != null:
-			needs |= _needed(input, vocab)
-		if int(rule.get("claims")) != int(output.get("claims")) or int(rule.get("needs")) != needs:
+		# What it needs, worked out here a word at a time from its parts' bit numbers,
+		# against what the rule holds: its first word, and the words past it.
+		var words := int(vocab.get("words"))
+		var needs := PackedInt64Array()
+		needs.resize(words)
+		for decl: Object in [output, input]:
+			if decl != null:
+				var bit := _needed(decl, vocab)
+				needs[bit / Rulebook.WORD] |= 1 << (bit % Rulebook.WORD)
+		var held := PackedInt64Array([int(rule.get("needs"))])
+		held.append_array(rule.get("far"))
+		held.resize(maxi(held.size(), words))
+		if int(rule.get("claims")) != int(output.get("claims")) or held != needs:
 			return "%s claims or needs what its parts do not" % rule.get("text")
 	return ""
 
 
 ## **The bit a declared part needs, as this probe reads it** (automation.md
 ## §4.3): its owner's, at its first level; past it, the bit the vocabulary keeps
-## for that owner at that level.
+## for that owner at that level. By its number, as the vocabulary numbers its bits.
 func _needed(decl: Object, vocab: RefCounted) -> int:
 	var level := int(decl.get("level"))
 	if level <= 1:
@@ -6390,13 +6399,13 @@ func _drawn(parent: RefCounted, child: RefCounted) -> Array[StringName]:
 
 ## Whether [param part], an input's or output's name, is always's or of an
 ## owner in [param owners], at the level the part is declared at.
-func _owned(part: StringName, vocab: RefCounted, owners: int) -> bool:
+func _owned(part: StringName, vocab: RefCounted, owners: PackedInt64Array) -> bool:
 	if part == Rulebook.ALWAYS:
 		return true
 	var decl: Object = (vocab.get("inputs") as Dictionary).get(part)
 	if decl == null:
 		decl = (vocab.get("outputs") as Dictionary).get(part)
-	return decl != null and (owners & _needed(decl, vocab)) != 0
+	return decl != null and Rulebook.has_bit(owners, _needed(decl, vocab))
 
 
 func _inert_count(list: RefCounted) -> int:
@@ -6462,9 +6471,9 @@ func _modular() -> void:
 	FoodField.declare([TRIAL])
 	var vocab: RefCounted = FoodField.vocabulary()
 	var owners: Dictionary = vocab.get("owners")
-	var bit := int(owners.get(&"trial", 0))
+	var bit := int(owners.get(&"trial", -1))
 	var named: bool = (vocab.get("inputs") as Dictionary).has(&"trial.glow") \
-		and (vocab.get("outputs") as Dictionary).has(&"trial.flash") and bit > 0
+		and (vocab.get("outputs") as Dictionary).has(&"trial.flash") and bit >= 0
 	var everybody := {&"body": true, &"metabolism": true}
 	var cell := CellBody.new()
 	cell.radius = CellBody.BASE_RADIUS
@@ -6487,8 +6496,10 @@ func _modular() -> void:
 	var cb: Object = cells[c]
 	cb.set("dna", wearing.duplicate())
 	cb.set("brain", _list(TRIAL_RULES))
-	var in_body := (int(wb.get("worn")) & bit) != 0 and (int(cb.get("worn")) & bit) == 0
-	var in_dna := bit > 0 and (Rulebook.worn(vocab, cb.get("dna"), everybody) & bit) != 0
+	var in_body := Rulebook.has_bit(wb.get("worn"), bit) \
+		and not Rulebook.has_bit(cb.get("worn"), bit)
+	var in_dna := bit >= 0 \
+		and Rulebook.has_bit(Rulebook.worn(vocab, cb.get("dna"), everybody), bit)
 	field.log_reads = true
 	field.reads.clear()
 	for f in 2 * 60:
@@ -7286,12 +7297,12 @@ func _tail_level_three() -> void:
 	var cell: CellBody = water[1]
 	var cells: Array = field.get("_cells")
 	var bit := int(((FoodField.vocabulary().get("levels") as Dictionary)
-		.get(&"lamella", {}) as Dictionary).get(3, 0))
+		.get(&"lamella", {}) as Dictionary).get(3, -1))
 	var worn := []
 	for copies: int in [2, 3]:
 		var k := _pose(field, cell.position + Vector2(300.0 * copies, 0.0), 30.0,
 			{&"cytostome": 1, &"lamella": copies}, 0.0, 0.6)
-		worn.append((int(cells[k].get("worn")) & bit) != 0)
+		worn.append(Rulebook.has_bit(cells[k].get("worn"), bit))
 	_done(water)
 	FoodField.declare([])
 	var words := []

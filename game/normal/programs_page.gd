@@ -515,7 +515,7 @@ var _said := ""
 var _states: Array = []
 var _never := PackedInt32Array()
 var _tick_seen := -1
-var _worn := 0
+var _worn := PackedInt64Array()
 ## **A drag in flight** (§2.6, §4.5): what is lifted, and the gap it would land in.
 var _drag_from := -1
 var _drag_gap := -1
@@ -1052,7 +1052,7 @@ func _compute_states() -> void:
 	if _library == null:
 		return
 	_vocab = FoodField.vocabulary()
-	_worn = int(_instincts.call(&"worn"))
+	_worn = _instincts.call(&"worn")
 	var merged := _library.merged(_vocab)
 	if merged == null:
 		return
@@ -1098,7 +1098,7 @@ func _lines_of(i: int) -> PackedStringArray:
 
 ## Whether [param rule]'s organs are all worn.
 func _awake(rule: Rulebook.Rule) -> bool:
-	return rule.inert or (rule.needs & _worn) == rule.needs
+	return rule.inert or Rulebook.awake(rule, _worn)
 
 
 ## The triggers [param rule] claims, as the columns' indices.
@@ -2383,12 +2383,11 @@ func _asleep_line(rule: Rulebook.Rule) -> String:
 		var decl: Variant = _vocab.inputs.get(part, _vocab.outputs.get(part, null))
 		if decl == null:
 			continue
-		var bit := int(decl.get(&"bit"))
-		if (bit & _worn) == bit:
+		if Rulebook.has_bit(_worn, int(decl.get(&"bit"))):
 			continue
 		var level_words := ProgramWords.asleep(part)
 		if int(decl.get(&"level")) > 1 and level_words != "" \
-				and (int(_vocab.owners.get(decl.get(&"owner"), 0)) & _worn) != 0:
+				and Rulebook.has_bit(_worn, int(_vocab.owners.get(decl.get(&"owner"), -1))):
 			return level_words
 		return tr(ASLEEP_SAYS) % ProgramWords.says(part)
 	return ""

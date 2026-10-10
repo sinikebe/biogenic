@@ -289,6 +289,7 @@ func _ready() -> void:
 	_water()
 	_tables()
 	_rules()
+	_owner_bits()
 	_wiring()
 	_mechanics()
 	_register()
@@ -681,6 +682,86 @@ func _rules() -> void:
 	_check("the genes declare parts in their shipped order, each at a level a gene reaches: %s"
 		% str(declarers), levelled_ok
 		and Array(declarers).slice(0, shipped.size()) == shipped)
+
+
+## **The rulebook has no ceiling on owners** (§13, §15.6): the game's tables and seventy
+## owners more, each declaring a sense, an action and an action at level 2, number every
+## owner-and-level -- 151 bits, past the one int that held them all -- and the game's
+## own bits are where they were. A body with only the last owner, at level 2, has that
+## owner's parts and no other's: its rules wake and fire, the first owner's sleep, its
+## level's part wakes at 2 and not at 1, and a change draws from it and from what every
+## body has, never from an owner it lacks.
+func _owner_bits() -> void:
+	var tables := [CellBody.DECLARES, Metabolism.DECLARES, Catalogue.declares()]
+	var game: Rulebook.Vocabulary = Rulebook.vocabulary(tables)
+	var table := {}
+	for i in 70:
+		table[StringName("probeowner%d" % i)] = {
+			"in": [{"name": &"sense", "bearing": false, "values": {&"level": &"level"}}],
+			"out": [{"name": &"act", "claims": [&"probeact"]},
+				{"name": &"late", "claims": [&"probelate"], "level": 2}]}
+	var vocab: Rulebook.Vocabulary = Rulebook.vocabulary(tables + [table])
+	var kept := true
+	for owner: StringName in game.owners:
+		kept = kept and vocab.owners[owner] == game.owners[owner] \
+			and str(vocab.levels.get(owner)) == str(game.levels.get(owner))
+	for name: StringName in game.inputs:
+		kept = kept and (vocab.inputs[name] as Rulebook.InputDecl).bit \
+			== (game.inputs[name] as Rulebook.InputDecl).bit
+	for name: StringName in game.outputs:
+		kept = kept and (vocab.outputs[name] as Rulebook.OutputDecl).bit \
+			== (game.outputs[name] as Rulebook.OutputDecl).bit
+	var everybody := FoodField.everybody()
+	var last := &"probeowner69"
+	var at_two := Rulebook.worn(vocab, {last: 2}, everybody)
+	var at_one := Rulebook.worn(vocab, {last: 1}, everybody)
+	var others := 0
+	for owner: StringName in table:
+		if owner != last and (Rulebook.has_bit(at_two, int(vocab.owners[owner]))
+				or Rulebook.has_bit(at_two, int(vocab.levels[owner][2]))):
+			others += 1
+	var mine := [Rulebook.has_bit(at_two, int(vocab.owners[last])),
+		Rulebook.has_bit(at_two, int(vocab.levels[last][2])),
+		Rulebook.has_bit(at_one, int(vocab.levels[last][2]))]
+	var list := Rulebook.parse("probeowner69.sense -> probeowner69.act\n"
+		+ "probeowner0.sense -> probeowner0.act\nprobeowner69.sense -> probeowner69.late",
+		vocab)
+	var read := func(_input: StringName) -> Array: return [[0.5]]
+	var fired := []
+	Rulebook.choose(list, read, at_two, {}, {}, 1, fired)
+	var acted: Array = fired.map(func(one: Array) -> int: return int(one[0]))
+	Rulebook.choose(list, read, Rulebook.worn(vocab, {&"probeowner0": 2}, everybody), {}, {},
+		1, fired)
+	var first: Array = fired.map(func(one: Array) -> int: return int(one[0]))
+	var states := []
+	Rulebook.choose(list, read, at_one, {}, {}, 1, fired, states)
+	var slept: Array = states.map(func(one: Array) -> String:
+		return String(Rulebook.State.keys()[int(one[0])]).to_lower())
+	# A change of the first rule, again and again: what it draws is the last owner's, or
+	# every body's, or the rulebook's own.
+	seed(29)
+	var strays: Array[String] = []
+	var one := Rulebook.parse("probeowner69.sense -> probeowner69.act", vocab)
+	for i in 60:
+		var child: Rulebook.Behaviour = Rulebook.changed(one, vocab, at_two,
+			{Rulebook.REPLACE: 1.0}, 8)[0]
+		for part: StringName in [child.rules[0].input, child.rules[0].output]:
+			var owner := String(part).get_slice(".", 0)
+			if part != Rulebook.ALWAYS and owner != String(last) \
+					and not everybody.has(StringName(owner)) and not strays.has(String(part)):
+				strays.append(String(part))
+	_check(("the rulebook has no ceiling on owners: the game's tables and 70 owners more number"
+		+ " %d bits in %d words, the game's %d where they were (%s); a body with only the last"
+		+ " owner has its bits (%s) and %d other's; of a rule of it, one of the first owner's"
+		+ " and one of its level 2, the rules that act are %s at its level 2 and say %s at"
+		+ " 1, and %s for a body with only the first owner; and a change draws nothing it"
+		+ " lacks%s") % [vocab.bits, vocab.words, game.bits, str(kept), str(mine), others,
+		str(acted), str(slept), str(first), "" if strays.is_empty() else ": "
+			+ ", ".join(strays)],
+		vocab.bits == game.bits + 140 and vocab.words == (vocab.bits + Rulebook.WORD - 1)
+			/ Rulebook.WORD and vocab.words >= 3 and game.words == 1 and kept
+		and mine == [true, true, false] and others == 0 and acted == [0, 2] and first == [1]
+		and slept == ["acted", "asleep", "asleep"] and strays.is_empty())
 
 
 ## **Every part a gene declares is wired, in a water cell and in yours** (§12.1):
@@ -2370,11 +2451,11 @@ func _synthetic_gene() -> void:
 	own.call(&"setup", cell, field, metabolism, genome)
 	var vocab := FoodField.vocabulary()
 	var part := &"probegland.smell"
-	var owner_bit := int(vocab.owners.get(&"probegland", 0))
+	var owner_bit := int(vocab.owners.get(&"probegland", -1))
 	var wears := []
 	for strain: Dictionary in [{&"probegkeen": 1}, {&"probegout": 2}, {&"cytostome": 1}]:
-		wears.append((Rulebook.worn(vocab, Catalogue.by_organ(strain), FoodField.everybody())
-			& owner_bit) != 0)
+		wears.append(Rulebook.has_bit(Rulebook.worn(vocab, Catalogue.by_organ(strain),
+			FoodField.everybody()), owner_bit))
 	var kept_bits := _bits_kept(bits_before, _vocabulary_bits())
 	_check(("its part %s is read in a water cell (%s) and in yours (%s), a body wearing"
 		+ " either strain has it and one wearing neither does not (%s), and every bit the"
@@ -2382,7 +2463,7 @@ func _synthetic_gene() -> void:
 		str((field.get("_readers") as Dictionary).has(part)),
 		str((own.get("_readers") as Dictionary).has(part)), str(wears), kept_bits],
 		(field.get("_readers") as Dictionary).has(part)
-		and (own.get("_readers") as Dictionary).has(part) and owner_bit != 0
+		and (own.get("_readers") as Dictionary).has(part) and owner_bit >= 0
 		and wears == [true, true, false] and kept_bits == "")
 
 	# **The wire, a cell's file and the referee.**
@@ -2609,7 +2690,7 @@ func _variant_of_shipped() -> void:
 		and top_with > top_before and peak_with > peak_before
 		and speeds[2] == maxf(speeds[0], speeds[1]) and speeds[1] > speeds[0]
 		and gaps[2] == gaps[1] and gaps[1] > gaps[0]
-		and tails == plains and tails != 0
+		and tails == plains and Rulebook.has_bit(tails, int(vocab.owners.get(organ, -1)))
 		and _bits_kept(bits_before, _vocabulary_bits()) == ""
 		and rows.size() == 2 and not (rows[0] as Array).is_empty()
 		and Array(Catalogue.keys()) == before)
