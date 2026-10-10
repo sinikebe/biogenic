@@ -613,7 +613,9 @@ static func number(value: float) -> String:
 ## **An owner is there** when its bit is set in [param worn] ([method worn]). An
 ## input whose owner is not there never reports, and is never read. The first word
 ## of [param worn] is read once, and each rule's needs there tested with one `&`, as
-## when the whole mask was one int; a later word only for a vocabulary that has one.
+## when the whole mask was one int; a later word only for a vocabulary that has one --
+## and for a mask of none, which has no owner: a rule that needs only owners past the
+## first word does not fire for it.
 ##
 ## **Each input is read at most once a tick**, through [param read] (input name
 ## to its reports), and only when a rule reaches it whose output could still
@@ -639,7 +641,7 @@ static func choose(list: Behaviour, read: Callable, worn: PackedInt64Array, refs
 		_now.resize(list.inputs)
 		_before.resize(list.inputs)
 	var near: int = worn[0] if not worn.is_empty() else 0
-	var wide := worn.size() > 1
+	var wide := worn.size() != 1
 	var claimed := 0
 	var have := 0
 	for k in rules.size():

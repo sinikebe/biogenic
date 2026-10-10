@@ -738,6 +738,10 @@ func _owner_bits() -> void:
 	Rulebook.choose(list, read, Rulebook.worn(vocab, {&"probeowner0": 2}, everybody), {}, {},
 		1, fired)
 	var first: Array = fired.map(func(one: Array) -> int: return int(one[0]))
+	# A mask of no words has no owner: the last owner's rules, which need only bits
+	# past the first word, do not fire for it.
+	Rulebook.choose(list, read, PackedInt64Array(), {}, {}, 1, fired)
+	var nobody: Array = fired.map(func(one: Array) -> int: return int(one[0]))
 	var states := []
 	Rulebook.choose(list, read, at_one, {}, {}, 1, fired, states)
 	var slept: Array = states.map(func(one: Array) -> String:
@@ -759,14 +763,14 @@ func _owner_bits() -> void:
 		+ " %d bits in %d words, the game's %d where they were (%s); a body with only the last"
 		+ " owner has its bits (%s) and %d other's; of a rule of it, one of the first owner's"
 		+ " and one of its level 2, the rules that act are %s at its level 2 and say %s at"
-		+ " 1, and %s for a body with only the first owner; and a change draws nothing it"
-		+ " lacks%s") % [vocab.bits, vocab.words, game.bits, str(kept), str(mine), others,
-		str(acted), str(slept), str(first), "" if strays.is_empty() else ": "
-			+ ", ".join(strays)],
+		+ " 1, %s for a body with only the first owner and %s for a mask of none; and a"
+		+ " change draws nothing it lacks%s") % [vocab.bits, vocab.words, game.bits, str(kept),
+		str(mine), others, str(acted), str(slept), str(first), str(nobody),
+		"" if strays.is_empty() else ": " + ", ".join(strays)],
 		vocab.bits == game.bits + 140 and vocab.words == (vocab.bits + Rulebook.WORD - 1)
 			/ Rulebook.WORD and vocab.words >= 3 and game.words == 1 and kept
 		and mine == [true, true, false] and others == 0 and acted == [0, 2] and first == [1]
-		and slept == ["acted", "asleep", "asleep"] and strays.is_empty())
+		and nobody.is_empty() and slept == ["acted", "asleep", "asleep"] and strays.is_empty())
 
 
 ## **Every part a gene declares is wired, in a water cell and in yours** (§12.1):
