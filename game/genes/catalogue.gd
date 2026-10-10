@@ -179,6 +179,8 @@ static var _one_variant := {}
 static var _rarity := {}
 static var _water_weights := {}
 static var _floors := {}
+## **Organ to its own class**, as its file sets it ([method organ_rarity]).
+static var _organ_rarity := {}
 ## **Key to its organ, and organ to its keys**, every key's, retired and forms
 ## included, an organ's in the order its file lists them. Asked of every gene of
 ## every draw the water makes ([method organ_of], [method keys_of_organ]), so each
@@ -411,6 +413,14 @@ static func pick_variety(varieties: Array[StringName]) -> StringName:
 ## probe fails.
 static func rarity_of(key: StringName) -> StringName:
 	return _rarity.get(key, &"")
+
+
+## **[param organ]'s own class**, as its file sets it: the class the water's weights
+## and the commons' third go by (gene-rarity.md §2.2, §2.3), where [method rarity_of]
+## is a key's, the rarer of its organ's and its variant's. `&""` for an organ this build
+## does not know.
+static func organ_rarity(organ: StringName) -> StringName:
+	return _organ_rarity.get(organ, &"")
 
 
 ## **[param key]'s weight in the water's draws** (gene-rarity.md §2.2, §2.3): its
@@ -1020,6 +1030,9 @@ static func _index_water(organ_classes: Dictionary) -> void:
 	_rarity = rarity
 	_water_weights = water
 	_floors = floors
+	var classes := organ_classes.duplicate()
+	classes.make_read_only()
+	_organ_rarity = classes
 
 
 ## **[param organ]'s keys, each a flat record** (§4.2, §6.2). **First the organ

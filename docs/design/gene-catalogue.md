@@ -2548,6 +2548,18 @@ phase 5 with the launcher at `b2f6ba4d`:
 - **The specs `gene-rarity.md` replaces** -- `ocean.md` §6.4, `lineage.md` §5,
   `dna-slots.md` §9, where every gene is kept at two carriers -- are not edited: its
   header says it wins where they say otherwise.
+- **A variety outside the water's pool still takes a share of its organ's place**
+  (the review's one finding for 7-2). `_index_water` shares an organ's class weight
+  among every live variety, whatever its `drifter`. The commons' third and the draws
+  count the pool alone. Registered as phase 5's `probeswift` is, with
+  `"drifter": false`, a second tail halves flagellum's `water_weight` (4 to 2): its
+  share of the drifters' draw goes from 11.8 % to 6.7 %, and the commons fall under
+  their third, so every uncommon is scaled down (stigma 2 to 1.82). Nothing in `game/`
+  reads `water_weight` in 7-1, and no shipped organ has such a variety. But 7-2 puts
+  every draw on that number, so it decides between two fixes. One shares the weight
+  among the pool's varieties alone, which leaves drift (§3.2, over every live variety)
+  a second number. The other holds an organ's live varieties in the pool or out of it
+  together, with a gene-probe check. The README says so where a variant sets its water.
 
 ---
 

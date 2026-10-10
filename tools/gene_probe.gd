@@ -976,13 +976,15 @@ static func _drifters_pool() -> Array[StringName]:
 
 ## **The share of the drifters' draw the commons hold** by the catalogue's weights:
 ## the varieties of every organ of the ladder's first class, against the pool's whole.
+## An organ is a common by its own file's class, as the catalogue counts the commons'
+## third -- not by a key's, which a rarer variant can make rarer than its organ.
 static func _commons_share() -> float:
 	var commons := 0.0
 	var all := 0.0
 	for key: StringName in _drifters_pool():
 		var weight := Catalogue.water_weight(key)
 		all += weight
-		if Catalogue.rarity_of(Catalogue.first_key(Catalogue.organ_of(key))) == Rarity.commonest():
+		if Catalogue.organ_rarity(Catalogue.organ_of(key)) == Rarity.commonest():
 			commons += weight
 	return commons / all if all > 0.0 else 1.0
 

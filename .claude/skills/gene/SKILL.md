@@ -35,7 +35,9 @@ letters `a-z` and permanent once shipped.
   `never_drifts`. **A variant of a sense is a sense and a gift**,
   by its organ's tags: the water may give it to a peer or a daughter with no sense and
   your newborn may be given it, whatever its water and drift say. A strain of the
-  toxin sets its `dose`. A form never sets a class. README, "A variant" and "Rarity".
+  toxin sets its `dose`, and its `water` as the first strain does, `{"weight": 2,
+  "drifter": true}`: the toxin's weight and drifter flag are each strain's, not the
+  organ's. A form never sets a class. README, "A variant" and "Rarity".
 - **An organ on mechanics the game has**: a copy of the nearest organ's file as
   `organs/<key>.gd`, every field set -- **its class, `water.rarity`**: `common` only if
   every run needs it, `uncommon` if runs are built from it, and **when unsure, `rare`**

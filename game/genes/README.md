@@ -118,7 +118,13 @@ organ's own key is its first variant, implicitly, and never leaves the catalogue
      organ's evenly** with its siblings -- its class is its organ's, and so is its
      weight -- or `"water": {"rarity": &"rare"}` to be a rare kind of a commoner
      organ. Either way it takes its place from its organ's alone and changes nothing
-     outside it. Until phase 7-2 the water draws an organ first, then one of its
+     outside it. **A strain of the toxin sets its `water`**: the toxin's `weight` and
+     `drifter` are each strain's own, not the organ's (`organs/toxin.gd`), so a new
+     strain sets `"water": {"weight": 2, "drifter": true}` as the first does -- with
+     none it is left out of the water's pool and halves its sibling's place. **A
+     variety the water never draws** (`"drifter": false`) still takes a share of its
+     organ's place until phase 7-2 settles it (gene-catalogue.md §15.7, deferred).
+     Until phase 7-2 the water draws an organ first, then one of its
      varieties by `water`'s `weight` -- the variant's share of its organ's draws; a
      rare variant sets `"weight": 1` beside its class until then. `drifter` says
      whether a drifter may be made of it. **Drift may bring it** to a

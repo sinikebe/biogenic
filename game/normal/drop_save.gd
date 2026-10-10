@@ -200,8 +200,9 @@ const CELLS := "cells"
 ## makes the file unreadable, never half-loaded. **And, since the floor took turns
 ## within a budget** (docs/design/gene-rarity.md §3.3), its queue and its budget:
 ## `gene_queue`, every gene the floor found short at its last count in the order it
-## gives them back -- `gene_short` is those it has not given yet, in the same order --
-## and `gene_since`, the drifters made since the floor's last. A file without them
+## gives them back -- `gene_short` is those due and not given yet, in the same order; a
+## peer-borne one the one-a-count rule holds back is in `gene_queue` alone -- and
+## `gene_since`, the drifters made since the floor's last. A file without them
 ## loads with its short genes queued in the order kept and the budget full; a build
 ## before them reads `gene_short` alone, as it always has.
 const RUNS := {

@@ -2007,6 +2007,11 @@ func _five_minutes() -> void:
 ## What each five-minute drop saw of pack 2's rules: a sighted player's
 ## ([method _five_minutes]) and a newborn's ([method _lineage]).
 var _lineage_runs: Array[Dictionary] = []
+## **[method _lineage]'s two drops**: a census every [constant LOOK_FRAMES] frames at
+## sixty a second, [constant LINEAGE_LOOKS] of them -- five minutes -- and lineage 4
+## holds that every one was taken.
+const LOOK_FRAMES := 600
+const LINEAGE_LOOKS := 30
 
 
 ## **A census, every ten seconds of a drop**: the hunters against today's count
@@ -2136,9 +2141,9 @@ func _lineage() -> void:
 		var water := _water(0.0, float(each[1]), false)
 		var field: WatchedDrop = water[0]
 		var seen := {"composed": true}
-		for f in 5 * 60 * 60:
+		for f in LINEAGE_LOOKS * LOOK_FRAMES:
 			field._process(1.0 / 60.0)
-			if f % 600 == 599:
+			if f % LOOK_FRAMES == LOOK_FRAMES - 1:
 				_lineage_look(field, float(f + 1) / 60.0, seen)
 		seen["food"] = float(int(field.get("_drifters"))) \
 			/ Drop.food_count(field._made_share())
@@ -2237,7 +2242,7 @@ func _lineage() -> void:
 		for kind: Variant in run["made_kinds"]:
 			made[kind] = int(made.get(kind, 0)) + int(run["made_kinds"][kind])
 		fed = fed and float(run["food"]) >= 0.85 and int(run.get("unseen", 0)) == 0 \
-			and int(run["looks"]) >= 30
+			and int(run["looks"]) >= LINEAGE_LOOKS
 	_check(("lineage 4. the spawner: of what it made %s, %d peers while the hunters stood at"
 		+ " or over the floor and none of the floor's peer-borne genes was short; drifters"
 		+ " after five minutes at %s of their count; every common and uncommon variety"
