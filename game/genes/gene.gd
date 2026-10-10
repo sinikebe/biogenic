@@ -48,12 +48,18 @@ const INSIDE := &"inside"
 ## catalogue's `tagged()` and `has_tag()`. A tag on an organ is on every variant
 ## and form of it.
 ##
-## - `sense`: it answers *where is something*. The water counts how many tiers of
-##   these a player wears to decide how much of it can hurt them, and gives one to
-##   a peer that has none (`food.gd`, `drop.gd`).
-## - `gift`: the free sense a newborn with none is given at five seconds is drawn
-##   from these, flat (`normal_mode.gd`), and a host's referee lets a guest's body
-##   gain one of them, once (`referee.gd`). Every one is a `sense` too.
+## - `sense`: it answers *where is something*. The water reads how much a player
+##   sees -- the best tier worn on each [member channel] these drive, summed -- to
+##   decide how much of it can hurt them (`food.gd`'s `_sensed`), and **whether a
+##   body needs the gift** is whether it wears any of these: a newborn, a peer or a
+##   water daughter wearing none is given one (`normal_mode.gd`, `drop.gd`).
+## - `gift`: **what the gift is** (docs/design/gene-rarity.md §3.4): the free sense
+##   given to a body that wears none is drawn from these, flat -- a newborn's at five
+##   seconds (`normal_mode.gd`), a peer's or a water daughter's at birth
+##   (`drop.gd`'s `give_sense`) -- and a host's referee lets a guest's body gain one
+##   of them, once (`referee.gd`). Every one is a `sense` too. Today the two tags name
+##   the same four; a sense the gene pass adds is a `sense`, and a `gift` only if its
+##   organ is.
 ## - `always_expressed`: a daughter always wears it, whatever its copies -- the
 ##   mouth, because a body born without one cannot feed itself (`genome.gd`).
 ## - `never_drifts`: a drift never writes over it and never brings it: the mouth
@@ -155,14 +161,30 @@ var numbers := {}
 ## `genome.gd`, which keeps a progression for every gene that levels.
 var levels := {}
 
-## **Its place in the water** (§9): `weight`, how often a draw takes it against
-## the others (`food.gd`'s draws; 1 if unset), and `drifter`, whether a drifter
-## may be made of it (false if unset). **The water draws an organ first, then one
-## of its variants** (gene-catalogue.md §6.1): an organ by its own weight -- this
-## field as its file sets it, or, where only its variants set one, its first
-## variety's -- and then a variant by the weight each answers, its share of the
-## organ's draws. **A variant is drawn by its variety**, its first form: its other
-## forms answer the same weight and are in no list of the water's.
+## **Its place in the water** (§9; docs/design/gene-rarity.md §2):
+##
+## - `rarity`, **how often the water makes it**: a class on `rarity.gd`'s ladder --
+##   `common`, what every run needs; `uncommon`, what a run is built from; `rare`,
+##   what a run is lucky, or determined, to find. **Required on a live organ**, which
+##   the gene probe holds. A variant may set its own: it is as rare as the rarer of
+##   its organ's class and its own, and its own is its share of its organ's place in
+##   the water. **A form never sets one.** The catalogue resolves each key's class,
+##   its weight in the water and the carriers the drop's floor keeps of it
+##   (`rarity_of`, `water_weight`, `floor_of`): the floor keeps every variety at its
+##   class's count, and from gene-rarity.md's phase 7-2 every draw reads the weight.
+## - `drifter`, whether a drifter may be made of it (false if unset).
+## - `habitats`, **reserved** (gene-rarity.md §6): the places of a water where it is
+##   found more. Absent, or empty, is everywhere alike, and every gene is so today:
+##   a name must be one a water declares (`drop.gd`'s HABITATS), and none does yet.
+##   A variant may set its own; a form may not.
+## - `weight`, how often a draw takes it against the others (`food.gd`'s draws; 1 if
+##   unset), **until phase 7-2 of gene-rarity.md**, which draws by `rarity` alone and
+##   takes it out. **The water draws an organ first, then one of its variants**
+##   (gene-catalogue.md §6.1): an organ by its own weight -- this field as its file
+##   sets it, or, where only its variants set one, its first variety's -- and then a
+##   variant by the weight each answers, its share of the organ's draws. **A variant
+##   is drawn by its variety**, its first form: its other forms answer the same
+##   weight and are in no list of the water's.
 var water := {}
 
 ## **Its tags**: any of [constant TAGS]. A variant's or a form's are added to its

@@ -41,7 +41,7 @@ func _init() -> void:
 	organ = &"vacuole"
 	order = 14
 	provides = {&"store": STORE_BY_TIER}
-	water = {"weight": 2, "drifter": true}
+	water = {"rarity": &"uncommon", "weight": 2, "drifter": true}
 	# **Its look** (gene-looks.md §6): a clear bubble under the skin, one for each
 	# copy. Metabolism's shade 0.
 	family = METABOLISM

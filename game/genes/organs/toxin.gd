@@ -113,6 +113,12 @@ func _init() -> void:
 	# harmless to eat, and a mouthless drifter's venom would bite nothing anyway.
 	# Every strain inherits both.
 	tags = [NOT_ON_DRIFTERS, FLOOR_BY_PEERS]
+	# **Uncommon, as every organ a run is built from** (gene-rarity.md §4): the
+	# organ's class, which every strain shares unless it sets its own -- a strain that
+	# sets none splits the toxin's place in the water evenly with its siblings, the
+	# die dna-slots.md §8.3 asks for. Its strain's weight and its drifter flag are the
+	# strain's own, below.
+	water = {"rarity": &"uncommon"}
 	variants = [
 		# The first form listed is the variety: the name the toxin goes by where no
 		# place is known yet -- the water's draws, the floor's count, and two meals

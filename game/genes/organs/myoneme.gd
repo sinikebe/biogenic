@@ -70,7 +70,7 @@ func _init() -> void:
 	organ = &"myoneme"
 	order = 9
 	provides = {&"dash_speed": DASH_SPEED_BY_TIER, &"dash_cost": DASH_COST_BY_TIER}
-	water = {"weight": 2, "drifter": true}
+	water = {"rarity": &"uncommon", "weight": 2, "drifter": true}
 	declares = {"out": [{"name": &"dash", "claims": [&"dash"]}]}
 	# **Its look** (gene-looks.md §6): a coil, a contractile spring -- which is what a
 	# myoneme is, Vorticella's stalk -- that draws up and lets go: a dash is that

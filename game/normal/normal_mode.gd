@@ -2111,15 +2111,9 @@ func _step_sense_grant(delta: float) -> void:
 	if _sense_clock < FIRST_SENSE_AT:
 		return
 	_sensed = true
-	var senses := Catalogue.tagged(Catalogue.GIFT)
-	for sense: StringName in senses:
-		if _cell.extra(sense) > 0:
-			return
-	# An organ, then one of its varieties by weight (gene-catalogue.md §6.1): with
-	# one variety to an organ, which is every sense today, the draw it always was.
-	var organs := Catalogue.organs_in(senses)
-	var gene := Catalogue.pick_variety(Catalogue.of_organ(senses,
-		organs[randi() % organs.size()]))
+	var gene := free_sense(_cell.worn(), func() -> int: return randi())
+	if gene == &"":
+		return
 	# It is in the DNA already but not on this body -- a lineage that wrote a
 	# sense down and then never expressed it. Nothing to give.
 	if _genome.dna_tier(gene) > 0:
@@ -2134,6 +2128,24 @@ func _step_sense_grant(delta: float) -> void:
 	# rebuild here. The body shows the waiting gene from the next frame on, and
 	# the line says where to put it.
 	_say_sense()
+
+
+## **The free sense a cell wearing [param tiers] is given at five seconds**, or `&""`
+## for none: **by two tags** (docs/design/gene-rarity.md §3.4). Whether it needs one is
+## whether it wears any sense at all, the `sense` tag's; what it is given is one of the
+## `gift` tag's four, the organ [param roll] names among theirs -- an organ, then one of
+## its varieties by weight (gene-catalogue.md §6.1), which with one variety to an organ,
+## every sense today, is the draw it always was. Today both tags name the same four.
+## [param roll] is called once, and only for a cell that needs the gift, so one that
+## does not draws no number.
+static func free_sense(tiers: Dictionary, roll: Callable) -> StringName:
+	for sense: StringName in Catalogue.tagged(Catalogue.SENSE):
+		if GenomeNode.tier_of(tiers, sense) > 0:
+			return &""
+	var gifts := Catalogue.tagged(Catalogue.GIFT)
+	var organs := Catalogue.organs_in(gifts)
+	return Catalogue.pick_variety(Catalogue.of_organ(gifts,
+		organs[int(roll.call()) % organs.size()]))
 
 
 # ---------------------------------------------------------------------------

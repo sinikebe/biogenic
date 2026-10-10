@@ -13,7 +13,8 @@ The owner, 2026-10-04, after the readiness review (§0):
 > genes, so it should be straightforward"
 
 **Status: phases 1a, 1b, 2, 3, 4, 5 and 6 built** (§15.1 to §15.6, 2026-10-05 to
-2026-10-10; phase 6 as `gene-looks.md` §13 records it, §7.2); phase 7 designed, not
+2026-10-10; phase 6 as `gene-looks.md` §13 records it, §7.2); phase 7's first half,
+7-1, built (§15.7, 2026-10-10), and its second, 7-2, designed (`gene-rarity.md`), not
 built.
 This document is the preparation. It turns the
 genes, their variants and the slots into data that every system reads, adds the checks
@@ -1067,7 +1068,7 @@ otherwise, and lands only when §14 holds.
 | **4. The referee and the handshake** | `RULES` generated from the catalogue; the fingerprint on HELLO and WELCOME; `PROTOCOL` 8; caps checked against every provider (§11) | `wire.gd`, `referee.gd`, `net_session.gd`, `tools/net_probe.gd`. Not a player-visible change, but it ends play between builds before and after it, as every protocol bump does |
 | **5. Ceilings, the gate and the playbook** | §13, the grep gate (§12.2), `game/genes/README.md`, `.claude/skills/gene/SKILL.md` | as listed |
 | **6. Families and shapes** (row 2) | UX design first (§7.2), then the build. **Visible**: titled for players | `families.gd`, `cilia.gd`, the organ files, `signal_bus.gd` |
-| **7. Common and rare genes** (row 3) | Systems design first (§9), then the build. **Visible in the water**: titled for players | the organ files, `food.gd`, `drop.gd`, `genome.gd` |
+| **7. Common and rare genes** (row 3) | Systems design first (§9; `gene-rarity.md`), then the build, in two (its §11.2): 7-1, rarity as data with today's water kept (`chore:`, §15.7), then 7-2, the draws by class. **Visible in the water**: 7-2 is titled for players | the organ files, `rarity.gd`, `floor_queue.gd`, `catalogue.gd`, `food.gd`, `drop.gd`, `genome.gd` |
 
 **The gene pass starts after phase 5.** It can start after phase 3 for genes that need
 no new look, if the owner wants it sooner. Phases 6 and 7 can be designed while 1 to 5
@@ -2391,6 +2392,175 @@ leaving, with the NOTE.
   lapse under load, and so can the input path's first trace. Render and trace such
   poses on a quiet machine, or render both sides under the same load.
 
+### 15.7 As built: phase 7-1, 2026-10-10
+
+**How often the water makes a gene is a class on the gene, and the drop's floor keeps
+every variety at its class's count, the one short longest first, within a budget --
+with today's water kept to the byte.** This is `gene-rarity.md`'s first pull request
+(its §11.2): the ladder, every organ's class, the floor by class with its queue and its
+budget, the peer-borne floor for any variety, the gift's two tags, the senses by
+channel, `rarity_line()` and the gene probe's rarity checks. The draws still read
+phase 1a's `water.weight`, and drift stays even: 7-2 switches them. By file:
+
+| file | now |
+|---|---|
+| `game/genes/rarity.gd` (new) | the ladder, commonest first -- `common` weighing 4 and keeping 2 carriers, `uncommon` 2 and 2, `rare` ½ and 1 -- and `COMMON_SHARE`, ⅓; `has`, `rank`, `classes`, `commonest`, `weight`, `least` (a class's floor), `rarer`. A class is a row keyed by its name, and the file names no gene |
+| `game/mechanics/floor_queue.gd` (new) | **a floor and its queue**, knowing no gene: kinds kept at a least count each; a `count` notes the count that first found each kind short and forgets it once the kind is back, and queues the short by that note, kinds found together in the caller's order; `take`, the first due kind a Callable accepts; the budget, `open` once `gap - 1` things or more have been made since the queue's last, starting open, and `made`; `restore`, the queue as a count left it |
+| `game/genes/gene.gd` | `water`'s fields: `rarity`, required on a live organ, a variant's own if it sets one, never a form's; `drifter`; `habitats`, reserved, absent being empty; `weight`, until 7-2. The `sense` tag says whether a body needs the gift, the `gift` tag what the gift is |
+| `game/genes/catalogue.gd` | `Rarity`; `rarity_of` (the rarer of an organ's class and its variant's own), `water_weight` (§2.2's share of the organ's class weight, then §2.3's third for the commons over the drifters' pool; a form's its variety's, a retired key's 0), `floor_of` and `floors()`, every key's worked out once an index (`_index_water`), so `register` and `forget` work them out again |
+| `game/genes/organs/*.gd` | each organ's class (§4): the mouth, the cirrus, the tail and the nose `common`, the other twelve `uncommon`, the toxin's on its organ; `rhabdom` and `statocyst` `uncommon` for the record. The comment that called the beam and the push the rarest things in the water now says that the weight they shipped never made them so |
+| `game/normal/drop.gd` | `GENE_FLOOR` gone: the floor by class. `GENE_FLOOR_GAP` 4, the budget; `HABITATS`, empty, the seam a gene's habitats are held to; `gene_floor()`; `count_floor`, the count through the queue, one peer-borne variety due a count; `take_drifter_gene` through the queue and the budget, a drifter made either way; `short_genes` by class; `give_sense` by two tags, and `water_gifts()`, the `gift` tag's genes in the order the water always drew its gift in |
+| `game/normal/food.gd` | `_gene_floor`, a queue, for `_gene_short`: `_count_genes` through `Drop.count_floor` and `_carriers`; `_seed_drifter`, `_peer_short` and `_give_back_by_peer` through it; `drop_state` and `load_drop` keep its queue and budget; `sense_tiers`, and `_sensed` and `_anchor_sensed` through it, by channel; the gift from `Drop.water_gifts()`; `rarity_line()`; the counts `drifters_made`, `peers_made` and the floor's gifts by class |
+| `game/normal/drop_save.gd` | `gene_queue` and `gene_since`, optional, beside `gene_short` |
+| `game/normal/normal_mode.gd` | `free_sense`, the newborn's gift at five seconds, needed by the `sense` tag and given from the `gift` tag, the roll drawn only for a cell that needs it |
+| `tools/gene_probe.gd` | §11.3's items 1 to 6, and the senses by channel and the gift by two tags: nine checks, 82 from 73. The ladder, and seven broken ladders each found; a class on every live organ, and four organs planted wrong found; the habitats; a weight in the water for every live variety of the pool, none for a retired key, and the commons' share; a rare kind of a common organ, a second strain splitting the toxin's place and three uncommon organs crowding the commons, each registered; the water's arithmetic printed; the floor's load under its budget, and a crowd of 170 rare organs found over it. The probe's gland has a class, and the floor's seams are the queue's |
+| `tools/drop_probe.gd` | the floor's unit check through the queue and the budget, and `_floor_by_class` (a rare variant, first come first served, one drifter in four, one peer a count); check 6 and lineage 4 by class, with the budget's clause; check 12 keeps the floor's queue and budget; `_owe` and `_due`, the seams dna 8 poses the toxin short through; each five-minute drop's `[rarity]` line printed. 144 checks, from 143 |
+| `tools/drive.gd`, `tools/eco_probe.gd` | `--census=`, and the eco probe's every census, print `rarity_line()` after the lineage line |
+| docs | `gene-rarity.md`'s status; `game/genes/README.md`'s **Rarity** and the class in its steps; the skill; here, and §16 |
+
+**Where it differs from the design, and why:**
+
+- **`game/mechanics/floor_queue.gd`, not `kinds_floor.gd`** (`gene-rarity.md` §10):
+  phase 6 gave "kinds" to the shapes an organ is built as (`game/genes/kinds.gd`), so
+  the name says what the mechanic is -- a floor's queue -- and it knows no more than
+  §10 asked of it.
+- **The floor's queue and budget are kept with the drop** (§8 has them rebuilt at the
+  first count and not saved). The drop file already keeps the floor's short genes, so
+  that a kept drop goes on as one that never stopped (`drop_save.gd`'s EXTRA, `ocean.md`
+  §14.3 check 12). The queue's order and the budget are part of that, so they are kept
+  beside them, as two optional keys a build before them never asks for. A file without
+  them queues its short genes in the order it kept them, with the budget full. Check 12
+  holds a queue kept mid-turn to it.
+- **At most one peer a count is a rule of the count**, not a clock: of the varieties
+  only a peer brings back, the count leaves the one short longest due and the others
+  in their place. So a check that poses a gene short through the queue gives it
+  through any number of peers, as dna 8's forty do.
+- **A peer is passed over by phase 5's rule**, `takes_back`: one carrying the same
+  variety, or another variant of an organ held to one a body (§6.3). §3.3 passed over a
+  peer carrying any variety of the organ; phase 5, built after it, settled which. With
+  one variety to an organ today the two are one rule.
+- **Ties go in the pool's order**: genes found short at one count are queued in the
+  order of the catalogue's `drifters()` -- the drifters' list as `SHIPPED_ORDERS` pins
+  it -- not `keys()`'s. The two differ only among the shipped drifters, and only for two
+  found together, which no seeded run has.
+- **The gift's order is each gift's own.** The water gives from the `gift` tag's genes
+  in the order it always drew from -- the `sense` list's, so `Drop.water_gifts()` -- and
+  the newborn from the `gift` tag's own. Today's four are both tags' four, so only the
+  order of a draw was ever at stake, and it is the seeded water's.
+- **`normal_mode.gd` gained `free_sense`**: the newborn's gift is a static function now,
+  its roll a Callable called only for a cell that needs the gift, so that the two tags
+  could be checked. The run calls it where it drew before, one `randi()` in the same
+  place.
+- **The senses by channel and the gift's two tags are checked in the gene probe** (§11.3
+  puts the channel check in `drop_probe`'s new `rarity` section, with 7-2's): 7-1 builds
+  the sum by channel, so 7-1 proves it, on a second nose of the probe's own.
+- **The gene probe keeps "a weight of its own in the water"** beside the class check
+  (§11.3 item 2 has the class replace it): the draws read `weight` until 7-2, and a gene
+  without one would fall back to 1. 7-2 takes both out together.
+- **The water's arithmetic is printed by `water_weight`** (§11.3 item 5): the weights
+  the draws take up in 7-2. The line says so; today's draws differ from it only in the
+  light and ping senses' 3.
+- **The rare rules of check 6 and lineage 4 go by the class's floor**, not its name: a
+  variety its class keeps at one carrier may be short for two counts, and absent from a
+  census for one; every other is held as every gene was. Today none is.
+- **`water.habitats` is in no organ's file**: absent is empty (`gene.gd`), and the gene
+  probe holds any list a file writes to `drop.gd`'s `HABITATS`, which declares none.
+- **`rarity_line()` counts the water's pool**, the varieties the floor keeps, and the
+  floor's gifts against every drifter and every peer the drop has made.
+- **The playbook tells the gene pass to set `weight` beside the class until 7-2**: 4, 2,
+  and 1 for rare, since the draw counts in whole numbers until then.
+
+**Checked** at `b230bfd`, against `cec8ff9` -- whose tree is `dev`'s at `58f84c5`,
+phase 5 with the launcher at `b2f6ba4d`:
+
+1. **Every check `ci.yml` runs passes**, the network's three each in a network
+   namespace of its own with CI's address: the gene probe's 82 checks, from 73, and its
+   gate, 0 names in 76 files; the levels and Back probes; the translation template,
+   current at 531 messages from 95 files -- the two new scripts read, and holding no
+   word -- with every catalog linted, and the launcher's template and its skew check;
+   every scene's boot, seven, no error; `drop_probe`'s 144, from 143, its ten pins
+   holding; `net_probe`, 477 checks in 18,336 frames of the 24,000 CI allows, as
+   `cec8ff9`'s 477; `net_fuzz` at seed 1, its door too; and `net_drop`. No check went
+   or loosened.
+2. **The seeded runs are the same**: the empty library hashes to `7397a410…` under all
+   three schemes, 69,349 lines; `drop_probe`'s ten pins hold, and the checks that hold
+   them print what they printed, line for line; `drive --fingerprint=3000` at seeds 7
+   and 12345, plain, sniffing and with seven genes on, gives `cec8ff9`'s six hashes and
+   counts (`cd0d5d1d…`, `f37d3aec…`, `72f5cda5…`, `901b9fd8…`, `54cbe11d…`,
+   `eaca0505…`). So does a sighted player of radius 30 wearing five genes in a water
+   aged fifteen minutes first, at both seeds -- `23c9a2ab…`, §15.6's, and `13f95d21…`
+   -- a water the floor has acted in: by then, at seed 7, its peers had given a gene
+   back 14 times in 489, through the queue, and its drifters none of 1,911. The input
+   path's three traces are `cec8ff9`'s, and the frames -- full vision and point of
+   view, a cell wearing seven genes among posed water cells, at both sizes -- are 0 px
+   from `cec8ff9`'s. In the fully sighted player's five minutes the floor gives none of
+   the 1,879 drifters made.
+3. **`Wire.RULES` is `843c9d81…` and `Wire.PROTOCOL` 8, `DropSave.rules()`
+   `e4213164…`, as at `cec8ff9`**, and `binary_version` 7: rarity is in neither text,
+   and 7-1 ships as content.
+4. **Each new check was seen to fail on the fault it guards**, planted in a scratch
+   copy. In the gene probe, fifteen: the rare class as heavy as the uncommon, and one
+   keeping no carrier; an organ with no class, one with a class off the ladder, and a
+   form with one; a habitat no water declares; the commons' third left out, a variant's
+   weight not shared with its siblings, a retired key weighing something, a key's class
+   its organ's alone, and every key kept at two; an uncommon floor of thirty, which the
+   floor's load fails; and the senses summed by gene, the water's gift drawn from the
+   senses, and the newborn's need read from the gift tag. In `drop_probe`'s floor
+   checks, seven: the queue served in the kinds' order alone, the budget always open,
+   the last short gene first, every peer-borne variety due at once, the floor at two for
+   every class, a drifter that may take the toxin, and the queue and budget not kept
+   with the drop (check 12, which the first three fail too). And in five minutes of the
+   drop: `palp` rare and never drawn passes check 6 and lineage 4, the floor keeping it;
+   with the rare floor at nothing as well, check 6 counts it carried by nobody 31 times
+   and lineage 4 finds it unseen; an uncommon floor of a hundred leaves genes short at
+   check 6 while the budget holds the floor to 407 of 1,870 drifters, and with the
+   budget always open too, the floor takes 1,340 of 1,869, which the budget's clause
+   fails. **The floor of nothing first passed lineage 4**: the probe's count of the
+   varieties a census did not see was kept under lineage 1's name for the ticks a
+   division missed, and the summary wrote lineage 1's over it. It is `unseen` now.
+5. **The water by class, as the gene probe prints it**: common 3 varieties, 53.8 /
+   41.6 / 29.3 drifters each in a newborn's, a sighted and a fully sighted player's drop
+   of 458 / 353 / 249; uncommon 11, 26.9 / 20.8 / 14.7 each; rare none; the senses 29.4 %
+   of the draw; the floor's expected share of the drifters 0.0 % at all three. A crowd
+   of 170 rare organs more would cost 9.0 / 16.2 / 32.4 %, past the budget's 25 % in a
+   fully sighted player's drop, and fails.
+6. **A drop kept by `cec8ff9` opens in 7-1 as it does in `cec8ff9`**: aged fifteen
+   minutes and kept, then opened by each, its first 3,000 frames hash the same,
+   `640b54ff…`, and so does 7-1's own file opened by either -- a build before 7-1
+   reads past the queue and the budget, and sets neither file aside. Kept with the
+   floor's short list set by hand, to `palp` and then to the toxin, as a build before
+   7-1 keeps it, each opens the same in both builds too, `ee522a0f…` and `b90a8732…`:
+   each other than the file as it was kept, so the list was read and acted on.
+
+**Deferred, to 7-2:**
+
+- **The draws by `water_weight`**, in floats; drift weighted; one variety to an organ on
+  a peer; `water.weight` and the gene probe's check of it removed; the seeded-water pins
+  and `ci.yml`'s check 8 re-recorded with their reason -- the workflow's pin is the
+  lead's to move.
+- **`drop_probe`'s `rarity` section, items 1 to 3** -- the draw, drift and the crowded
+  drop on the mixed hundred -- and `eco_probe`'s `--genes=crowded`, which registers that
+  catalogue.
+- **The word for a class on screen** (§13, answered yes): the UX designer's
+  (`rarity-word-ux.md`), with the first rare gene at the latest. `rarity.gd` keeps its
+  classes as rows keyed by name for it, and `Catalogue.rarity_of` is the one lookup of
+  a key's class -- a variant's, the class it resolves to.
+- **The specs `gene-rarity.md` replaces** -- `ocean.md` §6.4, `lineage.md` §5,
+  `dna-slots.md` §9, where every gene is kept at two carriers -- are not edited: its
+  header says it wins where they say otherwise.
+- **A variety outside the water's pool still takes a share of its organ's place**
+  (the review's one finding for 7-2). `_index_water` shares an organ's class weight
+  among every live variety, whatever its `drifter`. The commons' third and the draws
+  count the pool alone. Registered as phase 5's `probeswift` is, with
+  `"drifter": false`, a second tail halves flagellum's `water_weight` (4 to 2): its
+  share of the drifters' draw goes from 11.8 % to 6.7 %, and the commons fall under
+  their third, so every uncommon is scaled down (stigma 2 to 1.82). Nothing in `game/`
+  reads `water_weight` in 7-1, and no shipped organ has such a variety. But 7-2 puts
+  every draw on that number, so it decides between two fixes. One shares the weight
+  among the pool's varieties alone, which leaves drift (§3.2, over every live variety)
+  a second number. The other holds an organ's live varieties in the pool or out of it
+  together, with a gene-probe check. The README says so where a variant sets its water.
+
 ---
 
 ## 16. The playbook (what the gene pass will do)
@@ -2400,7 +2570,9 @@ built (§15.6): what each file of `game/genes/` is; the checks, with their comma
 runs them, and how to render a gene; and the steps for a variant, an organ on mechanics
 the game has, an organ with a new mechanic, an edit, a retirement and a change of the
 slots -- each with the pins it moves and why -- then the looks (a family, a kind and,
-for a variant, an accent: `gene-looks.md`), names, balance, and content or binary.
+for a variant, an accent: `gene-looks.md`), rarity (a class on the ladder, and when
+unsure, rare: `gene-rarity.md` §11.4, from phase 7-1, §15.7), names, balance, and
+content or binary.
 **Where this document and the README
 disagree on a step, the README is the one kept current**; this document keeps the
 design and its history.

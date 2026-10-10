@@ -42,7 +42,7 @@ func _init() -> void:
 	organ = &"plastid"
 	order = 13
 	provides = {&"sun": SUN_BY_TIER}
-	water = {"weight": 2, "drifter": true}
+	water = {"rarity": &"uncommon", "weight": 2, "drifter": true}
 	# **Its look** (gene-looks.md §6): a solid lens-shaped body under the skin, a
 	# chloroplast, one for each copy and nothing outside the skin: metabolism is
 	# drawn inside, which tells it from the mouth's mat where colour cannot.

@@ -90,7 +90,10 @@ extends Node
 ## carried; 5, a resting hunter of one copy swimming at you is coming for you, one
 ## of two holding still is not; 6, a part at a level is generic -- a gene declared
 ## only here, with a part at level 3 -- and every part the game declares at a level
-## has its words. Check 7 is `tools/net_probe.gd`'s.
+## has its words. Check 7 is `tools/net_probe.gd`'s. **And phase 7-1 of the genes as
+## data** (docs/design/gene-rarity.md §11.3): the floor by class -- a rare variety kept
+## at one carrier, the gene short longest first, one drifter in four, one peer a count --
+## check 6 and lineage 4 by class, and the floor's queue and budget kept with a drop.
 ##
 ## **Every check here fails with its fix taken out**, and was shown to by
 ## mutation when it was written: a grid that forgets the edge buckets stand for
@@ -154,7 +157,11 @@ extends Node
 ## counts lists rather than behaviours. And pack 4's first phase, one a check: a
 ## pack-3 water that keeps the parts a level brings, a tail held at one copy, a
 ## held tail that beats at once when let go, a drifter's tail that beats, a resting
-## tail that is never coming for you, and a level worn at one copy.
+## tail that is never coming for you, and a level worn at one copy. And 7-1's: a
+## queue that serves the short in the pool's order alone, a budget always open, the
+## last short gene first again, every peer-borne variety due at once, the floor at two
+## for every class, a drifter that may take the toxin, and a drop kept without its
+## floor's queue and budget.
 ##
 ## Headless and deterministic: one seed, set first. Prints one line per check
 ## and `ALL PASS` only if every one held; CI asserts on that marker rather than
@@ -164,6 +171,8 @@ const SpaceGrid := preload("res://game/mechanics/space_grid.gd")
 const Basin := preload("res://game/mechanics/basin.gd")
 const Replenish := preload("res://game/mechanics/replenish.gd")
 const Snowfall := preload("res://game/mechanics/snowfall.gd")
+## The gene floor's queue and budget (docs/design/gene-rarity.md §3.3).
+const FloorQueue := preload("res://game/mechanics/floor_queue.gd")
 const Drop := preload("res://game/normal/drop.gd")
 const Metabolism := preload("res://game/normal/metabolism.gd")
 const CellBody := preload("res://game/normal/cell.gd")
@@ -251,7 +260,14 @@ class WatchedDrop extends "res://game/normal/food.gd":
 	var counts := 0
 	var lost_genes := 0
 	var still_short := 0
-	var _short_before: Array[StringName] = []
+	var _short_before: Array = []
+	## **The floor by class** (docs/design/gene-rarity.md §3.3, §11.3): the varieties
+	## a class keeps at one carrier found short three counts running, each variety's
+	## counts running short so far, and the drifters made -- against which the floor's
+	## budget is held.
+	var rare_runs := 0
+	var _short_runs := {}
+	var drifters_made := 0
 	## The slot the last body came in by: a sister, which nothing returns.
 	var last_spawned := -1
 	# --- Pack 2 (docs/design/lineage.md §11.3): every division judged as it
@@ -529,8 +545,12 @@ class WatchedDrop extends "res://game/normal/food.gd":
 		if body_radius <= 0.0:
 			made += 1
 			if b.drifter:
-				for form: StringName in Genome.forms_of(TOXIN):
-					venom_drifters += 1 if b.genome.has(form) else 0
+				drifters_made += 1
+				# **No drifter made with a gene no drifter may carry** (gene-rarity.md
+				# §11.3): the toxin's forms, and any strain of anything tagged so.
+				for gene: StringName in b.genome:
+					if Catalogue.has_tag(gene, Catalogue.NOT_ON_DRIFTERS):
+						venom_drifters += 1
 			else:
 				made_gape = maxf(made_gape, _gape(b))
 		return index
@@ -642,6 +662,9 @@ class WatchedDrop extends "res://game/normal/food.gd":
 		if b.state == State.BREAK or b.calm != REST_MISS:
 			fled += 1
 
+	## **Every count of the floor, judged by class** (check 6; gene-rarity.md §11.3): a
+	## variety its class keeps at one -- a rare one -- never short three counts running;
+	## every other carried at every count and back at its class's count by the next.
 	func _count_genes() -> void:
 		super._count_genes()
 		counts += 1
@@ -652,11 +675,18 @@ class WatchedDrop extends "res://game/normal/food.gd":
 					carriers[gene] = int(carriers.get(gene, 0)) + 1
 		for gene: StringName in Catalogue.drifters():
 			var n := int(carriers.get(gene, 0))
+			var keeps := Catalogue.floor_of(gene)
+			if keeps == 1:
+				var run := int(_short_runs.get(gene, 0)) + 1 if n < keeps else 0
+				_short_runs[gene] = run
+				if run >= 3:
+					rare_runs += 1
+				continue
 			if n == 0:
 				lost_genes += 1
-			if n < Drop.GENE_FLOOR and _short_before.has(gene):
+			if n < keeps and _short_before.has(gene):
 				still_short += 1
-		_short_before = _gene_short.duplicate()
+		_short_before = _gene_floor.short.duplicate()
 
 
 func _ready() -> void:
@@ -1183,7 +1213,8 @@ func _drop() -> void:
 	_check("for a born cell a drifter is made %.0f to %.0f away, by its sense, and a peer"
 		% [low, high] + " %.0f -- §6.3's 1,050 to 1,200 and 1,500" % peer,
 		absf(low - 1049.0) < 0.5 and high == 1200.0 and peer == 1500.0)
-	# What is short.
+	# What is short -- each gene against its class's count -- and the floor's queue
+	# (docs/design/gene-rarity.md §3.3, §11.3).
 	var genes := Catalogue.drifters().duplicate()
 	var counts := {}
 	for gene: StringName in genes:
@@ -1191,13 +1222,22 @@ func _drop() -> void:
 	counts[&"palp"] = 1
 	counts[TOXIN] = 0
 	counts[&"crista"] = 2
-	var short := Drop.short_genes(counts, genes)
-	var first := Drop.take_drifter_gene(short)
-	var second := Drop.take_drifter_gene(short)
-	_check(("the floor finds %s short of %d; a drifter takes palp (%s), never the toxin"
-		+ " (%s), which is left for a peer (%s)") % [str(Drop.short_genes(counts, genes)),
-		Drop.GENE_FLOOR, first, second, str(short)],
-		first == &"palp" and second == &"" and short == [TOXIN])
+	var queue := Drop.gene_floor()
+	Drop.count_floor(queue, counts)
+	var found: Array = queue.short.duplicate()
+	var first := Drop.take_drifter_gene(queue)
+	# Three drifters the draw's while the budget refills; then, the budget open, the
+	# toxin is all that is due, and no drifter takes it.
+	var waited := [Drop.take_drifter_gene(queue), Drop.take_drifter_gene(queue),
+		Drop.take_drifter_gene(queue)]
+	var second := Drop.take_drifter_gene(queue)
+	_check(("the floor finds %s short of their classes' counts (%s); a drifter takes palp"
+		+ " (%s), never the toxin (%s, the budget open), which is left for a peer (%s)") % [
+		str(found), str(Drop.short_genes(counts, genes)), first, second, str(queue.due)],
+		found == [&"palp", TOXIN] and Drop.short_genes(counts, genes) == [&"palp", TOXIN]
+		and first == &"palp" and waited == [&"", &"", &""] and second == &""
+		and queue.due == [TOXIN])
+	_floor_by_class()
 	var shares := [Drop.wants_drifter(100, 44, 0.45), Drop.wants_drifter(100, 45, 0.45),
 		Drop.wants_drifter(0, 0, 0.92)]
 	_check("a drifter is made while the living share is under the one wanted: %s" % str(shares),
@@ -1213,9 +1253,10 @@ func _drop() -> void:
 		and not pool.has(&"toxicyst") and pool.size() == Catalogue.drifters().size() - 1)
 	var plan := Drop.peer_plan()
 	var blind := {&"cytostome": 2, &"cirrus": 1, &"flagellum": 3}
-	var given := Drop.give_sense(blind, Catalogue.tagged(Catalogue.SENSE), 7)
+	var given := Drop.give_sense(blind, Catalogue.tagged(Catalogue.SENSE), Drop.water_gifts(), 7)
 	var sighted := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"stigma": 2}
-	var again := Drop.give_sense(sighted, Catalogue.tagged(Catalogue.SENSE), 7)
+	var again := Drop.give_sense(sighted, Catalogue.tagged(Catalogue.SENSE), Drop.water_gifts(),
+		7)
 	_check("a peer starts from a born cell's plan %s; a blind one is given %s at tier 1," % [
 		str(plan), str(blind.keys().slice(3))] + " a sighted one nothing",
 		plan == [&"cytostome", &"cirrus", &"flagellum"] and given and not again
@@ -1383,6 +1424,80 @@ func _drop() -> void:
 		and remains == PackedFloat32Array([8.0, 15.0, 18.0])
 		and drop.meniscus.center == OFF_CENTRE + Vector2(100.0, -50.0)
 		and not drop.grid.has(5))
+
+
+## **The floor by class, its queue and its budget** (docs/design/gene-rarity.md §3.3,
+## §11.3), on the drop's own decisions: a rare variant of `palp`, one entry in its file
+## as the gene pass would write it, kept at one carrier -- at one it is not short, at
+## none it is; two genes found short at one count given back in the pool's order, and
+## one found at the next count after both, though it comes first in the pool; the first
+## on the next drifter and the next only three drifters on, the budget one in
+## GENE_FLOOR_GAP; and of two strains only a peer brings back -- a second strain of the
+## toxin, one entry of one place -- one due a count, the one short longest, and neither
+## ever on a drifter. Draws no number, and leaves the catalogue as it was.
+func _floor_by_class() -> void:
+	var before := Array(Catalogue.keys())
+	var palp: RefCounted = (Catalogue.gene(&"palp").get_script() as GDScript).new()
+	palp.set(&"variants", [{"variant": &"probefaint", "order": 990,
+		"water": {"rarity": &"rare"}}])
+	Catalogue.register(palp)
+	var rare := [Catalogue.rarity_of(&"probefaint"), Catalogue.floor_of(&"probefaint"),
+		Catalogue.rarity_of(&"palp"), Catalogue.floor_of(&"palp"),
+		Catalogue.drifters().has(&"probefaint")]
+	var pool: Array[StringName] = [&"probefaint"]
+	var kept_one := Drop.short_genes({&"probefaint": 1}, pool).is_empty()
+	var short_none := Drop.short_genes({&"probefaint": 0}, pool) == pool
+	Catalogue.forget(&"palp")
+	# First come first served, and the budget.
+	var counts := {}
+	for gene: StringName in Catalogue.drifters():
+		counts[gene] = 5
+	counts[&"palp"] = 1
+	counts[&"crista"] = 1
+	var queue := Drop.gene_floor()
+	Drop.count_floor(queue, counts)
+	var together: Array = queue.short.duplicate()
+	counts[&"axoneme"] = 0
+	Drop.count_floor(queue, counts)
+	var after: Array = queue.short.duplicate()
+	var given: Array = []
+	for k in 9:
+		given.append(Drop.take_drifter_gene(queue))
+	# Two strains only a peer brings back.
+	var toxin: RefCounted = (Catalogue.gene(TOXIN).get_script() as GDScript).new()
+	toxin.set(&"variants", (toxin.get(&"variants") as Array) + [{"variant": &"probebarb",
+		"order": 991, "water": {"drifter": true}}])
+	Catalogue.register(toxin)
+	var strains := Drop.gene_floor()
+	var toxic := {}
+	for gene: StringName in Catalogue.drifters():
+		toxic[gene] = 5
+	toxic[TOXIN] = 0
+	toxic[&"probebarb"] = 0
+	Drop.count_floor(strains, toxic)
+	var one_a_count := [strains.short.duplicate(), strains.due.duplicate()]
+	# The first given through a peer, as food.gd's `_give_back_by_peer` takes it off;
+	# back at its count by the next, the second is due.
+	strains.due.erase(TOXIN)
+	toxic[TOXIN] = 2
+	Drop.count_floor(strains, toxic)
+	one_a_count.append(strains.due.duplicate())
+	var on_drifter := Drop.take_drifter_gene(strains)
+	Catalogue.forget(Catalogue.organ_of(TOXIN))
+	_check(("the floor by class: a rare variant of palp is %s, kept at %d -- palp %s at %d --"
+		+ " not short at one carrier (%s) and short at none (%s); palp and crista found short"
+		+ " together go in the pool's order %s, and axoneme, found at the next count, after"
+		+ " both though it comes first in the pool %s; drifter by drifter the floor gives %s,"
+		+ " one in %d; of two strains only a peer brings back, found short together %s, one"
+		+ " is due a count %s, then the other %s, and no drifter takes it (%s)") % [rare[0],
+		rare[1], rare[2], rare[3], str(kept_one), str(short_none), str(together), str(after),
+		str(given), Drop.GENE_FLOOR_GAP, str(one_a_count[0]), str(one_a_count[1]),
+		str(one_a_count[2]), on_drifter],
+		rare == [&"rare", 1, &"uncommon", 2, true] and kept_one and short_none
+		and together == [&"palp", &"crista"] and after == [&"palp", &"crista", &"axoneme"]
+		and given == [&"palp", &"", &"", &"", &"crista", &"", &"", &"", &"axoneme"]
+		and one_a_count == [[TOXIN, &"probebarb"], [TOXIN], [&"probebarb"]]
+		and on_drifter == &"" and Array(Catalogue.keys()) == before)
 
 
 # --- 7. The LOD reaches past the senses ----------------------------------------------
@@ -1771,9 +1886,12 @@ func _containment() -> void:
 ##
 ## - 5, growth: no body over DIVIDE_RADIUS, and none *made* with a mouth wider
 ##   than ARRIVAL_GAPE_MAX -- a grown one may have it (row 5);
-## - 6, the floors: every drifter gene carried at every count, and a gene found
-##   short back at GENE_FLOOR by the next; a living drifter within the floor's
-##   reach of the still player every second; no drifter made with venom;
+## - 6, the floors (docs/design/gene-rarity.md §11.3): every common and uncommon
+##   variety carried at every count, and one found short back at its class's count
+##   by the next; no rare variety short three counts running; the floor's drifters at
+##   most one in GENE_FLOOR_GAP of those made, counting from a full budget; a living
+##   drifter within the floor's reach of the still player every second; no drifter
+##   made with a gene tagged `not_on_drifters`;
 ## - 11, one body: every body that left the drop living left by one of the four
 ##   causes or by dividing, and nothing else, and every body made or born is
 ##   living or left; **on rules** (behaviour.md §4.5) no body faster than its own
@@ -1827,12 +1945,18 @@ func _five_minutes() -> void:
 		FoodField.ARRIVAL_GAPE_MAX],
 		biggest <= CellBody.DIVIDE_RADIUS + 1e-4 and at_forty + field.at_forty > 0
 		and field.made_gape <= FoodField.ARRIVAL_GAPE_MAX and field.made > 1000)
-	_check(("6. the floors: at %d gene counts a drifter gene carried by nobody %d times and"
-		+ " one still short at the count after %d; a living drifter within the floor's"
-		+ " reach of the still player at %d of %d checks; drifters made with venom %d,"
-		+ " living with it %d") % [field.counts, field.lost_genes, field.still_short,
-		floor_checks - floor_missed, floor_checks, field.venom_drifters, venomous],
+	var floor_made := int(field.stats.get(&"gene_floor", 0))
+	_check(("6. the floors: at %d gene counts a common or uncommon variety carried by nobody"
+		+ " %d times and one still short at the count after %d, a rare one short three"
+		+ " counts running %d times; the floor's drifters %d of %d made (at most one in %d);"
+		+ " a living drifter within the floor's reach of the still player at %d of %d"
+		+ " checks; drifters made with a gene no drifter may carry %d, living with venom"
+		+ " %d") % [field.counts, field.lost_genes, field.still_short, field.rare_runs,
+		floor_made, field.drifters_made, Drop.GENE_FLOOR_GAP, floor_checks - floor_missed,
+		floor_checks, field.venom_drifters, venomous],
 		field.counts >= 140 and field.lost_genes == 0 and field.still_short == 0
+		and field.rare_runs == 0 and field.drifters_made > 1000
+		and Drop.GENE_FLOOR_GAP * floor_made <= field.drifters_made + Drop.GENE_FLOOR_GAP - 1
 		and floor_missed == 0 and floor_checks >= 300 and field.venom_drifters == 0
 		and venomous == 0)
 	var gone := 0
@@ -1883,6 +2007,11 @@ func _five_minutes() -> void:
 ## What each five-minute drop saw of pack 2's rules: a sighted player's
 ## ([method _five_minutes]) and a newborn's ([method _lineage]).
 var _lineage_runs: Array[Dictionary] = []
+## **[method _lineage]'s two drops**: a census every [constant LOOK_FRAMES] frames at
+## sixty a second, [constant LINEAGE_LOOKS] of them -- five minutes -- and lineage 4
+## holds that every one was taken.
+const LOOK_FRAMES := 600
+const LINEAGE_LOOKS := 30
 
 
 ## **A census, every ten seconds of a drop**: the hunters against today's count
@@ -1906,6 +2035,23 @@ func _lineage_look(field: WatchedDrop, t: float, seen: Dictionary) -> void:
 	seen["genes"] = minf(float(seen.get("genes", INF)), float(genes.size()))
 	seen["looks"] = int(seen.get("looks", 0)) + 1
 	seen["hunters_most"] = maxi(int(seen.get("hunters_most", 0)), int(hunters))
+	# **By class** (docs/design/gene-rarity.md §11.3): every live variety a class keeps
+	# at two or more carried at every census, and one kept at one -- a rare one -- at
+	# every census but for a gap of one. Each census a variety is unseen past that is
+	# counted -- as `unseen`: `missed` is lineage 1's, the ticks at forty a body did not
+	# divide on, which [method _lineage_summary] copies over whatever this kept.
+	var gaps: Dictionary = seen.get("gaps", {})
+	for gene: StringName in Catalogue.live():
+		if GenomeNode.variety(gene) != gene:
+			continue
+		if genes.has(gene):
+			gaps[gene] = 0
+			continue
+		var run := int(gaps.get(gene, 0)) + 1
+		gaps[gene] = run
+		if Catalogue.floor_of(gene) != 1 or run >= 2:
+			seen["unseen"] = int(seen.get("unseen", 0)) + 1
+	seen["gaps"] = gaps
 
 
 ## What one drop's [WatchedDrop] counted of pack 2's rules, and what its
@@ -1924,6 +2070,7 @@ func _lineage_summary(field: WatchedDrop, named: String, seen: Dictionary) -> Di
 			or value is PackedInt32Array else value
 	out["gifted"] = int((field.get("stats") as Dictionary).get(&"born_gifted", 0))
 	out["lineage"] = field.lineage_line()
+	out["rarity"] = field.rarity_line()
 	return out
 
 
@@ -1971,10 +2118,11 @@ static func _keyed(line: String) -> String:
 ## 3. **The floor**: after the first minute, the hunters at 90 % of today's count
 ##    or more at every census, at both compositions.
 ## 4. **The spawner**: no peer while the hunters are at or over the floor but for
-##    venom; drifters at 85 % of their count or more after five minutes; every
-##    gene, venom included, carried at every census -- and with a hundred
-##    hunters posed over the floor, the food is still made
-##    ([method _food_over_floor]).
+##    the floor's peer-borne genes (venom's); drifters at 85 % of their count or
+##    more after five minutes; every common and uncommon variety, venom included,
+##    carried at every census, and every rare one at every census but for a gap of
+##    one (docs/design/gene-rarity.md §11.3) -- and with a hundred hunters posed
+##    over the floor, the food is still made ([method _food_over_floor]).
 ## 5. **The grace**: no run begun at a body in its grace, every `_start_run`
 ##    over the three drops checked; daughters are hunted once it is over, and a
 ##    mouth one touches in it still eats her.
@@ -1993,9 +2141,9 @@ func _lineage() -> void:
 		var water := _water(0.0, float(each[1]), false)
 		var field: WatchedDrop = water[0]
 		var seen := {"composed": true}
-		for f in 5 * 60 * 60:
+		for f in LINEAGE_LOOKS * LOOK_FRAMES:
 			field._process(1.0 / 60.0)
-			if f % 600 == 599:
+			if f % LOOK_FRAMES == LOOK_FRAMES - 1:
 				_lineage_look(field, float(f + 1) / 60.0, seen)
 		seen["food"] = float(int(field.get("_drifters"))) \
 			/ Drop.food_count(field._made_share())
@@ -2078,8 +2226,8 @@ func _lineage() -> void:
 			100.0 * float(run.get("floor", 0.0)), float(run.get("floor_at", 0.0)),
 			int(run["hunters_most"])])
 		foods.append("%s %.1f %%" % [run["name"], 100.0 * float(run["food"])])
-		genes.append("%s %d at the least of %d" % [run["name"], int(run["genes"]),
-			int(run["looks"])])
+		genes.append("%s %d at the least of %d, %d unseen" % [run["name"], int(run["genes"]),
+			int(run["looks"]), int(run.get("unseen", 0))])
 	_check(("lineage 3. the floor: after the first minute the hunters stood at least at %s"
 		+ " of today's count, a census every ten seconds") % ", ".join(floors),
 		enough and composed.all(func(run: Dictionary) -> bool:
@@ -2093,12 +2241,13 @@ func _lineage() -> void:
 	for run: Dictionary in composed:
 		for kind: Variant in run["made_kinds"]:
 			made[kind] = int(made.get(kind, 0)) + int(run["made_kinds"][kind])
-		fed = fed and float(run["food"]) >= 0.85 \
-			and int(run["genes"]) == varieties.size()
+		fed = fed and float(run["food"]) >= 0.85 and int(run.get("unseen", 0)) == 0 \
+			and int(run["looks"]) >= LINEAGE_LOOKS
 	_check(("lineage 4. the spawner: of what it made %s, %d peers while the hunters stood at"
-		+ " or over the floor and venom was not short; drifters after five minutes at %s of"
-		+ " their count; every gene carried at every census, the toxin's two forms as one"
-		+ " (%s of %d); with %d hunters"
+		+ " or over the floor and none of the floor's peer-borne genes was short; drifters"
+		+ " after five minutes at %s of their count; every common and uncommon variety"
+		+ " carried at every census and every rare one but for a gap of one, the toxin's"
+		+ " two forms as one (%s of %d); with %d hunters"
 		+ " posed over the floor and %d drifters taken, %d drifters made in %d s and %d"
 		+ " peers but for venom, the food back at %.1f %%") % [str(made),
 		sum.call("peers_over_floor"),
@@ -2121,6 +2270,7 @@ func _lineage() -> void:
 		enough and sum.call("meals_judged") > 1000 and sum.call("meal_faults") == 0)
 	for run: Dictionary in runs:
 		print("[drop-probe] (%s drop at five minutes) %s" % [run["name"], run["lineage"]])
+		print("[drop-probe] (%s drop at five minutes) %s" % [run["name"], run["rarity"]])
 
 
 ## **The food whatever the hunters number** (check 4): a newborn's drop, a
@@ -3325,6 +3475,18 @@ func _save_bodies() -> void:
 				&"ocellus.beam": [41, [[0.3, 220.0, 1.2], [-0.2, 480.0, 0.7]]]}]]:
 		b.set(value[0], value[1])
 	b.set("brain", _list(["kinety.tingle below 0.5 -> body.rest", "always -> body.swim"]))
+	# **The gene floor mid-queue** (docs/design/gene-rarity.md §3.3): crista found short
+	# at one count and axoneme at the next, crista given to a drifter and one drifter
+	# the draw's since -- its queue, what it still owes and its budget, kept and loaded.
+	var queue := field._gene_floor
+	var have := {}
+	for gene: StringName in Catalogue.drifters():
+		have[gene] = 5
+	have[&"crista"] = 0
+	queue.count(have, Catalogue.drifters(), Catalogue.floors())
+	have[&"axoneme"] = 0
+	queue.count(have, Catalogue.drifters(), Catalogue.floors())
+	var given := [Drop.take_drifter_gene(queue), Drop.take_drifter_gene(queue)]
 	var wrote := DropSave.write(KEEP, DropSave.compose(field.drop_state(), {}))
 	var tmp_left := FileAccess.file_exists(KEEP.get_basename() + ".tmp")
 	var back := DropSave.read(KEEP)
@@ -3356,16 +3518,32 @@ func _save_bodies() -> void:
 		and var_to_bytes(field.basin().get(&"center")) == var_to_bytes(field2.basin().get(&"center"))
 	var kept_gene := posed < theirs.size() and bool(theirs[posed].get("seeded")) \
 		and int((theirs[posed].get("genome") as Dictionary).get(&"rhabdom", 0)) == 2
+	# The floor goes on as one that never stopped: the same queue, owing the same and
+	# with the same budget, and a gene found short at the next count after both.
+	var floors: Array = []
+	for one: FloorQueue in [queue, field2._gene_floor]:
+		var seen: Array = [one.short.duplicate(), one.due.duplicate(), one.since]
+		have[&"pellicle"] = 0
+		one.count(have, Catalogue.drifters(), Catalogue.floors())
+		seen.append(one.short.duplicate())
+		floors.append(seen)
+	var same_floor: bool = given == [&"crista", &""] and floors[0] == floors[1] \
+		and floors[0] == [[&"crista", &"axoneme"], [&"axoneme"], 1,
+			[&"crista", &"axoneme", &"pellicle"]]
 	var bytes := FileAccess.get_file_as_bytes(KEEP).size()
 	_check(("12. save and load: %d slots, %d bodies written (%s, %d B on disk, no .tmp left:"
 		+ " %s) and loaded into a field of their own -- %d slots differ in any field §9.2"
 		+ " names or anything its genome buys, or in its rules and what they had it doing"
 		+ " (pack 3), to the bit; the drop's clocks, free slots and"
-		+ " counts %s; a gene this build does not know, rhabdom:2, %s") % [ours.size(),
+		+ " counts %s; a gene this build does not know, rhabdom:2, %s; the gene floor's queue,"
+		+ " what it owes and its budget %s") % [ours.size(),
 		int(done.get("bodies", 0)), error_string(wrote), bytes, str(not tmp_left), differ,
-		"the same" if same_drop else "DIFFERENT", "kept" if kept_gene else "LOST"],
+		"the same" if same_drop else "DIFFERENT", "kept" if kept_gene else "LOST",
+		"the same, going on alike: %s" % str(floors[1]) if same_floor
+		else "DIFFERENT: %s against %s" % [str(floors[1]), str(floors[0])]],
 		wrote == OK and not tmp_left and not back.is_empty() and ours.size() == theirs.size()
-		and differ == 0 and same_drop and kept_gene and int(done.get("bodies", 0)) > 500)
+		and differ == 0 and same_drop and kept_gene and int(done.get("bodies", 0)) > 500
+		and same_floor)
 	# A drop that came out of a file goes on as a drop.
 	field2.in_water = false
 	for f in 120:
@@ -9807,14 +9985,13 @@ func _dna_water() -> void:
 	var peer := {&"cytostome": 2, &"cirrus": 1, &"flagellum": 1, &"ampulla": 1, &"crista": 2}
 	seed(77)
 	for k in 40:
-		var short: Array[StringName] = [TOXIN]
-		field.set("_gene_short", short)
+		_owe(field, [TOXIN])
 		var i := _pose(field, home + Vector2(1500.0, 300.0 * (k % 8)), 34.0, peer)
 		field._give_back_by_peer(cells[i])
 		var genome: Dictionary = (cells[i] as Object).get("genome")
 		places["venom"] += 1 if genome.has(&"toxicyst") else 0
 		places["poison"] += 1 if genome.has(&"veneneux") else 0
-		if (field.get("_gene_short") as Array).has(TOXIN):
+		if _due(field).has(TOXIN):
 			still_short += 1
 		if GenomeNode.count_outside(genome) > CellBody.slots_for(34.0) \
 				or (genome.has(&"veneneux") and genome.size() != peer.size() + 1):
@@ -9822,8 +9999,7 @@ func _dna_water() -> void:
 		field.take_out(i)
 	var carriers := 0
 	for form: StringName in [&"toxicyst", &"veneneux"]:
-		var short: Array[StringName] = [TOXIN]
-		field.set("_gene_short", short)
+		_owe(field, [TOXIN])
 		var i := _pose(field, home + Vector2(-1500.0, 0.0), 34.0, _merged(peer, {form: 1}))
 		field._give_back_by_peer(cells[i])
 		carriers += (cells[i] as Object).get("genome").size()
@@ -9872,6 +10048,20 @@ func _dna_water() -> void:
 		+ " (%s, dev %s)") % [int(ours[1]), DEV_DRAWS_TOXIC, "as dev drew them"
 		if ours[0] == DEV_DRAWS else "DIFFERENT", String(ours[0]).left(16), DEV_DRAWS.left(16)],
 		ours[0] == DEV_DRAWS and int(ours[1]) == DEV_DRAWS_TOXIC)
+
+
+## **The gene floor of [param field] as a count that found [param genes] short leaves
+## it** (docs/design/gene-rarity.md §3.3): every one of them due, in that order, and its
+## budget as it was -- the seam a check poses a short gene through (food.gd's
+## `_gene_floor`).
+static func _owe(field: Object, genes: Array) -> void:
+	var queue: RefCounted = field.get(&"_gene_floor")
+	queue.call(&"restore", genes, genes, int(queue.get(&"since")))
+
+
+## What the gene floor of [param field] has still to give since its last count.
+static func _due(field: Object) -> Array:
+	return (field.get(&"_gene_floor") as RefCounted).get(&"due")
 
 
 # --- 9. The saves -----------------------------------------------------------------------

@@ -73,11 +73,11 @@ func _init() -> void:
 	organ = &"chemocyte"
 	order = 5
 	provides = {&"smell_range": SMELL_RANGE_BY_TIER}
-	# **Weighted like a starting organ, and that is deliberate.** Taste stopped
+	# **Common, like a starting organ, and that is deliberate.** Taste stopped
 	# being innate when it became this gene, so a nose is the difference between a
 	# run and a wander -- it has to be the commonest thing the water can hand you,
-	# on a par with the three organs you are born with.
-	water = {"weight": 4, "drifter": true}
+	# on a par with the three organs you are born with (gene-rarity.md §4).
+	water = {"rarity": &"common", "weight": 4, "drifter": true}
 	tags = [SENSE, GIFT]
 	channel = SMELL
 	declares = {"in": [{"name": &"smell", "bearing": false,

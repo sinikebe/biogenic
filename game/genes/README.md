@@ -20,6 +20,7 @@ other systems ask.
 | `gene.gd` | The shape of one organ: every field, its default, who reads it. Read it before writing an organ. |
 | `catalogue.gd` | The index (`ORGANS`, one `preload` per organ file) and every question asked of a gene by key. `SHIPPED_ORDERS` pins the order four lists shipped in; the gene pass never edits it. |
 | `stats.gd` | One row per stat: its value with no provider, which way is better, how providers combine, its unit, whether the referee judges it, whether the host decides a contact by it, the group a mechanic reads it in. |
+| `rarity.gd` | The ladder a gene's `water.rarity` names a row of -- `common`, `uncommon`, `rare` -- each class's weight in the water's draw and the living carriers the drop's floor keeps of it, and the share of the drifters' draw the commons always hold. A class is a row: nothing else names one. |
 | `body_plan.gd` | The slots: how many, where, what kind, when earned. |
 | `organs/<organ>.gd` | One organ, its variants and their forms, its words, its look and its numbers on the pause screen. `rhabdom` and `statocyst` are retired. |
 
@@ -113,9 +114,20 @@ organ's own key is its first variant, implicitly, and never leaves the catalogue
      and the rest keep the organ's. **Tags add up**: a variant's tags join its
      organ's, never replace them.
    - **`born`** is 0 unless it says otherwise: a newborn wears the organ, not both.
-   - **Its place in the water**: the water draws an organ first, then one of its
-     varieties by `water`'s `weight` -- the variant's share of its organ's draws.
-     `drifter` says whether a drifter may be made of it. **Drift may bring it** to a
+   - **Its place in the water** (**Rarity**, below): **set nothing to share its
+     organ's evenly** with its siblings -- its class is its organ's, and so is its
+     weight -- or `"water": {"rarity": &"rare"}` to be a rare kind of a commoner
+     organ. Either way it takes its place from its organ's alone and changes nothing
+     outside it. **A strain of the toxin sets its `water`**: the toxin's `weight` and
+     `drifter` are each strain's own, not the organ's (`organs/toxin.gd`), so a new
+     strain sets `"water": {"weight": 2, "drifter": true}` as the first does -- with
+     none it is left out of the water's pool and halves its sibling's place. **A
+     variety the water never draws** (`"drifter": false`) still takes a share of its
+     organ's place until phase 7-2 settles it (gene-catalogue.md §15.7, deferred).
+     Until phase 7-2 the water draws an organ first, then one of its
+     varieties by `water`'s `weight` -- the variant's share of its organ's draws; a
+     rare variant sets `"weight": 1` beside its class until then. `drifter` says
+     whether a drifter may be made of it. **Drift may bring it** to a
      lineage whatever its water says, unless it is tagged `never_drifts`. **A variant
      of a sense is a sense, and a gift**: it inherits both tags, so the water may give
      it to a peer or a daughter born with no sense, and your newborn may be given it
@@ -168,8 +180,9 @@ A new nose, a new armour: everything it does, some mechanic already does.
 1. **Copy the shipped organ nearest it** to `organs/<key>.gd` -- `crista.gd` for an
    organ of one stat, `palp.gd` for a sense with a part. Set every field the probe
    asks for: `organ`, the next `order`, `provides` (a table per stat, `TIER_MAX + 1`
-   entries, the first the stat's value with no provider), `water` (its `weight`, and
-   `drifter` when a drifter may be made of it), `tags`, `channel` for a sense, `family`
+   entries, the first the stat's value with no provider), `water` (its `rarity` --
+   **Rarity**, below -- its `weight`, and `drifter` when a drifter may be made of it),
+   `tags`, `channel` for a sense, `family`
    and `look` (**Looks**), the words and `lines` (its numbers on the pause screen).
    Write the comment the other files have beside each table and number.
 2. **Add one line to `catalogue.gd`'s `ORGANS`**, after the last live organ. The probe
@@ -260,6 +273,10 @@ it is the tie-break of what a body is drawn as and what eating it gives.
   moves is a draw that counts the catalogue's keys: a bug to find, not a pin to record.
   A pin in a workflow is the lead's to move: a session edits `.github/workflows/`
   only when asked, so the pull request says it needs it.
+- **Its class** (**Rarity**) is one line, `water.rarity`: it moves how many carriers
+  the floor keeps of the gene and, from phase 7-2, how often the water makes it -- so the
+  seeded runs' pins move as for any change to what the water makes, and the gene
+  probe's printout says what it costs.
 - **Words** are re-extracted (`i18n_pot -- --write`); a changed English message needs
   its French again.
 
@@ -369,6 +386,39 @@ gene** (`docs/design/gene-looks.md`).
 
 A key this build does not know -- a gene from a newer build -- draws as a plain tuft in
 `UNKNOWN_TINT`, a pale grey-green in no family.
+
+## Rarity
+
+**How often the water makes a gene is a class on the gene**
+(`docs/design/gene-rarity.md`): its `water.rarity`, a row of `rarity.gd`'s ladder. The
+catalogue works out each key's weight in the water and the carriers the drop's floor
+keeps of it from the class (`rarity_of`, `water_weight`, `floor_of`), so nothing else is
+retuned when a gene arrives, however many do.
+
+- **Every new organ sets `water.rarity`**: `common` only if every run needs it -- the
+  commons share a third of the drifters' draw, and a new common makes the others less
+  common; `uncommon` if runs are built from it; and **when unsure, `rare`**: moving a
+  gene up a class later is one line, and the probe prints what each class costs.
+- **A variant sets nothing to share its organ evenly** with its siblings, or `rare` to
+  be a rare kind of a commoner organ. It is as rare as the rarer of its organ's class and
+  its own, and it changes nothing outside its organ: an organ's place in the water is
+  shared among its variants, never added to.
+- **A form never sets a class**, nor `habitats`. `water.habitats` is reserved for
+  places (spec §6): every name in it must be one a water declares (`drop.gd`'s
+  `HABITATS`), and none does yet, so leave it out.
+- **The floor keeps every variety at its class's count** -- two living carriers of a
+  common or uncommon one, one of a rare one -- the one short longest first, within a
+  budget of one drifter in four. It is a net, not a source.
+- **The probe's printout goes in the pull request**: the gene probe's `NOTE the water
+  by class` line -- how many varieties of each class, each one's drifters in a
+  newborn's, a sighted and a fully sighted player's drop, the senses' share of the draw
+  and the floor's expected share of the drifters. The probe fails once the floor's load
+  passes its budget, saying so: past about 160 genes the drop cannot keep them all at
+  their counts, and the answer is places, a design, not a retuning.
+- **Until phase 7-2 the water still draws by `water.weight`**: set it beside the class
+  -- 4 for a common organ, 2 for an uncommon one, 1 for a rare one, since a whole-number
+  draw cannot weigh the ladder's half. Phase 7-2 draws by the class, and takes `weight`
+  out.
 
 ## Names
 

@@ -620,7 +620,8 @@ extends Node
 ##                           cytostome:3,flagellum:2. In the drop the hunter is
 ##                           a body of its own, in a slot nothing else uses
 ##   --census=<seconds>      print the drop's census line on that interval, and
-##                           its lineage line after it (lineage.md §4) and its
+##                           its lineage line after it (lineage.md §4), its
+##                           rarity line (gene-rarity.md §11.1) and its
 ##                           behaviour line (behaviour.md §12.1)
 ##   --keep=<path>           keep the drop at that file, the way the game keeps
 ##                           yours at `user://drop.save` (§9): read as the run
@@ -2640,7 +2641,8 @@ func _step_shift() -> void:
 
 ## `--census=`: the drop's census line, on the interval, while it runs -- and
 ## its lineage line after it, with this cell's own record: its id, its mother's
-## and its line's, and its generation -- and its behaviour line.
+## and its line's, and its generation -- its rarity line (docs/design/
+## gene-rarity.md §11.1) and its behaviour line.
 func _step_census(delta: float) -> void:
 	if _census <= 0.0 or _food == null or not _food.is_processing():
 		return
@@ -2654,6 +2656,7 @@ func _step_census(delta: float) -> void:
 		you = "  | you: id %d parent %d lineage %d generation %d" % [int(_run.get("_id")),
 			int(_run.get("_parent")), int(_run.get("_lineage")), int(_run.get("_generation"))]
 	print("[drive] %6.2f  %s%s" % [_clock, _food.call(&"lineage_line"), you])
+	print("[drive] %6.2f  %s" % [_clock, _food.call(&"rarity_line")])
 	print("[drive] %6.2f  %s" % [_clock, _food.call(&"behaviour_line")])
 
 

@@ -72,9 +72,12 @@ func _init() -> void:
 	organ = &"axoneme"
 	order = 7
 	provides = {&"push_accel": PUSH_ACCEL_BY_TIER}
-	# **The beam and the voluntary push are the rarest things in the water**: the
-	# two that change the most about a run.
-	water = {"weight": 2, "drifter": true}
+	# **Uncommon, as every organ a run is built from** (gene-rarity.md §4). This
+	# comment once wanted the beam and the voluntary push the rarest things in the
+	# water, the two that change the most about a run; the weight they shipped never
+	# made them so, and making them `rare` is a balance change, made from play
+	# (gene-rarity.md §12).
+	water = {"rarity": &"uncommon", "weight": 2, "drifter": true}
 	declares = {"out": [{"name": &"push", "claims": [&"push"], "options": [0.5, 1.0]}]}
 	# **Its look** (gene-looks.md §6): the flagellum's evolution, so it is the tail's
 	# build -- one whip carrying two waves, smooth where the dash's spring is sharp.

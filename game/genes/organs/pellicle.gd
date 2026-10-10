@@ -43,7 +43,7 @@ func _init() -> void:
 	organ = &"pellicle"
 	order = 11
 	provides = {&"armor": ARMOR_BY_TIER}
-	water = {"weight": 2, "drifter": true}
+	water = {"rarity": &"uncommon", "weight": 2, "drifter": true}
 	# **Its look** (gene-looks.md §6): plates, overlapping scales lying along the skin
 	# over a thickened rim -- the pellicle is a real layer of plates under the
 	# membrane -- the one build that runs along a body rather than out of it.

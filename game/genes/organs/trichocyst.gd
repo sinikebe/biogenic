@@ -52,7 +52,7 @@ func _init() -> void:
 	order = 10
 	provides = {&"dart_range": DART_RANGE_BY_TIER, &"dart_cooldown": DART_COOLDOWN_BY_TIER}
 	numbers = {&"stun": DART_STUN}
-	water = {"weight": 2, "drifter": true}
+	water = {"rarity": &"uncommon", "weight": 2, "drifter": true}
 	# **Its look** (gene-looks.md §6): spear-headed spines, darts -- a trichocyst's
 	# real spindles -- in defending's orange.
 	family = DEFENDING

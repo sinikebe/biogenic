@@ -13,8 +13,11 @@ just adding/editing genes, so it should be straightforward"*, that is the brief:
 gene's rarity is a field on the gene, and adding a gene never needs anything else
 retuned by hand**, whether it is the 18th or the 118th.
 
-**Status: designed, not built.** Written from the code on `dev` at `77f90c3` and from
-the numbers earlier specs measured. Nothing was prototyped or measured for it (the
+**Status: phase 7-1 built** (`gene-catalogue.md` §15.7, 2026-10-10): the classes on
+the genes, the ladder, the floor by class with its queue and its budget, the gift's two
+tags and the senses by channel, with today's water kept to the byte. **Phase 7-2**, the
+draws by class, **designed, not built.** Written from the code on `dev` at `77f90c3` and
+from the numbers earlier specs measured. Nothing was prototyped or measured for it (the
 owner, 2026-10-02: *"Don't measure in prototypes. I'll playtest."*). §5 is
 arithmetic: expected values worked from the code's own draws and the drop's measured
 populations. It says so wherever it appears, and none of it is a measurement. It is

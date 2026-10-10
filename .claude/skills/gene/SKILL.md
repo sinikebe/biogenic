@@ -28,16 +28,23 @@ letters `a-z` and permanent once shipped.
 - **A variant**: one entry in its organ's `variants` -- a `variant` name, its `key`, the
   next `order`, what it changes, and an accent, `"look": {"accent": &"ring"}`, never a
   colour. `born` is 0 unless set; its tags add to its organ's; its parts are its
-  organ's; its water `weight` is its share of its organ's draws, and drift may bring it
-  unless it is tagged `never_drifts`. **A variant of a sense is a sense and a gift**,
+  organ's; **it sets no class to share its organ's place in the water evenly, or
+  `"water": {"rarity": &"rare"}` to be a rare kind of it** -- either way it changes
+  nothing outside its organ -- and until phase 7-2 its water `weight` is its share of
+  its organ's draws (1 for a rare one); drift may bring it unless it is tagged
+  `never_drifts`. **A variant of a sense is a sense and a gift**,
   by its organ's tags: the water may give it to a peer or a daughter with no sense and
   your newborn may be given it, whatever its water and drift say. A strain of the
-  toxin sets its `dose`. README, "A variant".
+  toxin sets its `dose`, and its `water` as the first strain does, `{"weight": 2,
+  "drifter": true}`: the toxin's weight and drifter flag are each strain's, not the
+  organ's. A form never sets a class. README, "A variant" and "Rarity".
 - **An organ on mechanics the game has**: a copy of the nearest organ's file as
-  `organs/<key>.gd`, every field set, and one line in `catalogue.gd`'s `ORGANS`; then
+  `organs/<key>.gd`, every field set -- **its class, `water.rarity`**: `common` only if
+  every run needs it, `uncommon` if runs are built from it, and **when unsure, `rare`**
+  -- and one line in `catalogue.gd`'s `ORGANS`; then
   import again (`xvfb-run -a ~/godot/godot --path . --import`), which writes the file's
   `.uid` -- commit it, never write one by hand. README, "An organ on mechanics the game
-  has".
+  has" and "Rarity".
 - **A new mechanic**: the mechanic, reading stats by name; its rows in `stats.gd`
   (`none`, `better`, `combine`, `unit`, `judged`, `contact`, `group`); `SEATED` for one
   that acts from a place, which then takes every number it uses -- its stats through
@@ -120,4 +127,5 @@ one frame. A screen is done when it has been looked at.
 `CLAUDE.md`'s git workflow: a pull request into `dev`, its title a line of the next
 patch note -- what changed for a player. Say in its body which pins moved and why,
 and, when `Wire.RULES` moved, that a player on the old content cannot play with one on
-the new until the older updates.
+the new until the older updates. **Paste the gene probe's `NOTE the water by class`
+line into it**: what the water holds of each class, and what the floor costs.
