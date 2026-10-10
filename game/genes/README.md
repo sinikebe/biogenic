@@ -61,24 +61,31 @@ timeout 600 ~/godot/godot --headless --path . res://tools/drop_probe.tscn
 ```
 
 Two network probes on one machine call each other's servers. Run them one at a
-time, or each in a network namespace of its own:
-`unshare --net -- bash -c 'ip link set lo up && <command>'`.
+time, or each in a network namespace of its own, with an address on it besides
+loopback -- net_probe's pond referee fails without one. Any private address does;
+`10.77.0.5` is made up:
+`unshare --net -- bash -c 'ip link set lo up && ip addr add 10.77.0.5/24 dev lo && <command>'`.
 
 **And look at it** (`CLAUDE.md`, "Nothing is done until someone has looked at
 it"). `tools/shot.tscn` photographs any scene, `tools/drive.tscn` poses a run --
 `--genome=key:copies:slot,...`, `--mode=1` full vision, `--mode=0` point of view,
 `--esc-at=1.0` the pause screen, `--numbers=1` its numbers -- at 1280x720 and at
-2400x1080:
+2400x1080. `--fixed-fps 60` steps the game at sixty frames a second however fast the
+machine runs, so the same pose is the same frame twice; without it, two renders of one
+pose differ, and a comparison between two builds measures the machine:
 
 ```
 xvfb-run -a -s "-screen 0 2400x1080x24" ~/godot/godot --path . --rendering-driver opengl3 \
-    res://tools/shot.tscn -- --scene=res://tools/drive.tscn --size=1280x720 \
+    --fixed-fps 60 res://tools/shot.tscn -- --scene=res://tools/drive.tscn --size=1280x720 \
     --out=/tmp/gene-1280.png --wait=4.0 --seed=7 --mode=1 --radius=39.5 \
     --genome=cytostome:2:0,cirrus:2:1,flagellum:3:2,<key>:2:3 --freeze-at=3.0
 ```
 
-Render the gene beside its nearest neighbours -- the genes of its look and its
-hue -- in full vision, in point of view and on the pause screen, at both sizes.
+Render the gene beside its nearest neighbours -- the organs of its family, on
+`tools/looks_sheet.tscn` (**Looks**) -- in full vision, in point of view and on the
+pause screen, at both sizes. The pause screen arms a slot or a way by the wall clock
+(`normal_mode.gd`'s `ARM_TIMEOUT_MS`), so a pose that arms one and waits can lapse on a
+busy machine: render such poses on a quiet one, or both builds under the same load.
 
 ## A variant
 
@@ -92,7 +99,7 @@ organ's own key is its first variant, implicitly, and never leaves the catalogue
    ```gdscript
    variants = [
    	{"variant": &"swift", "key": &"swiftail", "order": 17,
-   		"look": {"hue": Color(...)},
+   		"look": {"accent": &"disc"},
    		"provides": {&"impulse_speed": [118.0, 160.0, 190.0, 220.0], ...}},
    ]
    ```
@@ -109,31 +116,41 @@ organ's own key is its first variant, implicitly, and never leaves the catalogue
    - **Its place in the water**: the water draws an organ first, then one of its
      varieties by `water`'s `weight` -- the variant's share of its organ's draws.
      `drifter` says whether a drifter may be made of it. **Drift may bring it** to a
-     lineage whatever its water says, unless it is tagged `never_drifts`.
+     lineage whatever its water says, unless it is tagged `never_drifts`. **A variant
+     of a sense is a sense, and a gift**: it inherits both tags, so the water may give
+     it to a peer with no sense, and a newborn may be given it at five seconds,
+     whatever its water and drift say.
    - **Two places** take `forms`: place to `{"key": ..., "order": ..., ...}`, each
      form keyed and ordered, the first its variety. A variant of one place needs none.
    - **A strain of a toxin** sets its `dose`. The probe asks for a stack line where its
      kind of dose has none, and for a venom's side and stern words.
    - **Its parts are its organ's**: it declares none of its own, and every reader of
      the organ's parts reads it.
-3. **Its words**: its key in the organ's word tables -- `WORDS`, `EXPLAINS`, and
-   whatever else the organ's keys have (`EXPLAINS_SIDE`, `CARRIED_WORDS`...), each with
-   the TRANSLATORS note, ROOM and CONTEXT the table has.
-4. **Its look**: a hue of its own, for now (**Looks**, below).
+3. **Its words**: its key in the organ's word tables -- `WORDS`, `EXPLAINS`,
+   `VARIANT_WORDS` (its own word after its organ's name on the explaining line,
+   `toxicyst · paralysing`), and whatever else the organ's keys have
+   (`EXPLAINS_SIDE`, `CARRIED_WORDS`...), each with the TRANSLATORS note, ROOM and
+   CONTEXT the table has.
+4. **Its look**: an accent, `"look": {"accent": &"ring"}`, and nothing else of a look
+   (**Looks**, below).
 5. **The pins**: append its key to `tools/gene_probe.gd`'s `SHIPPED`, and to each list
    of its `SHIPPED_LISTS` it joins by the tags and water it has: `drifter` (a variety
    whose water says `drifter`), `sense`, `gift`. The probe fails until it is there.
 6. **The template**: `i18n_pot -- --write`, then its French in `game/i18n/fr.po`. The
    gene probe lists every gene word with no French.
 7. **The rules**: a variant that provides a stat a row marks `judged` or `contact` is a
-   new line of the rules two builds must agree on (**Editing a gene**). And the
-   referee's caps are held over every provider of a judged stat: one past them -- a
-   tail faster than the speed cap -- fails net_probe's check of the caps until they
-   move, which is a change to the referee's own limits and needs the false-positive
-   runs of `docs/design/net-hardening.md` again (`CLAUDE.md`).
+   new line of the rules two builds must agree on (**Editing a gene**) -- and, for a
+   mechanic with a place (`SEATED`), the second organ of it adds the line naming its
+   seat. **A variant of a sense moves them whatever it provides**: it inherits `gift`,
+   and the gift's list is in the rules (`run.FIRST_SENSES`), since the referee lets a
+   guest's body gain one of them. And the referee's caps are held over every provider
+   of a judged stat: one past them -- a tail faster than the speed cap -- fails
+   net_probe's check of the caps until they move, which is a change to the referee's
+   own limits and needs the false-positive runs of `docs/design/net-hardening.md`
+   again (`CLAUDE.md`).
 8. **The seeded runs**: every new key adds its column to the drop probe's lineage
-   pins, and a gene the water or drift can make moves what the water draws (**Editing
-   a gene**).
+   pins, and a gene the water, drift or a sense's draws can make moves what the water
+   draws (**Editing a gene**).
 9. **Run the checks, render it, and look.**
 
 **Two variants of one organ are two loci**, each with its own copies. If a body may
@@ -152,9 +169,9 @@ A new nose, a new armour: everything it does, some mechanic already does.
    organ of one stat, `palp.gd` for a sense with a part. Set every field the probe
    asks for: `organ`, the next `order`, `provides` (a table per stat, `TIER_MAX + 1`
    entries, the first the stat's value with no provider), `water` (its `weight`, and
-   `drifter` when a drifter may be made of it), `tags`, `channel` for a sense, `look`,
-   the words and `lines` (its numbers on the pause screen). Write the comment the
-   other files have beside each table and number.
+   `drifter` when a drifter may be made of it), `tags`, `channel` for a sense, `family`
+   and `look` (**Looks**), the words and `lines` (its numbers on the pause screen).
+   Write the comment the other files have beside each table and number.
 2. **Add one line to `catalogue.gd`'s `ORGANS`**, after the last live organ. The probe
    fails on a file the index lacks, or a line with no file. Import again: Godot writes
    the file's `.uid`, which is committed beside it, as every organ's is -- never
@@ -169,9 +186,10 @@ A new nose, a new armour: everything it does, some mechanic already does.
 ## An organ with a new mechanic
 
 1. **Write the mechanic** where its system lives -- `game/mechanics/` for one that
-   knows no body -- reading **stats by name** (`Stats.of`) and finding its organ by
-   stat, tag or channel (`Catalogue.worn_provider`, `Stats.organ`, `Catalogue.worn_on`,
-   `Catalogue.tagged`). Never by a gene's name: the gate fails it.
+   knows no body -- reading **stats by name** (`Stats.of`, or `Stats.seated` for one
+   that acts from a place) and finding its organ by stat, tag or channel
+   (`Catalogue.worn_provider`, `Stats.organ`, `Catalogue.worn_on`, `Catalogue.tagged`).
+   Never by a gene's name: the gate fails it.
 2. **Add its stats to `stats.gd`'s `ROWS`**, each with every field:
    - `none`, its value with no provider -- every table's index 0;
    - `better`, `higher` or `lower`;
@@ -183,14 +201,21 @@ A new nose, a new armour: everything it does, some mechanic already does.
    - `contact`: the host decides a contact by it -- a mouth, a skin, a bite, a dose;
    - `group`: the first stat of the stats a mechanic reads together, `&""` for one
      read alone. A body wearing two providers takes a whole group from the one best on
-     its first stat, never stat by stat, so every organ that provides one stat of a
+     its first stat -- or, where its mechanic acts from a place, from the one it acts
+     from (step 3) -- never stat by stat, so every organ that provides one stat of a
      group provides all of it, and a group's stats combine by `best`. The gene probe's
      `TOGETHER` pins the groups as the rows give them: a new group goes there too.
 
    A row marked `judged` or `contact` is in the rules the handshake carries
    (**Editing a gene**).
 3. **A mechanic that acts from a place** -- an arc it looks along, a slot it leaves
-   from -- adds its stat to `stats.gd`'s `SEATED`.
+   from -- adds its stat to `stats.gd`'s `SEATED`. **Every number it uses is then the
+   one organ's it acts from**, the first in slot order, never the best of two: its
+   arc, its tier, its own numbers and its stats, the seated one and every other of its
+   group, all read through `Stats.seated` with the body's slots -- and the referee's
+   copy too, where it judges one. A bound -- the most a body's senses could reach -- is
+   no mechanic, and reads `Stats.of`. The gene probe holds the dart and the radar to
+   it, two of each worn both ways round.
 4. **A sense on a new channel** is code: a lobe in `signal_bus.gd`, the membrane's
    shader and the replay's block (spec §7.3). Every lobe is taken today.
 5. **Then the steps of an organ on mechanics the game has.**
@@ -200,9 +225,12 @@ A new nose, a new armour: everything it does, some mechanic already does.
 **Edit its file.** A key never changes, and neither does a shipped gene's `order`:
 it is the tie-break of what a body is drawn as and what eating it gives.
 
-- **The rules.** When a number a row marks `judged` or `contact` changes -- or a
-  provider of one is added or retired, or the body plan changes -- the rules two
-  builds must agree on change, and net_probe's referee section fails:
+- **The rules.** When a number a row marks `judged` or `contact` changes -- or that
+  row's `none`, `better`, `combine` or `group`; or a provider of one is added or
+  retired; or the gift's list changes, which a variant of a sense does; or, once two
+  organs provide a stat of `SEATED`, which stats act from a place; or the body plan
+  changes -- the rules two builds must agree on change, and net_probe's referee
+  section fails:
 
   > the rules two builds must agree on changed -- they fingerprint to `<new>` now, and
   > Wire.RULES says `<old>`...
@@ -213,21 +241,22 @@ it is the tie-break of what a body is drawn as and what eating it gives.
   refuse each other there, with the version sentence. A player on the old content
   cannot play with one on the new until the older updates: say so in the patch note's
   line when a player can tell.
-- **The seeded runs.** A gene the water or drift can make -- a drifter, or any live
-  variety not tagged `never_drifts` -- changes what a seeded water draws: the drop
-  probe's pins of it (`DEV_LINES`, `DEV_DRAWS`, `DEV_MUTATIONS` and the rest) and
-  `ci.yml`'s empty-library hash. And every new live key, made or not, adds its column
-  to the lineage lines four of those pins hold (`DEV_LINES`, `THREE_ONE_LINES`,
-  `PACK3_LINES`, `TAIL_LINES`): `<key> 0.00` where nothing wears it. Each pin prints
-  what this build gives where it fails, and each is recorded again from that output in
-  the same pull request, with a line saying why.
+- **The seeded runs.** A gene the water or drift can make -- a drifter, any live
+  variety not tagged `never_drifts`, or a sense, which the water gives a peer with
+  none and a newborn as its gift whatever its water and drift say -- changes what a
+  seeded water draws: the drop probe's pins of it (`DEV_LINES`, `DEV_DRAWS`,
+  `DEV_MUTATIONS` and the rest) and `ci.yml`'s empty-library hash. And every new live
+  key, made or not, adds its column to the lineage lines four of those pins hold
+  (`DEV_LINES`, `THREE_ONE_LINES`, `PACK3_LINES`, `TAIL_LINES`): `<key> 0.00` where
+  nothing wears it. Each pin prints what this build gives where it fails, and each is
+  recorded again from that output in the same pull request, with a line saying why.
 
-  **A key that never drifts and is no drifter** is one nothing in a seeded run can
-  make: it leaves the water's every draw as it was. It moves only that column -- and
-  fails the drop probe's lineage 4, which holds that the water carries every live
-  variety at every census: a gene the water can never make is a new kind of gene, and
-  that check is the gene pass's to change, saying why. Anything else that moves is a
-  draw that counts the catalogue's keys: a bug to find, not a pin to record.
+  **A key that never drifts, is no drifter and no sense** is one nothing in a seeded
+  run can make: it leaves the water's every draw as it was. It moves only that column
+  -- and fails the drop probe's lineage 4, which holds that the water carries every
+  live variety at every census: a gene the water can never make is a new kind of
+  gene, and that check is the gene pass's to change, saying why. Anything else that
+  moves is a draw that counts the catalogue's keys: a bug to find, not a pin to record.
   A pin in a workflow is the lead's to move: a session edits `.github/workflows/`
   only when asked, so the pull request says it needs it.
 - **Words** are re-extracted (`i18n_pot -- --write`); a changed English message needs
@@ -239,6 +268,26 @@ it is the tie-break of what a body is drawn as and what eating it gives.
 saves and the wire keep it. A retired key stays known, drawn and inert, and leaves
 every list the water, drift and the gift draw from. It keeps the place in the order it
 shipped with.
+
+**An organ's tags are every variant's**, so an organ tagged `retired` retires every
+variant it lists. To retire the organ's own key and keep its variants, lay it out as
+the toxin is: the organ's `order = -1` and no `retired` of its own, and its first
+variant listed first with the key, the order and the born the organ had, retired --
+
+```gdscript
+order = -1
+variants = [
+	{"variant": &"plain", "key": &"vacuole", "order": 14, "born": 0,
+		"tags": [RETIRED]},
+	# ...then the others, live, as they were.
+]
+```
+
+Its key keeps its place in the order and stays the first of its organ's keys, so it
+is still the organ as shipped on the pause screen -- no accent, named by its organ
+alone -- and every other variant keeps its accent and its `organ · variant` name. To
+retire them all, tag each variant too. The gene probe fails an organ tagged `retired`
+over a variant that does not say so, with this recipe.
 
 What else moves fails until it is moved, each saying so:
 
@@ -275,16 +324,50 @@ index.
 
 ## Looks
 
-Today each gene wears **a hue of its own**: its look's `hue`, a `shape` -- `mat` (the
-mouth), `oars` (the cirrus), `lash` (the tail), `tuft` (every earned organ), `spines`
-(the toxin, by place) -- and a stroke `count` where the shape counts strokes. A home
-shape gives its tile's `tile_count` and `tile_length`. The gene probe holds every live
-gene's hue 10° or more of HSV hue from every other's and 25° from self teal and
-threat red, but five pairs kept until phase 6, and it asks a variant for a hue of its
-own too.
+**Colour shows the family, shape shows the organ, and the pause screen names the exact
+gene** (`docs/design/gene-looks.md`).
 
-**Phase 6 replaces this section**: a gene's colour will come from its family, and a
-variant will wear its organ's colour with an accent (`docs/design/gene-looks.md`).
+- **An organ's look is a family and a kind.** `family` is one of the five in
+  `families.gd` -- eating, moving, sensing, defending, metabolism -- and the colour
+  comes from it: three shades measured in OKLCH, the middle one unless the look sets
+  `shade` 0 or 2. **A look holds no colour.** The catalogue works a key's hue out
+  (`Catalogue.hue_of`), and the probe fails a `hue`. `look.shape` is a kind the family
+  is built as -- eating `mat`; moving `oars`, `lash`, `coil`; sensing `tuft`, `lens`;
+  defending `spines`, `plates`; metabolism `organelle` -- and the rest of the look is
+  that kind's parameters, each with its default and its range or values in `kinds.gd`:
+  `look = {"shape": &"tuft", "tip": &"fork"}`.
+- **Two organs of one family differ at a glance or the probe fails them**: in their
+  kind, or in a structural parameter -- a tip, a bend, a form, waves, turns, lips. A
+  count, a length or a shade is never a difference, because copies multiply counts and
+  lengths. The message names both organs. The fix is a new value of a parameter -- a
+  tip, a form, a head -- which is a few lines in that kind's generator in
+  `game/vision/cilia.gd`, and a render.
+- **A variant is its organ's look and one accent**: `"look": {"accent": &"ring"}`, one
+  of `disc`, `ring`, `diamond` and `bar`. Not the mark its organ's seat shows as
+  shipped (a sense's pigment and a toxin's beads are discs), and not a sibling's. It
+  sets nothing else of a look, and never a colour. An organ has room for three or four
+  variants, and one more fails the probe, saying *make a new organ*. On the pause screen
+  the accent sits in its chip's first lobe and before its word on the waiting tray, and
+  the explaining line names it `organ · variant`, the variant's word from the organ's
+  `VARIANT_WORDS`.
+- **A sense names its `channel`, and the membrane colours the channel**, not the
+  organ: a new sense on a channel the game has changes nothing there. A new channel is
+  code, a lobe of its own (`docs/design/gene-looks.md` §5).
+- **Render it beside its neighbours.** `tools/looks_sheet.tscn` draws every live organ
+  by family, at one copy and at three, with its tile. Its `--variants=1` lays out each
+  variant beside its organ, and `--room=1` organs no file holds. The variants and organs
+  it shows are filed by `tools/looks_specimens.gd` the way the gene probe files its own,
+  so a new one can be shot before it ships; `tools/drive.tscn -- --specimens=1` puts the
+  same variants on the pause screen. At both sizes:
+
+  ```
+  xvfb-run -a -s "-screen 0 2400x1080x24" ~/godot/godot --path . --rendering-driver opengl3 \
+      --fixed-fps 60 res://tools/shot.tscn -- --scene=res://tools/looks_sheet.tscn \
+      --size=2400x1080 --out=/tmp/sheet-2400.png --wait=0.5
+  ```
+
+A key this build does not know -- a gene from a newer build -- draws as a plain tuft in
+`UNKNOWN_TINT`, a pale grey-green in no family.
 
 ## Names
 
@@ -299,9 +382,11 @@ the gene's word and its `NAMES` entry, not the key.
 **Never name a gene outside `game/genes/`.** Ask the catalogue for the organ by its
 stat, its tag or its channel. The gate fails a key, an organ's or a variant's name
 written in any script, scene, resource or shader under `game/` -- in either quote,
-alone or with a part, `&"flagellum.hold"` -- but **a name built by concatenation or a
-format cannot be caught**: never build one (`"%s.hold" % organ`). Comments and
-`tools/` are exempt: a probe names genes on purpose.
+alone or with a part, `&"flagellum.hold"`, or in a script as a dictionary's bare key,
+`{flagellum = 2}`, which GDScript reads as the string. **What it cannot catch**, never
+write: a name built by concatenation or a format (`"%s.hold" % organ`), a name inside
+a longer string (`"flagellum hold"`), and a string with an escaped quote in it.
+Comments and `tools/` are exempt: a probe names genes on purpose.
 
 ## Balance
 

@@ -26,10 +26,13 @@ letters `a-z` and permanent once shipped.
 ## 2. Make the change
 
 - **A variant**: one entry in its organ's `variants` -- a `variant` name, its `key`, the
-  next `order`, what it changes, a `hue` of its own for now. `born` is 0 unless set; its
-  tags add to its organ's; its parts are its organ's; its water `weight` is its share of
-  its organ's draws, and drift may bring it unless it is tagged `never_drifts`. A strain
-  of the toxin sets its `dose`. README, "A variant".
+  next `order`, what it changes, and an accent, `"look": {"accent": &"ring"}`, never a
+  colour. `born` is 0 unless set; its tags add to its organ's; its parts are its
+  organ's; its water `weight` is its share of its organ's draws, and drift may bring it
+  unless it is tagged `never_drifts`. **A variant of a sense is a sense and a gift**,
+  by its organ's tags: the water may give it to a peer with no sense and a newborn may
+  be given it, whatever its water and drift say. A strain of the toxin sets its
+  `dose`. README, "A variant".
 - **An organ on mechanics the game has**: a copy of the nearest organ's file as
   `organs/<key>.gd`, every field set, and one line in `catalogue.gd`'s `ORGANS`; then
   import again (`xvfb-run -a ~/godot/godot --path . --import`), which writes the file's
@@ -37,11 +40,15 @@ letters `a-z` and permanent once shipped.
   has".
 - **A new mechanic**: the mechanic, reading stats by name; its rows in `stats.gd`
   (`none`, `better`, `combine`, `unit`, `judged`, `contact`, `group`); `SEATED` for one
-  that acts from a place. README, "An organ with a new mechanic".
+  that acts from a place, which then takes every number it uses -- its stats through
+  `Stats.seated` -- from the one organ it acts from, the first in slot order, never
+  the best of two. README, "An organ with a new mechanic".
 - **An edit**: the organ's file. Never a key, never a shipped `order`. README, "Editing
   a gene".
-- **A retirement**: the `retired` tag. Never delete the file or reuse the key. README,
-  "Retiring a gene".
+- **A retirement**: the `retired` tag. Never delete the file or reuse the key. An
+  organ's tag retires every variant it lists, so to retire only its own key lay it out
+  as the toxin is: `order = -1`, and its first variant listed first with the key, the
+  order and the born the organ had, `"tags": [RETIRED]`. README, "Retiring a gene".
 - **The slots**: `body_plan.gd`, after settling what spec §15.3 lists for the first
   plan change. README, "Changing the slots".
 
@@ -51,8 +58,10 @@ written with the first organ that turns it on.
 
 ## 3. Words
 
-Its key in the organ's word tables, with the TRANSLATORS note, ROOM and CONTEXT the
-table has. Then write the template again, and add the French in `game/i18n/fr.po`:
+Its key in the organ's word tables -- a variant's own word in `VARIANT_WORDS`, which
+the explaining line puts after its organ's name -- with the TRANSLATORS note, ROOM and
+CONTEXT the table has. Then write the template again, and add the French in
+`game/i18n/fr.po`:
 
 ```
 ~/godot/godot --headless --path . res://tools/i18n_pot.tscn -- --write
@@ -64,15 +73,19 @@ table has. Then write the template again, and add the French in `game/i18n/fr.po
   `SHIPPED_LISTS` it joins (`drifter`, `sense`, `gift`, `declares`).
 - **The rules**: when net_probe's referee section says the rules two builds agree on
   changed, set `Wire.RULES` (`game/net/wire.gd`) to the value it names, in the same
-  commit. **Never `Wire.PROTOCOL`.**
+  commit. **Never `Wire.PROTOCOL`.** They move with a judged or contact table, that
+  row's `none`, `better`, `combine` or `group`, the body plan, the gift's list -- which
+  a variant of a sense joins, whatever it provides -- and a second organ of a mechanic
+  with a place, which adds the line naming its seat.
 - **The referee's caps** hold over every provider of a judged stat: a tail faster than
   the speed cap fails net_probe's check of them. Moving a cap changes the referee's own
   limits, which needs the false-positive runs of `docs/design/net-hardening.md` again
   (`CLAUDE.md`).
-- **The seeded runs**: a gene the water or drift can make moves the drop probe's pins
-  and `ci.yml`'s empty-library hash, and a key added or retired adds or takes away its
-  column in the lineage lines four of those pins hold. Record them again from the
-  checks' own output, and say why. A new key that never drifts and is no drifter moves
+- **The seeded runs**: a gene the water, drift or a sense's draws can make -- a
+  variant of a sense always can -- moves the drop probe's pins and `ci.yml`'s
+  empty-library hash, and a key added or retired adds or takes away its column in the
+  lineage lines four of those pins hold. Record them again from the checks' own
+  output, and say why. A new key that never drifts, is no drifter and no sense moves
   only that column, and fails the drop probe's lineage 4 (every live variety carried):
   anything more is a bug (README, "The seeded runs"). The workflow's pin is the lead's
   to move: ask.
@@ -89,16 +102,18 @@ timeout 600 ~/godot/godot --headless --path . res://tools/drop_probe.tscn       
                                                      # [net-probe] NOTE --referee-only: 0 failed
 ```
 
-Run the network probe alone, or in a namespace of its own
-(`unshare --net -- bash -c 'ip link set lo up && <command>'`): two at once call each
-other's servers.
+Run the network probe alone, or in a namespace of its own with an address besides
+loopback, which its pond referee needs -- any private one; this one is made up:
+`unshare --net -- bash -c 'ip link set lo up && ip addr add 10.77.0.5/24 dev lo && <command>'`.
+Two at once call each other's servers.
 
 ## 6. Look at it
 
-Render the gene beside its nearest neighbours -- full vision, point of view and the
-pause screen -- at 1280x720 **and** 2400x1080, with `tools/shot.tscn` posing
-`tools/drive.tscn` (README, "The checks"), and judge it. A screen is done when it has
-been looked at.
+Render the gene beside its nearest neighbours -- the organs of its family on
+`tools/looks_sheet.tscn`, then full vision, point of view and the pause screen -- at
+1280x720 **and** 2400x1080, with `tools/shot.tscn` posing `tools/drive.tscn` (README,
+"The checks" and "Looks"), and judge it. Pass `--fixed-fps 60` to Godot, so one pose is
+one frame. A screen is done when it has been looked at.
 
 ## 7. Land it
 
