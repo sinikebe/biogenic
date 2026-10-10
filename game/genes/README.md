@@ -118,8 +118,8 @@ organ's own key is its first variant, implicitly, and never leaves the catalogue
      `drifter` says whether a drifter may be made of it. **Drift may bring it** to a
      lineage whatever its water says, unless it is tagged `never_drifts`. **A variant
      of a sense is a sense, and a gift**: it inherits both tags, so the water may give
-     it to a peer with no sense, and a newborn may be given it at five seconds,
-     whatever its water and drift say.
+     it to a peer or a daughter born with no sense, and your newborn may be given it
+     at five seconds, whatever its water and drift say.
    - **Two places** take `forms`: place to `{"key": ..., "order": ..., ...}`, each
      form keyed and ordered, the first its variety. A variant of one place needs none.
    - **A strain of a toxin** sets its `dose`. The probe asks for a stack line where its
@@ -242,14 +242,15 @@ it is the tie-break of what a body is drawn as and what eating it gives.
   cannot play with one on the new until the older updates: say so in the patch note's
   line when a player can tell.
 - **The seeded runs.** A gene the water or drift can make -- a drifter, any live
-  variety not tagged `never_drifts`, or a sense, which the water gives a peer with
-  none and a newborn as its gift whatever its water and drift say -- changes what a
-  seeded water draws: the drop probe's pins of it (`DEV_LINES`, `DEV_DRAWS`,
-  `DEV_MUTATIONS` and the rest) and `ci.yml`'s empty-library hash. And every new live
-  key, made or not, adds its column to the lineage lines four of those pins hold
-  (`DEV_LINES`, `THREE_ONE_LINES`, `PACK3_LINES`, `TAIL_LINES`): `<key> 0.00` where
-  nothing wears it. Each pin prints what this build gives where it fails, and each is
-  recorded again from that output in the same pull request, with a line saying why.
+  variety not tagged `never_drifts`, or a sense, which the water gives a peer or a
+  daughter with none, and your newborn as its gift, whatever its water and drift say
+  -- changes what a seeded water draws: the drop probe's pins of it (`DEV_LINES`,
+  `DEV_DRAWS`, `DEV_MUTATIONS` and the rest) and `ci.yml`'s empty-library hash. And
+  every new live key, made or not, adds its column to the lineage lines four of those
+  pins hold (`DEV_LINES`, `THREE_ONE_LINES`, `PACK3_LINES`, `TAIL_LINES`): `<key> 0.00`
+  where nothing wears it. Each pin prints what this build gives where it fails, and
+  each is recorded again from that output in the same pull request, with a line saying
+  why.
 
   **A key that never drifts, is no drifter and no sense** is one nothing in a seeded
   run can make: it leaves the water's every draw as it was. It moves only that column

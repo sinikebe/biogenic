@@ -12,8 +12,9 @@ The owner, 2026-10-04, after the readiness review (§0):
 > "You will prepare the code for the gene pass. THe gene pass is just adding/editing
 > genes, so it should be straightforward"
 
-**Status: phases 1a, 1b, 2, 3, 4 and 5 built** (§15.1 to §15.6, 2026-10-05 to
-2026-10-10); phases 6 and 7 designed, not built.
+**Status: phases 1a, 1b, 2, 3, 4, 5 and 6 built** (§15.1 to §15.6, 2026-10-05 to
+2026-10-10; phase 6 as `gene-looks.md` §13 records it, §7.2); phase 7 designed, not
+built.
 This document is the preparation. It turns the
 genes, their variants and the slots into data that every system reads, adds the checks
 that catch a half-wired gene, and writes the playbook the gene pass follows. Phases 1
@@ -1011,9 +1012,11 @@ with four letters, are read by key. `TIER_MAX` moved to `gene.gd`, which loads n
 so that the wire reads it too: `TIER_TOP` was the one limit still a literal,
 `GENES_MAX` and `ORDER_MAX` having been derived in phase 2, and both probes already held
 all three to their sources. Outside phase 6's files one tier clamp was a literal, `drive
---sample=`'s, and it reads `TIER_MAX` now. **Not lifted**: `cilia.gd`'s two tier clamps
-and `signal_bus.gd`'s `ORGAN_TIER_MAX`, in phase 6's files; and the triggers a rule
-claims, still one `int`'s bits, of which four are used today.
+--sample=`'s, and it reads `TIER_MAX` now. **Once phase 6 had landed** (§15.6),
+`cilia.gd`'s two -- the fangs' pairs and a spined organ's spines per copy -- and
+`signal_bus.gd`'s `ORGAN_TIER_MAX` read it too, and phase 6's organelles take their
+seating clamped by its own table, as every ladder there is. **Not lifted**: the
+triggers a rule claims, still one `int`'s bits, of which four are used today.
 
 ---
 
@@ -2145,7 +2148,8 @@ has its playbook and its skill. Nothing a player sees or feels moved (below). By
   rule on every tick is still one `&`, and one test that the body's mask is one word.
   The triggers a rule claims stay one `int` (§13).
 - **A group of stats is a row's field** (§5.1). Phase 4's review puts every judged and
-  contact row on a line of the rules; the group joins that line when the two meet.
+  contact row on a line of the rules; the group joined that line when the two met on
+  `dev`, and moved `Wire.RULES` once (below).
 - **`one_variant` holds wherever a body comes to carry a variant, and says so nowhere
   yet.** A player-facing word for writing over a variant waits for the first organ that
   turns the switch on (§6.3).
@@ -2167,36 +2171,44 @@ a lineage that carries the plain tail may now draw the faster one, and one with 
 draws between the two, which takes one more number from the stream. `water.drifter`
 says only whether a drifter may be made of it. **Tagged `never_drifts` as well, the
 same variant registered leaves the run at `23c9a2ab…`**, the hash without it, so
-nothing else in a run counts the catalogue's keys. In `drop_probe` it fails 4 checks of
-143 and moves nothing else: checks 1 and 6 and tail 1, whose pinned lineage lines gain
-its column, `probeswift 0.00` -- every live key has one -- and lineage 4, which holds that
-the seeded water carries every live variety at every census, which it never can. The
-traces, the draws, the mutations and the membrane hold. The playbook says all of it.
+nothing else in that run counts the catalogue's keys. In `drop_probe` it fails 4 checks
+of 143 and moves nothing else: checks 1 and 6 and tail 1, whose pinned lineage lines
+gain its column, `probeswift 0.00` -- every live key has one -- and lineage 4, which holds
+that the seeded water carries every live variety at every census, which it never can.
+The traces, the draws, the mutations and the membrane hold. **A variant of a sense
+would move the run all the same** (phase 5's review): tags add up, so it is a `sense`
+and a `gift` as its organ is: the water gives a peer, or a daughter born in it, with no
+sense one of the keys tagged `sense`, and your newborn its gift from those tagged
+`gift`, whatever a key's water and drift say. The gift's list is in the rules too,
+`run.FIRST_SENSES`, so `Wire.RULES` moves with it. The probe's tail is no sense. The
+playbook says all of it.
 
 **The review's calls** (§15.4, "Before the first variant"):
 
-- **6** (`06c6482`): a peer's born keys take their own variety out of its pool, and the
+- **6** (`b2e8728`): a peer's born keys take their own variety out of its pool, and the
   organ's other variants stay -- unless the organ holds one variant to a body. Of 400
   peers made at r40 with the probe's faster tail, 188 draw it beside the tail they
   were born with, and none once the tail holds one variant.
-- **7** (`0255802`): one measure of an organ's level, the best of any live key of it, for
+- **7** (`ff5358a`): one measure of an organ's level, the best of any live key of it, for
   a body's rules and its tail's hold, yours and a water body's. The plain tail at one
   copy beside the faster at three works at 3 for all three.
-- **8** (`bf9efc9`): the mechanics, and no words (above). With the probe's gland switched
+- **8** (`94e51fc`): the mechanics, and no words (above). With the probe's gland switched
   to one variant: `placing()` names the key it writes over; a lapse lands in its slot
   with room and without; the floor gives a peer wearing it nothing and keeps the gene
   short for the next.
 - **9**: no change. The paralysing and sleeping strains are dna-slots.md's phases 3 and
   4, which wait on the owner.
-- **10** (`4d6eea4`): a group from one provider. The probe's faster tail worn beside the
+- **10** (`aa33f96`): a group from one provider. The probe's faster tail worn beside the
   plain one swims at 220.8 with its own 2.1 s gap, not the plain one's 1.45.
-- **11**: phase 6's, untouched.
-- **12** (`13817e5`): a person's order before its genome, at both sites. A person given
+- **11**: phase 6's, and answered there (§15.4): a variant wears its organ's colour and
+  an accent, never a hue of its own.
+- **12** (`1f6b4d8`): a person's order before its genome, at both sites. A person given
   a second dart, its stun its own, stuns with the one first in slot order, each way
   round, by a replay and by a pond: `[9, 9, 5, 5]`.
-- **13** (`01f8a0f`): the gate, §12.2. 0 names in 75 files.
+- **13** (`6009cce`): the gate, §12.2. 0 names in 75 files.
 
-**Checked** at `a3bb018`, against `b63e365`, phase 4 as reviewed:
+**Checked** at `a3bb018`, against `b63e365`, phase 4 as reviewed -- the branch before
+phase 5's review, and before `dev` had phase 6 (below for the branch on `dev`):
 
 1. **Every check `ci.yml` runs passes**, the network's three each in a network
    namespace of its own: the gene probe's 62 and its gate; the levels, Back and
@@ -2272,18 +2284,81 @@ The rulebook's own two reads cost what they did: `choose` over the founders' lis
 `worn` for a body of seven genes, medians of 9.9 to 10.7 µs and 6.8 to 7.3 µs in either
 build, three runs of seven rounds each.
 
+**After phase 5's review, on `dev`** (2026-10-10). Phase 5 was built again on `dev` as
+it stood at `f6c88b9` -- phase 4's review fixes, the launcher at `ac925b9f`, then phase 6
+-- its commits picked over in order, the paused notes left out. Where the two met, each
+kept the other's: phase 6's accents in `gene.gd`'s examples and in the probe's own
+organs, its dart rows, and §16's looks. Phase 6 reads `keys_of_organ(organ)[0]` as the
+organ as shipped (`as_shipped`, `explain_name`), and that holds, with the gene probe's
+ProbeGland check that pins it. Then:
+
+- **The rules write a row's `group`** (`2985164`): `ROW_FIELDS` gains it at the end of
+  the line of each of the 15 judged and contact rows, and `Wire.RULES` moved once, from
+  `c382d531…` to `843c9d81…`. No `PROTOCOL` change: protocol 8 is on the dev app only.
+  Until it was written, net_probe's row check failed naming every row's `group`, and its
+  pin then named the new value. `docs/server.md`'s examples name it.
+- **The tier clamps phase 5 left in phase 6's files read `TIER_MAX`** (`f0c0c54`, §13).
+- **A mechanic with a place is all one organ's** (`570ab11`; the design call, §5.2):
+  every number it uses is the organ's it acts from -- its stats too, through
+  `Stats.seated` -- in your cell, a water cell's dart and senses, a person's dart, a
+  water cell's eye and the referee, which keeps the slots a guest said (`worn_order`)
+  and judges a call by the radar that calls, keeping the old reach for the calls on
+  their way when the same body is said in an order that moves it. Where two organs
+  provide a judged or contact stat of one, the rules carry a line naming its seat
+  (§11.3), which net_probe writes too and holds the game's to with a second dart filed;
+  today no stat has two, so the text and its pin are the ones above. The spawner's hide
+  reach round a person and the referee's reach cap are bounds, and read the most any
+  organ gives. The gene probe wears two darts and two radars, each way round.
+- **The review's findings**: the names gate reads a dictionary's bare keys,
+  `{flagellum = 2}` (`def9db1`, §12.2); an organ's own key retires alone only as the
+  toxin is laid out, and the probe fails an organ tagged `retired` over a variant that
+  does not say so (`2560335`, §6.2); a variant of a sense moves the seeded runs and the
+  rules whatever its drift tags (above); and the playbook's namespace carries CI's
+  address, its renders `--fixed-fps 60`, and phase 6's `## Looks` (`46d29a7`,
+  `632d62d`).
+
+**Checked** at `632d62d`, against `f6c88b9`:
+
+1. **Every check `ci.yml` runs passes**, the network's each in a namespace of its own
+   with CI's address: the gene probe's 73 checks, from `f6c88b9`'s 63, and its gate, 0
+   names in 75 files; the levels and Back probes, and the translation template, current
+   at 531 messages from 93 files, with every catalog linted; every scene's boot;
+   `drop_probe`'s 143 with its ten pins; `net_probe`, 474 checks in 18,297
+   frames of the 24,000 CI allows; `net_fuzz` at seed 1, its door too; and `net_drop`.
+2. **Each new check was seen to fail on the fault it guards**, planted in a scratch
+   copy: `Stats.seated` reading the best of two; your cell's stats, a water cell's dart,
+   a person's dart, a water eye's period, the referee's reach and its period, each back
+   on `Stats.of`; the referee not following a body said in its other order; the rules'
+   seat line left out, and written with one organ to provide it; and net_probe's own
+   writer without it -- eleven, each caught by the darts' check or the radars' or both,
+   the first two by the probe's gland's nose as well, and the last by net_probe. A
+   single-line bare key and one in a dictionary over four lines fail the gate twice,
+   the same text in a string and a parameter named after a gene not at all. The shipped
+   toxin tagged `retired` over its strain fails with the recipe.
+3. **The seeded runs are the same**: the empty library hashes to `7397a410…` under all
+   three schemes, 69,349 lines; `drop_probe`'s ten pins hold; `drive
+   --fingerprint=3000` at seeds 7 and 12345, plain, sniffing and with seven genes on,
+   gives `f6c88b9`'s six hashes and counts; the input path's three traces are
+   `f6c88b9`'s.
+4. **`DropSave.rules()` is `e4213164…`**, as at `f6c88b9`, and the stats layer's
+   3,865 answers are its to the byte. `Wire.RULES` is `843c9d81…`, the 15 row lines
+   each one item longer and nothing else.
+5. **The frames** -- full vision, point of view, the pause screen and the choosing
+   screen, at both sizes, every one rendered with `--fixed-fps 60` -- are 0 px from
+   `f6c88b9`'s, which were 0 px apart in three renders; and the final tree's two
+   renders are 0 px apart.
+
 **Deferred:**
 
 - **`ci.yml`'s "Check the gene names" comment** describes the gate's old reach: a key's
   literal in a script. The gate reads scenes, resources and shaders, organs' and
-  variants' names and qualified parts now. The workflow is the lead's to edit.
-- **Phase 6's**: `cilia.gd`'s two tier clamps and `signal_bus.gd`'s `ORGAN_TIER_MAX`
-  (§13), and the review's call 11.
+  variants' names, qualified parts and a dictionary's bare keys now. The workflow is
+  the lead's to edit, and the lead has it.
 - **The words for `one_variant`**, with the first organ that turns it on (§6.3).
 - **Call 9**, with dna-slots.md's phases 3 and 4.
 - **A gene the water never makes**: `drop_probe`'s lineage 4 holds that the seeded water
-  carries every live variety, so a key that never drifts and is no drifter fails it
-  (above). Whether the game wants such a gene, and that check with it, is the gene
+  carries every live variety, so a key that never drifts, is no drifter and no sense
+  fails it (above). Whether the game wants such a gene, and that check with it, is the gene
   pass's call.
 - **Frames on a busy machine**: the pause screen's arming reads a wall clock
   (`ARM_TIMEOUT_MS`, `ARM_GUARD_MS`), so a pose that arms a slot or a way and waits can

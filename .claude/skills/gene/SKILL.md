@@ -30,9 +30,9 @@ letters `a-z` and permanent once shipped.
   colour. `born` is 0 unless set; its tags add to its organ's; its parts are its
   organ's; its water `weight` is its share of its organ's draws, and drift may bring it
   unless it is tagged `never_drifts`. **A variant of a sense is a sense and a gift**,
-  by its organ's tags: the water may give it to a peer with no sense and a newborn may
-  be given it, whatever its water and drift say. A strain of the toxin sets its
-  `dose`. README, "A variant".
+  by its organ's tags: the water may give it to a peer or a daughter with no sense and
+  your newborn may be given it, whatever its water and drift say. A strain of the
+  toxin sets its `dose`. README, "A variant".
 - **An organ on mechanics the game has**: a copy of the nearest organ's file as
   `organs/<key>.gd`, every field set, and one line in `catalogue.gd`'s `ORGANS`; then
   import again (`xvfb-run -a ~/godot/godot --path . --import`), which writes the file's
