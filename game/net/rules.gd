@@ -101,20 +101,21 @@ const ROW_FIELDS_UNREAD := {
 }
 
 ## **The referee's own limits**, by the names they have in referee.gd and in its
-## order: what each foul weighs on the ledger and how often one rule may foul, the
-## caps over motion, the slack on a radius and a ring, the shout's and the arrival's
+## order: what each foul weighs on the ledger, how often one rule may foul, and the
+## ledger's cut and decay, which turn those weights into a cut; the caps over motion, the slack on a radius and a ring, the shout's and the arrival's
 ## banks, the re-entry and the stall. **Every constant of referee.gd is here or in
 ## [constant REFEREE_NOT_LIMITS]**, and `tools/net_probe.gd` fails on one in neither,
 ## so a limit added to the referee's judgement is in the rules or said not to be. One
 ## list: the probe writes the limits from this one, and sorts referee.gd by it.
 const REFEREE_LIMITS: Array[String] = ["WEIGHT_MOVE", "WEIGHT_TURN", "WEIGHT_SIZE",
 	"WEIGHT_OUT", "WEIGHT_SHOUT", "WEIGHT_ENTER", "WEIGHT_BODY_RATE", "WEIGHT_BODY",
-	"WEIGHT_SISTER", "WEIGHT_SISTER_OFF", "WEIGHT_DIED", "FOUL_EVERY", "MOVE_RATE",
-	"MOVE_HOLD", "MOVE_SLACK", "TURN_RATE", "TURN_HOLD", "TURN_SLACK", "SPEED_MAX",
-	"TURNING_MAX", "RADIUS_SLACK", "DAUGHTER_RADIUS", "OUT_STILL", "BIRTH_WAIT",
-	"SISTER_DISTANCE", "SISTER_RING", "SHOUT_REACH", "SHOUT_PAST", "SHOUT_BANK",
-	"SHOUT_EARLY", "ENTER_BANK", "ENTER_EVERY", "RADIUS_EPSILON", "PERSON_RATE",
-	"PERSON_BANK", "STALE_FOR", "REENTRY_KEEPS_WOUND", "REENTRY_WITHIN", "STALL_CREDIT"]
+	"WEIGHT_SISTER", "WEIGHT_SISTER_OFF", "WEIGHT_DIED", "FOUL_EVERY", "STRIKE_CUT",
+	"STRIKE_DECAY", "MOVE_RATE", "MOVE_HOLD", "MOVE_SLACK", "TURN_RATE", "TURN_HOLD",
+	"TURN_SLACK", "SPEED_MAX", "TURNING_MAX", "RADIUS_SLACK", "DAUGHTER_RADIUS",
+	"OUT_STILL", "BIRTH_WAIT", "SISTER_DISTANCE", "SISTER_RING", "SHOUT_REACH",
+	"SHOUT_PAST", "SHOUT_BANK", "SHOUT_EARLY", "ENTER_BANK", "ENTER_EVERY",
+	"RADIUS_EPSILON", "PERSON_RATE", "PERSON_BANK", "STALE_FOR", "REENTRY_KEEPS_WOUND",
+	"REENTRY_WITHIN", "STALL_CREDIT"]
 ## **The constants of referee.gd that are no limit**, each with why.
 const REFEREE_NOT_LIMITS := {
 	"CellBody": "a script it loads: what it judges by there is a line above, by name",

@@ -66,6 +66,9 @@ const Invite := preload("res://game/net/invite.gd")
 ## handshake carries (docs/design/gene-catalogue.md §11.3). It loads the game; the
 ## wire does not.
 const Rules := preload("res://game/net/rules.gd")
+## **The referee** (net-hardening.md B), for the ledger's cut and decay, which are
+## its: the rules its weights are counted against. It loads nothing of game/net.
+const Referee := preload("res://game/net/referee.gd")
 
 ## Where the link is. The screen reads this and nothing else to decide what to
 ## draw; the run reads [constant Link.TOGETHER] to decide whether to shout.
@@ -444,9 +447,12 @@ const QUEUE_BYTES := 16384
 ## **The ledger** (A.4): points for each offence, decaying at one a second;
 ## ten is a cut. Two malformed frames leave a guest connected and three inside
 ## two seconds do not -- and a guest on this protocol never sends one, because
-## the writers never write what the readers refuse (wire.gd).
-const STRIKE_CUT := 10.0
-const STRIKE_DECAY := 1.0
+## the writers never write what the readers refuse (wire.gd). **Its cut and its
+## decay are rules**, the referee's, in the text the handshake carries: they turn
+## the referee's weights into a cut. The wire's strikes after them are not -- an
+## honest guest on one protocol never earns one, and they guard the wire.
+const STRIKE_CUT := Referee.STRIKE_CUT
+const STRIKE_DECAY := Referee.STRIKE_DECAY
 const STRIKE_MALFORMED := 4.0
 const STRIKE_FLOOD := 6.0
 const STRIKE_BYTES := 6.0
