@@ -1939,6 +1939,15 @@ commit:
   window; with 30 s more of the room, 10 runs in 10, three of them with a sister fed;
   and with one sister or both taken out of the water before the stop, each is put
   back and check 27 passes.
+
+  CI then found a second way the two checks fail, and it was the probe's too. Each
+  guest's sister is told apart by a gene her mother marks in her DNA, and the mark
+  was chosen only against her own daughter, so the other sister could carry it
+  too: both records then matched one sister, and CI read "ids 685 and 685". The
+  mark is now a gene neither declined daughter carries, and a sister is matched by
+  the mark at the count it was set to. With the other daughter given the first
+  mark on purpose, the old probe fails both checks the way CI did (ids 690 and
+  690) and the new one passes them (701 and 702).
 - **The docs.** This section names what its citations were, where it named commits a
   squash removes; and the passages that still said a rules change bumps the protocol
   carry a dated note (`feeding.md` §3.3 and §5.6, `ocean.md` §10.5, `dna-slots.md`

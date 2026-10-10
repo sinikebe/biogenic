@@ -10485,14 +10485,26 @@ func _server_sisters(pond: Object, food: Node, first: Node, second: Node) -> Arr
 			return int(run.get("_split")) == NormalMode.Split.CHOOSING), 3.0, [])
 	var out: Array = []
 	var taken := {}
+	# **Each guest's mark is a gene neither declined daughter carries**, in her DNA
+	# or on her body: one the other sister also carried would match her too, and a
+	# record would then be the wrong sister's -- as CI once had it, both ids alike.
+	var declined_all: Array = []
+	for run: Node in runs:
+		if int(run.get("_split")) == NormalMode.Split.CHOOSING:
+			declined_all.append((run.get("_daughters") as Array)[1])
+	var marks: Array[StringName] = [&"ampulla", &"stigma", &"palp", &"ocellus",
+		&"chemocyte"]
+	for key: StringName in Catalogue.live():
+		if not marks.has(key) and not Catalogue.born().has(key):
+			marks.append(key)
 	for run: Node in runs:
 		var said := {"unworn": &"", "id": -1}
 		if int(run.get("_split")) == NormalMode.Split.CHOOSING:
 			var declined: Dictionary = (run.get("_daughters") as Array)[1]
-			for gene: StringName in [&"ampulla", &"stigma", &"palp", &"ocellus",
-					&"chemocyte"]:
-				if not taken.has(gene) and not (declined["body"] as Dictionary).has(gene) \
-						and not (declined["tiers"] as Dictionary).has(gene):
+			for gene: StringName in marks:
+				if not taken.has(gene) and declined_all.all(func(d: Dictionary) -> bool:
+						return not (d["body"] as Dictionary).has(gene) \
+							and not (d["tiers"] as Dictionary).has(gene)):
 					said["unworn"] = gene
 					break
 			taken[said["unworn"]] = true
@@ -10510,7 +10522,8 @@ func _server_sisters(pond: Object, food: Node, first: Node, second: Node) -> Arr
 	pond.disconnect(&"sister_placed", on_placed)
 	for one: Dictionary in placed:
 		for said: Dictionary in out:
-			if said["unworn"] != &"" and (one["body_dna"] as Dictionary).has(said["unworn"]):
+			if said["unworn"] != &"" \
+					and int((one["body_dna"] as Dictionary).get(said["unworn"], 0)) == 2:
 				said.merge(one, true)
 	return out
 
