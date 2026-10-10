@@ -19,3 +19,6 @@ extends "res://game/genes/gene.gd"
 func _init() -> void:
 	organ = &"rhabdom"
 	tags = [RETIRED]
+	# **Its class, for the record** (gene-rarity.md §4): uncommon, as its weight of 2
+	# was while the water made it. No pool reads it, and its weight is 0.
+	water = {"rarity": &"uncommon"}

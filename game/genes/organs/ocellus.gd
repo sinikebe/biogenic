@@ -172,9 +172,12 @@ func _init() -> void:
 	numbers = {&"xp_cap": BEAM_XP_CAP, &"ray_cost": BEAM_RAY_COST,
 		&"sweep_cost": BEAM_SWEEP_COST, &"sweep_step_deg": BEAM_SWEEP_STEP_DEG,
 		&"rays_max": BEAM_RAYS_MAX}
-	# **The beam and the voluntary push are the rarest things in the water**: the
-	# two that change the most about a run.
-	water = {"weight": 2, "drifter": true}
+	# **Uncommon, as every organ a run is built from** (gene-rarity.md §4). This
+	# comment once wanted the beam and the voluntary push the rarest things in the
+	# water, the two that change the most about a run; the weight they shipped never
+	# made them so, and making them `rare` is a balance change, made from play
+	# (gene-rarity.md §12).
+	water = {"rarity": &"uncommon", "weight": 2, "drifter": true}
 	tags = [SENSE, GIFT]
 	channel = BEAM
 	declares = {"in": [{"name": &"beam", "bearing": true,

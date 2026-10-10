@@ -78,6 +78,11 @@ const LENS := Gene.LENS
 const SPINES := Gene.SPINES
 const PLATES := Gene.PLATES
 const ORGANELLE := Gene.ORGANELLE
+## **The ladder a gene's `water.rarity` names a row of** (docs/design/gene-rarity.md
+## §2), for the same reason: what each class weighs in the water and the carriers the
+## drop's floor keeps of it. Read through [method rarity_of], [method water_weight] and
+## [method floor_of], never for its weights directly.
+const Rarity := preload("res://game/genes/rarity.gd")
 
 ## **The tables of words an organ's file may hold** (gene.gd, "Its words"), by
 ## constant name, and what each is called here: the words said of a key ...
@@ -168,6 +173,12 @@ static var _drifters: Array[StringName] = []
 ## one variant to a body ([method organ_weight], [method one_variant]).
 static var _organ_weights := {}
 static var _one_variant := {}
+## **Key to how rare it is, to its weight in the water and to the carriers the floor
+## keeps of it** (gene-rarity.md §2.4; [method rarity_of], [method water_weight],
+## [method floor_of]), every key's, worked out once an index from the ladder.
+static var _rarity := {}
+static var _water_weights := {}
+static var _floors := {}
 ## **Key to its organ, and organ to its keys**, every key's, retired and forms
 ## included, an organ's in the order its file lists them. Asked of every gene of
 ## every draw the water makes ([method organ_of], [method keys_of_organ]), so each
@@ -390,6 +401,42 @@ static func pick_variety(varieties: Array[StringName]) -> StringName:
 		if roll <= 0:
 			return key
 	return varieties[varieties.size() - 1]
+
+
+## **How rare [param key] is in the water** (gene-rarity.md §2.4): a class of the
+## ladder's ([constant Rarity]) -- the rarer of its organ's and its variant's own, so a
+## rare kind of a common organ is rare, and so is any variant of a rare organ. The class
+## the drop's floor counts it by, and the word a player would read (§7). `&""` for a key
+## this build does not know, and for one whose organ names no class -- which the gene
+## probe fails.
+static func rarity_of(key: StringName) -> StringName:
+	return _rarity.get(key, &"")
+
+
+## **[param key]'s weight in the water's draws** (gene-rarity.md §2.2, §2.3): its
+## organ's class's weight on the ladder, shared among the organ's live varieties by
+## their own classes -- variants are alleles, and share their organ's place -- and, where
+## the ladder would leave the commons less than [constant Rarity]'s `COMMON_SHARE` of
+## the drifters' draw, every other organ's varieties scaled down until they hold it.
+## Worked out once an index, over the drifters' pool. A form's is its variety's; a
+## retired key's, and a key this build does not know, 0. **Everything that makes a gene
+## reads this from phase 7-2 on**, and it is where a habitat will act (§6); until then
+## the water draws by [method weight] and [method organ_weight], as it always has.
+static func water_weight(key: StringName) -> float:
+	return float(_water_weights.get(key, 0.0))
+
+
+## **How many living carriers the drop's floor keeps of [param key]** (gene-rarity.md
+## §3.3): the floor of [method rarity_of]'s class. 0 for a key with no class, which the
+## floor never keeps.
+static func floor_of(key: StringName) -> int:
+	return int(_floors.get(key, 0))
+
+
+## **Every key's [method floor_of], by key**: the catalogue's own dictionary,
+## read-only, which a floor counts against. Asked again after every index.
+static func floors() -> Dictionary:
+	return _floors
 
 
 ## **The born cell's body** (`genome.gd`): key to the copies a newborn wears, in
@@ -748,10 +795,13 @@ static func _index() -> void:
 	var part_words := {}
 	var organ_weights := {}
 	var one_variant := {}
+	var organ_classes := {}
 	for organ: Gene in organs:
 		var tables := (organ.get_script() as GDScript).get_script_constant_map()
-		# The organ's own weight, read before a variant writes over its water.
+		# The organ's own weight, read before a variant writes over its water -- and
+		# its own class, read the same way (gene-rarity.md §2.2).
 		var own: Variant = organ.water.get("weight")
+		var own_class := StringName(organ.water.get("rarity", &""))
 		if organ.one_variant:
 			one_variant[organ.organ] = true
 		for record: Gene in _resolve(organ):
@@ -764,6 +814,7 @@ static func _index() -> void:
 			if not organ_weights.has(record.organ):
 				organ_weights[record.organ] = int(own if own != null
 					else record.water.get("weight", 1))
+				organ_classes[record.organ] = own_class
 		_part_words_into(part_words, tables)
 	_organ_weights = organ_weights
 	_one_variant = one_variant
@@ -903,6 +954,72 @@ static func _index() -> void:
 		for key: StringName in listed:
 			members_set[key] = true
 		_tag_sets[tag] = members_set
+	_index_water(organ_classes)
+
+
+## **Every key's class, weight and floor in the water** (gene-rarity.md §2), from
+## [param organ_classes] -- each organ's own class, as its file sets it -- and the
+## records, the live keys, the drifters and the tags already indexed.
+##
+## 1. **One number per variety** (§2.2): its organ's class's weight, shared among the
+##    organ's live varieties by their own classes -- a variant's own, or its organ's
+##    where it sets none -- so a variant takes its place from its siblings and changes
+##    nothing outside its organ.
+## 2. **The commons keep a third** (§2.3): where the varieties of the ladder's first
+##    class's organs would hold less than `COMMON_SHARE` of the drifters' draw -- every
+##    live variety a drifter may be made of, the `not_on_drifters` left out -- every
+##    other organ's varieties are scaled so that they hold the rest, by their own
+##    weights. A pool with no common organ in it, or nothing else, is left as it is.
+## 3. **Every key**: a form as its variety; a retired key, and a key whose organ
+##    names no class, weighs nothing. Its class is the rarer of its organ's and its
+##    variety's own, and its floor that class's.
+static func _index_water(organ_classes: Dictionary) -> void:
+	var own := {}
+	var shares := {}
+	for key: StringName in _live:
+		if variety(key) != key:
+			continue
+		var record: Gene = _records[key]
+		var mine := StringName(record.water.get("rarity", &""))
+		own[key] = mine
+		shares[record.organ] = float(shares.get(record.organ, 0.0)) + Rarity.weight(mine)
+	var weights := {}
+	for key: StringName in own:
+		var organ := organ_of(key)
+		var shared := float(shares[organ])
+		weights[key] = Rarity.weight(organ_classes.get(organ, &"")) \
+			* Rarity.weight(own[key]) / shared if shared > 0.0 else 0.0
+	var commonest := Rarity.commonest()
+	var commons := 0.0
+	var rest := 0.0
+	for key: StringName in _drifters:
+		if has_tag(key, NOT_ON_DRIFTERS):
+			continue
+		if organ_classes.get(organ_of(key), &"") == commonest:
+			commons += float(weights.get(key, 0.0))
+		else:
+			rest += float(weights.get(key, 0.0))
+	if commons > 0.0 and rest > 0.0 and commons / (commons + rest) < Rarity.COMMON_SHARE:
+		var scale := commons * (1.0 - Rarity.COMMON_SHARE) / (Rarity.COMMON_SHARE * rest)
+		for key: StringName in weights:
+			if organ_classes.get(organ_of(key), &"") != commonest:
+				weights[key] = float(weights[key]) * scale
+	var rarity := {}
+	var water := {}
+	var floors := {}
+	for key: StringName in _keys:
+		var record: Gene = _records[key]
+		var kind := variety(key)
+		var mine := StringName(own.get(kind, StringName(record.water.get("rarity", &""))))
+		rarity[key] = Rarity.rarer(StringName(organ_classes.get(record.organ, &"")), mine)
+		water[key] = 0.0 if record.tags.has(RETIRED) else float(weights.get(kind, 0.0))
+		floors[key] = Rarity.least(rarity[key])
+	rarity.make_read_only()
+	water.make_read_only()
+	floors.make_read_only()
+	_rarity = rarity
+	_water_weights = water
+	_floors = floors
 
 
 ## **[param organ]'s keys, each a flat record** (§4.2, §6.2). **First the organ

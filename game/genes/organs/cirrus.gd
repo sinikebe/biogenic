@@ -49,7 +49,8 @@ func _init() -> void:
 	provides = {&"turn_rate": TURN_RATE_BY_TIER, &"turn_response": TURN_RESPONSE_BY_TIER}
 	# **The three starting organs stay the commonest thing in the water**: a genome
 	# that fills up with exotica before it has a mouth is a run that cannot eat.
-	water = {"weight": 4, "drifter": true}
+	# Common: what every run needs (gene-rarity.md §4).
+	water = {"rarity": &"common", "weight": 4, "drifter": true}
 	born = 1
 	# **Its look** (gene-looks.md §6): oars, rowing strokes with a knee, on both flanks
 	# whatever slot holds it -- the kind's defaults are the oars it always drew -- in

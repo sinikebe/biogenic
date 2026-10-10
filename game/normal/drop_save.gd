@@ -197,7 +197,13 @@ const CELLS := "cells"
 ## and two points -- the genes the floor is short of, the grid as `[ids,
 ## buckets]`, the census's counts and whose turn it is. Each is checked as
 ## [constant SHAPE] is when it is there: one that does not hold what it says
-## makes the file unreadable, never half-loaded.
+## makes the file unreadable, never half-loaded. **And, since the floor took turns
+## within a budget** (docs/design/gene-rarity.md §3.3), its queue and its budget:
+## `gene_queue`, every gene the floor found short at its last count in the order it
+## gives them back -- `gene_short` is those it has not given yet, in the same order --
+## and `gene_since`, the drifters made since the floor's last. A file without them
+## loads with its short genes queued in the order kept and the budget full; a build
+## before them reads `gene_short` alone, as it always has.
 const RUNS := {
 	"state": TYPE_PACKED_BYTE_ARRAY,
 	"target": TYPE_PACKED_INT64_ARRAY,
@@ -207,6 +213,8 @@ const RUNS := {
 }
 const EXTRA := {
 	"gene_short": TYPE_PACKED_STRING_ARRAY,
+	"gene_queue": TYPE_PACKED_STRING_ARRAY,
+	"gene_since": TYPE_INT,
 	"grid": TYPE_ARRAY,
 	"stats": TYPE_DICTIONARY,
 	"turn": TYPE_INT,

@@ -74,7 +74,10 @@ const GENE_EXPLAINS := {
 func _init() -> void:
 	organ = &"stigma"
 	order = 3
-	water = {"weight": 3, "drifter": true}
+	# **Uncommon, as every organ a run is built from** (gene-rarity.md §4). Its
+	# weight of 3, a step the ladder does not have, is what the water draws by until
+	# phase 7-2 draws every gene by its class, when it weighs an uncommon's 2.
+	water = {"rarity": &"uncommon", "weight": 3, "drifter": true}
 	tags = [SENSE, GIFT]
 	channel = LIGHT
 	declares = {"in": [{"name": &"shadow", "bearing": true,

@@ -31,7 +31,9 @@ extends SceneTree
 ##
 ## Prints `[census]` lines, each followed by the drop's `[lineage]` line -- its
 ## hunters' generations, families and what they have become
-## (docs/design/lineage.md §4, §6.1) -- and its `[behaviour]` line -- how its
+## (docs/design/lineage.md §4, §6.1) -- its `[rarity]` line -- each class's genes in
+## the drop and what the floor has given back of them (docs/design/gene-rarity.md
+## §11.1) -- and its `[behaviour]` line -- how its
 ## hunters' rules fire and what they are doing, and last how many behaviours
 ## they carry, the share still on the founders' rules and the changes made at
 ## division (behaviour.md §12.1, §7.3) -- `[eco] cost p50 .. p90 ..` for each
@@ -135,6 +137,7 @@ func _initialize() -> void:
 		"an empty room" if empty else "a ghost player, anchored", sets])
 	print(food.census_line())
 	print(food.lineage_line())
+	print(food.rarity_line())
 	print(food.behaviour_line())
 
 
@@ -149,6 +152,7 @@ func _process(_delta: float) -> bool:
 		clock = 0.0
 		print(food.census_line())
 		print(food.lineage_line())
+		print(food.rarity_line())
 		print(food.behaviour_line())
 		var sorted := costs.duplicate()
 		sorted.sort()

@@ -128,7 +128,10 @@ func _init() -> void:
 	order = 6
 	provides = {&"ping_range": PING_RANGE_BY_TIER, &"ping_period": PING_PERIOD_BY_TIER,
 		&"ping_through": PING_THROUGH_BY_TIER}
-	water = {"weight": 3, "drifter": true}
+	# **Uncommon, as every organ a run is built from** (gene-rarity.md §4). Its
+	# weight of 3, a step the ladder does not have, is what the water draws by until
+	# phase 7-2 draws every gene by its class, when it weighs an uncommon's 2.
+	water = {"rarity": &"uncommon", "weight": 3, "drifter": true}
 	tags = [SENSE, GIFT]
 	channel = PING
 	declares = {"in": [{"name": &"echo", "bearing": true,

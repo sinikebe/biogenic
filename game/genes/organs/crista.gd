@@ -44,7 +44,7 @@ func _init() -> void:
 	organ = &"crista"
 	order = 15
 	provides = {&"burn": BURN_BY_TIER}
-	water = {"weight": 2, "drifter": true}
+	water = {"rarity": &"uncommon", "weight": 2, "drifter": true}
 	# **Its look** (gene-looks.md §6): a long hollow rod with a fold down it, a
 	# mitochondrion's crista, under the skin, one for each copy. Metabolism's shade 2.
 	family = METABOLISM

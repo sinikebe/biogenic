@@ -44,10 +44,11 @@ const Stats := preload("res://game/genes/stats.gd")
 ## adds no cycle.
 const Cilia := preload("res://game/vision/cilia.gd")
 ## **The drop**, this water's environment file (docs/design/ocean.md §13), and
-## two of the generic mechanics it is built on that this file asks directly. A
+## three of the generic mechanics it is built on that this file asks directly. A
 ## run in the drop holds one [Drop]; today's water holds none.
 const Drop := preload("res://game/normal/drop.gd")
 const Replenish := preload("res://game/mechanics/replenish.gd")
+const FloorQueue := preload("res://game/mechanics/floor_queue.gd")
 ## **Lineage** (docs/design/lineage.md §4): a body's record of descent, which
 ## the drop keeps on every body and draws nowhere.
 const Descent := preload("res://game/mechanics/descent.gd")
@@ -6053,15 +6054,11 @@ static func _anchor_slot(anchor: int) -> int:
 
 
 ## [method _sensed], for either player: the person's is read off the tiers they
-## wear, exactly as this cell's is read off its genome.
+## wear, by the same function, exactly as this cell's is read off its genome.
 func _anchor_sensed(anchor: int) -> float:
 	if anchor < Anchor.PERSON:
 		return _sensed()
-	var tiers := _cells[_anchor_slot(anchor)].genome
-	var sum := 0.0
-	for gene: StringName in Catalogue.tagged(Catalogue.SENSE):
-		sum += float(Genome.tier_of(tiers, gene))
-	return clampf(sum / SENSE_FULL, 0.0, 1.0)
+	return clampf(sense_tiers(_cells[_anchor_slot(anchor)].genome) / SENSE_FULL, 0.0, 1.0)
 
 
 ## **The daughter you did not take, left in the water as an ordinary body.**
@@ -6150,13 +6147,17 @@ func _seed_drifter(b: Body) -> void:
 	# genome with would make the early game a dead end. **Written whole**, so
 	# what it buys is read with it (`Body.derive`).
 	# **In the drop** (§5.8, §6.4): the gene the drop is down to its last
-	# carriers of, if one is -- and never the toxin, which comes back through a
-	# peer instead: the drop's drifters are its defenceless food (row 13).
+	# carriers of, if one is and the floor's budget allows -- first come first
+	# served, at most one drifter in four (gene-rarity.md §3.3) -- and never the
+	# toxin, which comes back through a peer instead: the drop's drifters are its
+	# defenceless food (row 13).
 	if _drop != null:
-		var wanted := Drop.take_drifter_gene(_gene_short)
+		_stat(&"drifters_made")
+		var wanted := Drop.take_drifter_gene(_gene_floor)
 		if wanted != &"":
 			b.genome = {wanted: 1}
 			_stat(&"gene_floor")
+			_stat(_floor_stat(&"gene_floor", wanted))
 			return
 		b.genome = {_place_toxin(_draw_gene(Catalogue.drifters() if drifter_toxin
 			else _drifter_pool)): 1}
@@ -6286,19 +6287,40 @@ func _draw_tier(sensed: float) -> int:
 # ---------------------------------------------------------------------------
 
 ## **How much this cell can see coming**, 0 for blind and 1 for the water as
-## shipped. The sum of the four sensing tiers over [constant SENSE_FULL], which
-## is the least invented mapping available: every tier of every sense moves it,
-## and none of them moves it in a step.
+## shipped. Its sensing tiers ([method sense_tiers]) over [constant SENSE_FULL],
+## which is the least invented mapping available: every tier of every sense moves
+## it, and none of them moves it in a step.
 func _sensed() -> float:
 	# A tool's water made for a player of that much sight (the drop only).
 	if _drop != null and sensed_override >= 0.0:
 		return sensed_override
 	if _cell == null:
 		return 1.0
-	var tiers := 0.0
+	return clampf(sense_tiers(_cell.worn()) / SENSE_FULL, 0.0, 1.0)
+
+
+## **How many tiers of sight a body wearing [param tiers] has** (docs/design/
+## gene-rarity.md §3.5): **by channel, not by gene** -- for each channel a sense
+## drives (`light`, `beam`, `ping`, `smell`), the best tier worn among the genes
+## tagged `sense` on it, and those summed. Today each channel has one sense, so it
+## is the four senses' tiers summed, as it always was. A second nose is still the
+## smell channel, as a second provider of a stat combines by its row rather than
+## adding up, so variants of a sense never move it; a new channel is code, and raises
+## the most a body can sum, while [constant SENSE_FULL] stays two organs, one grown.
+## A sense on no channel, which the gene probe fails, counts as one of its own.
+static func sense_tiers(tiers: Dictionary) -> float:
+	var best := {}
 	for gene: StringName in Catalogue.tagged(Catalogue.SENSE):
-		tiers += float(_cell.extra(gene))
-	return clampf(tiers / SENSE_FULL, 0.0, 1.0)
+		var tier := Genome.tier_of(tiers, gene)
+		if tier <= 0:
+			continue
+		var channel := Catalogue.channel_of(gene)
+		var on: StringName = channel if channel != &"" else gene
+		best[on] = maxi(int(best.get(on, 0)), tier)
+	var sum := 0
+	for on: StringName in best:
+		sum += int(best[on])
+	return float(sum)
 
 
 ## Share of arrivals that are drifters -- no cytostome, no bite, edible at every
@@ -6624,8 +6646,10 @@ var _ids := PackedInt32Array()
 var _water_idx := PackedInt32Array()
 ## What a drifter's gene is drawn from: every gene but the toxin (row 13).
 var _drifter_pool: Array[StringName] = []
-## The genes the drop is down to its last carriers of, at the last count.
-var _gene_short: Array[StringName] = []
+## **The gene floor** (§6.4; docs/design/gene-rarity.md §3.3): the varieties the drop
+## was short of at its last count, first come first served, those still due, and its
+## budget -- `drop.gd` decides what it counts and what each goes on.
+var _gene_floor: FloorQueue = Drop.gene_floor()
 var _eco_clock := 0.0
 var _gene_clock := 0.0
 var _floor_clock := 0.0
@@ -6875,7 +6899,7 @@ func _reset_drop() -> void:
 	numbers.randomize()
 	drop_seed = numbers.randi()
 	_drifter_pool = Drop.drifter_genes(Catalogue.drifters())
-	_gene_short.clear()
+	_gene_floor = Drop.gene_floor()
 
 
 ## **Where every player with a body is this frame** -- this cell, while it is an
@@ -7231,9 +7255,15 @@ func drop_state() -> Dictionary:
 	var counts := {}
 	for what: StringName in stats:
 		counts[String(what)] = int(stats[what])
+	# **The gene floor as its last count left it** (gene-rarity.md §3.3): what it is
+	# still to give, every variety it found short in the order it serves them, and its
+	# budget -- so a kept drop's floor goes on as one that never stopped.
 	var short := PackedStringArray()
-	for gene: StringName in _gene_short:
+	for gene: Variant in _gene_floor.due:
 		short.append(String(gene))
+	var queue := PackedStringArray()
+	for gene: Variant in _gene_floor.short:
+		queue.append(String(gene))
 	return {
 		"seed": drop_seed,
 		"age": _t,
@@ -7262,6 +7292,8 @@ func drop_state() -> Dictionary:
 		"runs": {"state": run_state, "target": run_target, "flags": run_flags,
 			"clocks": run_clocks, "points": run_points},
 		"gene_short": short,
+		"gene_queue": queue,
+		"gene_since": _gene_floor.since,
 		"grid": _drop.grid.state(),
 		"stats": counts,
 		"turn": _turn,
@@ -7476,10 +7508,20 @@ func load_drop(cell: CellBody, state: Dictionary) -> Dictionary:
 	# counts, and the grid as its queries found the bodies -- in which order,
 	# too, which is what the passes that step, push and eat go by. The grid only
 	# for a drop loaded as it was kept: one a conversion moved is filed anew.
+	# **And the floor's queue and budget** (gene-rarity.md §3.3), where it keeps them:
+	# a file from before them found what it is still to give short at its last count,
+	# in the pool's order, and its budget is full.
+	_gene_floor = Drop.gene_floor()
 	if state.has("gene_short"):
-		_gene_short.clear()
+		var due: Array = []
 		for gene: String in state["gene_short"]:
-			_gene_short.append(StringName(gene))
+			due.append(StringName(gene))
+		var found: Array = due
+		if state.has("gene_queue"):
+			found = []
+			for gene: String in state["gene_queue"]:
+				found.append(StringName(gene))
+		_gene_floor.restore(found, due, int(state.get("gene_since", _gene_floor.since)))
 	else:
 		_count_genes()
 	if state.has("stats"):
@@ -9439,16 +9481,17 @@ func _made_share() -> float:
 
 
 ## **The gene the drop is down to its last carriers of that only a peer brings
-## back** (gene-catalogue.md §6.4): the first short variety tagged
-## `floor_by_peers` -- the toxin's, in either form -- or `&""` for none (row 13; a
-## tool's `--drifter-toxin=1` lets a drifter carry it, and then none waits on a
-## peer).
+## back** (gene-catalogue.md §6.4; gene-rarity.md §3.3): the variety tagged
+## `floor_by_peers` -- the toxin's, in either form -- that the floor's last count
+## found short and has not given since, the one short longest, at most one a count
+## (`Drop.count_floor`); or `&""` for none (row 13; a tool's `--drifter-toxin=1` lets
+## a drifter carry it, and then none waits on a peer).
 func _peer_short() -> StringName:
 	if drifter_toxin:
 		return &""
-	for gene: StringName in _gene_short:
+	for gene: Variant in _gene_floor.due:
 		if Catalogue.has_tag(gene, Catalogue.FLOOR_BY_PEERS):
-			return gene
+			return StringName(gene)
 	return &""
 
 
@@ -9509,6 +9552,7 @@ func _spawn(at: Vector2, drifter: bool, sensed: float, fill := false,
 		if mine <= 0.0:
 			mine = _cell.radius if _cell != null else CellBody.BASE_RADIUS
 		_seed_peer(b, mine, sensed)
+		_stat(&"peers_made")
 		_give_back_by_peer(b)
 	# Expressed whole, as a run's first cell is: after the toxin, which is worn.
 	b.dna = b.genome.duplicate()
@@ -9616,7 +9660,7 @@ func _divide(i: int, b: Body) -> PackedInt32Array:
 	for k in 2:
 		var dna: Dictionary = carried[k]
 		var body := Genome.expressed(dna)
-		if Drop.give_sense(body, Catalogue.tagged(Catalogue.SENSE), randi()):
+		if Drop.give_sense(body, Catalogue.tagged(Catalogue.SENSE), Drop.water_gifts(), randi()):
 			for gene: StringName in Catalogue.tagged(Catalogue.SENSE):
 				if body.has(gene) and not dna.has(gene):
 					dna[gene] = int(body[gene])
@@ -9730,7 +9774,7 @@ func _draw_living(body_radius: float, sensed: float) -> Dictionary:
 	while mouth != &"" and int(tiers[mouth]) > 0 \
 			and CellBody.gape_of(tiers, body_radius) > ARRIVAL_GAPE_MAX:
 		tiers[mouth] = int(tiers[mouth]) - 1
-	if Drop.give_sense(tiers, Catalogue.tagged(Catalogue.SENSE), randi()):
+	if Drop.give_sense(tiers, Catalogue.tagged(Catalogue.SENSE), Drop.water_gifts(), randi()):
 		_stat(&"sense_given")
 	return tiers
 
@@ -9745,18 +9789,26 @@ func _give_back_by_peer(b: Body) -> void:
 	var gene := _peer_short()
 	if gene == &"" or not Drop.takes_back(b.genome, gene):
 		return
-	_gene_short.erase(gene)
+	_gene_floor.due.erase(gene)
 	Drop.give_back(b.genome, gene, CellBody.slots_for(b.radius),
 		Catalogue.tagged(Catalogue.SENSE), randi(), randi() % 2 == 0)
 	b.derive()
 	_stat(&"gene_floor_peer")
+	_stat(_floor_stat(&"gene_floor_peer", gene))
 
 
-## **The gene floor's count** (§6.4): who carries what, and which genes the
-## drop is down to its last GENE_FLOOR carriers of. **A form counts as its
-## variety** (docs/design/dna-slots.md §9): a venom and a poison are two carriers
-## of one toxin, which is the gene the floor keeps.
+## **The gene floor's count** (§6.4; gene-rarity.md §3.3): who carries what, and
+## which varieties the drop is down to its last carriers of -- each kept at its
+## class's count, the one short longest given back first (`Drop.count_floor`). **A
+## form counts as its variety** (docs/design/dna-slots.md §9): a venom and a poison
+## are two carriers of one toxin, which is the gene the floor keeps.
 func _count_genes() -> void:
+	Drop.count_floor(_gene_floor, _carriers())
+
+
+## **The living carriers of each variety**, as the floor counts them: every body's
+## worn genes, a form as its variety. Asking moves nothing.
+func _carriers() -> Dictionary:
 	var counts := {}
 	for b in _cells:
 		if not b.seeded or b.inert:
@@ -9764,7 +9816,14 @@ func _count_genes() -> void:
 		for gene: StringName in b.genome:
 			var kind := Genome.variety(gene)
 			counts[kind] = int(counts.get(kind, 0)) + 1
-	_gene_short = Drop.short_genes(counts, Catalogue.drifters())
+	return counts
+
+
+## **The count of the floor's gifts by class** that the floor's gift of [param gene]
+## goes on, under [param total]'s name: `gene_floor_uncommon`, say. For
+## [method rarity_line].
+static func _floor_stat(total: StringName, gene: StringName) -> StringName:
+	return StringName("%s_%s" % [total, Catalogue.rarity_of(Genome.variety(gene))])
 
 
 ## **The player's hide reach for a body with a mouth, or without** (§6.3): the
@@ -10111,6 +10170,46 @@ func lineage_line() -> String:
 		_n(&"made_for_floor") + _n(&"made_for_venom"), _n(&"made_for_floor"),
 		_n(&"made_for_venom"), _n(&"made_for_food"), _n(&"spawn_left_to_births"),
 		" ".join(means), " ; ".join(commonest)]
+
+
+## **The water's genes by how rare they are, in one line** (docs/design/gene-rarity.md
+## §11.1), for the probes, beside [method census_line] and never in it, as
+## [method lineage_line] is: for each class of the ladder, the varieties of it the floor
+## keeps -- every one the water's pool holds -- how many of them are in the drop, their
+## mean living carriers and how many are short of their class's count now; then the
+## floor's drifters and peers so far, by class, and their share of the drifters and the
+## peers the drop has made. Asking moves nothing.
+func rarity_line() -> String:
+	if _drop == null or _mirror:
+		return "[rarity] not in a drop of its own"
+	var counts := _carriers()
+	var held := PackedStringArray()
+	var drifters := PackedStringArray()
+	var peers := PackedStringArray()
+	for name: StringName in Catalogue.Rarity.classes():
+		var kinds := 0
+		var present := 0
+		var carriers := 0
+		var short := 0
+		for gene: StringName in Catalogue.drifters():
+			if Catalogue.rarity_of(gene) != name:
+				continue
+			var n := int(counts.get(gene, 0))
+			kinds += 1
+			present += 1 if n > 0 else 0
+			carriers += n
+			short += 1 if n < Catalogue.floor_of(gene) else 0
+		held.append("%s %d: in the drop %d, carriers %.1f each, short %d" % [name, kinds,
+			present, float(carriers) / float(maxi(kinds, 1)), short])
+		drifters.append("%s %d" % [name, _n(StringName("gene_floor_%s" % name))])
+		peers.append("%s %d" % [name, _n(StringName("gene_floor_peer_%s" % name))])
+	var made := _n(&"drifters_made")
+	var peers_made := _n(&"peers_made")
+	return ("[rarity] t %.0f  %s  | the floor's drifters %d of %d made (%.1f %%): %s  | its"
+		+ " peers %d of %d made (%.1f %%): %s") % [_t, "  | ".join(held), _n(&"gene_floor"),
+		made, 100.0 * float(_n(&"gene_floor")) / float(maxi(made, 1)), ", ".join(drifters),
+		_n(&"gene_floor_peer"), peers_made,
+		100.0 * float(_n(&"gene_floor_peer")) / float(maxi(peers_made, 1)), ", ".join(peers)]
 
 
 ## **The water's families, for the dev app's readout** (lineage.md §4, §6.4):
