@@ -10022,7 +10022,9 @@ func census_line() -> String:
 ## and the largest family, and how many carry a DNA that is not their body --
 ## and what they have become: their cruise, reach, mouth and upkeep, the genes
 ## they wear and carry, how many have a tail, a sense, or are at r40; then each
-## gene's mean tier worn, and the three commonest bodies. Asking moves nothing.
+## gene's mean tier worn, by its key (gene-catalogue.md §13: four letters of it named
+## two genes as soon as two keys began alike), and the three commonest bodies. Asking
+## moves nothing.
 func lineage_line() -> String:
 	if _drop == null or _mirror:
 		return "[lineage] not in a drop of its own"
@@ -10086,7 +10088,7 @@ func lineage_line() -> String:
 	var m := float(maxi(n, 1))
 	var means := PackedStringArray()
 	for gene: StringName in Catalogue.live():
-		means.append("%s %.2f" % [String(gene).left(4), float(tiers.get(gene, 0)) / m])
+		means.append("%s %.2f" % [gene, float(tiers.get(gene, 0)) / m])
 	return ("[lineage] t %.0f  hunters %d, born %d  generation mean %.2f max %d  families %d"
 		+ " (largest %d)  dna apart %d  | cruise %.1f notice %.0f mouth %.2f upkeep %.2f"
 		+ " genes worn %.2f carried %.2f  tails %d sighted %d at r40 %d  | divisions %d"

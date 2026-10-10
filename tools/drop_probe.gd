@@ -1927,6 +1927,33 @@ func _lineage_summary(field: WatchedDrop, named: String, seen: Dictionary) -> Di
 	return out
 
 
+## **A pinned line as the game writes it now** (gene-catalogue.md §13): the lineage
+## line labelled each gene by its key's first four letters when the pins below were
+## recorded, and labels it by its key now. So each four-letter label of a pin's
+## `| worn` part is read as the one live key it was cut from, and every value is
+## compared as it always was -- today's live keys are as many four-letter labels as
+## keys. A label two keys share is left as it is, and the line then differs, which says
+## to record the pin again from the check's own output, keys and all. A line with no
+## such part, or recorded with keys, comes back as it is.
+static func _keyed(line: String) -> String:
+	var at := line.find("| worn ")
+	if at < 0:
+		return line
+	at += "| worn ".length()
+	var end := line.find("  |", at)
+	if end < 0:
+		end = line.length()
+	var cut := {}
+	for key: StringName in Catalogue.live():
+		var label := String(key).left(4)
+		cut[label] = "" if cut.has(label) else String(key)
+	var words := line.substr(at, end - at).split(" ")
+	for k in range(0, words.size(), 2):
+		if String(cut.get(words[k], "")) != "":
+			words[k] = cut[words[k]]
+	return line.substr(0, at) + " ".join(words) + line.substr(end)
+
+
 ## **The water divides** (lineage.md §11.3, checks 1 to 6): five minutes of a
 ## newborn's drop and five of a sighted player's -- the spec's two compositions,
 ## 0.2 and 0.6 -- watched from inside as [method _five_minutes] watched a fully
@@ -1980,10 +2007,10 @@ func _lineage() -> void:
 	var differ := 0
 	for k in DEV_LINES.size():
 		var ours: String = lines[k] if k < lines.size() else "(none)"
-		if ours != DEV_LINES[k]:
+		if ours != _keyed(DEV_LINES[k]):
 			differ += 1
 			print("[drop-probe] check 1, line %d, this build: %s" % [k + 1, ours])
-			print("[drop-probe] check 1, line %d, dev:        %s" % [k + 1, DEV_LINES[k]])
+			print("[drop-probe] check 1, line %d, dev:        %s" % [k + 1, _keyed(DEV_LINES[k])])
 	_check(("1. with the rules off it is pack 2, the drop: a newborn's drop and a sighted"
 		+ " player's, seed 1, five minutes on pack 2's hunter -- their census and lineage"
 		+ " lines against dev's: %s") % ["the same to the byte" if differ == 0
@@ -2411,7 +2438,7 @@ func _determinism() -> void:
 	var differ := 0
 	for k in maxi(off.size(), THREE_ONE_LINES.size()):
 		var ours: String = off[k] if k < off.size() else "(none)"
-		var theirs: String = THREE_ONE_LINES[k] if k < THREE_ONE_LINES.size() else "(none)"
+		var theirs: String = _keyed(THREE_ONE_LINES[k]) if k < THREE_ONE_LINES.size() else "(none)"
 		if theirs.begins_with("[behaviour]"):
 			theirs += UNCHANGED_TAIL
 		if ours != theirs:
@@ -6721,7 +6748,7 @@ func _tail_pack3() -> void:
 	var differ := 0
 	for k in maxi(off.size(), PACK3_LINES.size()):
 		var ours: String = off[k] if k < off.size() else "(none)"
-		var theirs: String = PACK3_LINES[k] if k < PACK3_LINES.size() else "(none)"
+		var theirs: String = _keyed(PACK3_LINES[k]) if k < PACK3_LINES.size() else "(none)"
 		if ours != theirs:
 			differ += 1
 			print("[drop-probe] tail 1, pack 3, line %d, this build: %s" % [k + 1, ours])
@@ -6729,7 +6756,7 @@ func _tail_pack3() -> void:
 	var moved := 0
 	for k in maxi(_tail_on_lines.size(), TAIL_LINES.size()):
 		var ours: String = _tail_on_lines[k] if k < _tail_on_lines.size() else "(none)"
-		var pinned: String = TAIL_LINES[k] if k < TAIL_LINES.size() else "(none)"
+		var pinned: String = _keyed(TAIL_LINES[k]) if k < TAIL_LINES.size() else "(none)"
 		if ours != pinned:
 			moved += 1
 			print("[drop-probe] tail 1, row 37, line %d, this build: %s" % [k + 1, ours])
