@@ -10275,6 +10275,26 @@ func _check_server() -> void:
 		+ " recorded, on nodes of its own %s" % str(f_bound))
 	var fresh := int(food.drop_bodies())
 	var kept_before := int(server.get("rooms_kept"))
+	# **Each sister as the room keeps her** (check 27), read in the frame the stop
+	# keeps the room in -- `shut_down` keeps it first thing -- so the next start is
+	# held to what was kept. Not to what came at check 24: she has been a water body
+	# since, and a meal there writes its gene to her DNA (food.gd's `_grow`), which
+	# failed this check about one run in seven. **A sister the water has eaten since
+	# is put back as she came**, through the door the pond put her in by, so the
+	# room has her to keep: the harness reaching into the world, as `_hold` does,
+	# for a check about the file rather than the water.
+	var kept_sisters: Array = []
+	for said: Dictionary in [e_sister, f_sister]:
+		var b: Object = _body_of(food, int(said.get("id", -1)))
+		var again := false
+		if b == null and said.has("body_dna"):
+			var slot := int(food.place_sister(said["at"], float(said["heading"]),
+				float(said["radius"]), said["genome"], said["body_dna"], PackedInt32Array(),
+				pond.sister_list(_list_said(said.get("brain"))[0])))
+			b = food.bodies()[slot] if slot >= 0 else null
+			again = b != null
+		kept_sisters.append({} if b == null else {"id": int(b.get("id")),
+			"dna": (b.get("dna") as Dictionary).duplicate(), "again": again})
 	server.shut_down()
 	var stopped_age := float(food.drop_age())
 	var kept_at_stop := int(server.get("rooms_kept")) - kept_before
@@ -10344,19 +10364,29 @@ func _check_server() -> void:
 	# to her, read again, with her DNA; the sister on the founders' stays on them.
 	var stop_lists: Array = ((stop_kept.get("drop", {}) as Dictionary).get("behaviours",
 		{}) as Dictionary).get("lists", [])
-	var e_again: Object = _body_of(again_food, int(e_sister.get("id", -1)))
-	var f_again: Object = _body_of(again_food, int(f_sister.get("id", -1)))
+	var e_kept: Dictionary = kept_sisters[0]
+	var f_kept: Dictionary = kept_sisters[1]
+	var e_again: Object = _body_of(again_food, int(e_kept.get("id", -1)))
+	var f_again: Object = _body_of(again_food, int(f_kept.get("id", -1)))
 	var e_back: Array = _list_said(e_again.get("brain") if e_again != null else null)
+	var put_back := PackedStringArray()
+	for k in kept_sisters.size():
+		if bool((kept_sisters[k] as Dictionary).get("again", false)):
+			put_back.append(["the first guest's", "the second guest's"][k])
 	_says(stop_lists.has(PackedStringArray(SISTER_LINES)) and e_again != null
 			and f_again != null and e_back[0] == PackedStringArray(SISTER_LINES)
 			and e_back[1] == [false, false, true, false]
-			and _by_name(e_again.get("dna")) == _by_name(e_sister.get("body_dna"))
+			and _by_name(e_again.get("dna")) == _by_name(e_kept.get("dna"))
 			and f_again.get("brain") == null
-			and _by_name(f_again.get("dna")) == _by_name(f_sister.get("body_dna")),
+			and _by_name(f_again.get("dna")) == _by_name(f_kept.get("dna")),
 		"server (check 27): stopped, the room kept the first guest's sister's list as"
 		+ " it came -- the rule it cannot read among it -- and loaded, she has it back,"
-		+ " %d lines, one never firing, with her DNA; the second's sister is on the"
-		% (e_back[0] as PackedStringArray).size() + " founders' rules still")
+		+ " %d lines, one never firing, with her DNA as the room kept it; the second's"
+		% (e_back[0] as PackedStringArray).size() + " sister is on the founders' rules"
+		+ " still%s" % ("" if put_back.is_empty() else (" (both sisters put back as they"
+			+ " came: the water ate them before the stop)") if put_back.size() > 1
+			else " (%s sister put back as she came: the water ate her before the stop)"
+			% put_back[0]))
 	again.set("room_path", "")
 	again.shut_down()
 	again.queue_free()
@@ -10427,8 +10457,18 @@ func _server_sisters(pond: Object, food: Node, first: Node, second: Node) -> Arr
 	var program := int(library.call(&"add_new"))
 	library.call(&"set_lines", program, PackedStringArray(SISTER_LINES))
 	first.call(&"_library_changed")
+	# **Each sister as she is placed**, read in the signal, before the water's next
+	# step: she is a water body from then on, and a meal writes its gene to a water
+	# body's DNA (food.gd's `_grow`), so read a step later she can already be other
+	# than what her mother sent -- one run in 25 here.
 	var placed: Array = []
-	var on_placed := func(slot: int) -> void: placed.append(slot)
+	var on_placed := func(slot: int) -> void:
+		var b: Object = food.bodies()[slot]
+		placed.append({"id": int(b.get("id")), "parent": int(b.get("parent")),
+			"generation": int(b.get("generation")), "lineage": int(b.get("lineage")),
+			"body_dna": (b.get("dna") as Dictionary).duplicate(), "brain": b.get("brain"),
+			"genome": (b.get("genome") as Dictionary).duplicate(), "at": b.get("pos"),
+			"heading": float(b.get("heading")), "radius": float(b.get("radius"))})
 	pond.connect(&"sister_placed", on_placed)
 	for pin: Array in pins:
 		await _pond_feed(food, pin[0], pins)
@@ -10468,15 +10508,10 @@ func _server_sisters(pond: Object, food: Node, first: Node, second: Node) -> Arr
 		return placed.size() >= 2 and runs.all(func(run: Node) -> bool:
 			return int(run.get("_split")) == NormalMode.Split.NONE), 3.0, [])
 	pond.disconnect(&"sister_placed", on_placed)
-	for slot: int in placed:
-		var b: Object = food.bodies()[slot]
+	for one: Dictionary in placed:
 		for said: Dictionary in out:
-			if said["unworn"] != &"" and (b.get("dna") as Dictionary).has(said["unworn"]):
-				said.merge({"id": int(b.get("id")), "parent": int(b.get("parent")),
-					"generation": int(b.get("generation")), "lineage": int(b.get("lineage")),
-					"body_dna": (b.get("dna") as Dictionary).duplicate(),
-					"brain": b.get("brain"), "genome": (b.get("genome") as Dictionary).duplicate()},
-					true)
+			if said["unworn"] != &"" and (one["body_dna"] as Dictionary).has(said["unworn"]):
+				said.merge(one, true)
 	return out
 
 
