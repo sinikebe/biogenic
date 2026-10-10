@@ -1902,7 +1902,8 @@ func _lineage_look(field: WatchedDrop, t: float, seen: Dictionary) -> void:
 		if b.get("seeded") and not b.get("inert"):
 			for gene: StringName in b.get("genome"):
 				genes[GenomeNode.variety(gene)] = true
-	seen["genes"] = mini(int(seen.get("genes", 99)), genes.size())
+	# The least from no ceiling at all: a catalogue may carry more than any number.
+	seen["genes"] = minf(float(seen.get("genes", INF)), float(genes.size()))
 	seen["looks"] = int(seen.get("looks", 0)) + 1
 	seen["hunters_most"] = maxi(int(seen.get("hunters_most", 0)), int(hunters))
 
