@@ -103,7 +103,7 @@ timeout 600 ~/godot/godot --headless --path . res://tools/drop_probe.tscn       
 ```
 
 Run the network probe alone, or in a namespace of its own with an address besides
-loopback, which its pond referee needs -- any private one; this one is made up:
+loopback, which its pond referee needs -- any private one; CI's is made up:
 `unshare --net -- bash -c 'ip link set lo up && ip addr add 10.77.0.5/24 dev lo && <command>'`.
 Two at once call each other's servers.
 

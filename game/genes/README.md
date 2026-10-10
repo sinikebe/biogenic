@@ -63,7 +63,7 @@ timeout 600 ~/godot/godot --headless --path . res://tools/drop_probe.tscn
 Two network probes on one machine call each other's servers. Run them one at a
 time, or each in a network namespace of its own, with an address on it besides
 loopback -- net_probe's pond referee fails without one. Any private address does;
-`10.77.0.5` is made up:
+CI's, `10.77.0.5`, is made up:
 `unshare --net -- bash -c 'ip link set lo up && ip addr add 10.77.0.5/24 dev lo && <command>'`.
 
 **And look at it** (`CLAUDE.md`, "Nothing is done until someone has looked at
