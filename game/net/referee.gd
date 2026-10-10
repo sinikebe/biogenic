@@ -320,6 +320,11 @@ var _meals := 0
 var _meals_at_out := 0
 ## The tiers the host applied, and the ones the arrival said.
 var worn: Dictionary = {}
+## **The slots [member worn] is worn in**, as the guest last said them and the host
+## applied them: where a mechanic with a place acts from (stats.gd's `SEATED`). Its
+## call's reach and period are its first radar's in them, as its own run reads them
+## (stats.gd's `seated`) -- never the best of two.
+var worn_order: Array = []
 var _arrival_worn: Dictionary = {}
 var _gift_used := false
 var _stale_until := -INF
@@ -570,6 +575,7 @@ func judge_person(now: float, new_body: bool, tiers: Dictionary, order: Array,
 			_reach_before = _reach()
 			_reach_before_until = now + SHOUT_PAST
 			worn = tiers.duplicate()
+			worn_order = order.duplicate()
 			_arrival_worn = worn.duplicate()
 			_gift_used = false
 			_new_shout_rate(now)
@@ -586,6 +592,7 @@ func judge_person(now: float, new_body: bool, tiers: Dictionary, order: Array,
 			+ " has", now)
 		fouled = true
 	if tiers == worn:
+		_reseat(now, order)
 		if _stale(now) and tiers == _arrival_worn:
 			_stale_until = -INF
 		return [false]
@@ -593,6 +600,7 @@ func judge_person(now: float, new_body: bool, tiers: Dictionary, order: Array,
 		# **The born body, said again after the stale one**: it is the body. Any
 		# gift the stale one looked like was not one.
 		worn = _arrival_worn.duplicate()
+		worn_order = order.duplicate()
 		_gift_used = false
 		_stale_until = -INF
 		_new_shout_rate(now)
@@ -600,6 +608,7 @@ func judge_person(now: float, new_body: bool, tiers: Dictionary, order: Array,
 	if not _gift_used and _is_gift(worn, tiers):
 		var had := _reach()
 		worn = tiers.duplicate()
+		worn_order = order.duplicate()
 		_gift_used = true
 		_new_shout_rate(now)
 		if had <= 0.0 and _reach() > 0.0:
@@ -1005,19 +1014,39 @@ static func _order_fits(tiers: Dictionary, order: Array) -> bool:
 	return true
 
 
-## How far what the body wears calls: 0 with no organ that calls.
+## **How far what the body wears calls**, from the radar it calls with -- the first
+## in its slots, as its own run reads it (stats.gd's `seated`): 0 with no organ that
+## calls.
 func _reach() -> float:
-	return Stats.of(worn, &"ping_range")
+	return Stats.seated(worn_order, worn, &"ping_range")
 
 
-## **One call each ping period less a second**: the period [param tiers] calls
-## at, read as the guest's own run reads it (`cell.gd`'s `ping_period`, the
-## stats' `ping_period` of what it wears) -- or, when it wears no organ that
-## calls, the fastest the first organ that calls makes, its tier 1's. **Never
-## from an empty table**: with no organ that calls at all, a call a second, the
-## most this ever allows.
-static func _shout_rate(tiers: Dictionary) -> float:
-	var period := Stats.of(tiers, &"ping_period")
+## **The same tiers in other slots**, [param order]: the PERSON a guest says when it
+## moves an organ, which the host applies. Where that moves the radar it calls with
+## (stats.gd's `SEATED`), its reach and its period move with it: the reach it had
+## stays good for [constant SHOUT_PAST], for a call already on its way, as across a
+## new body, and its calls are counted at the new period from now.
+func _reseat(now: float, order: Array) -> void:
+	if order == worn_order:
+		return
+	var calling := Stats.organ(worn_order, worn, &"ping_range")
+	var had := _reach()
+	worn_order = order.duplicate()
+	if Stats.organ(worn_order, worn, &"ping_range") == calling:
+		return
+	_reach_before = had
+	_reach_before_until = now + SHOUT_PAST
+	_new_shout_rate(now)
+
+
+## **One call each ping period less a second**: the period [param tiers] worn in
+## [param order] calls at, read as the guest's own run reads it (`cell.gd`'s
+## `ping_period`: its first radar's in slot order, stats.gd's `seated`) -- or, when
+## it wears no organ that calls, the fastest the first organ that calls makes, its
+## tier 1's. **Never from an empty table**: with no organ that calls at all, a call a
+## second, the most this ever allows.
+static func _shout_rate(tiers: Dictionary, order: Array = []) -> float:
+	var period := Stats.seated(order, tiers, &"ping_period")
 	if period <= 0.0:
 		period = Stats.value(Catalogue.first_provider(&"ping_range"), &"ping_period", 1)
 	if period <= 0.0:
@@ -1027,7 +1056,7 @@ static func _shout_rate(tiers: Dictionary) -> float:
 
 func _new_shout_rate(now: float) -> void:
 	shouts.refill(now)
-	shouts.rate = _shout_rate(worn)
+	shouts.rate = _shout_rate(worn, worn_order)
 
 
 ## A new body, an arrival or an organ gained zeroes the organ's clock, and it

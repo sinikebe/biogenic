@@ -1201,12 +1201,14 @@ class Body:
 		stat_turn = Stats.of(g, &"turn_rate")
 		stat_speed = CellBody.speed_of(g)
 		stat_hold = CellBody.hold_level(g)
-		stat_dart_tier = Stats.tier(g, &"dart_range")
-		stat_dart_range = Stats.of(g, &"dart_range")
-		stat_dart_cooldown = Stats.of(g, &"dart_cooldown")
-		# The dart that fires stuns for its own time: the first in slot order, where
-		# it wears several (gene-catalogue.md §5.2).
-		stat_dart_stun = CellBody.dart_stun(g, seats()) if stat_dart_tier > 0 \
+		# The dart that fires does all of it -- its arc, its reach, its rest and its
+		# stun -- the first in slot order, where it wears several (stats.gd's
+		# `seated`; gene-catalogue.md §5.2).
+		var layout: Array = seats() if Stats.seats_decide(g) else []
+		stat_dart_tier = Stats.seated_tier(layout, g, &"dart_range")
+		stat_dart_range = Stats.seated(layout, g, &"dart_range")
+		stat_dart_cooldown = Stats.seated(layout, g, &"dart_cooldown")
+		stat_dart_stun = CellBody.dart_stun(g, layout) if stat_dart_tier > 0 \
 			else CellBody.dart_stun(g)
 		stat_dash_tier = Stats.tier(g, &"dash_speed")
 		stat_dash_speed = Stats.of(g, &"dash_speed")
@@ -4893,8 +4895,9 @@ func _derive_person(pb: Body) -> void:
 	var tiers := pb.genome
 	p.swim_speed = CellBody.swim_speed_of(tiers)
 	p.armour = Stats.of(tiers, &"armor")
-	p.dart_range = Stats.of(tiers, &"dart_range")
-	p.dart_cooldown = Stats.of(tiers, &"dart_cooldown")
+	# The dart that fires, all of it (stats.gd's `seated`): the first in their order.
+	p.dart_range = Stats.seated(pb.order, tiers, &"dart_range")
+	p.dart_cooldown = Stats.seated(pb.order, tiers, &"dart_cooldown")
 	var slot := _seat_of(pb.order, tiers, &"dart_range")
 	p.dart_bearing = Cilia.slot_bearing(slot) if slot >= 0 else 0.0
 	# Their toxins are read off their body and its worn order where a bite asks
@@ -6937,7 +6940,8 @@ func _push_person_drop(k: int) -> void:
 
 
 ## **How far a person's senses reach**, for the spawner's hide reach round
-## them: the widest of the nose, the radar and the beam their tiers carry.
+## them: the widest of the nose, the radar and the beam their tiers carry -- a bound,
+## so the most any of their organs gives (stats.gd's `of`), not the one that acts.
 func _person_senses(pb: Body) -> float:
 	var g := pb.genome
 	return maxf(maxf(Stats.of(g, &"smell_range"), Stats.of(g, &"ping_range")),
@@ -7965,9 +7969,12 @@ func _refresh_body(b: Body) -> void:
 	b.eye = _eye_of(b) if _drop != null and not _mirror and not _replay \
 		and not b.drifter and not b.inert else null
 	b.worn = _worn_of(g) if b.eye != null else PackedInt64Array()
-	var smell := Stats.of(g, &"smell_range")
-	var ping := Stats.of(g, &"ping_range")
-	var beam := Stats.of(g, &"beam_range")
+	# Each sense's reach is the organ that senses (stats.gd's `seated`): the first in
+	# the default order's slots where it wears two noses, two radars or two eyes.
+	var order: Array = Cilia.default_order(g) if Stats.seats_decide(g) else []
+	var smell := Stats.seated(order, g, &"smell_range")
+	var ping := Stats.seated(order, g, &"ping_range")
+	var beam := Stats.seated(order, g, &"beam_range")
 	var touch := Stats.of(g, &"touch_range")
 	b.notice = maxf(maxf(smell, ping), maxf(beam, touch))
 	# A radar does not hear a floc and an eyespot does not see one (§7.5): a
@@ -8370,14 +8377,16 @@ func _eye_of(b: Body) -> Observer:
 	o.radius = b.radius
 	o.gape = _gape(b)
 	var order := Cilia.default_order(g)
-	o.smell_range = Stats.of(g, &"smell_range")
+	# A seated sense is all one organ's (stats.gd's `seated`): its reach, its period,
+	# its pass and its copies, the first in slot order where it wears several.
+	o.smell_range = Stats.seated(order, g, &"smell_range")
 	o.smell_bearing = _arc_in(order, g, &"smell_range")
 	o.touch_range = Stats.of(g, &"touch_range")
 	o.eyespot = Catalogue.worn_on(g, Catalogue.LIGHT) != &""
-	o.ping_range = Stats.of(g, &"ping_range")
-	o.ping_tier = Stats.tier_of(g, Stats.organ(order, g, &"ping_range"), &"ping_range")
-	o.ping_period = Stats.of(g, &"ping_period")
-	o.ping_through = Stats.of(g, &"ping_through")
+	o.ping_range = Stats.seated(order, g, &"ping_range")
+	o.ping_tier = Stats.seated_tier(order, g, &"ping_range")
+	o.ping_period = Stats.seated(order, g, &"ping_period")
+	o.ping_through = Stats.seated(order, g, &"ping_through")
 	o.ping_bearing = _arc_in(order, g, &"ping_range")
 	# The beam as the run aims yours below its fork (normal_mode.gd's
 	# `_aim_beam`): a fixed fan of its rung's rays, spread about the arc.

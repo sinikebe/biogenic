@@ -696,13 +696,16 @@ func worn() -> Dictionary:
 
 
 ## **This body's [param which]** (stats.gd): what it wears of the stat's
-## providers, combined -- `turn_rate`, `gape`, `armor`. Read off the stats once a
-## body ([method _bought_now]).
+## providers, combined -- `turn_rate`, `gape`, `armor` -- or, for a mechanic that acts
+## from a place, the one organ it acts from: every number of it that organ's
+## (stats.gd's `seated`, `SEATED`). Read off the stats once a body ([method
+## _bought_now]).
 func stat(which: StringName) -> float:
 	var bought := _bought_now()
 	var known: Variant = bought.get(which)
 	if known == null:
-		known = Stats.of(worn(), which)
+		var tiers := worn()
+		known = Stats.seated(seats() if Stats.seats_decide(tiers) else [], tiers, which)
 		bought[which] = known
 	return known
 

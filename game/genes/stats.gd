@@ -114,10 +114,19 @@ const ROWS := {
 ## beam leaves from where its provider is worn, the ping calls from there, the dart
 ## looks along that arc, and the nose's level is weighted about it. Where a body
 ## wears several providers of one, the mechanic acts from the first in slot order
-## (catalogue.gd's `seated_provider`), and everything it reads off the organ itself
-## -- its arc, its level, its tier, its own numbers -- is that organ's; the stat
-## still combines by its row. Every other mechanic acts from the first in the
-## catalogue's order (`worn_provider`) -- [method organ] says which.
+## (catalogue.gd's `seated_provider`), and **every number it uses is that organ's,
+## never another's beside it**: its arc, its level, its tier, its own numbers, and its
+## stats -- the seated one and every other of its group -- which a mechanic reads
+## through [method seated]. A body with two darts fires the first one's arc, reach,
+## rest and stun, never its arc with the other's reach; a body with two radars calls
+## with the first one's reach and period, and the referee a host judges its calls by
+## reads them so, from the slots the guest said (referee.gd's `worn_order`). Where two
+## organs provide a judged or contact stat of one, the rules two builds agree on name
+## its seat (rules.gd), so builds that read it otherwise refuse each other. Every other
+## mechanic acts from the first in the catalogue's order (`worn_provider`) -- [method
+## organ] says which -- and reads its stats through [method of]. **A bound is not a
+## mechanic**: the referee's cap on a call's reach and the spawner's hide reach round a
+## person read [method top] and [method of] -- the most any organ gives, whichever acts.
 const SEATED: Array[StringName] = [&"beam_range", &"ping_range", &"dart_range",
 	&"smell_range"]
 
@@ -252,6 +261,61 @@ static func organ(layout: Array, tiers: Dictionary, stat: StringName) -> StringN
 	if SEATED.has(stat):
 		return Catalogue.seated_provider(layout, tiers, stat)
 	return Catalogue.worn_provider(tiers, stat)
+
+
+## **The stat of [constant SEATED] whose organ [param stat]'s mechanic acts from**:
+## [param stat] itself, or the first stat of its group where that one is seated -- a
+## dart's rest acts from the dart that fires -- and `&""` for a stat whose mechanic
+## acts from no place.
+static func seat_of(stat: StringName) -> StringName:
+	if SEATED.has(stat):
+		return stat
+	var row: Dictionary = ROWS.get(stat, {})
+	var lead: StringName = row.get("group", &"")
+	return lead if lead != &"" and SEATED.has(lead) else &""
+
+
+## **[param stat] as the mechanic that uses it reads it**, for a body wearing
+## [param tiers] in the slots [param layout]: for a stat whose mechanic acts from a
+## place ([method seat_of]), the value of the one organ it acts from -- [method organ],
+## the first provider in slot order -- at its copies, never another organ's beside it
+## nor the best of several ([constant SEATED]); for any other stat, [method of]'s. A
+## stat of one provider -- every stat today -- is [method of]'s, the layout unread.
+static func seated(layout: Array, tiers: Dictionary, stat: StringName) -> float:
+	var seat := seat_of(stat)
+	if seat == &"" or (_provided.get(stat, NO_PAIRS) as Array).size() <= 2:
+		return of(tiers, stat)
+	var from := organ(layout, tiers, seat)
+	if from == &"":
+		return none(stat)
+	return value(from, stat, int(tiers.get(from, 0)))
+
+
+## **The copies of the organ [param stat]'s mechanic acts from**, clamped to its table,
+## 0 for none: [method tier_of] of [method organ] -- for a seated mechanic the first
+## provider in slot order of [param layout], for any other the first in the catalogue's
+## order.
+static func seated_tier(layout: Array, tiers: Dictionary, stat: StringName) -> int:
+	var seat := seat_of(stat)
+	return tier_of(tiers, organ(layout, tiers, seat if seat != &"" else stat), stat)
+
+
+## **Whether a body wearing [param tiers] wears more than one organ of a seated
+## mechanic**: the only body whose slots decide which organ acts, and so the only one
+## whose layout a caller must work out for [method seated]. False for every body
+## today, every seated mechanic having one organ.
+static func seats_decide(tiers: Dictionary) -> bool:
+	for stat: StringName in SEATED:
+		var pairs: Array = _provided.get(stat, NO_PAIRS)
+		if pairs.size() <= 2:
+			continue
+		var worn := 0
+		for i in range(0, pairs.size(), 2):
+			if int(tiers.get(pairs[i], 0)) > 0:
+				worn += 1
+		if worn > 1:
+			return true
+	return false
 
 
 ## **[param stat] at [param copies] of [param key]**: its own table's, clamped,

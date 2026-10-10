@@ -1809,6 +1809,22 @@ static func _faster_tail() -> Object:
 	return tail
 
 
+## **A dart that reaches further**: the dart's own file with one entry more, a variant
+## whose reach is its own -- a second organ of a mechanic with a place (stats.gd's
+## `SEATED`), which the rules name the seat of.
+static func _farther_dart() -> Object:
+	var plain := Catalogue.first_provider(&"dart_range")
+	var reach: Array = Catalogue.table(plain, &"dart_range")
+	var farther: Array = []
+	for value: Variant in reach:
+		farther.append(float(value) * 1.5)
+	var dart: Object = (Catalogue.gene(plain).get_script() as GDScript).new()
+	dart.set(&"variants", [{"variant": &"probefar", "order": 922,
+		"provides": {&"dart_range": farther,
+			&"dart_cooldown": Catalogue.table(plain, &"dart_cooldown")}}])
+	return dart
+
+
 ## **A palp that feels further**: the palp's own file with one entry more, a variant
 ## whose reach is its own -- one more gene that changes nothing a host judges or
 ## decides a contact by.
@@ -3395,6 +3411,27 @@ func _referee_rules() -> void:
 			+ " %d: the game's '%s', this probe's '%s' -- write the same value in both"
 			% [first + 1, theirs[first] if first < theirs.size() else "",
 			ours[first] if first < ours.size() else ""]))
+	# **And where a body could wear two organs of a mechanic with a place**: with a
+	# second dart filed, both texts name the seat its every number is read off, alike --
+	# the one rule they write only then.
+	Catalogue.register(_farther_dart())
+	var two_game := Rules.text()
+	var two_ours := _rules_text()
+	Catalogue.forget(Catalogue.organ_of(&"probefar"))
+	var seat_lines: PackedStringArray = []
+	for line: String in two_game.split("\n"):
+		if line.contains(".seat="):
+			seat_lines.append(line)
+	var seated := Array(seat_lines) == ["stat.dart_range.seat=dart_range",
+		"stat.dart_cooldown.seat=dart_range"] and not game.contains(".seat=")
+	_says(two_game == two_ours and seated, ("referee: with a second organ that darts, the"
+		+ " game and this probe both name the dart's seat (%s), and neither names one while"
+		% ", ".join(seat_lines) + " one organ darts") if two_game == two_ours and seated
+		else ("referee: with a second organ that darts, %s -- the seat a mechanic with a"
+			% ("the game's rules and this probe's differ" if two_game != two_ours
+				else "the rules name the wrong seats") + " place is read off is written in"
+			+ " both, the same, once two organs provide it, and in neither while one does"
+			+ " (seat lines: %s)" % ", ".join(seat_lines)))
 	# **Written the same on every machine** (rules.gd's note): every float as whole
 	# millionths by Godot alone, none within RULE_TIE of a rounding edge -- the body
 	# plan's own numbers too, inside its fingerprint -- and nothing of a kind the rules
@@ -3451,6 +3488,14 @@ func _rules_text(doubts: Array = []) -> String:
 		for k in providers.size():
 			put.call(Stats.label(stat) + ("" if k == 0 else "." + String(providers[k])),
 				Catalogue.table(providers[k], stat))
+		# **Which organ's, where two could be**: a stat of stats.gd's SEATED, or of a
+		# group led by one, is read off the one organ its mechanic acts from -- a rule
+		# only where more than one organ provides it.
+		var lead: StringName = row.get("group", &"")
+		var seat: StringName = stat if Stats.SEATED.has(stat) \
+			else (lead if Stats.SEATED.has(lead) else &"")
+		if seat != &"" and providers.size() > 1:
+			put.call("stat.%s.seat" % stat, seat)
 	# cell.gd: size, growth, division and mending; and the motion the caps sit over
 	# (`_referee_agrees`).
 	put.call("cell.BASE_RADIUS", CellBody.BASE_RADIUS)

@@ -45,7 +45,12 @@ extends RefCounted
 ##    first the stat's row, the fields of it that decide a body's value
 ##    ([constant ROW_FIELDS]), then its table by every organ that provides it, the
 ##    first under the line its table always had (`Stats.label`), any other after it
-##    with its key. A new judged table is in it without anyone listing it;
+##    with its key. A new judged table is in it without anyone listing it. **Where a
+##    body could wear two of those organs and the stat's mechanic acts from a place**
+##    (stats.gd's `SEATED`), one line more names the stat whose organ it is read off
+##    (stats.gd's `seat_of`): every number of it is that one organ's, the first in the
+##    body's slots, never the best of two -- a rule as a row's fields are, written
+##    only where it chooses;
 ## 2. the run's numbers the referee judges a guest by that no organ provides, under
 ##    the names they have where they are defined;
 ## 3. the contact rules no table holds: the bite's gap and flank, `bite_damage`, the
@@ -167,6 +172,12 @@ static func text() -> String:
 		for k in providers.size():
 			put.call(Stats.label(stat) + ("" if k == 0 else "." + String(providers[k])),
 				Catalogue.table(providers[k], stat))
+		# **Which organ's, where two could be**: a mechanic with a place reads every
+		# number of it off the one organ it acts from (stats.gd's `seated`). With one
+		# organ to provide it there is nothing to choose, and no line.
+		var seat := Stats.seat_of(stat)
+		if seat != &"" and providers.size() > 1:
+			put.call("stat.%s.seat" % stat, seat)
 	# 2. The run's numbers the referee judges by. cell.gd: size, growth, division and
 	# mending, and the motion its caps sit over.
 	put.call("cell.BASE_RADIUS", CellBody.BASE_RADIUS)

@@ -326,9 +326,10 @@ when the gene pass adds a second provider of a stat, and it is set in that stat'
 together -- a stroke's speed and its two gaps, a call's reach, period and pass, a
 turn, a dash, a dart, a beam -- each name their group in their row's `group` (the
 group's first stat), and a body wearing two providers takes the whole group from the
-one best on that first stat, never stat by stat. Two tails swim at the faster one's
-speed with the faster one's gaps. Every stat of a group combines by `best`, and the
-gene probe holds that.
+one best on that first stat, never stat by stat -- or, for a mechanic with a place,
+from the one that acts (§5.2). Two tails swim at the faster one's speed with the
+faster one's gaps. Every stat of a group combines by `best`, and the gene probe holds
+that.
 
 ### 5.2 Mechanics read stats, never genes
 
@@ -361,6 +362,20 @@ Everything such a mechanic reads off its organ is that organ's: its arc, its tie
 level and path, its fork, its experience cap, its dart's stun. The mouth, the tail's
 level and hold and the dash have no place to act from, and act from the first in the
 catalogue's order, as before. `Stats.organ` answers which, for any stat.
+
+**Every number is the acting organ's** (phase 5's design call, §15.6). A seated
+mechanic takes every number it uses from the organ that acts, never mixed with another
+organ's: its arc, its tier and its own numbers as above, and its stats too -- the
+seated stat and every other of its group, through `Stats.seated` -- where §5.1's group
+would take them from the provider best on the group's first stat. A body with two darts
+fires the first one's reach, rest and stun along the first one's arc; a body with two
+radars calls with the first one's reach and period, and the referee judges its calls
+by the same organ, from the slots the guest said (`referee.gd`'s `worn_order`). Where
+two organs provide a judged or contact stat of one, the rules carry a line naming its
+seat (§11.3), so two builds that would read it otherwise refuse each other. **A bound
+is not a mechanic**: the referee's cap on a call's reach and the spawner's hide reach
+round a person read the most any organ gives, whichever acts. Today every seated stat
+has one provider, so nothing reads otherwise, and the rules carry no seat line.
 
 ### 5.3 Levels
 
@@ -786,7 +801,11 @@ deliberate: its failure says to move it, and that no `PROTOCOL` goes with it. **
 phase 4's review** (§15.5) each stat's row -- how its providers combine -- is a line
 before its tables, the dart is among the contacts, every limit of the referee's is in
 the text, every float is written in whole millionths by Godot alone, and a refusal to a
-stranger on the internet listener says only which game is older.
+stranger on the internet listener says only which game is older. **In phase 5**
+(§15.6) a row's line ends with its `group`, which moved the pin to `843c9d81`; and a
+stat whose mechanic has a place (§5.2) gains a line naming its seat, `stat.<name>.seat`,
+once a second organ provides it -- the one rule the text writes only where it chooses,
+so today's text has none.
 
 ### 11.4 Version skew, checked
 

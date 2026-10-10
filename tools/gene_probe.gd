@@ -43,7 +43,9 @@ extends Node
 ## the first variant of a shipped organ meets (§15.6): a peer born with the organ
 ## drawing its other variants, one measure of an organ's level for its rules and its
 ## tail's hold, one variant a body wherever a body comes to carry one, a group of stats
-## taken from one provider, and a person's order written before its genome; and the
+## taken from one provider, a person's order written before its genome, and a mechanic
+## with a place taking every number from the one organ it acts from -- two darts, two
+## radars, by your cell, the water, a person, the referee and the rules (§5.2); and the
 ## rulebook numbering owners past one word of bits (§13). And -- a number, not a
 ## failure (§8.3) -- the gene words with no French; and how many gene names are
 ## written into game/ outside game/genes/, which `-- --names` fails on (§12.2, CI's
@@ -2423,7 +2425,8 @@ func _synthetic_gene() -> void:
 
 	# **The body**: its stats by their rows, its family's colour on every key and the keen
 	# strain told by its accent and named after its organ, and the mechanic with a place
-	# acting from the first provider in slot order.
+	# acting from the first provider in slot order -- every number of it that one's, its
+	# reach too, never the best of the two (stats.gd's `seated`).
 	var both := {&"probegout": 2, &"probegkeen": 1}
 	var smell := [Stats.of({&"probegout": 2}, &"smell_range"), Stats.of(both, &"smell_range")]
 	var store := Stats.of({&"probegin": 3}, &"store")
@@ -2440,16 +2443,17 @@ func _synthetic_gene() -> void:
 		var water_order: Array = worn_layout
 		seats.append([cell.provider(&"smell_range"), cell.tier_for(&"smell_range"),
 			cell.stat(&"smell_range"), FoodField._seat_of(water_order, body, &"smell_range")])
-	_check(("the body takes it: a nose of %s alone, %s beside the keen strain -- the best of"
-		+ " them, as its row says -- and %s of store inside; drawn in its family's colour,"
-		+ " every key (%s), the keen strain told by its accent and named after its organ"
-		+ " (%s); and the smell acts from the first nose in slot order, here and in the"
-		+ " water: %s") % [smell[0], smell[1], store, str(hues), str(marked), str(seats)],
+	_check(("the body takes it: a nose of %s alone, %s the most beside the keen strain, as"
+		+ " its row says -- what a bound reads -- and %s of store inside; drawn in its family's"
+		+ " colour, every key (%s), the keen strain told by its accent and named after its"
+		+ " organ (%s); and the smell acts from the first nose in slot order, its reach that"
+		+ " nose's, here and in the water: %s") % [smell[0], smell[1], store, str(hues),
+		str(marked), str(seats)],
 		smell == [400.0, 600.0] and is_equal_approx(store, 1.3)
 		and hues == [Families.shade(Gene.SENSING), Families.shade(Gene.SENSING),
 			Families.shade(Gene.SENSING)]
 		and marked == [&"", ProbeGland.KEEN_ACCENT, "probegout", "probegin · keener"]
-		and seats[0] == [&"probegkeen", 1, 600.0, 4] and seats[1] == [&"probegout", 2, 600.0, 3])
+		and seats[0] == [&"probegkeen", 1, 600.0, 4] and seats[1] == [&"probegout", 2, 400.0, 3])
 
 	# **Its parts**: wired by the name it declares them under, in a water cell and in
 	# yours; a body wearing either strain has them; and no bit a list was read with moved.
@@ -2886,6 +2890,7 @@ func _strain_of_shipped() -> void:
 		and not said.is_empty() and Array(Catalogue.keys()) == before
 		and beads == [true, Kinds.MARK_DIAMOND, "%s · probebarb" % Genome.name_of(dosed)])
 	_person_order()
+	_seated_one_organ()
 
 
 ## **A person's order is written before its genome** (gene-catalogue.md §15.6): with a
@@ -2927,6 +2932,235 @@ func _person_order() -> void:
 		+ " %s and moving them round, its stun is the dart first in slot order now -- %s, by"
 		+ " a replay's field and a pond's, each way round") % [dart, str(stuns)],
 		stuns == [9.0, 9.0, own, own] and own != 9.0 and Array(Catalogue.keys()) == before)
+
+
+## **A seated mechanic is one organ's** (§5.2, §15.6; stats.gd's `SEATED`): a body
+## wearing two organs of a mechanic with a place -- the second one entry in the first's
+## own file, every number of it its own -- acts from the one first in slot order and
+## takes every number from it, never another organ's beside it. Each way round, so
+## neither passes by being first in the catalogue's order or best on its reach:
+##
+## - **two darts**, read by the stats (`Stats.seated`), by your cell, by a water cell
+##   and by a person: the reach, the rest, the stun and the copies of the dart that
+##   fires ([method _seated_darts]);
+## - **two radars**, read by your cell, by a water cell's eye and by the referee a host
+##   judges your calls by: the reach, the period, the pass and the copies of the one
+##   that calls ([method _seated_radars]);
+##
+## and the rules two builds agree on carry it (rules.gd): a line naming the seat of
+## each judged or contact stat of the two once a second organ provides it, and none
+## while one does.
+func _seated_one_organ() -> void:
+	var shipped := Rules.text()
+	_seated_darts(shipped)
+	_seated_radars(shipped)
+
+
+func _seated_darts(shipped: String) -> void:
+	var before := Array(Catalogue.keys())
+	var dart := Catalogue.first_provider(&"dart_range")
+	var organ: Gene = (Catalogue.gene(dart).get_script() as GDScript).new()
+	var reach: Array = Catalogue.table(dart, &"dart_range").duplicate()
+	var rest: Array = Catalogue.table(dart, &"dart_cooldown").duplicate()
+	for k in range(1, reach.size()):
+		reach[k] = float(reach[k]) * 1.5
+		rest[k] = float(rest[k]) + 1.0
+	organ.variants = [{"variant": &"probefar", "order": 960, "numbers": {&"stun": 9.0},
+		"look": {"accent": Kinds.MARK_BAR},
+		"provides": {&"dart_range": reach, &"dart_cooldown": rest}}]
+	Catalogue.register(organ)
+	var text := Rules.text()
+	var dna := Catalogue.born().duplicate()
+	dna[dart] = 2
+	dna[&"probefar"] = 1
+	var orders := [Array(Catalogue.born_order()) + [dart, &"probefar"],
+		Array(Catalogue.born_order()) + [&"probefar", dart]]
+	# What the dart first in slot order gives, each way round: its reach, its rest, its
+	# stun and its copies -- the shipped dart at two, the far one at one.
+	var wanted := [[Stats.value(dart, &"dart_range", 2), Stats.value(dart, &"dart_cooldown", 2),
+			float(Catalogue.number(dart, &"stun")), 2],
+		[float(reach[1]), float(rest[1]), 9.0, 1]]
+	var cell: Node = CellBody.new()
+	var field: Node = FoodField.new()
+	field.call(&"open_replay", cell, 0)
+	field.call(&"open_replay_person")
+	field.call(&"restore_person", Vector2.ZERO, 0.0, CellBody.DIVIDE_RADIUS, 0.0, 0.0, true)
+	var person: Object = (field.get(&"_cells") as Array)[FoodField.PERSON_SLOT]
+	var got := []
+	for k in 2:
+		var order: Array = orders[k]
+		var read := [[Stats.seated(order, dna, &"dart_range"),
+			Stats.seated(order, dna, &"dart_cooldown"), CellBody.dart_stun(dna, order),
+			Stats.seated_tier(order, dna, &"dart_range")]]
+		# Your cell, its genome expressed in that order.
+		var yours: Node = CellBody.new()
+		yours.radius = CellBody.DIVIDE_RADIUS
+		var genome: Node = Genome.new()
+		genome.setup(yours)
+		genome.express(dna, order)
+		yours.genome = genome
+		read.append([yours.stat(&"dart_range"), yours.stat(&"dart_cooldown"),
+			CellBody.dart_stun(yours.worn(), yours.seats()), yours.tier_for(&"dart_range")])
+		genome.free()
+		yours.free()
+		# A water cell wearing it in that order, and a person, as a pond writes one.
+		var water := FoodField.Body.new()
+		water.order = order
+		water.genome = dna.duplicate()
+		read.append([water.stat_dart_range, water.stat_dart_cooldown, water.stat_dart_stun,
+			water.stat_dart_tier])
+		field.call(&"set_person_genome", dna, order)
+		var p: Object = person.get(&"person")
+		read.append([float(p.get(&"dart_range")), float(p.get(&"dart_cooldown")),
+			float(person.get(&"stat_dart_stun")), int(person.get(&"stat_dart_tier"))])
+		got.append(read)
+	field.free()
+	cell.free()
+	Catalogue.forget(Catalogue.organ_of(dart))
+	var mixed := _mixed(got, wanted, ["the shipped dart first", "the far one first"],
+		["the stats", "your cell", "a water cell", "a person"])
+	var stray := _seats_in(shipped)
+	if not stray.is_empty():
+		mixed.append("with one organ to each, the shipped rules name seats all the same: "
+			+ ", ".join(PackedStringArray(stray)))
+	var seats := _seat_lines(text, [&"dart_range", &"dart_cooldown"], &"dart_range")
+	_check(("and a mechanic with a place is one organ's: wearing two darts, %s and a far one"
+		+ " with a longer reach, a longer rest and a stun of its own, the stats, your cell,"
+		+ " a water cell and a person each take the reach, the rest, the stun and the copies"
+		+ " of the dart first in slot order, each way round -- %s and %s; and the rules name"
+		+ " the dart's seat once two organs dart (%s), and no seat while one does%s") % [dart,
+		str(wanted[0]), str(wanted[1]), seats, "" if mixed.is_empty() else ": "
+		+ "; ".join(PackedStringArray(mixed))],
+		mixed.is_empty() and wanted[0] != wanted[1] and seats == "both"
+		and Array(Catalogue.keys()) == before)
+
+
+func _seated_radars(shipped: String) -> void:
+	var before := Array(Catalogue.keys())
+	var radar := Catalogue.first_provider(&"ping_range")
+	var organ: Gene = (Catalogue.gene(radar).get_script() as GDScript).new()
+	var reach: Array = Catalogue.table(radar, &"ping_range").duplicate()
+	var period: Array = Catalogue.table(radar, &"ping_period").duplicate()
+	var through: Array = Catalogue.table(radar, &"ping_through").duplicate()
+	for k in range(1, reach.size()):
+		reach[k] = float(reach[k]) * 1.5
+		period[k] = float(period[k]) + 4.0
+		through[k] = 0.9
+	organ.variants = [{"variant": &"probeloud", "order": 961,
+		"look": {"accent": Kinds.MARK_BAR},
+		"provides": {&"ping_range": reach, &"ping_period": period, &"ping_through": through}}]
+	Catalogue.register(organ)
+	var text := Rules.text()
+	var ways: Array = [[radar, &"probeloud"], [&"probeloud", radar]]
+	# What the radar first in slot order gives, each way round -- the shipped one at two
+	# copies, the loud one at one: its reach, its period, its pass and its copies, and
+	# to the referee its reach and the calls a second its period allows.
+	var wanted := [[Stats.value(radar, &"ping_range", 2), Stats.value(radar, &"ping_period", 2),
+			Stats.value(radar, &"ping_through", 2), 2],
+		[float(reach[1]), float(period[1]), float(through[1]), 1]]
+	for one: Array in wanted:
+		one.append(1.0 / maxf(float(one[1]) - Referee.SHOUT_EARLY, 1.0))
+	var field: Node = FoodField.new()
+	var got := []
+	for k in 2:
+		var pair: Array = ways[k]
+		# Its tiers written in that order too, as a water cell's slots follow them.
+		var dna := Catalogue.born().duplicate()
+		for key: StringName in pair:
+			dna[key] = 2 if key == radar else 1
+		var order: Array = Array(Catalogue.born_order()) + pair
+		var read := []
+		var yours: Node = CellBody.new()
+		yours.radius = CellBody.DIVIDE_RADIUS
+		var genome: Node = Genome.new()
+		genome.setup(yours)
+		genome.express(dna, order)
+		yours.genome = genome
+		read.append([yours.ping_range(), yours.ping_period(), yours.ping_through(),
+			yours.ping_tier(), _rate_of(yours.ping_period())])
+		genome.free()
+		yours.free()
+		var water := FoodField.Body.new()
+		water.radius = CellBody.BASE_RADIUS
+		water.genome = dna.duplicate()
+		var eye: Object = field.call(&"_eye_of", water)
+		read.append([float(eye.get(&"ping_range")), float(eye.get(&"ping_period")),
+			float(eye.get(&"ping_through")), int(eye.get(&"ping_tier")),
+			_rate_of(float(eye.get(&"ping_period")))])
+		# The referee, told the body in that order; and one told it the other way round
+		# first, then this way -- the same tiers, its radars moved -- which keeps the
+		# reach it had for the calls on their way.
+		var ref := Referee.new(0.0)
+		ref.judge_person(0.0, true, dna, order, false)
+		read.append([float(ref.call(&"_reach")), wanted[k][1], wanted[k][2], wanted[k][3],
+			float(ref.shouts.rate)])
+		var moved := Referee.new(0.0)
+		moved.judge_person(0.0, true, dna, Array(Catalogue.born_order()) + [pair[1], pair[0]],
+			false)
+		var had := float(moved.call(&"_reach"))
+		var took: Array = moved.judge_person(1.0, false, dna, order, false)
+		read.append([float(moved.call(&"_reach")), wanted[k][1], wanted[k][2], wanted[k][3],
+			float(moved.shouts.rate)] if took == [false]
+				and is_equal_approx(float(moved.get(&"_reach_before")), had) else [took])
+		got.append(read)
+	field.free()
+	Catalogue.forget(Catalogue.organ_of(radar))
+	var mixed := _mixed(got, wanted, ["the shipped radar first", "the loud one first"],
+		["your cell", "a water cell's eye", "the referee", "the referee, its radars moved"])
+	var stray := _seats_in(shipped)
+	if not stray.is_empty():
+		mixed.append("with one organ to each, the shipped rules name seats all the same: "
+			+ ", ".join(PackedStringArray(stray)))
+	var seats := _seat_lines(text, [&"ping_range", &"ping_period"], &"ping_range")
+	_check(("and so is a radar: wearing two, %s and a loud one calling further, slower and"
+		+ " through more, your cell, a water cell's eye and the referee each take the reach,"
+		+ " the period, the pass and the copies of the one first in slot order, each way"
+		+ " round -- %s and %s -- the referee its reach and its calls a second, and the same"
+		+ " body said in its other order moves them, keeping the old reach for the calls on"
+		+ " their way; and the rules name the radar's seat once two organs call (%s), and no"
+		+ " seat while one does%s") % [radar, str(wanted[0]), str(wanted[1]), seats,
+		"" if mixed.is_empty() else ": " + "; ".join(PackedStringArray(mixed))],
+		mixed.is_empty() and wanted[0] != wanted[1] and seats == "both"
+		and Array(Catalogue.keys()) == before)
+
+
+## **Calls a second a referee allows at [param period]** (referee.gd's `_shout_rate`).
+static func _rate_of(period: float) -> float:
+	return 1.0 / maxf(period - Referee.SHOUT_EARLY, 1.0)
+
+
+## **Where [param got] mixes**: each reader's row, by way, against what the organ
+## first in slot order gives, as `way, reader: got, not wanted`.
+static func _mixed(got: Array, wanted: Array, ways: Array, who: Array) -> Array[String]:
+	var mixed: Array[String] = []
+	for k in ways.size():
+		for w in who.size():
+			if str(got[k][w]) != str(wanted[k]):
+				mixed.append("%s, %s: %s, not %s" % [ways[k], who[w], str(got[k][w]),
+					str(wanted[k])])
+	return mixed
+
+
+## **Whether [param text] names [param seat] as the seat of every stat of [param stats]**
+## (rules.gd): `both` when it does, else the lines it has.
+static func _seat_lines(text: String, stats: Array, seat: StringName) -> String:
+	var found := _seats_in(text)
+	var want: Array[String] = []
+	for stat: StringName in stats:
+		want.append("stat.%s.seat=%s" % [stat, seat])
+	if found == want:
+		return "both"
+	return "none" if found.is_empty() else ", ".join(PackedStringArray(found))
+
+
+## **The lines of [param text] naming a seat** (rules.gd): none while every mechanic
+## with a place has one organ to provide it.
+static func _seats_in(text: String) -> Array[String]:
+	var found: Array[String] = []
+	for line: String in text.split("\n"):
+		if line.contains(".seat="):
+			found.append(line)
+	return found
 
 
 ## The part [param name] an organ of the catalogue declares as an input, its
