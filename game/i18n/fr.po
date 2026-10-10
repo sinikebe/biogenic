@@ -1812,6 +1812,45 @@ msgstr "un sens a grandi · maintenez E pour le placer"
 msgid "waiting"
 msgstr "attente"
 
+#. How often the water makes a gene, in one lowercase word at the start of the
+#. line under the gene's name on the pause and choosing screens: "uncommon ·
+#. two copies · a daughter probably wears it". Commonest first. It says how
+#. seldom the gene is found, not how good it is: a field guide's words. An
+#. adjective about the gene (in French "le gène": "commun", "peu commun",
+#. "rare").
+#. entry: common
+#. Room: at most 100 px in 14 px type; the English takes 60 px.
+#: game/genes/rarity.gd
+msgctxt "rarity"
+msgid "common"
+msgstr "commun"
+
+#. How often the water makes a gene, in one lowercase word at the start of the
+#. line under the gene's name on the pause and choosing screens: "uncommon ·
+#. two copies · a daughter probably wears it". Commonest first. It says how
+#. seldom the gene is found, not how good it is: a field guide's words. An
+#. adjective about the gene (in French "le gène": "commun", "peu commun",
+#. "rare").
+#. entry: uncommon
+#. Room: at most 100 px in 14 px type; the English takes 78 px.
+#: game/genes/rarity.gd
+msgctxt "rarity"
+msgid "uncommon"
+msgstr "peu commun"
+
+#. How often the water makes a gene, in one lowercase word at the start of the
+#. line under the gene's name on the pause and choosing screens: "uncommon ·
+#. two copies · a daughter probably wears it". Commonest first. It says how
+#. seldom the gene is found, not how good it is: a field guide's words. An
+#. adjective about the gene (in French "le gène": "commun", "peu commun",
+#. "rare").
+#. entry: rare
+#. Room: at most 100 px in 14 px type; the English takes 29 px.
+#: game/genes/rarity.gd
+msgctxt "rarity"
+msgid "rare"
+msgstr "rare"
+
 #. The hint under the figure, in 14 px type, about the gene being read: how
 #. many copies of it the cell's DNA holds (one to three) and so how likely a
 #. daughter cell is to wear it (to show it as an organ). The copies are words,
@@ -2938,7 +2977,7 @@ msgstr "coûte autant à garder"
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "works as level %d until you choose"
-msgstr "fonctionne comme niveau %d jusqu'à ce que vous choisissiez"
+msgstr "fonctionne comme niveau %d jusqu'à votre choix"
 
 #. The same hint at the fork itself: whichever way is chosen, it only starts
 #. at the next level.

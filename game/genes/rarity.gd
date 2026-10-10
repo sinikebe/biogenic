@@ -9,7 +9,8 @@ extends RefCounted
 ## **What it does not know**: genes, waters, or how the floor works. The catalogue
 ## resolves each key's class, weight and floor from it once (`catalogue.gd`'s
 ## `rarity_of`, `water_weight` and `floor_of`), and nothing reads the weights here
-## directly.
+## directly. Beside the ladder, each class's word and the classes a screen marks
+## (docs/design/rarity-word-ux.md): what a player reads, and nothing the water reads.
 ##
 ## **Starting values** (CLAUDE.md, "Balance waits for players"; gene-rarity.md §14):
 ## common and uncommon weigh what today's water weighs most, 4 and 2, so today's genes
@@ -32,6 +33,26 @@ const LADDER: Array[Dictionary] = [
 ## born organs and the nose hold today. Where the ladder would give the commons less,
 ## everything else shares the rest by its weights.
 const COMMON_SHARE := 1.0 / 3.0
+## **The word a player reads for each class** (docs/design/rarity-word-ux.md §3), at the
+## head of the row under a gene's line on the pause screen, the choosing screen and a
+## cell's detailed view: keyed by class, as an organ's `WORDS` are keyed by key. A table
+## of its own and not a field of [constant LADDER]'s rows, because a translators' note
+## there would hand a translator every plain string in the rows, `"class"` and
+## `"weight"` included. A fourth class is its row in the ladder and its word here; the
+## gene probe asks for both. Translated with the context `rarity`
+## (`figure.gd`'s `rarity_word`), because French agrees an adjective with its noun.
+##
+## TRANSLATORS: How often the water makes a gene, in one lowercase word at the start
+## of the line under the gene's name on the pause and choosing screens: "uncommon ·
+## two copies · a daughter probably wears it". Commonest first. It says how seldom
+## the gene is found, not how good it is: a field guide's words. An adjective about
+## the gene (in French "le gène": "commun", "peu commun", "rare").
+## ROOM: 100 px at 14 px
+## CONTEXT: rarity
+const WORDS := {&"common": "common", &"uncommon": "uncommon", &"rare": "rare"}
+## The classes a screen marks as the hunt: their word is drawn brighter
+## (docs/design/rarity-word-ux.md §2). Today the rarest.
+const MARKED := [&"rare"]
 
 
 ## Whether [param name] is a class on the ladder.

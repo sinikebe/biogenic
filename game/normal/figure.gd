@@ -59,6 +59,9 @@ const Drops := preload("res://game/normal/drops.gd")
 ## **The body plan** (docs/design/gene-catalogue.md §10): the slots the ring lays
 ## out, by their bearings. It preloads nothing.
 const BodyPlan := preload("res://game/genes/body_plan.gd")
+## **The rarity ladder** (docs/design/gene-rarity.md §2): the word each class is read
+## by, and the classes a screen marks. It preloads nothing.
+const Rarity := preload("res://game/genes/rarity.gd")
 
 ## The figure's own box, and where the body sits in it. **Set in code, as the
 ## choosing screen's column is**: every seat below is measured from
@@ -462,9 +465,9 @@ const FORK_OPEN_Y := 45.0
 ## TRANSLATORS: The hint under the figure, in 14 px type, about the gene being
 ## read: how many copies of it the cell's DNA holds (one to three) and so how
 ## likely a daughter cell is to wear it (to show it as an organ). The copies are
-## words, not digits, on purpose. The row is 560 px wide and a level and a gauge
-## share it, which leaves the text 430 px.
-## ROOM: 430 px at 14 px
+## words, not digits, on purpose. The row has 576 px, and the gene's rarity word,
+## a level and a gauge share it, which leaves the text 350 px.
+## ROOM: 350 px at 14 px
 const HINT_CHANCE: Array[String] = [
 	"",
 	"one copy · a daughter may not wear it",
@@ -495,6 +498,10 @@ const HINT_EMPTY := "an empty slot · nothing to pass on from here"
 ## the hint itself, which share the row's 560 px with it.
 ## ROOM: 70 px at 14 px with 99
 const HINT_LEVEL := "level %d"
+## **The row's gap**, on all three screens that lay it out ([method lay_hint_row]):
+## between the rarity word, the level, the gauge and the words. And its type.
+const HINT_GAP := 6
+const HINT_SIZE := 14
 ## **A gauge and not a number**, because experience means nothing to a player
 ## and `progress()` is already a fraction: a 36 x 4 bar at y 9 in its own
 ## 36 x 20 box, one pixel a thirty-sixth of a level.
@@ -739,6 +746,91 @@ static func odds(copies: int, numbers: bool) -> String:
 ## A gene's [param level], at the front of the hint row: "level 7".
 static func level_text(level: int) -> String:
 	return String(TranslationServer.translate(HINT_LEVEL)) % level
+
+
+## **How rare [param key] is, in one word** (docs/design/rarity-word-ux.md §3): its
+## class's word in [constant Rarity]'s `WORDS`, in the player's language and under the
+## context `rarity` -- `uncommon`, `peu commun`. "" for a key with no class, a retired
+## one and one this build does not know: the water does not make it, so there is no
+## find to name (§4).
+static func rarity_word(key: StringName) -> String:
+	var rarity := Catalogue.rarity_of(key)
+	if not Rarity.WORDS.has(rarity) or not Catalogue.live().has(key):
+		return ""
+	return String(TranslationServer.translate(Rarity.WORDS[rarity], &"rarity"))
+
+
+## **The word's tint** (rarity-word-ux.md §2): a step in brightness and no colour,
+## because every hue on this column already means something. A class the screens
+## mark as the hunt ([constant Rarity]'s `MARKED`, today `rare`) wears the level's
+## [constant LABEL_TINT], about as bright as the gene's own sentence and dimmer than
+## any number's value; every other class the caption's [constant CAPTION_TINT], one
+## step brighter than the odds it leads.
+static func rarity_tint(key: StringName) -> Color:
+	return LABEL_TINT if Rarity.MARKED.has(Catalogue.rarity_of(key)) else CAPTION_TINT
+
+
+## **The row under a gene's line, whole** (rarity-word-ux.md §1.3), as the pause
+## screen, the choosing screen and a cell's detailed view all lay it out: first
+## [param word], how rare [param named] is -- the gene the line above names, which is
+## not always the one the row prices (§4) -- then, where [param level_said] says a
+## level, [param level] and its [param gauge], then [param text] saying [param said].
+##
+## **Every label that follows another starts with `· `**, so a separator is drawn with
+## what it leads into and never in the word's tint. **[param text] spans the row and
+## centres itself when it is alone**, exactly as the label it was before the row
+## existed, so a row with nothing beside its words lays out to the pixel as it always
+## has; beside the word or a level it shrinks to its own width, and the row centres
+## the group. A row that writes its level into its words, as the choosing screen's
+## does, passes no [param level] and no [param gauge]. The gap after the word is the
+## row's separation, as the gap after the level always was.
+static func lay_hint_row(word: Label, named: StringName, level: Label, gauge: Control,
+		level_said: String, text: Label, said: String) -> void:
+	var rarity := rarity_word(named)
+	var lead := not rarity.is_empty()
+	word.visible = lead
+	word.text = rarity
+	word.add_theme_color_override(&"font_color", rarity_tint(named))
+	var levelled := level != null and not level_said.is_empty()
+	if level != null:
+		level.visible = levelled
+		if levelled:
+			level.text = "· " + level_said if lead else level_said
+	if gauge != null:
+		gauge.visible = levelled
+		if levelled:
+			gauge.queue_redraw()
+	var shared := lead or levelled
+	text.size_flags_horizontal = Control.SIZE_FILL if shared else Control.SIZE_EXPAND_FILL
+	text.text = "· " + said if shared and not said.is_empty() else said
+
+
+## **How wide a row [method lay_hint_row] lays out is**, in [param font] at the
+## row's [constant HINT_SIZE]: the word [param rarity] ("" for none), the level
+## [param level_said] and its gauge ("" for none) and the words [param said], every
+## label after the first with its `· ` and each part [constant HINT_GAP] from the
+## next. What the translation lint measures the pause screen's row by
+## (tools/i18n_pot.gd), so the row it measures is the row these screens lay out.
+static func hint_row_width(font: Font, rarity: String, level_said: String,
+		said: String) -> float:
+	var lead := not rarity.is_empty()
+	var levelled := not level_said.is_empty()
+	var parts: Array[float] = []
+	if lead:
+		parts.append(_row_width(font, rarity))
+	if levelled:
+		parts.append(_row_width(font, "· " + level_said if lead else level_said))
+		parts.append(GAUGE_SIZE.x)
+	parts.append(_row_width(font, "· " + said if (lead or levelled) and not said.is_empty()
+		else said))
+	var wide := float(HINT_GAP) * float(parts.size() - 1)
+	for part in parts:
+		wide += part
+	return wide
+
+
+static func _row_width(font: Font, text: String) -> float:
+	return font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, HINT_SIZE).x
 
 
 ## **The caption, whole** (gene-stats.md §5.4): the [param generation], and with
