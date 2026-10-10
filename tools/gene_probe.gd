@@ -39,7 +39,12 @@ extends Node
 ## file, the referee and the pause screen, held to one variant a body, and taken out
 ## again; a faster tail, one entry in the tail's own file, its parts offered on the
 ## instincts page to a body that wears it alone; and a second strain of the toxin, one
-## entry of one place in its own file, covered by its organ's tags (§12.3). And -- a number, not a
+## entry of one place in its own file, covered by its organ's tags (§12.3). Then what
+## the first variant of a shipped organ meets (§15.6): a peer born with the organ
+## drawing its other variants, one measure of an organ's level for its rules and its
+## tail's hold, one variant a body wherever a body comes to carry one, a group of stats
+## taken from one provider, and a person's order written before its genome; and the
+## rulebook numbering owners past one word of bits (§13). And -- a number, not a
 ## failure (§8.3) -- the gene words with no French; and how many gene names are
 ## written into game/ outside game/genes/, which `-- --names` fails on (§12.2, CI's
 ## "Check the gene names").
