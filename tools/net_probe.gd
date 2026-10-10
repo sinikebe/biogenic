@@ -1792,9 +1792,10 @@ static func _hello() -> PackedByteArray:
 	return Wire.hello(Wire.PROTOCOL, Wire.tail(Rules.fingerprint(), 0))
 
 
-## **A faster tail**, filed as the tail's own organ with one variant whose speed is
-## its own -- one more gene the referee judges, as the gene probe files one.
-## Registered by the caller, and forgotten by its organ's name.
+## **A faster tail**: the tail's own file with one entry more, a variant whose speed
+## is its own -- one more gene the referee judges, as the gene probe files one.
+## Registered by the caller in the tail's place, and forgotten by its organ's name,
+## which puts the tail's own file back.
 static func _faster_tail() -> Object:
 	var plain := Catalogue.first_provider(&"impulse_speed")
 	var speed: Array = Catalogue.table(plain, &"impulse_speed")
@@ -1803,14 +1804,30 @@ static func _faster_tail() -> Object:
 		swift.append(float(value) * 1.6)
 	swift[0] = speed[0]
 	var tail: Object = (Catalogue.gene(plain).get_script() as GDScript).new()
-	tail.set(&"variants", [{"variant": &"probeswift", "order": 920, "born": 0,
+	tail.set(&"variants", [{"variant": &"probeswift", "order": 920,
 		"provides": {&"impulse_speed": swift}}])
 	return tail
 
 
-## **A palp that feels further**, the palp's own organ with one variant whose reach
-## is its own: one more gene that changes nothing a host judges or decides a
-## contact by.
+## **A dart that reaches further**: the dart's own file with one entry more, a variant
+## whose reach is its own -- a second organ of a mechanic with a place (stats.gd's
+## `SEATED`), which the rules name the seat of.
+static func _farther_dart() -> Object:
+	var plain := Catalogue.first_provider(&"dart_range")
+	var reach: Array = Catalogue.table(plain, &"dart_range")
+	var farther: Array = []
+	for value: Variant in reach:
+		farther.append(float(value) * 1.5)
+	var dart: Object = (Catalogue.gene(plain).get_script() as GDScript).new()
+	dart.set(&"variants", [{"variant": &"probefar", "order": 922,
+		"provides": {&"dart_range": farther,
+			&"dart_cooldown": Catalogue.table(plain, &"dart_cooldown")}}])
+	return dart
+
+
+## **A palp that feels further**: the palp's own file with one entry more, a variant
+## whose reach is its own -- one more gene that changes nothing a host judges or
+## decides a contact by.
 static func _longer_palp() -> Object:
 	var plain := Catalogue.first_provider(&"touch_range")
 	var reach: Array = Catalogue.table(plain, &"touch_range")
@@ -1818,7 +1835,7 @@ static func _longer_palp() -> Object:
 	for value: Variant in reach:
 		longer.append(float(value) * 1.5)
 	var palp: Object = (Catalogue.gene(plain).get_script() as GDScript).new()
-	palp.set(&"variants", [{"variant": &"probefeel", "order": 921, "born": 0,
+	palp.set(&"variants", [{"variant": &"probefeel", "order": 921,
 		"provides": {&"touch_range": longer}}])
 	return palp
 
@@ -3394,6 +3411,27 @@ func _referee_rules() -> void:
 			+ " %d: the game's '%s', this probe's '%s' -- write the same value in both"
 			% [first + 1, theirs[first] if first < theirs.size() else "",
 			ours[first] if first < ours.size() else ""]))
+	# **And where a body could wear two organs of a mechanic with a place**: with a
+	# second dart filed, both texts name the seat its every number is read off, alike --
+	# the one rule they write only then.
+	Catalogue.register(_farther_dart())
+	var two_game := Rules.text()
+	var two_ours := _rules_text()
+	Catalogue.forget(Catalogue.organ_of(&"probefar"))
+	var seat_lines: PackedStringArray = []
+	for line: String in two_game.split("\n"):
+		if line.contains(".seat="):
+			seat_lines.append(line)
+	var seated := Array(seat_lines) == ["stat.dart_range.seat=dart_range",
+		"stat.dart_cooldown.seat=dart_range"] and not game.contains(".seat=")
+	_says(two_game == two_ours and seated, ("referee: with a second organ that darts, the"
+		+ " game and this probe both name the dart's seat (%s), and neither names one while"
+		% ", ".join(seat_lines) + " one organ darts") if two_game == two_ours and seated
+		else ("referee: with a second organ that darts, %s -- the seat a mechanic with a"
+			% ("the game's rules and this probe's differ" if two_game != two_ours
+				else "the rules name the wrong seats") + " place is read off is written in"
+			+ " both, the same, once two organs provide it, and in neither while one does"
+			+ " (seat lines: %s)" % ", ".join(seat_lines)))
 	# **Written the same on every machine** (rules.gd's note): every float as whole
 	# millionths by Godot alone, none within RULE_TIE of a rounding edge -- the body
 	# plan's own numbers too, inside its fingerprint -- and nothing of a kind the rules
@@ -3450,6 +3488,14 @@ func _rules_text(doubts: Array = []) -> String:
 		for k in providers.size():
 			put.call(Stats.label(stat) + ("" if k == 0 else "." + String(providers[k])),
 				Catalogue.table(providers[k], stat))
+		# **Which organ's, where two could be**: a stat of stats.gd's SEATED, or of a
+		# group led by one, is read off the one organ its mechanic acts from -- a rule
+		# only where more than one organ provides it.
+		var lead: StringName = row.get("group", &"")
+		var seat: StringName = stat if Stats.SEATED.has(stat) \
+			else (lead if Stats.SEATED.has(lead) else &"")
+		if seat != &"" and providers.size() > 1:
+			put.call("stat.%s.seat" % stat, seat)
 	# cell.gd: size, growth, division and mending; and the motion the caps sit over
 	# (`_referee_agrees`).
 	put.call("cell.BASE_RADIUS", CellBody.BASE_RADIUS)
@@ -7353,7 +7399,7 @@ func _check_pond() -> void:
 	var reentry := await _pond_reenter(guest_run, {&"cytostome": 3, &"cirrus": 1,
 		&"flagellum": 2, &"axoneme": 1, &"myoneme": 1, &"toxicyst": 1, &"veneneux": 1},
 		[&"cytostome", &"cirrus", &"flagellum", &"axoneme", &"myoneme", &"toxicyst"],
-		[host_pin])
+		[host_pin], host_pond)
 	guest_home = guest_cell.position
 	guest_pin = [guest_cell, guest_home, 0.0]
 	pins = [host_pin, guest_pin]
@@ -8799,20 +8845,91 @@ func _pond_budget(seconds: float) -> int:
 ## the run asks for at its next ordinary frame: PERSON with a new body, ENTER,
 ## the host's ARRIVE and the beat. Waits for the run to be swimming first, and
 ## returns the seconds from leaving to being back in, or -1.
-func _pond_reenter(run: Node, tiers: Dictionary, order: Array, pins: Array) -> float:
+##
+## **Through the run's own second asking, if it takes one.** An ENTER not
+## answered inside [constant NetSession.REACH_TIMEOUT] -- refused, lost, or
+## answered after the run stopped waiting -- is asked again (normal_mode.gd's
+## `_enter_timed_out`, then the swap at the next ordinary frame), so a wait of
+## REACH_TIMEOUT alone could never see that path through: this waits for both,
+## and a second for their frames. Twice in CI the server's first guest was not
+## back in time, and the one of those runs that finished had its referees judge
+## the ENTERs and PERSONs of a quiet run, no foul among them -- never here, in some
+## twenty runs on a quiet machine and on a loaded one. So when it happens,
+## [param room], the host's pond, is asked what it judged of that guest
+## meanwhile, and a NOTE says so beside what the run was doing as its ENTER ran out.
+func _pond_reenter(run: Node, tiers: Dictionary, order: Array, pins: Array,
+		room: Object = null) -> float:
 	var pond: Object = run.get("_pond")
 	var food: Node = run.get_node(^"Food")
 	await _pond_until(func() -> bool:
 		return int(run.get("_life")) == NormalMode.Life.ALIVE \
 			and float(run.get("_water_beat")) < 0.0, 2.0, pins)
+	var guest: Object = null
+	if room != null:
+		guest = room.call(&"_guest_by_id", int((run.get("_net") as Node).call(&"my_id")))
+		if guest == null:
+			# A phone host knows its one guest as 0.
+			guest = room.call(&"_guest_by_id", 0)
+	var judged_were := _judged_by(guest)
 	var from := _now()
 	pond.mirror_ended()
 	food.leave_mirror()
 	(run.get_node(^"Genome")).express(tiers, order)
-	var back := await _pond_until(func() -> bool:
+	var in_again := func() -> bool:
 		return bool(pond.in_pond) and food.mirroring() \
-			and float(run.get("_water_beat")) < 0.0, 4.0, pins)
+			and float(run.get("_water_beat")) < 0.0
+	var back := await _pond_until(in_again, NetSession.REACH_TIMEOUT, pins)
+	if back < 0.0:
+		# Its longest frame too: every end of this pond is one process here, so a
+		# stall as long as REACH_TIMEOUT times the ENTER out with its answer waiting.
+		var asking := ("life %d, split %d, menu %s, beat %.2f, ENTER waiting %s %.2f s,"
+			+ " swap %s, in the pond %s, a mirror %s, the host's pond open %s, its longest"
+			+ " frame %.2f s") % [
+			int(run.get("_life")), int(run.get("_split")), bool(run.get("_menu_open")),
+			float(run.get("_water_beat")), bool(pond.entering),
+			float(pond.call(&"entering_for")), bool(run.get("_swap_pending")),
+			bool(pond.in_pond), bool(food.mirroring()),
+			bool((run.get("_net") as Node).call(&"peer_pond_open")), _pond_frame_max]
+		var hosted := ("its body there %s, awaiting %s" % [
+			(room.get("_food") as Node).call(&"person", int(guest.slot)) != null,
+			bool(guest.awaiting)]) if guest != null else "no host asked"
+		var judged_then := _judged_by(guest)
+		back = await _pond_until(in_again, NetSession.REACH_TIMEOUT + 1.0, pins)
+		print("[net-probe] NOTE a guest's re-entry not back inside %.0f s -- the run then"
+			% NetSession.REACH_TIMEOUT + " [%s], the host [%s], which had judged %s of"
+			% [asking, hosted, _judged_since(judged_were, judged_then)] + " it since it left;"
+			+ (" back %.2f s after leaving" % (_now() - from) if back >= 0.0
+				else " never back"))
 	return _now() - from if back >= 0.0 else -1.0
+
+
+## **What [param guest]'s referee has judged** (a host's `Guest`, or null):
+## `[ENTERs, PERSONs, its fouls called by rule, its fouls struck]`, or `[]`.
+func _judged_by(guest: Object) -> Array:
+	if guest == null or guest.get("referee") == null:
+		return []
+	var referee: Object = guest.get("referee")
+	var judged: Dictionary = referee.get("judged")
+	return [int(judged["enter"]), int(judged["person"]),
+		(referee.get("called") as Dictionary).duplicate(),
+		(referee.get("fouls") as Array).duplicate()]
+
+
+## **What a referee judged between [param were] and [param now]**, two of
+## [method _judged_by]: the ENTERs and PERSONs it heard, each foul it called by
+## rule, and why, for those it struck.
+func _judged_since(were: Array, now: Array) -> String:
+	if were.is_empty() or now.is_empty():
+		return "nothing it could be asked"
+	var called := PackedStringArray()
+	for rule: String in now[2]:
+		var more := int(now[2][rule]) - int((were[2] as Dictionary).get(rule, 0))
+		if more > 0:
+			called.append("%s %d" % [rule, more])
+	for foul: Array in (now[3] as Array).slice((were[3] as Array).size()):
+		called.append("'%s'" % foul[2])
+	return "%d ENTER and %d PERSON, fouls %s" % [int(now[0]) - int(were[0]),
+		int(now[1]) - int(were[1]), "none" if called.is_empty() else ", ".join(called)]
 
 
 # --- The replay in a pond (shared-pond.md §5, Phase 3) -------------------------
@@ -9805,7 +9922,7 @@ func _check_server() -> void:
 	var b_brought := await _pond_reenter(b_run, {&"cytostome": 2, &"cirrus": 1,
 		&"flagellum": 2, &"palp": 1, &"axoneme": 1, &"myoneme": 1, &"toxicyst": 1,
 		&"veneneux": 1}, [&"cytostome", &"cirrus", &"flagellum", &"palp", &"axoneme",
-		&"myoneme", &"toxicyst"], [a_pin])
+		&"myoneme", &"toxicyst"], [a_pin], pond)
 	b_home = b_cell.position
 	b_pin = [b_cell, b_home, 0.0]
 	pins = [a_pin, b_pin]
@@ -9889,13 +10006,17 @@ func _check_server() -> void:
 	# so it is tested eating and being eaten.
 	# The first brings a tier-3 mouth in the same way.
 	var a_brought := await _pond_reenter(a_run, {&"cytostome": 3, &"cirrus": 1,
-		&"flagellum": 1}, [&"cytostome", &"cirrus", &"flagellum"], [b_pin])
+		&"flagellum": 1}, [&"cytostome", &"cirrus", &"flagellum"], [b_pin], pond)
 	a_home = a_cell.position
 	a_pin = [a_cell, a_home, 0.0]
 	pins = [a_pin, b_pin]
-	await _pond_until(func() -> bool:
+	var a_three := await _pond_until(func() -> bool:
 		return Genome.tier_of(food.bodies()[slot_a].genome, &"cytostome") == 3,
 		1.0, pins)
+	# Said on its own: a re-entry that never came back is not a meal that failed.
+	_says(a_brought >= 0.0 and a_three >= 0.0,
+		"server: the first guest leaves the pond and swims back in with a tier-3 mouth"
+		+ " in %.2f s, and the room takes the body it arrives with" % a_brought)
 	var a_ate := [false]
 	var on_a_eaten := func(_n: float, _g: StringName, _at: Vector2) -> void:
 		a_ate[0] = true
@@ -9972,14 +10093,17 @@ func _check_server() -> void:
 
 	# And brings a tier-3 mouth back in -- a re-entry inside 30 s of the one
 	# before, so it is the same body continued (the referee's re-entry rule).
-	await _pond_reenter(b_run, {&"cytostome": 3, &"cirrus": 1, &"flagellum": 1},
-		[&"cytostome", &"cirrus", &"flagellum"], [a_pin])
+	var b_again := await _pond_reenter(b_run, {&"cytostome": 3, &"cirrus": 1,
+		&"flagellum": 1}, [&"cytostome", &"cirrus", &"flagellum"], [a_pin], pond)
 	b_home = b_cell.position
 	b_pin = [b_cell, b_home, 0.0]
 	pins = [a_pin, b_pin]
-	await _pond_until(func() -> bool:
+	var b_three := await _pond_until(func() -> bool:
 		return Genome.tier_of(food.bodies()[slot_b].genome, &"cytostome") == 3,
 		1.0, pins)
+	_says(b_again >= 0.0 and b_three >= 0.0,
+		"server: and the second brings a tier-3 mouth back in %.2f s, and the room takes"
+		% b_again + " the body it arrives with")
 	var b_ate := [false]
 	var on_b_eaten := func(_n: float, _g: StringName, _at: Vector2) -> void:
 		b_ate[0] = true
@@ -10008,6 +10132,23 @@ func _check_server() -> void:
 	a_pin = [a_cell, a_home, 0.0]
 	pins = [a_pin, b_pin]
 	await _server_until(func() -> bool: return a_food.person() != null, pins)
+	var a_solo := not bool(a_food.call(&"mirroring"))
+	# **And back in the room's water as the room has it.** The room holds a guest
+	# that comes back -- no snapshots go to it -- until its first frame from the
+	# water arrives (pond.gd's `awaiting`), and a tap the room has not answered
+	# inside REACH_TIMEOUT swims on alone, then swaps in again at its next
+	# ordinary frame (normal_mode.gd's `_enter_timed_out`, then the swap). Once in
+	# CI the answer came late: the guest swam alone, and the checks below read a
+	# mirror it no longer had. So this waits for the room to be sending to it
+	# again, through that swap if it took one -- an unanswered tap and the swap's
+	# own wait, and a second for both frames.
+	var a_back := await _pond_until(func() -> bool:
+		var g: Object = pond.call("_guest_by_id", int(a_net.my_id()))
+		return g != null and food.person(int(g.slot)) != null and not bool(g.awaiting) \
+			and bool(a_food.call(&"mirroring")), 2.0 * NetSession.REACH_TIMEOUT + 1.0, pins)
+	_says(a_back >= 0.0, "server: the first guest, back from being eaten, is in the room's"
+		+ " water as the room has it, and sent its snapshots again"
+		+ (" -- through a swap, its tap not answered in time" if a_solo else ""))
 
 	# **The water, on the guest in the second slot.** A chewer's bite is felt
 	# at its true bearing, and that guest's snapshots carry its own wound --

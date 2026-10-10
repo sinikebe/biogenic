@@ -1123,9 +1123,9 @@ class Body:
 	## [method CellBody.hold_level]. Under [member tails_beat] a tail beats
 	## unless this holds it.
 	var tail_held := false
-	## **The level its tail works at**: the worn copies of the organ that beats,
-	## as its beam's level is its copies (`_eye_of`). Made with its body
-	## ([method _refresh_body]).
+	## **The level its tail works at**: the worn copies of the organ that beats --
+	## the best of any key of it, as its rules count it -- as its beam's level is its
+	## copies (`_eye_of`). Made with its body ([method _refresh_body]).
 	var tail_level := 0
 	## **The random turn it holds**: the rule that drew it and the tick it last
 	## fired on, -1 for none. While that rule keeps firing, the heading it drew
@@ -1163,9 +1163,9 @@ class Body:
 	## the arc the default order puts it, made by [method _refresh_body] for a
 	## body with a mouth in a drop of this field's own; null otherwise. And what
 	## of the rulebook's vocabulary it has, as rulebook.gd's bits: what it wears
-	## and what every body has (`Rulebook.worn`).
+	## and what every body has (`Rulebook.worn`), a mask of the vocabulary's words.
 	var eye: Observer = null
-	var worn := 0
+	var worn := PackedInt64Array()
 	## **What its genome buys it, read when the genome is written**
 	## (docs/design/gene-catalogue.md §15, as built 1a) and never on a tick: its
 	## mouth's gape, as a multiple of its radius, and its bite; its armour; its
@@ -1201,12 +1201,14 @@ class Body:
 		stat_turn = Stats.of(g, &"turn_rate")
 		stat_speed = CellBody.speed_of(g)
 		stat_hold = CellBody.hold_level(g)
-		stat_dart_tier = Stats.tier(g, &"dart_range")
-		stat_dart_range = Stats.of(g, &"dart_range")
-		stat_dart_cooldown = Stats.of(g, &"dart_cooldown")
-		# The dart that fires stuns for its own time: the first in slot order, where
-		# it wears several (gene-catalogue.md §5.2).
-		stat_dart_stun = CellBody.dart_stun(g, seats()) if stat_dart_tier > 0 \
+		# The dart that fires does all of it -- its arc, its reach, its rest and its
+		# stun -- the first in slot order, where it wears several (stats.gd's
+		# `seated`; gene-catalogue.md §5.2).
+		var layout: Array = seats() if Stats.seats_decide(g) else []
+		stat_dart_tier = Stats.seated_tier(layout, g, &"dart_range")
+		stat_dart_range = Stats.seated(layout, g, &"dart_range")
+		stat_dart_cooldown = Stats.seated(layout, g, &"dart_cooldown")
+		stat_dart_stun = CellBody.dart_stun(g, layout) if stat_dart_tier > 0 \
 			else CellBody.dart_stun(g)
 		stat_dash_tier = Stats.tier(g, &"dash_speed")
 		stat_dash_speed = Stats.of(g, &"dash_speed")
@@ -4430,8 +4432,10 @@ func restore_person_genome(tiers: Dictionary, order: Array) -> void:
 	if not _replay or not _pond or _cells.size() <= PERSON_SLOT:
 		return
 	var pb := _cells[PERSON_SLOT]
-	pb.genome = tiers
+	# The order first: writing the genome reads what it buys, the seated dart's stun
+	# among it, under the order it is worn in (gene-catalogue.md §15.6).
 	pb.order = order
+	pb.genome = tiers
 
 
 ## **Where a body was, written back from a recording.** The one thing in this
@@ -4877,8 +4881,10 @@ func set_person_genome(tiers: Dictionary, order: Array,
 	if not _pond or not _is_person_slot(slot) or _cells.size() <= slot:
 		return
 	var pb := _cells[slot]
-	pb.genome = tiers.duplicate()
+	# The order first: writing the genome reads what it buys, the seated dart's stun
+	# among it, under the order it is worn in (gene-catalogue.md §15.6).
 	pb.order = order.duplicate()
+	pb.genome = tiers.duplicate()
 	if pb.person != null:
 		_derive_person(pb)
 	_changes += 1
@@ -4889,8 +4895,9 @@ func _derive_person(pb: Body) -> void:
 	var tiers := pb.genome
 	p.swim_speed = CellBody.swim_speed_of(tiers)
 	p.armour = Stats.of(tiers, &"armor")
-	p.dart_range = Stats.of(tiers, &"dart_range")
-	p.dart_cooldown = Stats.of(tiers, &"dart_cooldown")
+	# The dart that fires, all of it (stats.gd's `seated`): the first in their order.
+	p.dart_range = Stats.seated(pb.order, tiers, &"dart_range")
+	p.dart_cooldown = Stats.seated(pb.order, tiers, &"dart_cooldown")
 	var slot := _seat_of(pb.order, tiers, &"dart_range")
 	p.dart_bearing = Cilia.slot_bearing(slot) if slot >= 0 else 0.0
 	# Their toxins are read off their body and its worn order where a bite asks
@@ -6250,6 +6257,16 @@ static func _erase_organ(pool: Array[StringName], gene: StringName) -> void:
 			pool.erase(organ)
 
 
+## **[param gene]'s variety, out of [param pool]**, in every form: what a body that
+## wears it already may not draw again. The organ's other varieties stay, and the
+## pool keeps its order. One organ of one variety today, so this takes out what
+## [method _erase_organ] takes out.
+static func _erase_variety(pool: Array[StringName], gene: StringName) -> void:
+	for key: StringName in Catalogue.forms_of(gene):
+		while pool.has(key):
+			pool.erase(key)
+
+
 func _draw_tier(sensed: float) -> int:
 	var total := 0.0
 	for tier in TIER_WEIGHTS.size():
@@ -6923,7 +6940,8 @@ func _push_person_drop(k: int) -> void:
 
 
 ## **How far a person's senses reach**, for the spawner's hide reach round
-## them: the widest of the nose, the radar and the beam their tiers carry.
+## them: the widest of the nose, the radar and the beam their tiers carry -- a bound,
+## so the most any of their organs gives (stats.gd's `of`), not the one that acts.
 func _person_senses(pb: Body) -> float:
 	var g := pb.genome
 	return maxf(maxf(Stats.of(g, &"smell_range"), Stats.of(g, &"ping_range")),
@@ -7943,14 +7961,20 @@ func _refresh_body(b: Body) -> void:
 	b.turn_rate = b.stat_turn
 	b.thrust = Stats.of(g, &"push_accel")
 	b.dart_tier = b.stat_dart_tier
-	# Pack 4 (automation.md §5.3): its tail's level is its copies, as its beam's is.
-	b.tail_level = Genome.tier_of(g, Catalogue.worn_provider(g, &"impulse_speed"))
+	# Pack 4 (automation.md §5.3): its tail's level is its copies, as its beam's is --
+	# the level its rules count the tail's organ at, the best of any key of it worn
+	# (catalogue.gd's `organ_level`; gene-catalogue.md §15.6).
+	b.tail_level = Catalogue.organ_level(g,
+		Catalogue.organ_of(Catalogue.worn_provider(g, &"impulse_speed")))
 	b.eye = _eye_of(b) if _drop != null and not _mirror and not _replay \
 		and not b.drifter and not b.inert else null
-	b.worn = _worn_of(g) if b.eye != null else 0
-	var smell := Stats.of(g, &"smell_range")
-	var ping := Stats.of(g, &"ping_range")
-	var beam := Stats.of(g, &"beam_range")
+	b.worn = _worn_of(g) if b.eye != null else PackedInt64Array()
+	# Each sense's reach is the organ that senses (stats.gd's `seated`): the first in
+	# the default order's slots where it wears two noses, two radars or two eyes.
+	var order: Array = Cilia.default_order(g) if Stats.seats_decide(g) else []
+	var smell := Stats.seated(order, g, &"smell_range")
+	var ping := Stats.seated(order, g, &"ping_range")
+	var beam := Stats.seated(order, g, &"beam_range")
 	var touch := Stats.of(g, &"touch_range")
 	b.notice = maxf(maxf(smell, ping), maxf(beam, touch))
 	# A radar does not hear a floc and an eyespot does not see one (§7.5): a
@@ -8260,9 +8284,9 @@ func _ruled() -> bool:
 ## 3's water has no part at a level** ([member tails_beat] off): those bits are
 ## never there, so nothing a level brings fires, nor is drawn by a change, and the
 ## drop is pack 3's to the byte.
-func _worn_of(parts: Dictionary) -> int:
+func _worn_of(parts: Dictionary) -> PackedInt64Array:
 	var mask := Rulebook.worn(vocabulary(), Catalogue.by_organ(parts), _everybody)
-	return mask if tails_beat else mask & ~vocabulary().levelled
+	return mask if tails_beat else Rulebook.without(mask, vocabulary().levelled)
 
 
 ## **The wiring** (§3.5 step 3), made on first use: each declared input to the
@@ -8353,14 +8377,16 @@ func _eye_of(b: Body) -> Observer:
 	o.radius = b.radius
 	o.gape = _gape(b)
 	var order := Cilia.default_order(g)
-	o.smell_range = Stats.of(g, &"smell_range")
+	# A seated sense is all one organ's (stats.gd's `seated`): its reach, its period,
+	# its pass and its copies, the first in slot order where it wears several.
+	o.smell_range = Stats.seated(order, g, &"smell_range")
 	o.smell_bearing = _arc_in(order, g, &"smell_range")
 	o.touch_range = Stats.of(g, &"touch_range")
 	o.eyespot = Catalogue.worn_on(g, Catalogue.LIGHT) != &""
-	o.ping_range = Stats.of(g, &"ping_range")
-	o.ping_tier = Stats.tier_of(g, Stats.organ(order, g, &"ping_range"), &"ping_range")
-	o.ping_period = Stats.of(g, &"ping_period")
-	o.ping_through = Stats.of(g, &"ping_through")
+	o.ping_range = Stats.seated(order, g, &"ping_range")
+	o.ping_tier = Stats.seated_tier(order, g, &"ping_range")
+	o.ping_period = Stats.seated(order, g, &"ping_period")
+	o.ping_through = Stats.seated(order, g, &"ping_through")
 	o.ping_bearing = _arc_in(order, g, &"ping_range")
 	# The beam as the run aims yours below its fork (normal_mode.gd's
 	# `_aim_beam`): a fixed fan of its rung's rays, spread about the arc.
@@ -9676,6 +9702,11 @@ func _free_slot_drop() -> int:
 ## drawn as today up to the slots its radius has, the ceiling on what the water
 ## makes kept on the mouth, and a sense given in a bonus slot to a peer that
 ## drew none, as the player's newborn is given one.
+##
+## **Its born organs are the born keys** (gene-catalogue.md §15.6), and each takes
+## only its own variety out of the pool: the organ's other variants stay in it, so a
+## peer may draw a faster tail beside the tail it was born with -- unless the organ
+## holds one variant to a body, which takes the whole organ out, as any draw does.
 func _draw_living(body_radius: float, sensed: float) -> Dictionary:
 	var tiers := {}
 	for gene: StringName in Drop.peer_plan():
@@ -9683,7 +9714,10 @@ func _draw_living(body_radius: float, sensed: float) -> Dictionary:
 	var capacity := CellBody.slots_for(body_radius)
 	var pool: Array[StringName] = Catalogue.drifters().duplicate()
 	for gene: StringName in tiers:
-		_erase_organ(pool, gene)
+		if Catalogue.one_variant(Catalogue.organ_of(gene)):
+			_erase_organ(pool, gene)
+		else:
+			_erase_variety(pool, gene)
 	# The toxin drawn as one gene, its place by a coin, and poison taking no arc
 	# ([method _place_toxin]): a peer's draw differs from before only on a peer
 	# that drew the toxin.
@@ -9704,14 +9738,13 @@ func _draw_living(body_radius: float, sensed: float) -> Dictionary:
 ## **A gene back through a peer** (§6.4, docs/design/dna-slots.md §9;
 ## gene-catalogue.md §6.4): a drop down to its last carriers of a gene tagged
 ## `floor_by_peers` -- the toxin's, in either form -- gives the next peer that
-## gene, its place by a coin, since no drifter may carry it.
+## gene, its place by a coin, since no drifter may carry it. A peer that carries it,
+## or another strain of an organ held to one a body, is passed over
+## (`Drop.takes_back`), and the gene waits for the next.
 func _give_back_by_peer(b: Body) -> void:
 	var gene := _peer_short()
-	if gene == &"":
+	if gene == &"" or not Drop.takes_back(b.genome, gene):
 		return
-	for form: StringName in Genome.forms_of(gene):
-		if Genome.tier_of(b.genome, form) > 0:
-			return
 	_gene_short.erase(gene)
 	Drop.give_back(b.genome, gene, CellBody.slots_for(b.radius),
 		Catalogue.tagged(Catalogue.SENSE), randi(), randi() % 2 == 0)
@@ -9998,7 +10031,9 @@ func census_line() -> String:
 ## and the largest family, and how many carry a DNA that is not their body --
 ## and what they have become: their cruise, reach, mouth and upkeep, the genes
 ## they wear and carry, how many have a tail, a sense, or are at r40; then each
-## gene's mean tier worn, and the three commonest bodies. Asking moves nothing.
+## gene's mean tier worn, by its key (gene-catalogue.md §13: four letters of it named
+## two genes as soon as two keys began alike), and the three commonest bodies. Asking
+## moves nothing.
 func lineage_line() -> String:
 	if _drop == null or _mirror:
 		return "[lineage] not in a drop of its own"
@@ -10062,7 +10097,7 @@ func lineage_line() -> String:
 	var m := float(maxi(n, 1))
 	var means := PackedStringArray()
 	for gene: StringName in Catalogue.live():
-		means.append("%s %.2f" % [String(gene).left(4), float(tiers.get(gene, 0)) / m])
+		means.append("%s %.2f" % [gene, float(tiers.get(gene, 0)) / m])
 	return ("[lineage] t %.0f  hunters %d, born %d  generation mean %.2f max %d  families %d"
 		+ " (largest %d)  dna apart %d  | cruise %.1f notice %.0f mouth %.2f upkeep %.2f"
 		+ " genes worn %.2f carried %.2f  tails %d sighted %d at r40 %d  | divisions %d"

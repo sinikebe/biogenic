@@ -31,6 +31,13 @@ extends RefCounted
 
 # --- The words fields are written in ------------------------------------------------
 
+## **The most copies of a gene a body carries**: three tiers, and tier 0 for none.
+## Every table an organ [member provides] has an entry for each, and `genome.gd`'s
+## TIER_MAX is this one -- here, in the file of a gene's shape, which loads nothing,
+## so that the wire reads it too (`wire.gd`'s TIER_TOP) and nothing copies it. The
+## host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL.
+const TIER_MAX := 3
+
 ## **The two places** (docs/design/dna-slots.md §2): the slots round the body,
 ## and the one inside it. `genome.gd`'s OUTSIDE_PLACE and INSIDE_PLACE are
 ## these.
@@ -131,7 +138,7 @@ var order := -1
 
 ## **The stats it provides** (§5): stat to its value at each tier, index 0 being
 ## the stat's value with no provider -- `stats.gd`'s row -- and one entry for each
-## copy up to `genome.gd`'s TIER_MAX. Every body's stat is read through
+## copy up to [constant TIER_MAX]. Every body's stat is read through
 ## `stats.gd`, which knows no gene; the fingerprints that list every table
 ## (`drop_save.gd`'s rules, `tools/net_probe.gd`'s RULES) read them from here.
 var provides := {}
@@ -189,15 +196,19 @@ var look := {}
 var family: StringName = &""
 
 ## **The copies a newborn wears of it** (`genome.gd`'s born cell): the mouth, the
-## cirrus and the tail, one each. 0 for a gene no cell is born with. The host's
+## cirrus and the tail, one each. 0 for a gene no cell is born with, and for a
+## variant that does not set it: a variant does not take its organ's. The host's
 ## referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 var born := 0
 
 ## **One variant to a body** (gene-catalogue.md §6.3): placing a second variant of
-## this organ writes over the first, as the inside's one poison does, and the water
-## and drift never give a body a second. Off for every organ today, since nothing
-## today can carry two: the gene pass sets it per organ when it adds variants. The
-## organ's own, never a variant's.
+## this organ writes over the first, as the inside's one poison does -- and so does a
+## sample of one left to lapse, in the first's slot, and a water cell's meal -- and
+## the water, the gene floor and drift never give a body a second. `genome.gd`'s
+## `placing()` names the variant a write takes out; no screen says it yet. Off for
+## every organ today, since nothing today can carry two: the gene pass sets it per
+## organ when it adds variants, and words what a player is told with it. The organ's
+## own, never a variant's.
 var one_variant := false
 
 ## **What it gives a body's rules** (docs/design/behaviour.md §3), in the shape
@@ -244,20 +255,24 @@ var declares := {}
 #
 # A variant has keys of its own, so it brings its own words in the same tables.
 
-## **Its variants**, the first being the organ as it shipped (§6): each a
-## dictionary with its `variant` name, the `dose` it delivers (the toxin's
-## strain, doses.gd's name for a kind), its `forms` -- place to the form's key,
-## or to a dictionary with the form's `key` and anything the form sets of its own
-## -- and anything else the variant sets over its organ. A variant's first form
-## is its variety. **A variant with no `forms` is one form, outside**, keyed by
-## its own `key` or, without one, by its name. Empty for an organ of one variant
-## in one place. **An organ's first variant is two entries until phase 5**
-## (gene-catalogue.md §6.2): its own key is filed only while this is empty, and a
-## variant takes its `order` and `born` as it takes every field it does not set.
-## So a faster tail restates the tail first, then gives itself an order and no
-## copies at birth: `[{"key": &"flagellum"}, {"variant": &"swift", "key":
-## &"swiftail", "order": 17, "born": 0, "look": {"accent": &"disc"},
-## "provides": {...}}]`.
+## **Its variants after the first** (§6): each a dictionary with its `variant`
+## name, the `dose` it delivers (the toxin's strain, doses.gd's name for a kind),
+## its `forms` -- place to the form's key, or to a dictionary with the form's `key`
+## and anything the form sets of its own -- and anything else the variant sets over
+## its organ. A variant's first form is its variety. **A variant with no `forms` is
+## one form, outside**, keyed by its own `key` or, without one, by its name. Empty
+## for an organ of one variant.
+##
+## **The organ's own key is its first variant**, implicit: the organ as it shipped,
+## filed under [member organ] (gene-catalogue.md §6.2). So a faster tail is one
+## entry, and the tail keeps its key: `[{"variant": &"swift", "key": &"swiftail",
+## "order": 17, "look": {"accent": &"disc"}, "provides": {...}}]`. **A variant sets
+## its own `order`** -- the next one -- or it would take its organ's and tie it in
+## `dominant_of`, which the gene probe fails; and **it is born with no copies**, its
+## `born` 0 unless it says, the one field it does not take from its organ.
+## **An organ with no `order` of its own lists its first variant here too**, and its
+## name is no key: the toxin, whose first strain sits in two places, each form with
+## its own key and order.
 var variants: Array = []
 
 # --- What the catalogue writes, per key ------------------------------------------------
@@ -266,7 +281,8 @@ var variants: Array = []
 ## wire, saves and the replay hold. 1 to 16 letters `a-z` (Wire.NAME_MAX), for
 ## good once shipped (§4.4).
 var key: StringName = &""
-## The variant this form is of, `&""` for an organ of one.
+## The variant this form is of: `&""` for the organ's own key, its implicit first
+## variant, so every variant [member variants] lists needs a name of its own.
 var variant: StringName = &""
 ## The place this form sits in: [constant OUTSIDE] or [constant INSIDE].
 var place: StringName = OUTSIDE

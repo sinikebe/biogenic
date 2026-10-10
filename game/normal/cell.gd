@@ -696,13 +696,16 @@ func worn() -> Dictionary:
 
 
 ## **This body's [param which]** (stats.gd): what it wears of the stat's
-## providers, combined -- `turn_rate`, `gape`, `armor`. Read off the stats once a
-## body ([method _bought_now]).
+## providers, combined -- `turn_rate`, `gape`, `armor` -- or, for a mechanic that acts
+## from a place, the one organ it acts from: every number of it that organ's
+## (stats.gd's `seated`, `SEATED`). Read off the stats once a body ([method
+## _bought_now]).
 func stat(which: StringName) -> float:
 	var bought := _bought_now()
 	var known: Variant = bought.get(which)
 	if known == null:
-		known = Stats.of(worn(), which)
+		var tiers := worn()
+		known = Stats.seated(seats() if Stats.seats_decide(tiers) else [], tiers, which)
 		bought[which] = known
 	return known
 
@@ -893,15 +896,21 @@ func impulse_gap_max() -> float:
 	return stat(&"impulse_gap_max")
 
 
-## **The level this body's tail works at**: `genome.gd`'s `level_of` of the
-## organ that beats, which for a tail is its worn copies -- 1 for an unwired cell,
-## which is the born one, and 0 for a body with no tail. What
-## [method hold_level] is asked of.
+## **The level this body's tail works at**: the level its rules count the organ that
+## beats at -- the best `genome.gd`'s `level_of` of any key of it the body wears, which
+## for a tail is its worn copies (the catalogue's `worn_levels` and `organ_level`) --
+## so a plain tail at one copy beside a faster one at three works at three, for the
+## hand's hold and a rule's alike (gene-catalogue.md §15.6). 1 for an unwired cell,
+## which is the born one, and 0 for a body with no tail. What [method hold_level] is
+## asked of.
 func tail_level() -> int:
 	if genome == null:
 		return 1
 	var tail := provider(&"impulse_speed")
-	return int(genome.level_of(tail)) if tail != &"" else 0
+	if tail == &"":
+		return 0
+	return Catalogue.organ_level(Catalogue.worn_levels(worn(), genome),
+		Catalogue.organ_of(tail))
 
 
 ## Whether this tail can be held still at all: at [method hold_level] or more.

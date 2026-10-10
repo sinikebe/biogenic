@@ -187,7 +187,8 @@ static var _owners_are_keys := true
 static var _levelled: Array[StringName] = []
 ## Channel to the live keys that drive it.
 static var _channels := {}
-## What a tool registered ([method register]), after the index's own.
+## What a tool registered ([method register]): each in the place of the index's
+## organ of its name, or after the index's own.
 static var _registered: Array = []
 ## **Key to its look as drawn** ([method look]: its kind's every parameter, its
 ## shade and its accent's seat resolved by `kinds.gd`), every key's, a retired one's
@@ -262,7 +263,8 @@ static func keys_of_organ(organ: StringName) -> Array[StringName]:
 	return _organ_keys.get(organ, _none)
 
 
-## The variant [param key] is a form of, `&""` for an organ of one.
+## The variant [param key] is a form of, `&""` for an organ's own key -- its
+## implicit first variant -- and for a key this build does not know.
 static func variant_of(key: StringName) -> StringName:
 	var record := gene(key)
 	return record.variant if record != null else &""
@@ -416,11 +418,12 @@ static func declares() -> Dictionary:
 
 
 ## **[param levels] -- a key to the level it works at -- by organ**: each organ to
-## the highest level of any live key of it, which is what a body's rules count its
-## parts by (rulebook.gd's owners are the organs of [method declares]). A retired
-## key brings nothing, as it provides nothing (§4.4), and a key this build does not
-## know stands for itself. **[param levels] itself while every organ that declares
-## parts goes by its own key alone** -- every one today -- so nothing is made.
+## the highest level of any live key of it ([method organ_level]), which is what a
+## body's rules count its parts by (rulebook.gd's owners are the organs of [method
+## declares]). A retired key brings nothing, as it provides nothing (§4.4), and a key
+## this build does not know stands for itself. **[param levels] itself while every
+## organ that declares parts goes by its own key alone** -- every one today -- so
+## nothing is made.
 static func by_organ(levels: Dictionary) -> Dictionary:
 	if _owners_are_keys:
 		return levels
@@ -432,6 +435,37 @@ static func by_organ(levels: Dictionary) -> Dictionary:
 		var organ: StringName = record.organ if record != null else StringName(key)
 		out[organ] = maxi(int(out.get(organ, 0)), int(levels[key]))
 	return out
+
+
+## **The level each key a body wears works at**, key to level, for its rules and its
+## tail's hold alike: [param genome]'s `level_of` -- the beam's earned level, every
+## other gene's worn copies -- and at least 1, for every key of [param tiers], the
+## body, worn at a copy or more. [param genome] is the body's genome node, or any
+## object that answers `level_of` (a tool's stub): this file preloads none.
+static func worn_levels(tiers: Dictionary, genome: Object) -> Dictionary:
+	var out := {}
+	for key: Variant in tiers:
+		if int(tiers[key]) > 0:
+			out[key] = maxi(int(genome.call(&"level_of", key)), 1)
+	return out
+
+
+## **The level [param organ] works at, in a body whose keys work at [param levels]**
+## (key to level): the highest of any live key of it -- **one measure**, the one a
+## body's rules count a part's owner by ([method by_organ]), so a mechanic that asks
+## an organ's level asks the same: the tail's hold (`cell.gd`'s `tail_level`,
+## `food.gd`'s `Body.tail_level`). A plain tail at one copy beside a faster one at
+## three works at three. A retired key brings nothing, and a name no organ goes by
+## stands for itself. 0 for an organ it has none of.
+static func organ_level(levels: Dictionary, organ: StringName) -> int:
+	var keys: Array[StringName] = _organ_keys.get(organ, _none)
+	if keys.is_empty():
+		return int(levels.get(organ, 0))
+	var best := 0
+	for key: StringName in keys:
+		if levels.has(key) and not has_tag(key, RETIRED):
+			best = maxi(best, int(levels[key]))
+	return best
 
 
 ## **The first live key of [param organ]** -- its first variant's variety -- what
@@ -668,16 +702,20 @@ static func part_words(part: StringName) -> Dictionary:
 
 # --- Tools -----------------------------------------------------------------------------------
 
-## **A tool's seam: a gene of its own** (§4.3), filed after the index's as a new
-## organ's file would be, and every lookup built again. As `food.gd`'s
-## `declare()` lets a probe declare a part, this lets one put a synthetic gene
-## through every system. Nothing in the game calls it.
+## **A tool's seam: a gene of its own** (§4.3), filed as an organ's file would be,
+## and every lookup built again: after the index's, as a new organ's file is -- or,
+## **for an organ of a name the index already has, in that organ's place**, as an
+## edit to its file would be. So a variant of a shipped organ is posed as it will
+## be written: the organ's own file with one more entry. As `food.gd`'s `declare()`
+## lets a probe declare a part, this lets one put a synthetic gene through every
+## system. Nothing in the game calls it.
 static func register(organ: Gene) -> void:
 	_registered.append(organ)
 	_index()
 
 
-## Takes back everything [method register] filed under [param organ_name].
+## Takes back everything [method register] filed under [param organ_name], and puts
+## back the index's own organ of that name where one stood in for it.
 static func forget(organ_name: StringName) -> void:
 	_registered = _registered.filter(func(one: Gene) -> bool: return one.organ != organ_name)
 	_index()
@@ -691,7 +729,18 @@ static func _index() -> void:
 	var organs: Array = []
 	for script: GDScript in ORGANS:
 		organs.append(script.new())
-	organs.append_array(_registered)
+	# What a tool registered: in the place of the organ of its name, or after them all
+	# ([method register]).
+	for one: Gene in _registered:
+		var at := -1
+		for k in organs.size():
+			if (organs[k] as Gene).organ == one.organ:
+				at = k
+				break
+		if at >= 0:
+			organs[at] = one
+		else:
+			organs.append(one)
 	var records := {}
 	var resolved: Array = []
 	# Each key's words, and every part's, from its organ file's word tables.
@@ -856,21 +905,31 @@ static func _index() -> void:
 		_tag_sets[tag] = members_set
 
 
-## **[param organ]'s keys, each a flat record** (§4.2): the organ itself for an
-## organ of one variant in one place, keyed by its name; otherwise one record per
-## form of every variant, in the order the organ lists them -- a fresh instance of
-## the organ's script, the organ's fields copied onto it, then its variant's and
-## its form's written over them. A variant with no forms is one, outside.
+## **[param organ]'s keys, each a flat record** (§4.2, §6.2). **First the organ
+## itself, keyed by its name** -- its implicit first variant, the organ as it shipped
+## -- unless it lists variants and has no place in the order of its own (below).
+## Then one record per form of every variant it lists, in its order -- a fresh
+## instance of the organ's script, the organ's fields copied onto it, then its
+## variant's and its form's written over them. A variant with no forms is one,
+## outside. **A variant is born with no copies** unless it says otherwise: `born`
+## is the one field it does not take from its organ, or every newborn would wear
+## both tails.
+##
+## **An organ with variants and no `order` of its own is no key itself**: its
+## variants are all it files, the first listed being the organ as it shipped. That
+## is the toxin, whose first strain sits in two places, each form with its key and
+## its order. Every other organ has a place in the order, so adding a variant to it
+## is one entry and its own key never leaves the catalogue.
 static func _resolve(organ: Gene) -> Array:
-	if organ.variants.is_empty():
-		organ.key = organ.organ
-		return [organ]
 	var out: Array = []
+	if organ.variants.is_empty() or organ.order >= 0:
+		organ.key = organ.organ
+		out.append(organ)
 	for entry: Dictionary in organ.variants:
 		var forms: Dictionary = entry.get("forms", {})
 		if forms.is_empty():
 			# **A variant with no forms is one form, outside** (gene.gd): keyed by its
-			# own `key`, or by its name -- so `{"key": <the organ>}` keeps the organ's.
+			# own `key`, or by its name.
 			var own := StringName(entry.get("key", entry.get("variant", &"")))
 			if own == &"":
 				push_error("[catalogue] a variant of %s has no forms, no key and no name:"
@@ -885,6 +944,8 @@ static func _resolve(organ: Gene) -> Array:
 			# The parts are the organ's, on every variant and form ([method declares]).
 			record.declares = organ.declares
 			_write_over(record, _fields_of(organ))
+			# No copies at birth unless the variant or its form says so (above).
+			record.born = 0
 			_write_over(record, entry)
 			if form is Dictionary:
 				_write_over(record, form)

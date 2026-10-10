@@ -1902,7 +1902,8 @@ func _lineage_look(field: WatchedDrop, t: float, seen: Dictionary) -> void:
 		if b.get("seeded") and not b.get("inert"):
 			for gene: StringName in b.get("genome"):
 				genes[GenomeNode.variety(gene)] = true
-	seen["genes"] = mini(int(seen.get("genes", 99)), genes.size())
+	# The least from no ceiling at all: a catalogue may carry more than any number.
+	seen["genes"] = minf(float(seen.get("genes", INF)), float(genes.size()))
 	seen["looks"] = int(seen.get("looks", 0)) + 1
 	seen["hunters_most"] = maxi(int(seen.get("hunters_most", 0)), int(hunters))
 
@@ -1924,6 +1925,33 @@ func _lineage_summary(field: WatchedDrop, named: String, seen: Dictionary) -> Di
 	out["gifted"] = int((field.get("stats") as Dictionary).get(&"born_gifted", 0))
 	out["lineage"] = field.lineage_line()
 	return out
+
+
+## **A pinned line as the game writes it now** (gene-catalogue.md §13): the lineage
+## line labelled each gene by its key's first four letters when the pins below were
+## recorded, and labels it by its key now. So each four-letter label of a pin's
+## `| worn` part is read as the one live key it was cut from, and every value is
+## compared as it always was -- today's live keys are as many four-letter labels as
+## keys. A label two keys share is left as it is, and the line then differs, which says
+## to record the pin again from the check's own output, keys and all. A line with no
+## such part, or recorded with keys, comes back as it is.
+static func _keyed(line: String) -> String:
+	var at := line.find("| worn ")
+	if at < 0:
+		return line
+	at += "| worn ".length()
+	var end := line.find("  |", at)
+	if end < 0:
+		end = line.length()
+	var cut := {}
+	for key: StringName in Catalogue.live():
+		var label := String(key).left(4)
+		cut[label] = "" if cut.has(label) else String(key)
+	var words := line.substr(at, end - at).split(" ")
+	for k in range(0, words.size(), 2):
+		if String(cut.get(words[k], "")) != "":
+			words[k] = cut[words[k]]
+	return line.substr(0, at) + " ".join(words) + line.substr(end)
 
 
 ## **The water divides** (lineage.md §11.3, checks 1 to 6): five minutes of a
@@ -1979,10 +2007,10 @@ func _lineage() -> void:
 	var differ := 0
 	for k in DEV_LINES.size():
 		var ours: String = lines[k] if k < lines.size() else "(none)"
-		if ours != DEV_LINES[k]:
+		if ours != _keyed(DEV_LINES[k]):
 			differ += 1
 			print("[drop-probe] check 1, line %d, this build: %s" % [k + 1, ours])
-			print("[drop-probe] check 1, line %d, dev:        %s" % [k + 1, DEV_LINES[k]])
+			print("[drop-probe] check 1, line %d, dev:        %s" % [k + 1, _keyed(DEV_LINES[k])])
 	_check(("1. with the rules off it is pack 2, the drop: a newborn's drop and a sighted"
 		+ " player's, seed 1, five minutes on pack 2's hunter -- their census and lineage"
 		+ " lines against dev's: %s") % ["the same to the byte" if differ == 0
@@ -2410,7 +2438,7 @@ func _determinism() -> void:
 	var differ := 0
 	for k in maxi(off.size(), THREE_ONE_LINES.size()):
 		var ours: String = off[k] if k < off.size() else "(none)"
-		var theirs: String = THREE_ONE_LINES[k] if k < THREE_ONE_LINES.size() else "(none)"
+		var theirs: String = _keyed(THREE_ONE_LINES[k]) if k < THREE_ONE_LINES.size() else "(none)"
 		if theirs.begins_with("[behaviour]"):
 			theirs += UNCHANGED_TAIL
 		if ours != theirs:
@@ -6346,17 +6374,26 @@ func _flaws(list: RefCounted, vocab: RefCounted) -> String:
 		if StringName(output.get("needs")) == Rulebook.BEARING \
 				and (input == null or not bool(input.get("bearing"))):
 			return "a turn on %s, which carries no bearing" % name
-		var needs := _needed(output, vocab)
-		if input != null:
-			needs |= _needed(input, vocab)
-		if int(rule.get("claims")) != int(output.get("claims")) or int(rule.get("needs")) != needs:
+		# What it needs, worked out here a word at a time from its parts' bit numbers,
+		# against what the rule holds: its first word, and the words past it.
+		var words := int(vocab.get("words"))
+		var needs := PackedInt64Array()
+		needs.resize(words)
+		for decl: Object in [output, input]:
+			if decl != null:
+				var bit := _needed(decl, vocab)
+				needs[bit / Rulebook.WORD] |= 1 << (bit % Rulebook.WORD)
+		var held := PackedInt64Array([int(rule.get("needs"))])
+		held.append_array(rule.get("far"))
+		held.resize(maxi(held.size(), words))
+		if int(rule.get("claims")) != int(output.get("claims")) or held != needs:
 			return "%s claims or needs what its parts do not" % rule.get("text")
 	return ""
 
 
 ## **The bit a declared part needs, as this probe reads it** (automation.md
 ## §4.3): its owner's, at its first level; past it, the bit the vocabulary keeps
-## for that owner at that level.
+## for that owner at that level. By its number, as the vocabulary numbers its bits.
 func _needed(decl: Object, vocab: RefCounted) -> int:
 	var level := int(decl.get("level"))
 	if level <= 1:
@@ -6390,13 +6427,13 @@ func _drawn(parent: RefCounted, child: RefCounted) -> Array[StringName]:
 
 ## Whether [param part], an input's or output's name, is always's or of an
 ## owner in [param owners], at the level the part is declared at.
-func _owned(part: StringName, vocab: RefCounted, owners: int) -> bool:
+func _owned(part: StringName, vocab: RefCounted, owners: PackedInt64Array) -> bool:
 	if part == Rulebook.ALWAYS:
 		return true
 	var decl: Object = (vocab.get("inputs") as Dictionary).get(part)
 	if decl == null:
 		decl = (vocab.get("outputs") as Dictionary).get(part)
-	return decl != null and (owners & _needed(decl, vocab)) != 0
+	return decl != null and Rulebook.has_bit(owners, _needed(decl, vocab))
 
 
 func _inert_count(list: RefCounted) -> int:
@@ -6462,9 +6499,9 @@ func _modular() -> void:
 	FoodField.declare([TRIAL])
 	var vocab: RefCounted = FoodField.vocabulary()
 	var owners: Dictionary = vocab.get("owners")
-	var bit := int(owners.get(&"trial", 0))
+	var bit := int(owners.get(&"trial", -1))
 	var named: bool = (vocab.get("inputs") as Dictionary).has(&"trial.glow") \
-		and (vocab.get("outputs") as Dictionary).has(&"trial.flash") and bit > 0
+		and (vocab.get("outputs") as Dictionary).has(&"trial.flash") and bit >= 0
 	var everybody := {&"body": true, &"metabolism": true}
 	var cell := CellBody.new()
 	cell.radius = CellBody.BASE_RADIUS
@@ -6487,8 +6524,10 @@ func _modular() -> void:
 	var cb: Object = cells[c]
 	cb.set("dna", wearing.duplicate())
 	cb.set("brain", _list(TRIAL_RULES))
-	var in_body := (int(wb.get("worn")) & bit) != 0 and (int(cb.get("worn")) & bit) == 0
-	var in_dna := bit > 0 and (Rulebook.worn(vocab, cb.get("dna"), everybody) & bit) != 0
+	var in_body := Rulebook.has_bit(wb.get("worn"), bit) \
+		and not Rulebook.has_bit(cb.get("worn"), bit)
+	var in_dna := bit >= 0 \
+		and Rulebook.has_bit(Rulebook.worn(vocab, cb.get("dna"), everybody), bit)
 	field.log_reads = true
 	field.reads.clear()
 	for f in 2 * 60:
@@ -6709,7 +6748,7 @@ func _tail_pack3() -> void:
 	var differ := 0
 	for k in maxi(off.size(), PACK3_LINES.size()):
 		var ours: String = off[k] if k < off.size() else "(none)"
-		var theirs: String = PACK3_LINES[k] if k < PACK3_LINES.size() else "(none)"
+		var theirs: String = _keyed(PACK3_LINES[k]) if k < PACK3_LINES.size() else "(none)"
 		if ours != theirs:
 			differ += 1
 			print("[drop-probe] tail 1, pack 3, line %d, this build: %s" % [k + 1, ours])
@@ -6717,7 +6756,7 @@ func _tail_pack3() -> void:
 	var moved := 0
 	for k in maxi(_tail_on_lines.size(), TAIL_LINES.size()):
 		var ours: String = _tail_on_lines[k] if k < _tail_on_lines.size() else "(none)"
-		var pinned: String = TAIL_LINES[k] if k < TAIL_LINES.size() else "(none)"
+		var pinned: String = _keyed(TAIL_LINES[k]) if k < TAIL_LINES.size() else "(none)"
 		if ours != pinned:
 			moved += 1
 			print("[drop-probe] tail 1, row 37, line %d, this build: %s" % [k + 1, ours])
@@ -7286,12 +7325,12 @@ func _tail_level_three() -> void:
 	var cell: CellBody = water[1]
 	var cells: Array = field.get("_cells")
 	var bit := int(((FoodField.vocabulary().get("levels") as Dictionary)
-		.get(&"lamella", {}) as Dictionary).get(3, 0))
+		.get(&"lamella", {}) as Dictionary).get(3, -1))
 	var worn := []
 	for copies: int in [2, 3]:
 		var k := _pose(field, cell.position + Vector2(300.0 * copies, 0.0), 30.0,
 			{&"cytostome": 1, &"lamella": copies}, 0.0, 0.6)
-		worn.append((int(cells[k].get("worn")) & bit) != 0)
+		worn.append(Rulebook.has_bit(cells[k].get("worn"), bit))
 	_done(water)
 	FoodField.declare([])
 	var words := []
@@ -8913,7 +8952,7 @@ func _dna_forms() -> void:
 			var result := g.place(slot)
 			var want := &"veneneux" if slot == inside else &"toxicyst"
 			var other := &"toxicyst" if slot == inside else &"veneneux"
-			if not (result == GenomeNode.Result.INTEGRATED and said == [GenomeNode.PLACE_WRITE, slot]
+			if not (result == GenomeNode.Result.INTEGRATED and said == [GenomeNode.PLACE_WRITE, slot, &""]
 					and int(g.dna().get(want, 0)) == 1 and not g.dna().has(other)
 					and g.dna_slot(want) == slot and g.waiting().is_empty()
 					and _in_place(g) == ""):
@@ -8933,7 +8972,7 @@ func _dna_forms() -> void:
 	g.integrate(&"veneneux")
 	var elsewhere := g.placing(&"veneneux", 4)
 	var raised := g.place(4)
-	var raise_ok := elsewhere == [GenomeNode.PLACE_RAISE, 3] \
+	var raise_ok := elsewhere == [GenomeNode.PLACE_RAISE, 3, &""] \
 		and raised == GenomeNode.Result.RAISED and int(g.dna()[&"toxicyst"]) == 2 \
 		and g.layout()[4] == &"" and not g.dna().has(&"veneneux") and _in_place(g) == ""
 	_dna_free(g)
@@ -8947,8 +8986,8 @@ func _dna_forms() -> void:
 	g.integrate(&"toxicyst")
 	var full := g.placing(&"toxicyst", inside)
 	var spent := g.place(inside)
-	var inside_ok := in_place == [GenomeNode.PLACE_RAISE, inside] \
-		and raised_in == GenomeNode.Result.RAISED and full == [GenomeNode.PLACE_FULL, inside] \
+	var inside_ok := in_place == [GenomeNode.PLACE_RAISE, inside, &""] \
+		and raised_in == GenomeNode.Result.RAISED and full == [GenomeNode.PLACE_FULL, inside, &""] \
 		and spent == GenomeNode.Result.RAISED and int(g.dna()[&"veneneux"]) == 3 \
 		and not g.dna().has(&"toxicyst") and g.waiting().is_empty() and _in_place(g) == ""
 	_dna_free(g)
@@ -8957,7 +8996,7 @@ func _dna_forms() -> void:
 	g.integrate(&"ampulla")
 	var faces := g.placing(&"ampulla", inside)
 	var refused := g.place(inside)
-	var faces_ok := faces == [GenomeNode.PLACE_FACES_OUT, -1] \
+	var faces_ok := faces == [GenomeNode.PLACE_FACES_OUT, -1, &""] \
 		and refused == GenomeNode.Result.NOTHING and g.waiting() == [&"ampulla"] \
 		and not g.dna().has(&"ampulla")
 	_dna_free(g)

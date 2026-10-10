@@ -10,7 +10,9 @@ extends Node
 ##
 ## **Static, and a few seconds**: it reads the catalogue and the files, and plays
 ## nothing. What it checks (§15): the keys -- names the wire carries, one form's
-## each, in their shipped order, organ and variant names their own; the index
+## each, in their shipped order, organ and variant names their own, every variant
+## at an order of its own, and an organ's own key retired alone only as the toxin is
+## laid out, never by a tag on the organ over a live variant; the index
 ## against the folder, and every tag, channel, place and field one there is; the
 ## water's weights, drifters, senses, gift and born cell, and the lists a draw or
 ## a bit reads in their shipped order; every stat table's length and first entry,
@@ -36,9 +38,16 @@ extends Node
 ## gene of the probe's own -- an organ with two variants, one in two places -- put
 ## through the genome, the water, the body, its instinct parts, the wire, a cell's
 ## file, the referee and the pause screen, held to one variant a body, and taken out
-## again; a faster tail, one more variant of the tail filed beside it, its parts offered
-## on the instincts page to a body that wears it alone; and a second strain of the toxin,
-## one entry of one place, covered by its organ's tags (§12.3). And -- a number, not a
+## again; a faster tail, one entry in the tail's own file, its parts offered on the
+## instincts page to a body that wears it alone; and a second strain of the toxin, one
+## entry of one place in its own file, covered by its organ's tags (§12.3). Then what
+## the first variant of a shipped organ meets (§15.6): a peer born with the organ
+## drawing its other variants, one measure of an organ's level for its rules and its
+## tail's hold, one variant a body wherever a body comes to carry one, a group of stats
+## taken from one provider, a person's order written before its genome, and a mechanic
+## with a place taking every number from the one organ it acts from -- two darts, two
+## radars, by your cell, the water, a person, the referee and the rules (§5.2); and the
+## rulebook numbering owners past one word of bits (§13). And -- a number, not a
 ## failure (§8.3) -- the gene words with no French; and how many gene names are
 ## written into game/ outside game/genes/, which `-- --names` fails on (§12.2, CI's
 ## "Check the gene names").
@@ -112,21 +121,22 @@ const SHIPPED_LISTS := {
 		&"axoneme", &"flagellum"],
 }
 
-## **The stats a mechanic reads together, as one organ's** -- so every organ that
-## provides one of a group provides all of it: a call is its reach, its period
-## and how much of it passes a body; a stroke its speed and its two gaps; a turn
-## its rate and how fast it answers; a dash its burst and its price; a dart its
-## reach and its rest; a beam its reach, its rays and their fan. An organ that
-## gave one alone would be read at the others' values with no provider -- a call
-## every 0 s, which the referee divides by, or a tail's speed beating at the
-## gaps of no tail.
+## **The stats a mechanic reads together, as one organ's** -- `stats.gd`'s groups, by
+## its rows' `group`, in its rows' order, kept here as well so that a change there
+## fails here first -- so every organ that provides one of a group provides all of it:
+## a stroke is its speed and its two gaps; a turn its rate and how fast it answers; a
+## beam its reach, its rays and their fan; a call its reach, its period and how much
+## of it passes a body; a dash its burst and its price; a dart its reach and its rest.
+## An organ that gave one alone would be read at the others' values with no provider
+## -- a call every 0 s, which the referee divides by, or a tail's speed beating at the
+## gaps of no tail. And a body wearing two providers takes a whole group from one.
 const TOGETHER: Array = [
-	[&"ping_range", &"ping_period", &"ping_through"],
 	[&"impulse_speed", &"impulse_gap_min", &"impulse_gap_max"],
 	[&"turn_rate", &"turn_response"],
+	[&"beam_range", &"beam_count", &"beam_fan_deg"],
+	[&"ping_range", &"ping_period", &"ping_through"],
 	[&"dash_speed", &"dash_cost"],
 	[&"dart_range", &"dart_cooldown"],
-	[&"beam_range", &"beam_count", &"beam_fan_deg"],
 ]
 
 ## **The families and the kinds** (docs/design/gene-looks.md §1, §2, §7): what a
@@ -167,6 +177,11 @@ const ORGANS_DIR := "res://game/genes/organs"
 ## Where the gene names left in code are counted (§12.2), and what is exempt.
 const GAME_DIR := "res://game"
 const GENES_DIR := "res://game/genes"
+## **The files the gate reads** (§12.2), by extension, each to the marker its
+## language starts a comment with: every script, scene, resource and shader under
+## game/. Not the translations (`.po`, `.pot`), whose comments and contexts name genes
+## for a translator, not for code.
+const GATED := {"gd": "#", "tscn": ";", "tres": ";", "gdshader": "//"}
 
 ## **The body plan in this commit, written out by hand** (§10.1): what a reader keeps
 ## of it -- the counts `CellBody.SLOT_MIN` and `SLOT_MAX`, `Genome.INSIDE`,
@@ -277,10 +292,13 @@ func _ready() -> void:
 		get_tree().quit(0 if _failed == 0 else 1)
 		return
 	_keys()
+	_own_orders()
+	_retired_alone()
 	_index()
 	_water()
 	_tables()
 	_rules()
+	_owner_bits()
 	_wiring()
 	_mechanics()
 	_register()
@@ -342,7 +360,11 @@ func _keys() -> void:
 		var variants := {}
 		for entry: Dictionary in organ.variants:
 			var variant := StringName(entry.get("variant", &""))
-			if variants.has(variant):
+			# A variant of no name would be one variant with the organ's own key,
+			# whose name is none (gene.gd's `variant`): its forms would be the organ's.
+			if variant == &"":
+				clashes.append("%s lists a variant with no name" % organ.organ)
+			elif variants.has(variant):
 				clashes.append("%s's variant %s twice" % [organ.organ, variant])
 			variants[variant] = true
 	_check("every organ's name is its own, %d of them, and every variant's within its organ%s"
@@ -380,6 +402,149 @@ func _keys() -> void:
 			and Catalogue.tagged(Catalogue.GIFT).find(key) < 0
 	_check("rhabdom and statocyst are known, retired, and in no list that makes a gene",
 		retired_ok)
+
+
+## **Retiring an organ's own key is not tagging the organ** (§4.4, §6.2): an organ's
+## tags are every variant's -- tags add up -- so an organ tagged `retired` retires every
+## variant it lists with its own key. One tagged so whose variants do not each say
+## `retired` too fails, saying how to retire its own key alone -- the toxin's layout --
+## or every one of them. Shown on organs of the probe's own: one tagged over a live
+## variant, which fails here and would retire the variant; and the same laid out as the
+## toxin is, which passes, its old key retired at its old order and still the first of
+## its keys (phase 6's `as_shipped`), its variant live.
+func _retired_alone() -> void:
+	var before := Array(Catalogue.keys())
+	var faults := _retire_faults(_organs())
+	var store := Catalogue.first_provider(&"store")
+	var script := Catalogue.gene(store).get_script() as GDScript
+	var shipped: Gene = script.new()
+	var kept := {"variant": &"probekeep", "order": 963, "look": {"accent": Kinds.MARK_RING}}
+	# Tagged: the organ retired over a live variant -- found, and the variant retired.
+	var tagged: Gene = script.new()
+	var tags: Array[StringName] = []
+	tags.assign(tagged.tags)
+	tags.append(Gene.RETIRED)
+	tagged.tags = tags
+	tagged.variants = [kept]
+	var found := _retire_faults([tagged])
+	Catalogue.register(tagged)
+	var dragged := Catalogue.has_tag(&"probekeep", Catalogue.RETIRED)
+	Catalogue.forget(tagged.organ)
+	# Laid out as the toxin is: no order of its own, its first variant listed first with
+	# the key, the order and the born it had, and retired.
+	var laid: Gene = script.new()
+	laid.order = -1
+	laid.variants = [{"variant": &"plain", "key": store, "order": shipped.order,
+		"born": shipped.born, "tags": [Gene.RETIRED]}, kept]
+	var clean := _retire_faults([laid])
+	Catalogue.register(laid)
+	var took := [Catalogue.has_tag(store, Catalogue.RETIRED), Catalogue.rank(store),
+		Catalogue.keys_of_organ(laid.organ)[0], Catalogue.live().has(&"probekeep"),
+		Catalogue.has_tag(&"probekeep", Catalogue.RETIRED)]
+	Catalogue.forget(laid.organ)
+	_check(("an organ's own key retires alone only as the toxin is laid out: %s; one of the"
+		+ " probe's own tagged retired over a live variant is found (%s), and registered"
+		+ " retires it too (%s); laid out as the toxin is -- no order of its own, its first"
+		+ " variant listed first with the key, order and born it had, retired -- %s retires"
+		+ " at its order and stays the first of its keys, its variant live: %s") % [
+		("none of the %d organs tags itself retired over a variant that does not say so"
+			% _organs().size()) if faults.is_empty() else _retire_how(faults),
+		", ".join(PackedStringArray(found)), dragged, store, str(took)],
+		faults.is_empty() and found == ["%s (probekeep)" % store] and dragged
+		and clean.is_empty()
+		and took == [true, shipped.order, store, true, false]
+		and Array(Catalogue.keys()) == before)
+
+
+## **Each organ of [param organs] tagged `retired` over a variant that does not say it
+## too**, as `organ (variants)`: tags add up, so the organ's tag retires each of them.
+static func _retire_faults(organs: Array) -> Array[String]:
+	var out: Array[String] = []
+	for organ: Gene in organs:
+		if not organ.tags.has(Gene.RETIRED):
+			continue
+		var silent: Array[String] = []
+		for entry: Dictionary in organ.variants:
+			if not _says_retired(entry):
+				silent.append(String(entry.get("variant", &"")))
+		if not silent.is_empty():
+			out.append("%s (%s)" % [organ.organ, ", ".join(PackedStringArray(silent))])
+	return out
+
+
+## Whether a variant's [param entry] tags itself `retired`: in its own tags, or in every
+## form's.
+static func _says_retired(entry: Dictionary) -> bool:
+	if (entry.get("tags", []) as Array).has(Gene.RETIRED):
+		return true
+	var forms: Dictionary = entry.get("forms", {})
+	for place: Variant in forms:
+		var form: Variant = forms[place]
+		if not (form is Dictionary
+				and ((form as Dictionary).get("tags", []) as Array).has(Gene.RETIRED)):
+			return false
+	return not forms.is_empty()
+
+
+## **What to do about [param faults]**, the failure's sentence.
+static func _retire_how(faults: Array[String]) -> String:
+	return ("%s -- each tagged retired, which retires every variant it lists with it. To"
+		% ", ".join(PackedStringArray(faults)) + " retire only its own key, lay it out as"
+		+ " the toxin is: the organ's `order = -1` and no `retired` of its own, and its"
+		+ " first variant listed first with the key, the order and the born the organ had,"
+		+ " retired -- `{\"variant\": &\"plain\", \"key\": &\"<organ>\", \"order\": <its order>,"
+		+ " \"born\": <its born>, \"tags\": [RETIRED]}` -- then the others, live. To retire"
+		+ " them all, tag each variant retired too")
+
+
+## **Every variant an organ's file lists has an order of its own** (§6.2): set in its
+## entry or its form, and no other key's. The organ's own key -- its implicit first
+## variant -- keeps the organ's order, so a variant that set none would take it, and
+## tie the organ in `dominant_of`: a body wearing both at one copy count would be
+## drawn as either, and eating it would give either. Two keys of one order do the
+## same.
+func _own_orders() -> void:
+	var next := 0
+	for key: StringName in Catalogue.keys():
+		next = maxi(next, Catalogue.rank(key) + 1)
+	var bad: Array[String] = []
+	var listed := 0
+	for organ: Gene in _organs():
+		for entry: Dictionary in organ.variants:
+			var forms: Dictionary = entry.get("forms", {})
+			var filed: Array = []
+			if forms.is_empty():
+				filed.append([StringName(entry.get("key", entry.get("variant", &""))),
+					entry.get("order")])
+			for place: Variant in forms:
+				var form: Variant = forms[place]
+				if form is Dictionary:
+					filed.append([StringName((form as Dictionary).get("key", &"")),
+						(form as Dictionary).get("order", entry.get("order"))])
+				else:
+					filed.append([StringName(form), entry.get("order")])
+			for one: Array in filed:
+				listed += 1
+				if one[1] != null:
+					continue
+				bad.append(("%s, a variant of %s, has no order of its own: it would take the"
+					+ " organ's, %d, %s. Give it the next, %d, and append it to SHIPPED") % [
+					one[0], organ.organ, organ.order,
+					("and tie %s in dominant_of -- a body wearing both at one copy count would"
+						+ " be drawn as either, and eating it would give either") % organ.organ
+						if organ.order >= 0 else "which is no place in the order", next])
+	var by_order := {}
+	for key: StringName in Catalogue.keys():
+		var rank := Catalogue.rank(key)
+		if rank < 0:
+			continue
+		if by_order.has(rank):
+			bad.append("%s and %s share the order %d, and tie in dominant_of" % [by_order[rank],
+				key, rank])
+		by_order[rank] = key
+	_check("every variant an organ's file lists has an order of its own, no other key's: %d of"
+		% listed + " them, the next order %d%s" % [next, "" if bad.is_empty() else ": "
+			+ "; ".join(bad)], bad.is_empty())
 
 
 # --- The index (§4.1) ------------------------------------------------------------------
@@ -562,13 +727,21 @@ func _tables() -> void:
 				or combine == Stats.PRODUCT and Stats.none(stat) != 1.0 \
 				or not [Stats.BEST, Stats.SUM, Stats.PRODUCT].has(combine):
 			rows_bad.append("%s combines by %s from %s" % [stat, combine, str(row.get("none"))])
-		if not row.has("unit") or not row.has("judged") or not row.has("contact"):
-			rows_bad.append("%s has no unit, no judged or no contact" % stat)
+		if not row.has("unit") or not row.has("judged") or not row.has("contact") \
+				or not row.get("group") is StringName:
+			rows_bad.append("%s has no unit, no judged, no contact or no group" % stat)
+		else:
+			# A group is named by its first stat, which is its own group's and comes first.
+			var lead: StringName = row["group"]
+			if lead != &"" and (not Stats.ROWS.has(lead) or Stats.ROWS[lead].get("group") != lead
+					or Stats.ROWS.keys().find(lead) > Stats.ROWS.keys().find(stat)):
+				rows_bad.append("%s is grouped by %s, which is not its group's first stat"
+					% [stat, lead])
 	_check(("every row says which way is better, how providers combine -- a sum from 0, a"
-		+ " product from 1 -- its unit, whether the referee judges it and whether the host"
-		+ " decides a contact by it; judged: %s, contact: %s%s") % [str(Stats.judged()),
-		str(Stats.contact()), "" if rows_bad.is_empty() else ": " + "; ".join(rows_bad)],
-		rows_bad.is_empty())
+		+ " product from 1 -- its unit, whether the referee judges it, whether the host"
+		+ " decides a contact by it and the group it is read in; judged: %s, contact: %s%s")
+		% [str(Stats.judged()), str(Stats.contact()),
+			"" if rows_bad.is_empty() else ": " + "; ".join(rows_bad)], rows_bad.is_empty())
 	# One provider each today, so every combine rule gives the table's own number.
 	var crowded: Array[StringName] = []
 	for stat: StringName in Stats.ROWS:
@@ -611,6 +784,90 @@ func _rules() -> void:
 	_check("the genes declare parts in their shipped order, each at a level a gene reaches: %s"
 		% str(declarers), levelled_ok
 		and Array(declarers).slice(0, shipped.size()) == shipped)
+
+
+## **The rulebook has no ceiling on owners** (§13, §15.6): the game's tables and seventy
+## owners more, each declaring a sense, an action and an action at level 2, number every
+## owner-and-level -- 151 bits, past the one int that held them all -- and the game's
+## own bits are where they were. A body with only the last owner, at level 2, has that
+## owner's parts and no other's: its rules wake and fire, the first owner's sleep, its
+## level's part wakes at 2 and not at 1, and a change draws from it and from what every
+## body has, never from an owner it lacks.
+func _owner_bits() -> void:
+	var tables := [CellBody.DECLARES, Metabolism.DECLARES, Catalogue.declares()]
+	var game: Rulebook.Vocabulary = Rulebook.vocabulary(tables)
+	var table := {}
+	for i in 70:
+		table[StringName("probeowner%d" % i)] = {
+			"in": [{"name": &"sense", "bearing": false, "values": {&"level": &"level"}}],
+			"out": [{"name": &"act", "claims": [&"probeact"]},
+				{"name": &"late", "claims": [&"probelate"], "level": 2}]}
+	var vocab: Rulebook.Vocabulary = Rulebook.vocabulary(tables + [table])
+	var kept := true
+	for owner: StringName in game.owners:
+		kept = kept and vocab.owners[owner] == game.owners[owner] \
+			and str(vocab.levels.get(owner)) == str(game.levels.get(owner))
+	for name: StringName in game.inputs:
+		kept = kept and (vocab.inputs[name] as Rulebook.InputDecl).bit \
+			== (game.inputs[name] as Rulebook.InputDecl).bit
+	for name: StringName in game.outputs:
+		kept = kept and (vocab.outputs[name] as Rulebook.OutputDecl).bit \
+			== (game.outputs[name] as Rulebook.OutputDecl).bit
+	var everybody := FoodField.everybody()
+	var last := &"probeowner69"
+	var at_two := Rulebook.worn(vocab, {last: 2}, everybody)
+	var at_one := Rulebook.worn(vocab, {last: 1}, everybody)
+	var others := 0
+	for owner: StringName in table:
+		if owner != last and (Rulebook.has_bit(at_two, int(vocab.owners[owner]))
+				or Rulebook.has_bit(at_two, int(vocab.levels[owner][2]))):
+			others += 1
+	var mine := [Rulebook.has_bit(at_two, int(vocab.owners[last])),
+		Rulebook.has_bit(at_two, int(vocab.levels[last][2])),
+		Rulebook.has_bit(at_one, int(vocab.levels[last][2]))]
+	var list := Rulebook.parse("probeowner69.sense -> probeowner69.act\n"
+		+ "probeowner0.sense -> probeowner0.act\nprobeowner69.sense -> probeowner69.late",
+		vocab)
+	var read := func(_input: StringName) -> Array: return [[0.5]]
+	var fired := []
+	Rulebook.choose(list, read, at_two, {}, {}, 1, fired)
+	var acted: Array = fired.map(func(one: Array) -> int: return int(one[0]))
+	Rulebook.choose(list, read, Rulebook.worn(vocab, {&"probeowner0": 2}, everybody), {}, {},
+		1, fired)
+	var first: Array = fired.map(func(one: Array) -> int: return int(one[0]))
+	# A mask of no words has no owner: the last owner's rules, which need only bits
+	# past the first word, do not fire for it.
+	Rulebook.choose(list, read, PackedInt64Array(), {}, {}, 1, fired)
+	var nobody: Array = fired.map(func(one: Array) -> int: return int(one[0]))
+	var states := []
+	Rulebook.choose(list, read, at_one, {}, {}, 1, fired, states)
+	var slept: Array = states.map(func(one: Array) -> String:
+		return String(Rulebook.State.keys()[int(one[0])]).to_lower())
+	# A change of the first rule, again and again: what it draws is the last owner's, or
+	# every body's, or the rulebook's own.
+	seed(29)
+	var strays: Array[String] = []
+	var one := Rulebook.parse("probeowner69.sense -> probeowner69.act", vocab)
+	for i in 60:
+		var child: Rulebook.Behaviour = Rulebook.changed(one, vocab, at_two,
+			{Rulebook.REPLACE: 1.0}, 8)[0]
+		for part: StringName in [child.rules[0].input, child.rules[0].output]:
+			var owner := String(part).get_slice(".", 0)
+			if part != Rulebook.ALWAYS and owner != String(last) \
+					and not everybody.has(StringName(owner)) and not strays.has(String(part)):
+				strays.append(String(part))
+	_check(("the rulebook has no ceiling on owners: the game's tables and 70 owners more number"
+		+ " %d bits in %d words, the game's %d where they were (%s); a body with only the last"
+		+ " owner has its bits (%s) and %d other's; of a rule of it, one of the first owner's"
+		+ " and one of its level 2, the rules that act are %s at its level 2 and say %s at"
+		+ " 1, %s for a body with only the first owner and %s for a mask of none; and a"
+		+ " change draws nothing it lacks%s") % [vocab.bits, vocab.words, game.bits, str(kept),
+		str(mine), others, str(acted), str(slept), str(first), str(nobody),
+		"" if strays.is_empty() else ": " + ", ".join(strays)],
+		vocab.bits == game.bits + 140 and vocab.words == (vocab.bits + Rulebook.WORD - 1)
+			/ Rulebook.WORD and vocab.words >= 3 and game.words == 1 and kept
+		and mine == [true, true, false] and others == 0 and acted == [0, 2] and first == [1]
+		and nobody.is_empty() and slept == ["acted", "asleep", "asleep"] and strays.is_empty())
 
 
 ## **Every part a gene declares is wired, in a water cell and in yours** (§12.1):
@@ -677,11 +934,29 @@ func _unwired(field: Node, own: RefCounted, parts: Array[StringName]) -> Array[S
 # --- What the mechanics ask of an organ (§5.2, §5.3) ---------------------------------------
 
 ## Every organ a mechanic finds by its stat answers what that mechanic asks of
-## it: every stat of the group it reads together ([constant TOGETHER]), the tail
+## it: every stat of the group it reads together (stats.gd's `groups`), the tail
 ## its hold level, the dart its stun, the beam its shape, its price and its
 ## levels. Then an organ that calls with no period is registered, to show this
 ## fails on one -- and that the referee holds it to a rate all the same.
 func _mechanics() -> void:
+	# **A group is one provider's** (§15.6): the groups are stats.gd's, as they shipped,
+	# and each of their stats combines by `best` -- a body takes the whole group from the
+	# provider best on its first stat, so a row that said a sum or a product would say
+	# what no body does, and the limits read off it (`Stats.top`) would be no bound.
+	var groups := Stats.groups()
+	var not_best: Array[StringName] = []
+	for group: Array in groups:
+		for stat: StringName in group:
+			if Stats.ROWS[stat]["combine"] != Stats.BEST:
+				not_best.append(stat)
+	var moved := not _same_list(groups, TOGETHER)
+	_check(("the %d groups of stats a mechanic reads together are stats.gd's, as they shipped,"
+		% groups.size() + " and every stat of them combines by best%s%s") % [""
+		if not_best.is_empty() else ": not %s" % str(not_best), "" if not moved
+		else ("; stats.gd's rows group them %s, the probe's TOGETHER %s: what a mechanic"
+			+ " reads together changed, so change both, and say why") % [str(groups),
+			str(TOGETHER)]],
+		not moved and not_best.is_empty())
 	var missing := _unanswered()
 	for key: StringName in Catalogue.levelled():
 		var levels := Catalogue.levels(key)
@@ -691,7 +966,7 @@ func _mechanics() -> void:
 		elif Catalogue.upkeep_at(key, 2, &"") < 0.0:
 			missing.append("%s's price per level" % key)
 	_check(("every organ a mechanic finds by its stat answers it: all of the %d groups of"
-		% TOGETHER.size() + " stats it reads together, the tail its hold level, the dart its"
+		% Stats.groups().size() + " stats it reads together, the tail its hold level, the dart its"
 		+ " stun, the beam its shape, xp cap and price, every levelled gene its levels%s")
 		% ("" if missing.is_empty() else ": not " + ", ".join(missing)),
 		missing.is_empty() and not Catalogue.levelled().is_empty())
@@ -715,11 +990,11 @@ func _mechanics() -> void:
 
 
 ## What the organs providing each stat leave unanswered of what a mechanic asks,
-## one line each: a stat of a group ([constant TOGETHER]) missing, or a number
+## one line each: a stat of a group (stats.gd's `groups`) missing, or a number
 ## or hook of the organ's own.
 func _unanswered() -> Array[String]:
 	var missing: Array[String] = []
-	for group: Array in TOGETHER:
+	for group: Array in Stats.groups():
 		for stat: StringName in group:
 			for key: StringName in Catalogue.providers(stat):
 				for other: StringName in group:
@@ -807,13 +1082,17 @@ func _register() -> void:
 		and drawn[1] and drawn[2] == Cilia.UNKNOWN_TINT)
 	_check("and a variant's and a form's tags add to their organ's, never replace them:"
 		+ " outside %s, inside %s" % [str(tags[0]), str(tags[1])], added)
-	# **A variant with no forms is one entry** (gene.gd): filed outside under its
-	# own key, or its name -- the organ as it shipped and a faster one beside it.
+	# **An organ's first variant is one entry** (§6.2): the organ as it shipped keeps
+	# its own key, first, with its order and its copies at birth; the entry is filed
+	# after it, outside, under its name -- it has no forms and no key of its own --
+	# with an order of its own and no copies at birth, though its organ has one.
 	var tail := Gene.new()
 	tail.organ = &"probetail"
+	tail.order = 940
+	tail.born = 1
 	tail.provides = {&"armor": [1.0, 1.1, 1.1, 1.1]}
-	tail.variants = [{"variant": &"plain", "key": &"probetail"},
-		{"variant": &"probeswift", "provides": {&"armor": [1.0, 1.5, 1.5, 1.5]}}]
+	tail.variants = [{"variant": &"probeswift", "order": 941,
+		"provides": {&"armor": [1.0, 1.5, 1.5, 1.5]}}]
 	Catalogue.register(tail)
 	var one_each := true
 	for key: StringName in [&"probetail", &"probeswift"]:
@@ -823,11 +1102,17 @@ func _register() -> void:
 			and Catalogue.form_in(key, Gene.INSIDE) == &"" and not Genome.is_inside_form(key)
 	var armours := [Stats.of({&"probetail": 1}, &"armor"), Stats.of({&"probeswift": 1}, &"armor")]
 	var filed_keys := _keys_of(tail)
+	var ranks := [Catalogue.rank(&"probetail"), Catalogue.rank(&"probeswift")]
+	var births := [int(Catalogue.born().get(&"probetail", 0)),
+		int(Catalogue.born().get(&"probeswift", 0))]
 	Catalogue.forget(&"probetail")
-	_check(("and a variant with no forms is one entry, outside, under its key or its name:"
-		+ " %s, armour %s and %s") % [str(filed_keys), armours[0], armours[1]], one_each
+	_check(("and an organ's first variant is one entry: the organ keeps its own key, its order"
+		+ " and its copies at birth, and the entry is filed after it, outside, under its name,"
+		+ " at its own order and born with none -- %s, ranked %s, born %s, armour %s and %s")
+		% [str(filed_keys), str(ranks), str(births), armours[0], armours[1]], one_each
 		and filed_keys == [&"probetail", &"probeswift"] and armours == [1.1, 1.5]
-		and Array(Catalogue.keys()) == before)
+		and ranks == [940, 941] and births == [1, 0]
+		and Array(Catalogue.keys()) == before and not Catalogue.born().has(&"probetail"))
 
 
 # --- Looks (gene-looks.md §2, §3, §7, §8) ------------------------------------------------
@@ -2235,7 +2520,8 @@ func _synthetic_gene() -> void:
 
 	# **The body**: its stats by their rows, its family's colour on every key and the keen
 	# strain told by its accent and named after its organ, and the mechanic with a place
-	# acting from the first provider in slot order.
+	# acting from the first provider in slot order -- every number of it that one's, its
+	# reach too, never the best of the two (stats.gd's `seated`).
 	var both := {&"probegout": 2, &"probegkeen": 1}
 	var smell := [Stats.of({&"probegout": 2}, &"smell_range"), Stats.of(both, &"smell_range")]
 	var store := Stats.of({&"probegin": 3}, &"store")
@@ -2252,16 +2538,17 @@ func _synthetic_gene() -> void:
 		var water_order: Array = worn_layout
 		seats.append([cell.provider(&"smell_range"), cell.tier_for(&"smell_range"),
 			cell.stat(&"smell_range"), FoodField._seat_of(water_order, body, &"smell_range")])
-	_check(("the body takes it: a nose of %s alone, %s beside the keen strain -- the best of"
-		+ " them, as its row says -- and %s of store inside; drawn in its family's colour,"
-		+ " every key (%s), the keen strain told by its accent and named after its organ"
-		+ " (%s); and the smell acts from the first nose in slot order, here and in the"
-		+ " water: %s") % [smell[0], smell[1], store, str(hues), str(marked), str(seats)],
+	_check(("the body takes it: a nose of %s alone, %s the most beside the keen strain, as"
+		+ " its row says -- what a bound reads -- and %s of store inside; drawn in its family's"
+		+ " colour, every key (%s), the keen strain told by its accent and named after its"
+		+ " organ (%s); and the smell acts from the first nose in slot order, its reach that"
+		+ " nose's, here and in the water: %s") % [smell[0], smell[1], store, str(hues),
+		str(marked), str(seats)],
 		smell == [400.0, 600.0] and is_equal_approx(store, 1.3)
 		and hues == [Families.shade(Gene.SENSING), Families.shade(Gene.SENSING),
 			Families.shade(Gene.SENSING)]
 		and marked == [&"", ProbeGland.KEEN_ACCENT, "probegout", "probegin · keener"]
-		and seats[0] == [&"probegkeen", 1, 600.0, 4] and seats[1] == [&"probegout", 2, 600.0, 3])
+		and seats[0] == [&"probegkeen", 1, 600.0, 4] and seats[1] == [&"probegout", 2, 400.0, 3])
 
 	# **Its parts**: wired by the name it declares them under, in a water cell and in
 	# yours; a body wearing either strain has them; and no bit a list was read with moved.
@@ -2272,11 +2559,11 @@ func _synthetic_gene() -> void:
 	own.call(&"setup", cell, field, metabolism, genome)
 	var vocab := FoodField.vocabulary()
 	var part := &"probegland.smell"
-	var owner_bit := int(vocab.owners.get(&"probegland", 0))
+	var owner_bit := int(vocab.owners.get(&"probegland", -1))
 	var wears := []
 	for strain: Dictionary in [{&"probegkeen": 1}, {&"probegout": 2}, {&"cytostome": 1}]:
-		wears.append((Rulebook.worn(vocab, Catalogue.by_organ(strain), FoodField.everybody())
-			& owner_bit) != 0)
+		wears.append(Rulebook.has_bit(Rulebook.worn(vocab, Catalogue.by_organ(strain),
+			FoodField.everybody()), owner_bit))
 	var kept_bits := _bits_kept(bits_before, _vocabulary_bits())
 	_check(("its part %s is read in a water cell (%s) and in yours (%s), a body wearing"
 		+ " either strain has it and one wearing neither does not (%s), and every bit the"
@@ -2284,7 +2571,7 @@ func _synthetic_gene() -> void:
 		str((field.get("_readers") as Dictionary).has(part)),
 		str((own.get("_readers") as Dictionary).has(part)), str(wears), kept_bits],
 		(field.get("_readers") as Dictionary).has(part)
-		and (own.get("_readers") as Dictionary).has(part) and owner_bit != 0
+		and (own.get("_readers") as Dictionary).has(part) and owner_bit >= 0
 		and wears == [true, true, false] and kept_bits == "")
 
 	# **The wire, a cell's file and the referee.**
@@ -2350,8 +2637,11 @@ func _synthetic_gene() -> void:
 	# **One variant to a body** (§6.3): the same organ, switched on. Placing the keen
 	# strain writes over the plain one, in a genome and in a water cell's, and drift
 	# brings no strain of it to a lineage that carries one.
+	# The floor gives it back through peers, as the toxin's strains, so that the floor
+	# below is the one a strain held to one a body meets.
 	var single := ProbeGland.new()
 	single.one_variant = true
+	single.tags = [Catalogue.FLOOR_BY_PEERS]
 	Catalogue.register(single)
 	var grown: Node = CellBody.new()
 	grown.radius = CellBody.DIVIDE_RADIUS
@@ -2363,6 +2653,7 @@ func _synthetic_gene() -> void:
 	one.place(Genome.INSIDE)
 	var had: Dictionary = one.dna().duplicate()
 	one.integrate(&"probegkeen")
+	var over_said: Array = one.placing(&"probegkeen", 4)
 	one.place(4)
 	var after: Dictionary = one.dna().duplicate()
 	var after_layout: Array = one.layout().duplicate()
@@ -2378,17 +2669,43 @@ func _synthetic_gene() -> void:
 			for gene: StringName in tiers:
 				if gene != &"probegout" and Catalogue.organ_of(gene) == &"probegland":
 					again += 1
+	# **The rest of call 8** (§15.6): a sample of the keen strain left to lapse writes over
+	# the plain one in its slot -- with no room, where it used to be gone, and with room
+	# -- and the floor gives no peer the keen strain beside the plain one it wears.
+	var lapsed := [_lapsed_over(7), _lapsed_over(6)]
+	var floor_field: Node = FoodField.new()
+	floor_field.set(&"_gene_short", [&"probegkeen"] as Array[StringName])
+	var peer: RefCounted = FoodField.Body.new()
+	peer.set(&"radius", CellBody.DIVIDE_RADIUS)
+	var peer_worn := Catalogue.born().duplicate()
+	peer_worn[&"probegout"] = 1
+	peer.set(&"genome", peer_worn)
+	floor_field.call(&"_give_back_by_peer", peer)
+	var floor_said := [(peer.get(&"genome") as Dictionary).has(&"probegkeen"),
+		(floor_field.get(&"_gene_short") as Array).has(&"probegkeen"),
+		Drop.takes_back({&"probegin": 1}, &"probegkeen"),
+		Drop.takes_back(Catalogue.born(), &"probegkeen")]
+	floor_field.free()
 	var switched := Catalogue.one_variant(&"probegland")
 	Catalogue.forget(&"probegland")
 	_check(("and switched to one variant a body, placing the keen strain writes over the"
-		+ " plain one in both its places (%s, then %s, %s), a water cell's too (%s), and drift"
-		+ " brings no strain of it to a lineage that carries one (%d in 600)") % [
-		str(had), str(after), str(after_layout), str(water), again],
+		+ " plain one in both its places (%s, then %s, %s), and says which (%s); a water cell's"
+		+ " meal does too (%s), and drift brings no strain of it to a lineage that carries one"
+		+ " (%d in 600)") % [str(had), str(after), str(after_layout), str(over_said), str(water),
+		again],
 		switched and had.has(&"probegout") and had.has(&"probegin")
 		and not after.has(&"probegout") and not after.has(&"probegin")
 		and int(after.get(&"probegkeen", 0)) == 1 and not after_layout.has(&"probegout")
+		and over_said == [Genome.PLACE_WRITE, 4, &"probegout"]
 		and water.has(&"probegkeen") and not water.has(&"probegout")
 		and not water.has(&"probegin") and again == 0)
+	_check(("and a sample of the keen strain left to lapse writes over the plain one in its"
+		+ " slot, with no room (%s) and with room (%s); and the floor gives no peer the keen"
+		+ " strain beside the plain one it wears -- given %s, still short %s -- nor one that"
+		+ " carries the plain one inside (%s), and gives one wearing neither (%s)") % [
+		str(lapsed[0]), str(lapsed[1]), str(floor_said[0]), str(floor_said[1]),
+		str(floor_said[2]), str(floor_said[3])],
+		lapsed == [[3, true], [3, true]] and floor_said == [false, true, false, true])
 
 	_check(("and forgotten, the catalogue and the vocabulary are as they were: %d keys, every"
 		+ " bit where it was (%s)") % [Catalogue.keys().size(),
@@ -2398,14 +2715,13 @@ func _synthetic_gene() -> void:
 	_variant_of_shipped()
 
 
-## **A variant of a shipped organ** (§6.2, §12.3): a faster tail, filed as a copy of
-## the tail's own organ file holding that one variant -- the tail's every field, its
-## speed's table its own -- beside the shipped file, which keeps the tail's own key.
-## In the tail's own file it would be the second of two entries until phase 5. The
-## drop's fingerprint and the handshake's see it, as the referee's caps do; a body
-## wearing it beside the plain tail is read by the stat rows; its parts are the
-## tail's, and the vocabulary does not move; and the instincts page offers them to a
-## body that wears it alone.
+## **A variant of a shipped organ** (§6.2, §12.3): a faster tail, as the gene pass will
+## write it -- **one entry in the tail's own file**, its speed's table its own and an
+## order of its own, registered in that file's place. The tail keeps its key, and the
+## variant is born with no copies. The drop's fingerprint and the handshake's see it,
+## as the referee's caps do; a body wearing it beside the plain tail is read by the
+## stat rows; its parts are the tail's, and the vocabulary does not move; and the
+## instincts page offers them to a body that wears it alone.
 func _variant_of_shipped() -> void:
 	var before := Array(Catalogue.keys())
 	var bits_before := _vocabulary_bits()
@@ -2424,7 +2740,8 @@ func _variant_of_shipped() -> void:
 	var slower: Array = Catalogue.table(plain, &"impulse_gap_min").duplicate()
 	for k in range(1, slower.size()):
 		slower[k] = float(slower[k]) + 0.4
-	tail.variants = [{"variant": &"probeswift", "order": 920, "born": 0,
+	var born_before := Catalogue.born().duplicate()
+	tail.variants = [{"variant": &"probeswift", "order": 920,
 		"look": {"accent": Kinds.MARK_DISC},
 		"provides": {&"impulse_speed": swift, &"impulse_gap_min": slower}}]
 	var entries := _keys_of(tail)
@@ -2443,7 +2760,10 @@ func _variant_of_shipped() -> void:
 	var tails := Rulebook.worn(vocab, Catalogue.by_organ({&"probeswift": 2}), FoodField.everybody())
 	var plains := Rulebook.worn(vocab, {plain: 2}, FoodField.everybody())
 	var rows: Array = GeneStats.lines(&"probeswift", 2, 0, &"", GeneStats.context({}))
-	var born_same := not Catalogue.born().has(&"probeswift")
+	# The file registered is the one filed, in the shipped file's place: the tail's own key
+	# is its record, not a second of it dropped beside the shipped one.
+	var born_same := not Catalogue.born().has(&"probeswift") and Catalogue.born() == born_before \
+		and Catalogue.gene(plain) == tail and Catalogue.rank(plain) == SHIPPED.find(plain)
 	var page := _offered_alike(vocab, organ, &"probeswift", plain)
 	# **Drawn as its organ is, plus its accent**: the tail's colour and kind, a disc at
 	# its basal body, and `organ · variant` at the head of its line.
@@ -2451,28 +2771,34 @@ func _variant_of_shipped() -> void:
 		Catalogue.look(&"probeswift")["shape"] == Catalogue.look(plain)["shape"],
 		Cilia.accent_of(&"probeswift"), Cilia.accent_of(plain),
 		Figure.explain_name(&"probeswift")]
+	var peers := _peers_wearing(&"probeswift", plain)
+	var mixed := Catalogue.born().duplicate()
+	mixed[&"probeswift"] = 3
+	var measured := _tail_levels(mixed, organ)
 	Catalogue.forget(organ)
 	var rules_after := DropSave.rules_text()
 	var wire_after := Rules.text()
-	_check(("and a faster %s, a variant filed beside its organ (%s), is %s's own: the drop's"
+	_check(("and a faster %s, one entry in its own file, registered in its place (%s, the"
+		+ " tail's key kept and the variant born with none), is %s's own: the drop's"
 		+ " rules (%s) and the handshake's (%s) fingerprint it, and are as they were once it is"
 		+ " gone; the caps see it -- the fastest a body goes %.0f u/s with it, %.0f without,"
 		+ " against the referee's %.0f%s -- and a body wearing it beside the plain tail swims at"
-		+ " the best speed and the shortest gap of the two, as their rows say (%s, %s); its"
+		+ " the faster one's speed with the faster one's gaps, a group being one provider's"
+		+ " (%s, %s); its"
 		+ " parts are the tail's, bit for bit, in a vocabulary that did not move (%s); and the"
 		+ " pause screen reads its own numbers") % [plain, str(entries), organ,
 		str(rules_with != rules_before), str(wire_with != wire_before), peak_with, peak_before,
 		Referee.SPEED_MAX, ", which net_probe's check of the caps fails on until they move"
 			if peak_with >= Referee.SPEED_MAX else "", str(speeds), str(gaps),
 		_bits_kept(bits_before, _vocabulary_bits())],
-		entries == [&"probeswift"] and organ == Catalogue.organ_of(plain) and born_same
+		entries == [plain, &"probeswift"] and organ == Catalogue.organ_of(plain) and born_same
 		and rules_with != rules_before and rules_after == rules_before
 		and rules_with.contains(Stats.label(&"impulse_speed") + ".probeswift=")
 		and wire_with != wire_before and wire_after == wire_before
 		and top_with > top_before and peak_with > peak_before
 		and speeds[2] == maxf(speeds[0], speeds[1]) and speeds[1] > speeds[0]
-		and gaps[2] == minf(gaps[0], gaps[1]) and gaps[1] > gaps[0]
-		and tails == plains and tails != 0
+		and gaps[2] == gaps[1] and gaps[1] > gaps[0]
+		and tails == plains and Rulebook.has_bit(tails, int(vocab.owners.get(organ, -1)))
 		and _bits_kept(bits_before, _vocabulary_bits()) == ""
 		and rows.size() == 2 and not (rows[0] as Array).is_empty()
 		and Array(Catalogue.keys()) == before)
@@ -2485,7 +2811,84 @@ func _variant_of_shipped() -> void:
 		+ " it unworn, what it offers one with the plain tail at every copy count -- %s's parts"
 		+ " %s, waiting at one copy %s, carried %s -- counting parts by organ, as the body's"
 		+ " rules do") % [plain, organ, str(page[1]), str(page[2]), str(page[3])], page[0])
+	# **A peer's born organs are its born keys** (§15.6): the organ's other variants stay
+	# in its pool -- unless the organ holds one variant to a body.
+	var single: Gene = (Catalogue.gene(plain).get_script() as GDScript).new()
+	single.one_variant = true
+	single.variants = tail.variants
+	Catalogue.register(single)
+	var peers_single := _peers_wearing(&"probeswift", plain)
+	Catalogue.forget(organ)
+	_check(("and one measure of a part owner's level: a plain %s at one copy beside the faster"
+		+ " one at three works at %d for its rules, at %d for the hand's hold, which can hold it"
+		+ " (%s), and at %d in the water, where a rest holds it (%s)") % [plain, measured[0],
+		measured[1], str(measured[2]), measured[3], str(measured[4])],
+		measured == [3, 3, true, 3, true])
+	_check(("and a peer's born organs are its born keys, the organ's other variants left in its"
+		+ " pool: of 400 peers made at r40, %d draw the faster %s beside the one they were born"
+		+ " with, and %d once the organ holds one variant a body") % [peers, plain, peers_single],
+		peers > 0 and peers_single == 0 and Array(Catalogue.keys()) == before)
 	_strain_of_shipped()
+
+
+## **What [param body] works [param organ] at** (gene-catalogue.md §15.6): `[its rules'
+## level, your cell's tail level, whether your cell can hold it, a water body's tail
+## level, whether a rest holds a water body's]` -- one measure, the rules', for all.
+static func _tail_levels(body: Dictionary, organ: StringName) -> Array:
+	var cell: Node = CellBody.new()
+	var genome: Node = Genome.new()
+	genome.setup(cell)
+	cell.genome = genome
+	genome.express(body, Cilia.default_order(body))
+	var yours := [int(cell.tail_level()), bool(cell.can_hold())]
+	genome.free()
+	cell.free()
+	var field: Node = FoodField.new()
+	var water: RefCounted = FoodField.Body.new()
+	water.set(&"genome", body.duplicate())
+	field.call(&"_refresh_body", water)
+	field.free()
+	return [int(Catalogue.by_organ(body).get(organ, 0)), yours[0], yours[1],
+		int(water.get(&"tail_level")),
+		int(water.get(&"tail_level")) >= int(water.get(&"stat_hold"))]
+
+
+## **Where a sample of the probe's keen strain goes when it lapses**, the gland held to
+## one variant a body: a cell at the divide radius whose DNA carries the plain strain
+## outside, at slot 3, among [param genes] genes outside -- 7 fills every slot. `[the
+## slot the keen strain is in afterwards, -1 for none; whether the plain one is gone]`.
+static func _lapsed_over(genes: int) -> Array:
+	var cell: Node = CellBody.new()
+	cell.radius = CellBody.DIVIDE_RADIUS
+	var genome: Node = Genome.new()
+	genome.setup(cell)
+	var dna := {}
+	var order: Array[StringName] = [&"cytostome", &"cirrus", &"flagellum", &"probegout",
+		&"chemocyte", &"ampulla", &"stigma"]
+	order.resize(genes)
+	for gene: StringName in order:
+		dna[gene] = 1
+	genome.express(dna, order)
+	genome.integrate(&"probegkeen")
+	genome.call(&"_process", Genome.SAMPLE_SECONDS + 1.0)
+	var out := [genome.layout().find(&"probegkeen"), not genome.dna().has(&"probegout")]
+	genome.free()
+	cell.free()
+	return out
+
+
+## **How many of 400 peers made at r40 wear [param variant] beside [param plain]**:
+## the drop's own peer, `food.gd`'s `_draw_living`, on a seeded stream.
+static func _peers_wearing(variant: StringName, plain: StringName) -> int:
+	var field: Node = FoodField.new()
+	seed(17)
+	var wearing := 0
+	for i in 400:
+		var peer: Dictionary = field.call(&"_draw_living", CellBody.DIVIDE_RADIUS, 1.0)
+		if peer.has(variant) and peer.has(plain):
+			wearing += 1
+	field.free()
+	return wearing
 
 
 ## **What the instincts page offers a body of [param variant] alone, against one of
@@ -2523,11 +2926,11 @@ static func _offered_alike(vocab: Rulebook.Vocabulary, organ: StringName, varian
 
 
 ## **A second strain of the shipped organ with a dose** -- the toxin's -- as one
-## entry of one place (gene-catalogue.md §6.4): every rule that was the toxin's
-## special case covers it by its organ's tags, so no drifter carries it and the
-## floor gives it back through a peer, into the one place it has; its venom is
-## delivered at the front and on a side, by its own kind; and its lines say what a
-## stack of that kind does.
+## entry of one place in that organ's own file (gene-catalogue.md §6.4), registered
+## in its place: every rule that was the toxin's special case covers it by its
+## organ's tags, so no drifter carries it and the floor gives it back through a
+## peer, into the one place it has; its venom is delivered at the front and on a
+## side, by its own kind; and its lines say what a stack of that kind does.
 func _strain_of_shipped() -> void:
 	var before := Array(Catalogue.keys())
 	var dosed := &""
@@ -2537,11 +2940,14 @@ func _strain_of_shipped() -> void:
 			break
 	var organ: Gene = (Catalogue.gene(dosed).get_script() as GDScript).new()
 	var stacks: Array = Catalogue.table(dosed, &"venom_stacks")
-	organ.variants = [{"variant": &"probebarb", "dose": Catalogue.dose_of(dosed),
+	var shipped := Catalogue.keys_of_organ(Catalogue.organ_of(dosed)).duplicate()
+	organ.variants = organ.variants + [{"variant": &"probebarb", "dose": Catalogue.dose_of(dosed),
 		"order": 930, "water": {"weight": 1, "drifter": true},
 		"look": {"accent": Kinds.MARK_DIAMOND},
 		"provides": {&"venom_stacks": stacks}}]
 	Catalogue.register(organ)
+	var kept := Array(Catalogue.keys_of_organ(Catalogue.organ_of(dosed))) \
+		== Array(shipped) + [&"probebarb"]
 	var strain := &"probebarb"
 	var tagged := Catalogue.has_tag(strain, Catalogue.NOT_ON_DRIFTERS) \
 		and Catalogue.has_tag(strain, Catalogue.FLOOR_BY_PEERS)
@@ -2563,20 +2969,293 @@ func _strain_of_shipped() -> void:
 		Figure.explain_name(strain)]
 	var gone := Catalogue.organ_of(strain)
 	Catalogue.forget(gone)
-	_check(("and a second strain of %s, one entry of one place, is covered by every rule"
+	_check(("and a second strain of %s, one entry of one place in its own file (its first"
+		+ " strain's keys kept: %s), is covered by every rule"
 		+ " that was the toxin's: tagged %s, no drifter carries it (%s), the floor gives it"
 		+ " back through a peer (%s), into its one place (%s); its venom bites at the front"
 		+ " and stings on a side, by its own kind (%s; %s); it says what a stack of its"
 		+ " dose does; and it is the toxin's colour with %s beads, named %s") % [gone,
-		str(tagged), str(not drifting and to_drifter == &""), by_peer,
+		str(kept), str(tagged), str(not drifting and to_drifter == &""), by_peer,
 		str(peer.get(strain, 0)), str(bite), str(side), beads[1], beads[2]],
-		tagged and not drifting and to_drifter == &"" and by_peer == strain
+		kept and tagged and not drifting and to_drifter == &"" and by_peer == strain
 		and int(peer.get(strain, 0)) == 1
 		and bite == PackedFloat64Array([FoodField.HOW_BITE, kind, float(stacks[2]), 0.0])
 		and side == PackedFloat64Array([FoodField.HOW_STING, kind, float(stacks[2]),
 			Cilia.slot_bearing(1)])
 		and not said.is_empty() and Array(Catalogue.keys()) == before
 		and beads == [true, Kinds.MARK_DIAMOND, "%s · probebarb" % Genome.name_of(dosed)])
+	_person_order()
+	_seated_one_organ()
+
+
+## **A person's order is written before its genome** (gene-catalogue.md §15.6): with a
+## second dart -- one entry in the dart's own file, its stun its own -- a person who
+## wears both and moves them round is read under the order they wear them in now, by a
+## replay's field and by a pond's: the dart that fires first in slot order is the one
+## whose stun its body has. Both ways round, so neither dart passes by being first in
+## the catalogue's order.
+func _person_order() -> void:
+	var before := Array(Catalogue.keys())
+	var dart := Catalogue.first_provider(&"dart_range")
+	var organ: Gene = (Catalogue.gene(dart).get_script() as GDScript).new()
+	organ.variants = [{"variant": &"probestun", "order": 950, "numbers": {&"stun": 9.0},
+		"look": {"accent": Kinds.MARK_BAR}}]
+	Catalogue.register(organ)
+	var body := Catalogue.born().duplicate()
+	body[dart] = 1
+	body[&"probestun"] = 1
+	var first: Array = Array(Catalogue.born_order()) + [dart, &"probestun"]
+	var second: Array = Array(Catalogue.born_order()) + [&"probestun", dart]
+	var cell: Node = CellBody.new()
+	var field: Node = FoodField.new()
+	field.call(&"open_replay", cell, 0)
+	field.call(&"open_replay_person")
+	var cells: Array = field.get(&"_cells")
+	var stuns := []
+	for orders: Array in [[first, second], [second, first]]:
+		field.call(&"restore_person_genome", body, orders[0])
+		field.call(&"restore_person_genome", body, orders[1])
+		stuns.append(float((cells[FoodField.PERSON_SLOT] as Object).get(&"stat_dart_stun")))
+		field.call(&"set_person_genome", body, orders[0])
+		field.call(&"set_person_genome", body, orders[1])
+		stuns.append(float((cells[FoodField.PERSON_SLOT] as Object).get(&"stat_dart_stun")))
+	var own := float(Catalogue.number(dart, &"stun"))
+	field.free()
+	cell.free()
+	Catalogue.forget(Catalogue.organ_of(dart))
+	_check(("and a person's order is written before its genome: wearing a second dart beside"
+		+ " %s and moving them round, its stun is the dart first in slot order now -- %s, by"
+		+ " a replay's field and a pond's, each way round") % [dart, str(stuns)],
+		stuns == [9.0, 9.0, own, own] and own != 9.0 and Array(Catalogue.keys()) == before)
+
+
+## **A seated mechanic is one organ's** (§5.2, §15.6; stats.gd's `SEATED`): a body
+## wearing two organs of a mechanic with a place -- the second one entry in the first's
+## own file, every number of it its own -- acts from the one first in slot order and
+## takes every number from it, never another organ's beside it. Each way round, so
+## neither passes by being first in the catalogue's order or best on its reach:
+##
+## - **two darts**, read by the stats (`Stats.seated`), by your cell, by a water cell
+##   and by a person: the reach, the rest, the stun and the copies of the dart that
+##   fires ([method _seated_darts]);
+## - **two radars**, read by your cell, by a water cell's eye and by the referee a host
+##   judges your calls by: the reach, the period, the pass and the copies of the one
+##   that calls ([method _seated_radars]);
+##
+## and the rules two builds agree on carry it (rules.gd): a line naming the seat of
+## each judged or contact stat of the two once a second organ provides it, and none
+## while one does.
+func _seated_one_organ() -> void:
+	var shipped := Rules.text()
+	_seated_darts(shipped)
+	_seated_radars(shipped)
+
+
+func _seated_darts(shipped: String) -> void:
+	var before := Array(Catalogue.keys())
+	var dart := Catalogue.first_provider(&"dart_range")
+	var organ: Gene = (Catalogue.gene(dart).get_script() as GDScript).new()
+	var reach: Array = Catalogue.table(dart, &"dart_range").duplicate()
+	var rest: Array = Catalogue.table(dart, &"dart_cooldown").duplicate()
+	for k in range(1, reach.size()):
+		reach[k] = float(reach[k]) * 1.5
+		rest[k] = float(rest[k]) + 1.0
+	organ.variants = [{"variant": &"probefar", "order": 960, "numbers": {&"stun": 9.0},
+		"look": {"accent": Kinds.MARK_BAR},
+		"provides": {&"dart_range": reach, &"dart_cooldown": rest}}]
+	Catalogue.register(organ)
+	var text := Rules.text()
+	var dna := Catalogue.born().duplicate()
+	dna[dart] = 2
+	dna[&"probefar"] = 1
+	var orders := [Array(Catalogue.born_order()) + [dart, &"probefar"],
+		Array(Catalogue.born_order()) + [&"probefar", dart]]
+	# What the dart first in slot order gives, each way round: its reach, its rest, its
+	# stun and its copies -- the shipped dart at two, the far one at one.
+	var wanted := [[Stats.value(dart, &"dart_range", 2), Stats.value(dart, &"dart_cooldown", 2),
+			float(Catalogue.number(dart, &"stun")), 2],
+		[float(reach[1]), float(rest[1]), 9.0, 1]]
+	var cell: Node = CellBody.new()
+	var field: Node = FoodField.new()
+	field.call(&"open_replay", cell, 0)
+	field.call(&"open_replay_person")
+	field.call(&"restore_person", Vector2.ZERO, 0.0, CellBody.DIVIDE_RADIUS, 0.0, 0.0, true)
+	var person: Object = (field.get(&"_cells") as Array)[FoodField.PERSON_SLOT]
+	var got := []
+	for k in 2:
+		var order: Array = orders[k]
+		var read := [[Stats.seated(order, dna, &"dart_range"),
+			Stats.seated(order, dna, &"dart_cooldown"), CellBody.dart_stun(dna, order),
+			Stats.seated_tier(order, dna, &"dart_range")]]
+		# Your cell, its genome expressed in that order.
+		var yours: Node = CellBody.new()
+		yours.radius = CellBody.DIVIDE_RADIUS
+		var genome: Node = Genome.new()
+		genome.setup(yours)
+		genome.express(dna, order)
+		yours.genome = genome
+		read.append([yours.stat(&"dart_range"), yours.stat(&"dart_cooldown"),
+			CellBody.dart_stun(yours.worn(), yours.seats()), yours.tier_for(&"dart_range")])
+		genome.free()
+		yours.free()
+		# A water cell wearing it in that order, and a person, as a pond writes one.
+		var water := FoodField.Body.new()
+		water.order = order
+		water.genome = dna.duplicate()
+		read.append([water.stat_dart_range, water.stat_dart_cooldown, water.stat_dart_stun,
+			water.stat_dart_tier])
+		field.call(&"set_person_genome", dna, order)
+		var p: Object = person.get(&"person")
+		read.append([float(p.get(&"dart_range")), float(p.get(&"dart_cooldown")),
+			float(person.get(&"stat_dart_stun")), int(person.get(&"stat_dart_tier"))])
+		got.append(read)
+	field.free()
+	cell.free()
+	Catalogue.forget(Catalogue.organ_of(dart))
+	var mixed := _mixed(got, wanted, ["the shipped dart first", "the far one first"],
+		["the stats", "your cell", "a water cell", "a person"])
+	var stray := _seats_in(shipped)
+	if not stray.is_empty():
+		mixed.append("with one organ to each, the shipped rules name seats all the same: "
+			+ ", ".join(PackedStringArray(stray)))
+	var seats := _seat_lines(text, [&"dart_range", &"dart_cooldown"], &"dart_range")
+	_check(("and a mechanic with a place is one organ's: wearing two darts, %s and a far one"
+		+ " with a longer reach, a longer rest and a stun of its own, the stats, your cell,"
+		+ " a water cell and a person each take the reach, the rest, the stun and the copies"
+		+ " of the dart first in slot order, each way round -- %s and %s; and the rules name"
+		+ " the dart's seat once two organs dart (%s), and no seat while one does%s") % [dart,
+		str(wanted[0]), str(wanted[1]), seats, "" if mixed.is_empty() else ": "
+		+ "; ".join(PackedStringArray(mixed))],
+		mixed.is_empty() and wanted[0] != wanted[1] and seats == "both"
+		and Array(Catalogue.keys()) == before)
+
+
+func _seated_radars(shipped: String) -> void:
+	var before := Array(Catalogue.keys())
+	var radar := Catalogue.first_provider(&"ping_range")
+	var organ: Gene = (Catalogue.gene(radar).get_script() as GDScript).new()
+	var reach: Array = Catalogue.table(radar, &"ping_range").duplicate()
+	var period: Array = Catalogue.table(radar, &"ping_period").duplicate()
+	var through: Array = Catalogue.table(radar, &"ping_through").duplicate()
+	for k in range(1, reach.size()):
+		reach[k] = float(reach[k]) * 1.5
+		period[k] = float(period[k]) + 4.0
+		through[k] = 0.9
+	organ.variants = [{"variant": &"probeloud", "order": 961,
+		"look": {"accent": Kinds.MARK_BAR},
+		"provides": {&"ping_range": reach, &"ping_period": period, &"ping_through": through}}]
+	Catalogue.register(organ)
+	var text := Rules.text()
+	var ways: Array = [[radar, &"probeloud"], [&"probeloud", radar]]
+	# What the radar first in slot order gives, each way round -- the shipped one at two
+	# copies, the loud one at one: its reach, its period, its pass and its copies, and
+	# to the referee its reach and the calls a second its period allows.
+	var wanted := [[Stats.value(radar, &"ping_range", 2), Stats.value(radar, &"ping_period", 2),
+			Stats.value(radar, &"ping_through", 2), 2],
+		[float(reach[1]), float(period[1]), float(through[1]), 1]]
+	for one: Array in wanted:
+		one.append(1.0 / maxf(float(one[1]) - Referee.SHOUT_EARLY, 1.0))
+	var field: Node = FoodField.new()
+	var got := []
+	for k in 2:
+		var pair: Array = ways[k]
+		# Its tiers written in that order too, as a water cell's slots follow them.
+		var dna := Catalogue.born().duplicate()
+		for key: StringName in pair:
+			dna[key] = 2 if key == radar else 1
+		var order: Array = Array(Catalogue.born_order()) + pair
+		var read := []
+		var yours: Node = CellBody.new()
+		yours.radius = CellBody.DIVIDE_RADIUS
+		var genome: Node = Genome.new()
+		genome.setup(yours)
+		genome.express(dna, order)
+		yours.genome = genome
+		read.append([yours.ping_range(), yours.ping_period(), yours.ping_through(),
+			yours.ping_tier(), _rate_of(yours.ping_period())])
+		genome.free()
+		yours.free()
+		var water := FoodField.Body.new()
+		water.radius = CellBody.BASE_RADIUS
+		water.genome = dna.duplicate()
+		var eye: Object = field.call(&"_eye_of", water)
+		read.append([float(eye.get(&"ping_range")), float(eye.get(&"ping_period")),
+			float(eye.get(&"ping_through")), int(eye.get(&"ping_tier")),
+			_rate_of(float(eye.get(&"ping_period")))])
+		# The referee, told the body in that order; and one told it the other way round
+		# first, then this way -- the same tiers, its radars moved -- which keeps the
+		# reach it had for the calls on their way.
+		var ref := Referee.new(0.0)
+		ref.judge_person(0.0, true, dna, order, false)
+		read.append([float(ref.call(&"_reach")), wanted[k][1], wanted[k][2], wanted[k][3],
+			float(ref.shouts.rate)])
+		var moved := Referee.new(0.0)
+		moved.judge_person(0.0, true, dna, Array(Catalogue.born_order()) + [pair[1], pair[0]],
+			false)
+		var had := float(moved.call(&"_reach"))
+		var took: Array = moved.judge_person(1.0, false, dna, order, false)
+		read.append([float(moved.call(&"_reach")), wanted[k][1], wanted[k][2], wanted[k][3],
+			float(moved.shouts.rate)] if took == [false]
+				and is_equal_approx(float(moved.get(&"_reach_before")), had) else [took])
+		got.append(read)
+	field.free()
+	Catalogue.forget(Catalogue.organ_of(radar))
+	var mixed := _mixed(got, wanted, ["the shipped radar first", "the loud one first"],
+		["your cell", "a water cell's eye", "the referee", "the referee, its radars moved"])
+	var stray := _seats_in(shipped)
+	if not stray.is_empty():
+		mixed.append("with one organ to each, the shipped rules name seats all the same: "
+			+ ", ".join(PackedStringArray(stray)))
+	var seats := _seat_lines(text, [&"ping_range", &"ping_period"], &"ping_range")
+	_check(("and so is a radar: wearing two, %s and a loud one calling further, slower and"
+		+ " through more, your cell, a water cell's eye and the referee each take the reach,"
+		+ " the period, the pass and the copies of the one first in slot order, each way"
+		+ " round -- %s and %s -- the referee its reach and its calls a second, and the same"
+		+ " body said in its other order moves them, keeping the old reach for the calls on"
+		+ " their way; and the rules name the radar's seat once two organs call (%s), and no"
+		+ " seat while one does%s") % [radar, str(wanted[0]), str(wanted[1]), seats,
+		"" if mixed.is_empty() else ": " + "; ".join(PackedStringArray(mixed))],
+		mixed.is_empty() and wanted[0] != wanted[1] and seats == "both"
+		and Array(Catalogue.keys()) == before)
+
+
+## **Calls a second a referee allows at [param period]** (referee.gd's `_shout_rate`).
+static func _rate_of(period: float) -> float:
+	return 1.0 / maxf(period - Referee.SHOUT_EARLY, 1.0)
+
+
+## **Where [param got] mixes**: each reader's row, by way, against what the organ
+## first in slot order gives, as `way, reader: got, not wanted`.
+static func _mixed(got: Array, wanted: Array, ways: Array, who: Array) -> Array[String]:
+	var mixed: Array[String] = []
+	for k in ways.size():
+		for w in who.size():
+			if str(got[k][w]) != str(wanted[k]):
+				mixed.append("%s, %s: %s, not %s" % [ways[k], who[w], str(got[k][w]),
+					str(wanted[k])])
+	return mixed
+
+
+## **Whether [param text] names [param seat] as the seat of every stat of [param stats]**
+## (rules.gd): `both` when it does, else the lines it has.
+static func _seat_lines(text: String, stats: Array, seat: StringName) -> String:
+	var found := _seats_in(text)
+	var want: Array[String] = []
+	for stat: StringName in stats:
+		want.append("stat.%s.seat=%s" % [stat, seat])
+	if found == want:
+		return "both"
+	return "none" if found.is_empty() else ", ".join(PackedStringArray(found))
+
+
+## **The lines of [param text] naming a seat** (rules.gd): none while every mechanic
+## with a place has one organ to provide it.
+static func _seats_in(text: String) -> Array[String]:
+	var found: Array[String] = []
+	for line: String in text.split("\n"):
+		if line.contains(".seat="):
+			found.append(line)
+	return found
 
 
 ## The part [param name] an organ of the catalogue declares as an input, its
@@ -2620,26 +3299,197 @@ static func _bits_kept(before: Dictionary, now: Dictionary) -> String:
 
 # --- Gene names in code (§12.2) ----------------------------------------------------------------
 
-## **Every gene name written into game/ outside game/genes/** -- `&"<key>"` and
-## `"<key>"` alike, for every key the catalogue knows, retired ones too -- one
-## `path:line: the line` for each key a line names. Comment lines aside, and tools/
-## is not looked in: a probe names genes on purpose.
+## **Every gene name written into game/ outside game/genes/** (§12.2), in any file
+## the gate reads ([constant GATED]): a name the catalogue knows -- a key, retired ones
+## too; an organ's, which is no key when its variants list their own (`toxin`); a
+## variant's -- quoted alone, `"palp"`, `&"palp"`, `'palp'`, `&'palp'`, or with a part
+## it declares, `&"flagellum.hold"`; or, in a script, written bare as a dictionary's
+## key, `{flagellum = 2}`, which GDScript reads as the string `"flagellum"`
+## ([method _bare_keys]). One `path:line: the line` for each. Comments aside -- a line
+## of one, and a line's tail from its marker on, outside a string -- and tools/ is not
+## looked in: a probe names genes on purpose. **A name built by concatenation or a
+## format -- `"%s.hold" % organ` -- is not caught**, nor one inside a longer string --
+## `"flagellum hold"` -- nor a string with an escaped quote in it: nothing read line by
+## line can tell those from words, so the playbook says not to write one.
 func _name_literals() -> Array[String]:
 	var out: Array[String] = []
-	for path: String in _scripts_in(GAME_DIR):
+	var named := _names_pattern()
+	var names := {}
+	for name: String in _gene_names():
+		names[name] = true
+	for path: String in _texts_in(GAME_DIR):
 		if path.begins_with(GENES_DIR + "/"):
 			continue
+		var marker: String = GATED[path.get_extension()]
 		var lines := FileAccess.get_file_as_string(path).split("\n")
+		var codes: Array[String] = []
+		var block := false
 		for k in lines.size():
-			var line := lines[k]
-			if line.strip_edges().begins_with("#"):
-				continue
-			for key: StringName in Catalogue.keys():
-				# `"key"` is in `&"key"` too, so this finds both.
-				if line.contains('"%s"' % key):
-					out.append("%s:%d: %s" % [path.trim_prefix(GAME_DIR + "/"), k + 1,
-						line.strip_edges()])
+			if marker == "//":
+				var cut := _shader_code(lines[k], block)
+				codes.append(cut[0])
+				block = cut[1]
+			else:
+				codes.append(_code_of(lines[k], marker))
+		var bare: Array[int] = []
+		if path.get_extension() == "gd":
+			bare = _bare_keys(codes, names)
+		for k in lines.size():
+			for _each in named.search_all(codes[k]).size() + bare.count(k):
+				out.append("%s:%d: %s" % [path.trim_prefix(GAME_DIR + "/"), k + 1,
+					lines[k].strip_edges()])
 	return out
+
+
+## **A script's dictionary keys written bare that are gene names** -- `{flagellum = 2}`,
+## a Lua-style key, which GDScript reads as the string `"flagellum"` -- as the index of
+## the line each is on, once for each, read off [param codes], its lines without their
+## comments. A key is a name written right after a `{`, or after a `,` within one, and
+## followed by a lone `=`; strings are blanked first, and the braces are followed from
+## line to line, so a dictionary written over several is read whole. A parameter with a
+## default, `func f(flagellum := 2)`, is no key, and is not caught.
+static func _bare_keys(codes: Array[String], names: Dictionary) -> Array[int]:
+	var found: Array[int] = []
+	var open: Array[String] = []
+	var key_next := false
+	for k in codes.size():
+		var code := _blank_strings(codes[k])
+		var at := 0
+		while at < code.length():
+			var c := code[at]
+			if c == "{" or c == "[" or c == "(":
+				open.append(c)
+				key_next = c == "{"
+			elif c == "}" or c == "]" or c == ")":
+				if not open.is_empty():
+					open.pop_back()
+				key_next = false
+			elif c == ",":
+				key_next = not open.is_empty() and open.back() == "{"
+			elif c == "_" or (c >= "a" and c <= "z") or (c >= "A" and c <= "Z"):
+				var end := at + 1
+				while end < code.length() and (code[end] == "_" or (code[end] >= "a"
+						and code[end] <= "z") or (code[end] >= "A" and code[end] <= "Z")
+						or (code[end] >= "0" and code[end] <= "9")):
+					end += 1
+				var after := code.substr(end).strip_edges(true, false)
+				if key_next and names.has(code.substr(at, end - at)) \
+						and after.begins_with("=") and not after.begins_with("=="):
+					found.append(k)
+				key_next = false
+				at = end
+				continue
+			elif c != " " and c != "\t":
+				key_next = false
+			at += 1
+	return found
+
+
+## **[param code] with what its strings hold blanked**, quotes kept: so a brace, a comma
+## or a name in words is no code.
+static func _blank_strings(code: String) -> String:
+	var out := ""
+	var quote := ""
+	var k := 0
+	while k < code.length():
+		var c := code[k]
+		if quote != "":
+			if c == "\\":
+				out += "  "
+				k += 2
+				continue
+			if c == quote:
+				quote = ""
+				out += c
+			else:
+				out += " "
+		else:
+			if c == "\"" or c == "'":
+				quote = c
+			out += c
+		k += 1
+	return out
+
+
+## **Every name the gate looks for**, each once: every key the catalogue knows,
+## retired ones too, every organ's name and every variant's.
+static func _gene_names() -> PackedStringArray:
+	var names := PackedStringArray()
+	for key: StringName in Catalogue.keys():
+		for name: StringName in [key, Catalogue.organ_of(key), Catalogue.variant_of(key)]:
+			if name != &"" and not names.has(String(name)):
+				names.append(String(name))
+	return names
+
+
+## **What the gate looks for, as one pattern**: a quoted string that is one of
+## [method _gene_names], or one of them, a dot and a part. The quote that closes it is
+## the one that opened it.
+static func _names_pattern() -> RegEx:
+	var names := PackedStringArray()
+	for name: String in _gene_names():
+		names.append(_escaped(name))
+	var pattern := RegEx.new()
+	pattern.compile("([\"'])(?:%s)(?:\\.[A-Za-z0-9_-]+)?\\1" % "|".join(names))
+	return pattern
+
+
+## [param text] with every character a pattern would read as more than itself escaped.
+static func _escaped(text: String) -> String:
+	var out := ""
+	for c: String in text:
+		out += c if (c >= "a" and c <= "z") or (c >= "A" and c <= "Z") or (c >= "0" and c <= "9") \
+			or c == "_" else "\\" + c
+	return out
+
+
+## **[param line] without its comment**: everything from [param marker] on, where the
+## marker stands outside a string -- so a `"#ff8800"` or a `"%s ; %s"` is code, and a
+## name in a trailing comment is not. A line inside a string that spans lines is read
+## as code, which can only find more.
+static func _code_of(line: String, marker: String) -> String:
+	var quote := ""
+	var k := 0
+	while k < line.length():
+		var c := line[k]
+		if quote != "":
+			if c == "\\":
+				k += 2
+				continue
+			if c == quote:
+				quote = ""
+		elif c == "\"" or c == "'":
+			quote = c
+		elif line.substr(k, marker.length()) == marker:
+			return line.substr(0, k)
+		k += 1
+	return line
+
+
+## **A shader's [param line] without its comments**, `//` to the end and `/* ... */`
+## within and across lines, [param block] saying whether the line before ended inside
+## one: `[the code, whether this line ends inside one]`. A shader has no strings.
+static func _shader_code(line: String, block: bool) -> Array:
+	var code := ""
+	var k := 0
+	while k < line.length():
+		if block:
+			var close := line.find("*/", k)
+			if close < 0:
+				return [code, true]
+			k = close + 2
+			block = false
+			continue
+		var tail := line.find("//", k)
+		var open := line.find("/*", k)
+		if open >= 0 and (tail < 0 or open < tail):
+			code += line.substr(k, open - k)
+			k = open + 2
+			block = true
+			continue
+		code += line.substr(k, tail - k) if tail >= 0 else line.substr(k)
+		break
+	return [code, block]
 
 
 ## **How many gene names are written into game/ outside game/genes/**, by file:
@@ -2666,8 +3516,13 @@ func _names_gate() -> void:
 	var found := _name_literals()
 	for one: String in found:
 		print("[gene-names] FAIL %s" % one)
-	print(("[gene-names] %d gene names in game/ outside game/genes/ -- %d keys looked for,"
-		+ " comment lines and tools/ aside") % [found.size(), Catalogue.keys().size()])
+	print(("[gene-names] %d gene names in game/ outside game/genes/ -- the %d names of %d"
+		+ " keys, their organs and their variants looked for, quoted alone or with a part"
+		+ " or written bare as a dictionary's key, in %d scripts, scenes, resources and"
+		+ " shaders; comments and tools/ aside") % [found.size(),
+		_gene_names().size(), Catalogue.keys().size(),
+		_texts_in(GAME_DIR).filter(func(path: String) -> bool:
+			return not path.begins_with(GENES_DIR + "/")).size()])
 	print("[gene-names] ALL PASS" if found.is_empty() else "[gene-names] FAILED %d" % found.size())
 	_failed += found.size()
 
@@ -2778,14 +3633,15 @@ func _organs() -> Array[Gene]:
 
 
 ## The keys [param organ]'s file says its forms are, as the catalogue resolves
-## them: its own name for an organ of one form, and a variant's own key -- or its
-## name -- for a variant of none. `&""` for a variant with none of the three,
-## which the catalogue cannot file, so that the count of forms says so.
+## them: its own name first -- its implicit first variant -- unless it lists
+## variants and has no order of its own, as the toxin does; then a variant's own key
+## -- or its name -- for a variant of no forms, and every form's for one of forms.
+## `&""` for a variant with none of the three, which the catalogue cannot file, so
+## that the count of forms says so.
 static func _keys_of(organ: Gene) -> Array[StringName]:
 	var out: Array[StringName] = []
-	if organ.variants.is_empty():
+	if organ.variants.is_empty() or organ.order >= 0:
 		out.append(organ.organ)
-		return out
 	for entry: Dictionary in organ.variants:
 		var forms: Dictionary = entry.get("forms", {})
 		if forms.is_empty():
@@ -2808,12 +3664,12 @@ static func _unknown_fields(organ: StringName, fields: Dictionary, own: Array) -
 	return out
 
 
-## Every `.gd` file under [param dir], in order.
-static func _scripts_in(dir: String) -> Array[String]:
+## Every file under [param dir] the gate reads ([constant GATED]), in order.
+static func _texts_in(dir: String) -> Array[String]:
 	var out: Array[String] = []
 	for file: String in DirAccess.get_files_at(dir):
-		if file.ends_with(".gd"):
+		if GATED.has(file.get_extension()):
 			out.append(dir + "/" + file)
 	for sub: String in DirAccess.get_directories_at(dir):
-		out.append_array(_scripts_in(dir + "/" + sub))
+		out.append_array(_texts_in(dir + "/" + sub))
 	return out

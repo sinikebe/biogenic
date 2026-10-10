@@ -453,7 +453,11 @@ const ORGAN_CYTOSTOME := 0
 const ORGAN_CIRRUS := 1
 const ORGAN_FLAGELLUM := 2
 const ORGAN_STIGMA := 3
-const ORGAN_TIER_MAX := 3
+## **The most copies an organ is told at**: a gene's own ceiling (gene.gd's TIER_MAX),
+## read rather than written out. The bus's tables by tier -- [constant
+## INGEST_DECAY_BY_TIER], [constant THRUST_PEAK_BY_TIER], [constant
+## PING_HOLLOW_BY_TIER] -- have an entry for each copy up to it.
+const ORGAN_TIER_MAX := Catalogue.Gene.TIER_MAX
 
 # --- Death ------------------------------------------------------------------
 # docs/design/food-and-predators.md §6. Predation slams the membrane shut;
