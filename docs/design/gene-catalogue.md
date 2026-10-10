@@ -2348,6 +2348,32 @@ ProbeGland check that pins it. Then:
    `f6c88b9`'s, which were 0 px apart in three renders; and the final tree's two
    renders are 0 px apart.
 
+**And in CI, twice, a re-entry that was not back in time.** Both of this pull request's
+first full CI runs failed in `net_probe`'s server section, at two places, on one
+cause: the room's first guest, coming back into the room, was not back inside
+`REACH_TIMEOUT`. At `5505992` it came back from being eaten and swam alone, so the
+hunter check read a mirror it no longer had (fixed at `b1751f9` by waiting for it to
+be back). At `b1751f9` it was bringing a tier-3 mouth in, and the swallow that
+needed the mouth failed. That run's waits then used up the 24,000 frames CI allows,
+before the probe could print its count. The run that finished is the evidence: its
+referees judged the ENTERs and PERSONs a quiet run judges, 11 and 30, no foul and
+nothing dropped at the gate, so nothing was refused. They also judged one death more
+than a quiet run, the first guest's own, in the water it swam alone. Never here:
+twenty-odd runs of the section, on a quiet machine and on a loaded one, a full probe
+among four at once, `dev` beside this branch at the same frame rate, every re-entry
+back in under a second.
+
+So `_pond_reenter` waits through the run's own second asking, which is what the game
+does with an ENTER nobody answered in time. The three re-entries in the server
+section are each checked on their own, so a re-entry that never came back is not
+reported as a meal that failed. And when one does need the second asking, a NOTE
+gives what the room's referee judged of that guest since it left, and what the run
+was doing as its ENTER ran out, with its longest frame -- every end of the pond is one
+process in the probe, so a stall that long times an ENTER out with its answer already
+waiting. Run against a room that leaves the first guest's second ENTER unanswered:
+`b1751f9`'s probe fails on the guest's foul, and this one passes, back 4.92 s after
+leaving, with the NOTE.
+
 **Deferred:**
 
 - **`ci.yml`'s "Check the gene names" comment** describes the gate's old reach: a key's
