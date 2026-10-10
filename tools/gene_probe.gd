@@ -3,7 +3,7 @@ extends Node
 ## gene's numbers, lists, tags, rules, look and words live in its organ's file under
 ## game/genes/organs/, and everything that reads one asks the catalogue. What a
 ## render cannot show is a gene that is half there: a key the wire refuses, a
-## table one entry short, a live gene with no weight in the water, a sense no
+## table one entry short, a live gene with no class in the water, a sense no
 ## channel carries, an organ file the index forgot. Each of those works alone and
 ## fails somewhere else -- in a shared pond, a seeded water, a save -- so it fails
 ## here first.
@@ -14,12 +14,13 @@ extends Node
 ## at an order of its own, and an organ's own key retired alone only as the toxin is
 ## laid out, never by a tag on the organ over a live variant; the index
 ## against the folder, and every tag, channel, place and field one there is; the
-## water's weights, drifters, senses, gift and born cell, and the lists a draw or
-## a bit reads in their shipped order; how rare each gene is (docs/design/
-## gene-rarity.md §11.3) -- the ladder, a class on every live organ and none on a form,
-## the habitats, a weight in the water for every variety of its pool and the commons'
-## share, what the water holds of each class and what its floor costs, and the word a
-## player reads for each class (rarity-word-ux.md §7) -- and the senses
+## water's drifters, senses, gift and born cell, and the lists a draw or a bit reads
+## in their shipped order; how rare each gene is (docs/design/gene-rarity.md §11.3) --
+## the ladder, a class on every live organ and none on a form, the habitats, a weight
+## in the water for every variety of its pool and in drift for every one drift may
+## bring, the commons' share, a variety the water never makes taking nothing of its
+## organ's place there, what the water holds of each class and what its floor costs,
+## and the word a player reads for each class (rarity-word-ux.md §7) -- and the senses
 ## by channel and the gift by two tags; every stat table's length and first entry,
 ## every row, and a provider for every stat, live or retired; the founders' parts
 ## declared, and every declared part wired in a water cell and in yours; what each
@@ -154,6 +155,10 @@ const Rarity := preload("res://game/genes/rarity.gd")
 ## player a drop is made for is -- a newborn's, a sighted one's, a fully sighted one's --
 ## each setting how many drifters stand in it, `Drop.food_count` of the share it calls for.
 const SIGHTED: Array[float] = [0.2, 0.6, 1.0]
+## **The fields a gene's `water` holds** (gene.gd): its class, whether the water makes
+## it, and its places. A field outside them is read by nothing -- `weight`, which the
+## draws read until gene-rarity.md's phase 7-2, above all -- and would only mislead.
+const WATER_FIELDS: Array[String] = ["rarity", "drifter", "habitats"]
 ## **What the floor's load failing says** (§11.3 item 6): past it, the floor cannot keep
 ## its promise, and the answer is a design -- places -- not a retuning.
 const CROWDED := "the drop cannot keep this many genes at their counts: see gene-rarity.md §5.4"
@@ -611,19 +616,10 @@ func _index() -> void:
 
 # --- The water (§9) ----------------------------------------------------------------------
 
-## Every live gene has a weight in the water; every sense has a channel, and
-## every gift is a sense.
+## The water's pool, every variety and no mouth; every sense has a channel, and
+## every gift is a sense. A gene's weight in the water is its class's
+## ([method _rarity]).
 func _water() -> void:
-	var weightless: Array[StringName] = []
-	for key: StringName in Catalogue.live():
-		if Catalogue.variety(key) != key:
-			continue
-		var weight: Variant = Catalogue.gene(key).water.get("weight")
-		if weight == null or int(weight) < 1:
-			weightless.append(key)
-	_check("every live variety has a weight of its own in the water%s"
-		% ("" if weightless.is_empty() else ": not %s" % str(weightless)),
-		weightless.is_empty())
 	var drifters_ok := true
 	for key: StringName in Catalogue.drifters():
 		drifters_ok = drifters_ok and Catalogue.variety(key) == key \
@@ -695,9 +691,10 @@ func _listed(list: StringName) -> Array:
 ## and the floor's load under its budget at all three. The ladder, the classes and the
 ## habitats are each shown failing on what breaks them, and the weights on organs of the
 ## probe's own: a rare kind of a common organ takes its place from its organ alone, a
-## second strain that sets no class splits the toxin's, and enough uncommon organs to
-## crowd the commons leave them their share. The floor's load is shown failing on a
-## crowd worked out by the ladder's own arithmetic.
+## second strain that sets no class splits the toxin's, enough uncommon organs to crowd
+## the commons leave them their share, and a variant the water never makes takes
+## nothing of its organ's place in the water, only its share in drift. The floor's load
+## is shown failing on a crowd worked out by the ladder's own arithmetic.
 func _rarity() -> void:
 	# 1. The ladder.
 	var ladder := _ladder_faults(Rarity.LADDER, Rarity.COMMON_SHARE)
@@ -731,8 +728,9 @@ func _rarity() -> void:
 	unclassed.organ = &"probeold"
 	unclassed.tags = [Gene.RETIRED]
 	_check(("a class on every live organ, a row of the ladder: %s; a variant's own a row too,"
-		+ " and no form setting one%s; and each of %d organs planted wrong is found (%s),"
-		+ " while a retired organ needs none (%s)") % [_classes_said(),
+		+ " no form setting one, and no water a field nothing reads%s; and each of %d organs"
+		+ " planted wrong is found (%s), while a retired organ needs none (%s)") % [
+		_classes_said(),
 		"" if classes.is_empty() else " -- NOT: " + "; ".join(classes), planted.size(),
 		", ".join(found), str(_class_faults([unclassed]).is_empty())],
 		classes.is_empty() and found.size() == planted.size()
@@ -759,28 +757,41 @@ func _rarity() -> void:
 		str(_habitat_faults([homebody]).is_empty())],
 		strays.is_empty() and not _habitat_faults([roams]).is_empty()
 		and not _habitat_faults([form_roams]).is_empty() and _habitat_faults([homebody]).is_empty())
-	# 4. A weight for every live variety of the water's pool, none for a retired key, and
-	# the commons their share.
+	# 4. A weight for every live variety of the water's pool, and in drift for every one
+	# drift may bring; none for a retired key, nor in drift for one tagged never_drifts;
+	# and the commons their share.
 	var weightless: Array[StringName] = []
 	for key: StringName in Catalogue.drifters():
 		if not (Catalogue.water_weight(key) > 0.0):
 			weightless.append(key)
+	var drifting := 0
+	for key: StringName in Catalogue.live():
+		if Catalogue.variety(key) != key or Catalogue.has_tag(key, Catalogue.NEVER_DRIFTS):
+			continue
+		drifting += 1
+		if not (Catalogue.drift_weight(key) > 0.0):
+			weightless.append(key)
 	var heavy: Array[StringName] = []
 	for key: StringName in Catalogue.keys():
-		if Catalogue.has_tag(key, Catalogue.RETIRED) and Catalogue.water_weight(key) != 0.0:
+		if (Catalogue.has_tag(key, Catalogue.RETIRED) and (Catalogue.water_weight(key) != 0.0
+				or Catalogue.drift_weight(key) != 0.0)) \
+				or (Catalogue.has_tag(key, Catalogue.NEVER_DRIFTS)
+				and Catalogue.drift_weight(key) != 0.0):
 			heavy.append(key)
 	var commons := _commons_share()
-	_check(("a weight in the water for every live variety of the water's pool, %d of them%s;"
-		+ " none for a retired key%s; and the commons hold %.1f %% of the drifters' draw, at"
-		+ " least COMMON_SHARE's %.1f %%") % [Catalogue.drifters().size(),
+	_check(("a weight in the water for every live variety of the water's pool, %d of them, and"
+		+ " in drift for every one drift may bring, %d%s; none for a retired key, nor in drift"
+		+ " for one tagged never_drifts%s; and the commons hold %.1f %% of the drifters' draw,"
+		+ " at least COMMON_SHARE's %.1f %%") % [Catalogue.drifters().size(), drifting,
 		"" if weightless.is_empty() else " -- NOT %s" % str(weightless),
 		"" if heavy.is_empty() else " -- NOT %s" % str(heavy), 100.0 * commons,
 		100.0 * Rarity.COMMON_SHARE],
 		weightless.is_empty() and heavy.is_empty() and not Catalogue.drifters().is_empty()
-		and commons >= Rarity.COMMON_SHARE - 1e-9)
+		and drifting > 0 and commons >= Rarity.COMMON_SHARE - 1e-9)
 	_rare_kind()
 	_strains_split()
 	_crowded_commons()
+	_out_of_pool()
 	# 5 and 6. The water's arithmetic, and the floor's load.
 	var loads := _floor_loads(_pool_weights())
 	print("[gene-probe] NOTE the water by class (gene-rarity.md §5, §11.3): %s" % _arithmetic())
@@ -920,10 +931,24 @@ static func _ladder_said() -> String:
 ## **What is wrong with the classes [param organs]' files give** (gene-rarity.md §11.3
 ## item 2): a live organ names one of the ladder's in its `water.rarity`; a variant that
 ## sets its own names one too; a form never sets one -- it is its variant in one place.
-## A retired organ needs none, and one it keeps for the record is still a row.
+## A retired organ needs none, and one it keeps for the record is still a row. And no
+## `water` holds a field nothing reads ([constant WATER_FIELDS]): a gene's class is the
+## whole of its place in the water.
 static func _class_faults(organs: Array) -> Array[String]:
 	var out: Array[String] = []
 	for organ: Gene in organs:
+		out.append_array(_stray_water(String(organ.organ), organ.water))
+		for entry: Dictionary in organ.variants:
+			var water: Variant = entry.get("water", {})
+			if water is Dictionary:
+				out.append_array(_stray_water("%s's variant %s" % [organ.organ,
+					entry.get("variant", &"")], water))
+			var forms: Dictionary = entry.get("forms", {})
+			for place: Variant in forms:
+				var form: Variant = forms[place]
+				if form is Dictionary and (form as Dictionary).get("water", {}) is Dictionary:
+					out.append_array(_stray_water("%s's form %s" % [organ.organ,
+						(form as Dictionary).get("key", place)], (form as Dictionary).get("water", {})))
 		var own: Variant = organ.water.get("rarity")
 		if own == null:
 			if _live_in_file(organ):
@@ -951,12 +976,23 @@ static func _class_faults(organs: Array) -> Array[String]:
 	return out
 
 
+## The fields of [param water], [param who]'s, that nothing reads ([constant WATER_FIELDS]).
+static func _stray_water(who: String, water: Dictionary) -> Array[String]:
+	var out: Array[String] = []
+	for field: Variant in water:
+		if not WATER_FIELDS.has(String(field)):
+			out.append(("%s's water sets %s, which nothing reads: a gene's place in the water"
+				+ " is its class (game/genes/README.md, Rarity)") % [who, field])
+	return out
+
+
 ## **Organs planted wrong, by how** (item 2): one naming no class, one naming a class the
-## ladder has no row for, one whose variant does, and one whose form sets a class.
+## ladder has no row for, one whose variant does, one whose form sets a class, and one
+## whose water sets a weight beside its class, as the draws read until phase 7-2.
 func _planted_classes() -> Dictionary:
 	var none := Gene.new()
 	none.organ = &"probenone"
-	none.water = {"weight": 2, "drifter": true}
+	none.water = {"drifter": true}
 	var off := Gene.new()
 	off.organ = &"probeoff"
 	off.water = {"rarity": &"legendary", "drifter": true}
@@ -972,8 +1008,11 @@ func _planted_classes() -> Dictionary:
 		Gene.INSIDE: {"key": &"probeformin", "order": 983},
 		Gene.OUTSIDE: {"key": &"probeformout", "order": 984,
 			"water": {"rarity": Rarity.classes()[Rarity.LADDER.size() - 1]}}}}]
+	var weighed := Gene.new()
+	weighed.organ = &"probeweighed"
+	weighed.water = {"rarity": Rarity.commonest(), "weight": 4, "drifter": true}
 	return {"no class": none, "a class off the ladder": off, "a variant's off it": variant,
-		"a form's own": formed}
+		"a form's own": formed, "a weight beside its class": weighed}
 
 
 ## Every class with the live organs that name it, in the ladder's order.
@@ -1197,7 +1236,7 @@ static func _arithmetic() -> String:
 		counts.append("%.0f" % d)
 	return ("%s -- in a drop of %s drifters (a newborn's / a sighted / a fully sighted"
 		+ " player's); the senses %.1f %% of the draw; the floor's expected share of the"
-		+ " drifters %s, by the weights the draws take up in phase 7-2") % ["; ".join(classes),
+		+ " drifters %s, by the weights the water draws by") % ["; ".join(classes),
 		" / ".join(counts), 100.0 * senses / maxf(total, 1e-9),
 		_percents(_floor_loads(_pool_weights()))]
 
@@ -1229,16 +1268,27 @@ func _rare_kind() -> void:
 	for key: StringName in before:
 		if key != common and not is_equal_approx(float(during.get(key, -1.0)), float(before[key])):
 			others += 1
+	# **A pick among the organ's varieties** -- the gift's, whatever their water --
+	# takes each by its class's share of the organ.
+	seed(985)
+	var picked := 0
+	const PICKS := 9000
+	for i in PICKS:
+		if Catalogue.pick_variety([common, &"probescarce"] as Array[StringName]) == &"probescarce":
+			picked += 1
+	var picks_expected := float(PICKS) * w_rare / (w_common + w_rare)
 	Catalogue.forget(Catalogue.organ_of(common))
 	var after := _weights_now()
 	_check(("a rare kind of %s, one entry in its file, takes its place in the water from its"
-		+ " organ alone: %.3f of it to %.3f left (%.3f), %d other genes' weights moved; it is"
-		+ " %s, kept at %d, %s %s at %d; and forgotten, every weight is what it was (%s)") % [
-		common, shares[0], shares[1], w_common, others, said[0], said[1], common, said[2],
-		said[3], str(after == before)],
+		+ " organ alone: %.3f of it to %.3f left (%.3f), %d other genes' weights moved; a pick"
+		+ " among the organ's varieties, the gift's, takes it %d times in %d (%.0f by its"
+		+ " class's share); it is %s, kept at %d, %s %s at %d; and forgotten, every weight is"
+		+ " what it was (%s)") % [common, shares[0], shares[1], w_common, others, picked, PICKS,
+		picks_expected, said[0], said[1], common, said[2], said[3], str(after == before)],
 		is_equal_approx(float(shares[0]), w_common * w_rare / (w_common + w_rare))
 		and is_equal_approx(float(shares[1]), w_common * w_common / (w_common + w_rare))
 		and is_equal_approx(float(shares[0]) + float(shares[1]), w_common) and others == 0
+		and absf(float(picked) / picks_expected - 1.0) < 0.15
 		and said == [rarest, Rarity.least(rarest), Rarity.commonest(),
 			Rarity.least(Rarity.commonest())] and after == before)
 
@@ -1272,7 +1322,8 @@ func _strains_split() -> void:
 ## **The commons keep their share** (gene-rarity.md §2.3): uncommon organs of the
 ## probe's own, three of them, filed until the commons would hold less than
 ## COMMON_SHARE of the drifters' draw -- they hold it exactly, every common its weight,
-## and every other organ scaled alike.
+## and every other organ scaled alike, in drift as in the water: one set of weights,
+## where every variety of an organ is in the pool and drifts.
 func _crowded_commons() -> void:
 	var before := _weights_now()
 	var share_before := _commons_share()
@@ -1294,18 +1345,80 @@ func _crowded_commons() -> void:
 	var share := _commons_share()
 	var weights := [Catalogue.water_weight(common), Catalogue.water_weight(other),
 		Catalogue.water_weight(names[0])]
+	var unlike: Array[StringName] = []
+	for key: StringName in Catalogue.drifters():
+		if not is_equal_approx(Catalogue.drift_weight(key), Catalogue.water_weight(key)):
+			unlike.append(key)
 	for name: StringName in names:
 		Catalogue.forget(name)
 	var scale := float(weights[1]) / float(before[other])
 	_check(("and three uncommon organs of the probe's own crowd the commons from %.1f %% of the"
 		+ " drifters' draw: they keep %.1f %%, COMMON_SHARE's, %s its %.1f, %s scaled by %.3f"
-		+ " like the newcomers (%.3f); and forgotten, every weight is what it was (%s)") % [
+		+ " like the newcomers (%.3f), and in drift every variety of the pool weighs what it"
+		+ " weighs in the water%s; and forgotten, every weight is what it was (%s)") % [
 		100.0 * share_before, 100.0 * share, common, weights[0], other, scale,
-		float(weights[2]) / Rarity.weight(uncommon), str(_weights_now() == before)],
+		float(weights[2]) / Rarity.weight(uncommon),
+		"" if unlike.is_empty() else " -- NOT %s" % str(unlike), str(_weights_now() == before)],
 		share_before > Rarity.COMMON_SHARE and is_equal_approx(share, Rarity.COMMON_SHARE)
 		and is_equal_approx(float(weights[0]), float(before[common])) and scale < 1.0
 		and is_equal_approx(float(weights[2]), Rarity.weight(uncommon) * scale)
-		and _weights_now() == before)
+		and unlike.is_empty() and _weights_now() == before)
+
+
+## **A variety the water never makes takes nothing of its organ's place there**
+## (gene-catalogue.md §15.8; 7-1's review, its one finding): the first common organ of the
+## drifters' pool given one more variant, `"drifter": false`, one entry in its own file.
+## **In the water nothing moves**: its own weight is 0 and every other key's is what it
+## was -- its sibling keeps the organ's whole place, the commons their share, every other
+## organ its weight -- and it is in no pool. **In drift it takes its share of its organ**,
+## its class's against its sibling's, from that sibling alone, every other key's drift
+## weight what it was. And forgotten, every weight is back.
+func _out_of_pool() -> void:
+	var before := _weights_now()
+	var drifts_before := _drift_weights_now()
+	var share_before := _commons_share()
+	var common := &""
+	for key: StringName in _drifters_pool():
+		if Catalogue.organ_rarity(Catalogue.organ_of(key)) == Rarity.commonest() \
+				and Catalogue.keys_of_organ(Catalogue.organ_of(key)).size() == 1:
+			common = key
+			break
+	var organ: Gene = (Catalogue.gene(common).get_script() as GDScript).new()
+	organ.variants = organ.variants + [{"variant": &"probeaside", "order": 993,
+		"look": {"accent": Kinds.MARK_RING}, "water": {"drifter": false}}]
+	Catalogue.register(organ)
+	var during := _weights_now()
+	var drifts := _drift_weights_now()
+	var moved: Array[StringName] = []
+	for key: StringName in before:
+		if not is_equal_approx(float(during.get(key, -1.0)), float(before[key])):
+			moved.append(key)
+	var drift_moved: Array[StringName] = []
+	for key: StringName in drifts_before:
+		if key != common and not is_equal_approx(float(drifts.get(key, -1.0)),
+				float(drifts_before[key])):
+			drift_moved.append(key)
+	var said := [Catalogue.water_weight(&"probeaside"), Catalogue.drift_weight(&"probeaside"),
+		Catalogue.drift_weight(common), float(drifts_before[common]),
+		Catalogue.drifters().has(&"probeaside"), _commons_share(),
+		Catalogue.rarity_of(&"probeaside"), Catalogue.floor_of(&"probeaside")]
+	Catalogue.forget(Catalogue.organ_of(common))
+	var after := [_weights_now() == before, _drift_weights_now() == drifts_before]
+	_check(("and a variant of %s the water never makes, one entry in its file with"
+		+ " `\"drifter\": false`, takes nothing of its organ's place in the water -- it"
+		+ " weighs %.2f there, in no pool (%s), and %d other keys' weights moved, the commons"
+		+ " holding %.1f %% as before (%.1f %%) -- while drift may bring it at its share, %.2f,"
+		+ " which %s gives up from %.2f to %.2f, %d other keys' drift weights moved; it is %s,"
+		+ " kept at %d were it in the water; and forgotten, every weight is back (%s, %s)") % [
+		common, said[0], str(said[4]), moved.size(), 100.0 * float(said[5]),
+		100.0 * share_before, said[1], common, said[3], said[2], drift_moved.size(), said[6],
+		said[7], str(after[0]), str(after[1])],
+		moved.is_empty() and float(said[0]) == 0.0 and not bool(said[4])
+		and is_equal_approx(float(said[5]), share_before)
+		and is_equal_approx(float(said[1]), float(said[3]) * 0.5)
+		and is_equal_approx(float(said[2]), float(said[3]) * 0.5)
+		and drift_moved.is_empty() and said[6] == Catalogue.rarity_of(common)
+		and after == [true, true])
 
 
 ## **The senses by channel, and the gift by two tags** (docs/design/gene-rarity.md §3.4,
@@ -1376,6 +1489,14 @@ static func _weights_now() -> Dictionary:
 	var out := {}
 	for key: StringName in Catalogue.keys():
 		out[key] = Catalogue.water_weight(key)
+	return out
+
+
+## Every key's weight in drift now, by key.
+static func _drift_weights_now() -> Dictionary:
+	var out := {}
+	for key: StringName in Catalogue.keys():
+		out[key] = Catalogue.drift_weight(key)
 	return out
 
 
@@ -1736,8 +1857,9 @@ func _register() -> void:
 	var organ := Gene.new()
 	organ.organ = &"probeorgan"
 	organ.tags = [Catalogue.ALWAYS_EXPRESSED]
+	organ.water = {"rarity": Rarity.classes()[1]}
 	organ.variants = [{"variant": &"plain", "dose": &"harm",
-		"water": {"weight": 1, "drifter": false}, "tags": [Catalogue.NEVER_DRIFTS],
+		"water": {"drifter": false}, "tags": [Catalogue.NEVER_DRIFTS],
 		"forms": {Gene.INSIDE: {"key": &"probein", "order": 900},
 			Gene.OUTSIDE: {"key": &"probeout", "order": 901, "tags": [Catalogue.SENSE],
 				"provides": {&"armor": [1.0, 1.25, 1.25, 1.25]}}}}]
@@ -1768,7 +1890,9 @@ func _register() -> void:
 		and Catalogue.dose_of(&"probeout") == &"harm" and Catalogue.rank(&"probeout") == 901 \
 		and Catalogue.provides(&"probeout", &"armor") \
 		and not Catalogue.provides(&"probein", &"armor") \
-		and Catalogue.weight(&"probeout") == 1 and not Catalogue.drifters().has(&"probein")
+		and not Catalogue.drifters().has(&"probein") and Catalogue.rarity_of(&"probeout") \
+			== Rarity.classes()[1] and Catalogue.water_weight(&"probeout") == 0.0 \
+		and Catalogue.drift_weight(&"probeout") == 0.0 and Catalogue.drift_weight(&"probein") == 0.0
 	# **Tags add up** (gene.gd): the organ's on both forms, the variant's on both,
 	# the outside form's on it alone.
 	var tags := [Catalogue.gene(&"probeout").tags, Catalogue.gene(&"probein").tags]
@@ -1781,10 +1905,12 @@ func _register() -> void:
 	Catalogue.forget(&"probeorgan")
 	read.append(Stats.of({&"probeout": 1}, &"armor"))
 	drawn.append(Cilia.hue(&"probeout"))
-	_check(("a registered organ's two forms answer as the toxin's do, and forgetting it leaves"
-		+ " the catalogue as it was; its armour reads through the stats at once -- %s alone,"
-		+ " %s beside %s, %s again once forgotten (%s before)") % [read[0], read[1],
-		beside if beside != &"" else "nothing", read[2], bare], filed
+	_check(("a registered organ's two forms answer as the toxin's do -- out of the water's pool"
+		+ " and never drifting, weighing nothing in the water or in drift though it is %s --"
+		+ " and forgetting it leaves the catalogue as it was; its armour reads through the"
+		+ " stats at once -- %s alone,"
+		+ " %s beside %s, %s again once forgotten (%s before)") % [Rarity.classes()[1],
+		read[0], read[1], beside if beside != &"" else "nothing", read[2], bare], filed
 		and Array(Catalogue.keys()) == before and not Catalogue.known(&"probein")
 		and bare == 1.0 and read[0] == 1.25 and is_equal_approx(read[1], other * 1.25)
 		and read[2] == 1.0)
@@ -3083,18 +3209,18 @@ class ProbeGland extends "res://game/genes/gene.gd":
 
 	func _init() -> void:
 		organ = &"probegland"
-		water = {"rarity": &"uncommon", "weight": 3, "drifter": true}
+		water = {"rarity": &"uncommon", "drifter": true}
 		family = SENSING
 		look = {"shape": TUFT, "count": 3, "tip": Kinds.TIP_HOOK}
 		variants = [
-			{"variant": &"plain", "water": {"weight": 2},
+			{"variant": &"plain",
 				"forms": {
 					INSIDE: {"key": &"probegin", "order": 910,
 						"provides": {&"store": [1.0, 1.1, 1.2, 1.3]}},
 					OUTSIDE: {"key": &"probegout", "order": 911,
 						"provides": {&"smell_range": [0.0, 300.0, 400.0, 500.0]}},
 				}},
-			{"variant": &"keen", "key": &"probegkeen", "order": 912, "water": {"weight": 1},
+			{"variant": &"keen", "key": &"probegkeen", "order": 912,
 				"look": {"accent": KEEN_ACCENT},
 				"provides": {&"smell_range": [0.0, 600.0, 800.0, 1000.0]}},
 		]
@@ -3120,8 +3246,17 @@ func _synthetic_gene() -> void:
 	Catalogue.register(gland)
 	FoodField.declare([])
 
-	# **Filed**: three keys, two varieties, one organ, its weight and each strain's.
+	# **Filed**: three keys, two varieties, one organ, its place in the water an uncommon
+	# organ's, shared evenly by its two strains, which set no class of their own.
 	var keys: Array[StringName] = [&"probegin", &"probegout", &"probegkeen"]
+	var uncommon := 0.0
+	for key: StringName in _drifters_pool():
+		if Catalogue.organ_rarity(Catalogue.organ_of(key)) == Rarity.classes()[1] \
+				and Catalogue.keys_of_organ(Catalogue.organ_of(key)).size() == 1:
+			uncommon = Catalogue.water_weight(key)
+			break
+	var strains := [Catalogue.water_weight(&"probegin"), Catalogue.water_weight(&"probegkeen"),
+		Catalogue.water_weight(&"probegout")]
 	var filed := Catalogue.keys().size() == before.size() + 3
 	for key: StringName in keys:
 		filed = filed and Catalogue.known(key) and Catalogue.organ_of(key) == &"probegland"
@@ -3131,13 +3266,14 @@ func _synthetic_gene() -> void:
 		and Genome.is_inside_form(&"probegin") and not Genome.is_inside_form(&"probegkeen") \
 		and Catalogue.drifters().has(&"probegin") and Catalogue.drifters().has(&"probegkeen") \
 		and not Catalogue.drifters().has(&"probegout") \
-		and Catalogue.organ_weight(&"probegland") == 3 and Catalogue.weight(&"probegin") == 2 \
-		and Catalogue.weight(&"probegkeen") == 1 and not Catalogue.one_variant(&"probegland")
+		and uncommon > 0.0 and is_equal_approx(float(strains[0]) + float(strains[1]), uncommon) \
+		and is_equal_approx(float(strains[0]), float(strains[1])) and strains[2] == strains[0] \
+		and not Catalogue.one_variant(&"probegland")
 	_check(("a gene of the probe's own -- an organ with two variants, one in two places --"
-		+ " is filed: %s, varieties %s and %s, the organ weighing %d in the water and its"
-		+ " strains %d and %d") % [str(keys), Catalogue.variety(&"probegout"),
-		Catalogue.variety(&"probegkeen"), Catalogue.organ_weight(&"probegland"),
-		Catalogue.weight(&"probegin"), Catalogue.weight(&"probegkeen")], filed)
+		+ " is filed: %s, varieties %s and %s, the organ weighing %.2f in the water, an"
+		+ " uncommon organ's, and its strains %.2f and %.2f, the outside form its variety's")
+		% [str(keys), Catalogue.variety(&"probegout"), Catalogue.variety(&"probegkeen"),
+		float(strains[0]) + float(strains[1]), strains[0], strains[1]], filed)
 
 	# **The genome**: integrated and placed outside -- its outside form -- and inside, the
 	# keen strain beside it as a locus of its own, raised alone, moved, expressed.
@@ -3185,19 +3321,20 @@ func _synthetic_gene() -> void:
 		+ " moved and expressed (%s), and mutated 300 times by every kind (%s), each leaving"
 		+ " a genome") % [str(steps), str(placed), str(layout), str(kinds)], genome_ok)
 
-	# **The water**: the spawner draws the organ by its weight and then a strain by
-	# theirs; the floor counts each strain apart; drift brings each.
+	# **The water**: the spawner draws each strain by its weight in the water, the
+	# organ's place shared between them; the floor counts each strain apart; drift
+	# brings each.
 	seed(11)
 	var draws := {}
 	var pool: Array[StringName] = Catalogue.drifters().duplicate()
-	var total := 0
-	for organ: StringName in Catalogue.organs_in(pool):
-		total += Catalogue.organ_weight(organ)
+	var total := 0.0
+	for key: StringName in pool:
+		total += Catalogue.water_weight(key)
 	for i in 6000:
 		var drawn := FoodField._draw_gene(pool)
 		draws[drawn] = int(draws.get(drawn, 0)) + 1
 	var gland_draws := int(draws.get(&"probegin", 0)) + int(draws.get(&"probegkeen", 0))
-	var expected := 6000.0 * 3.0 / float(total)
+	var expected := 6000.0 * (float(strains[0]) + float(strains[1])) / total
 	var keen_share := float(draws.get(&"probegkeen", 0)) / maxf(float(gland_draws), 1.0)
 	var counts := {}
 	for gene: StringName in Catalogue.drifters():
@@ -3222,13 +3359,13 @@ func _synthetic_gene() -> void:
 				if Catalogue.organ_of(gene) == &"probegland":
 					brought[gene] = int(brought.get(gene, 0)) + 1
 	_check(("the water takes it: the spawner draws the organ %d times in 6000 (%.0f by its"
-		+ " weight) and the keen strain %.0f%% of them (a third by theirs); the floor counts"
+		+ " weight) and the keen strain %.0f%% of them (a half by theirs); the floor counts"
 		+ " each strain apart -- two carriers of the plain one in either form, one of the"
 		+ " keen -- and gives a drifter the keen one (%s, short %s); and drift brings each"
 		+ " (%s)") % [gland_draws, expected, 100.0 * keen_share, taken, short_said,
 		str(brought)],
-		absf(float(gland_draws) - expected) < expected * 0.25 and keen_share > 0.2
-		and keen_share < 0.47 and short.size() == 0 and short_said.contains("probegkeen")
+		absf(float(gland_draws) - expected) < expected * 0.25 and keen_share > 0.4
+		and keen_share < 0.6 and short.size() == 0 and short_said.contains("probegkeen")
 		and not short_said.contains("probegin") and taken == &"probegkeen"
 		and brought.has(&"probegkeen") and (brought.has(&"probegin") or brought.has(&"probegout")))
 
@@ -3665,7 +3802,7 @@ func _strain_of_shipped() -> void:
 	var stacks: Array = Catalogue.table(dosed, &"venom_stacks")
 	var shipped := Catalogue.keys_of_organ(Catalogue.organ_of(dosed)).duplicate()
 	organ.variants = organ.variants + [{"variant": &"probebarb", "dose": Catalogue.dose_of(dosed),
-		"order": 930, "water": {"weight": 1, "drifter": true},
+		"order": 930, "water": {"drifter": true},
 		"look": {"accent": Kinds.MARK_DIAMOND},
 		"provides": {&"venom_stacks": stacks}}]
 	Catalogue.register(organ)

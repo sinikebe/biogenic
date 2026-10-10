@@ -30,14 +30,14 @@ letters `a-z` and permanent once shipped.
   colour. `born` is 0 unless set; its tags add to its organ's; its parts are its
   organ's; **it sets no class to share its organ's place in the water evenly, or
   `"water": {"rarity": &"rare"}` to be a rare kind of it** -- either way it changes
-  nothing outside its organ -- and until phase 7-2 its water `weight` is its share of
-  its organ's draws (1 for a rare one); drift may bring it unless it is tagged
-  `never_drifts`. **A variant of a sense is a sense and a gift**,
+  nothing outside its organ. One the water never makes (`"drifter": false`) takes
+  nothing of its organ's place there; drift may still bring it, at its share in drift,
+  unless it is tagged `never_drifts`. **A variant of a sense is a sense and a gift**,
   by its organ's tags: the water may give it to a peer or a daughter with no sense and
   your newborn may be given it, whatever its water and drift say. A strain of the
-  toxin sets its `dose`, and its `water` as the first strain does, `{"weight": 2,
-  "drifter": true}`: the toxin's weight and drifter flag are each strain's, not the
-  organ's. A form never sets a class. README, "A variant" and "Rarity".
+  toxin sets its `dose`, and its `water` as the first strain does, `{"drifter": true}`:
+  the toxin's drifter flag is each strain's, not the organ's. A form never sets a
+  class. README, "A variant" and "Rarity".
 - **An organ on mechanics the game has**: a copy of the nearest organ's file as
   `organs/<key>.gd`, every field set -- **its class, `water.rarity`**: `common` only if
   every run needs it, `uncommon` if runs are built from it, and **when unsure, `rare`**

@@ -77,7 +77,7 @@ func _init() -> void:
 	# being innate when it became this gene, so a nose is the difference between a
 	# run and a wander -- it has to be the commonest thing the water can hand you,
 	# on a par with the three organs you are born with (gene-rarity.md §4).
-	water = {"rarity": &"common", "weight": 4, "drifter": true}
+	water = {"rarity": &"common", "drifter": true}
 	tags = [SENSE, GIFT]
 	channel = SMELL
 	declares = {"in": [{"name": &"smell", "bearing": false,

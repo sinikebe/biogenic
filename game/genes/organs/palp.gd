@@ -67,7 +67,7 @@ func _init() -> void:
 	organ = &"palp"
 	order = 8
 	provides = {&"touch_range": TOUCH_RANGE_BY_TIER}
-	water = {"rarity": &"uncommon", "weight": 2, "drifter": true}
+	water = {"rarity": &"uncommon", "drifter": true}
 	channel = TOUCH
 	declares = {"in": [{"name": &"touch", "bearing": true,
 		"values": {&"closeness": &"level"}}]}

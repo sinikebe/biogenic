@@ -177,7 +177,7 @@ func _init() -> void:
 	# water, the two that change the most about a run; the weight they shipped never
 	# made them so, and making them `rare` is a balance change, made from play
 	# (gene-rarity.md §12).
-	water = {"rarity": &"uncommon", "weight": 2, "drifter": true}
+	water = {"rarity": &"uncommon", "drifter": true}
 	tags = [SENSE, GIFT]
 	channel = BEAM
 	declares = {"in": [{"name": &"beam", "bearing": true,

@@ -427,9 +427,10 @@ static func peer_plan() -> Array[StringName]:
 ## none of [param senses] -- the `sense` tag's genes, any sense at all: whether a body
 ## needs the gift -- is given one of [param gifts] -- the `gift` tag's: what the gift
 ## is -- at tier 1, in a bonus slot, as the player's newborn is at five seconds: the
-## organ [param pick] names among the gifts', then one of its varieties by weight
-## (gene-catalogue.md §6.1), which with one variety to an organ is `gifts[pick]`.
-## Today both tags name the same four. Returns whether it was.
+## organ [param pick] names among the gifts', then one of its varieties by its share
+## of the organ (`Catalogue.pick_variety`; gene-catalogue.md §6.1), which with one
+## variety to an organ is `gifts[pick]`. Flat by organ, whatever its class: rarity
+## does not touch the gift. Today both tags name the same four. Returns whether it was.
 static func give_sense(tiers: Dictionary, senses: Array[StringName],
 		gifts: Array[StringName], pick: int) -> bool:
 	if gifts.is_empty():

@@ -169,22 +169,21 @@ var levels := {}
 ##   the gene probe holds. A variant may set its own: it is as rare as the rarer of
 ##   its organ's class and its own, and its own is its share of its organ's place in
 ##   the water. **A form never sets one.** The catalogue resolves each key's class,
-##   its weight in the water and the carriers the drop's floor keeps of it
-##   (`rarity_of`, `water_weight`, `floor_of`): the floor keeps every variety at its
-##   class's count, and from gene-rarity.md's phase 7-2 every draw reads the weight.
-## - `drifter`, whether a drifter may be made of it (false if unset).
+##   its weight in the water, its weight in drift and the carriers the drop's floor
+##   keeps of it (`rarity_of`, `water_weight`, `drift_weight`, `floor_of`): every
+##   draw of the water reads the first, drift the second, and the floor keeps every
+##   variety at its class's count. **A variant is drawn by its variety**, its first
+##   form: its other forms answer the same weight and are in no list of the water's.
+## - `drifter`, **whether the water makes it** (false if unset): in the water's pool,
+##   which a drifter (but for one tagged `not_on_drifters`) and a peer are drawn from
+##   and the floor keeps. A variety out of it takes nothing of its organ's place there
+##   -- its siblings in the pool share it all -- and drift may still bring it, at its
+##   share of its organ among every variety drift may bring, unless it is tagged
+##   `never_drifts` (gene-catalogue.md §15.8).
 ## - `habitats`, **reserved** (gene-rarity.md §6): the places of a water where it is
 ##   found more. Absent, or empty, is everywhere alike, and every gene is so today:
 ##   a name must be one a water declares (`drop.gd`'s HABITATS), and none does yet.
 ##   A variant may set its own; a form may not.
-## - `weight`, how often a draw takes it against the others (`food.gd`'s draws; 1 if
-##   unset), **until phase 7-2 of gene-rarity.md**, which draws by `rarity` alone and
-##   takes it out. **The water draws an organ first, then one of its variants**
-##   (gene-catalogue.md §6.1): an organ by its own weight -- this field as its file
-##   sets it, or, where only its variants set one, its first variety's -- and then a
-##   variant by the weight each answers, its share of the organ's draws. **A variant
-##   is drawn by its variety**, its first form: its other forms answer the same
-##   weight and are in no list of the water's.
 var water := {}
 
 ## **Its tags**: any of [constant TAGS]. A variant's or a form's are added to its

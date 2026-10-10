@@ -296,11 +296,23 @@ jobs:
         # both, its poison by the coin -- and the next body seeded after it is the
         # first to differ. Venom's bite, poison's and doses move the rest.
         #
+        # **Re-pinned at gene-rarity phase 7-2** (docs/design/gene-rarity.md
+        # §11.2; gene-catalogue.md §15.8), from 7397a410...: the water's draws
+        # changed on purpose. Every draw of the water is a float draw by
+        # `water_weight` now, so a seeded run differs from dev's from the first
+        # body the water seeds; `stigma` and `ampulla` weigh 2, not 3; and drift
+        # is weighted. Measured against phase 7-1 (4c029f7): the trace is 7-1's
+        # for its first two lines, the cell's own, and differs from its first look
+        # at the water, 0.52 s in -- cell 0, the first body seeded, has the radius
+        # it had and another gene, and the run starts at another quiet point,
+        # since where a run starts is chosen by the water round it. 69,549 lines,
+        # from 69,349, the same hash under all three schemes.
+        #
         # Each run prints about ten megabytes, so it goes to a file rather than
         # a variable. About twenty seconds a scheme.
         run: |
           set -uo pipefail
-          pinned="7397a410a51b14203ccdd58c040346c3fd72e975c0c50e4d1baf8684c8b83bf4"
+          pinned="701cc2684080d05586c12610b4fea1aacefbb0431caad24b9ca0e4fe204d7e52"
           log=$(mktemp)
           fail=0
           for scheme in 0 1 2; do
