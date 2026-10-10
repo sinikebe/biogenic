@@ -131,8 +131,9 @@ organ's own key is its first variant, implicitly, and never leaves the catalogue
    tail faster than the speed cap -- fails net_probe's check of the caps until they
    move, which is a change to the referee's own limits and needs the false-positive
    runs of `docs/design/net-hardening.md` again (`CLAUDE.md`).
-8. **The seeded runs**: a gene the water or drift can make moves them (**Editing a
-   gene**).
+8. **The seeded runs**: every new key adds its column to the drop probe's lineage
+   pins, and a gene the water or drift can make moves what the water draws (**Editing
+   a gene**).
 9. **Run the checks, render it, and look.**
 
 **Two variants of one organ are two loci**, each with its own copies. If a body may
