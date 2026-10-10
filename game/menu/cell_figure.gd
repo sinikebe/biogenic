@@ -46,7 +46,7 @@ const TRAY_GAP := 8
 const LINES_GAP := 8
 const EXPLAIN_HEIGHT := 26.0
 const HINT_HEIGHT := 20.0
-const HINT_GAP := 6
+const HINT_GAP := Figure.HINT_GAP
 const ROW_HEIGHT := 19.0
 ## The switch, out to the right of the lines, where the pause screen has it.
 const TOGGLE_RECT := Rect2(16.0, -11.0, 96.0, 48.0)
@@ -69,6 +69,7 @@ var _gene: Label = null
 var _says: Label = null
 var _numbers: Control = null
 var _hint_row: HBoxContainer = null
+var _hint_rarity: Label = null
 var _hint_level: Label = null
 var _hint_gauge: Control = null
 var _hint: Label = null
@@ -171,6 +172,10 @@ func _build_lines() -> void:
 	_stack = VBoxContainer.new()
 	_stack.name = "Stack"
 	_stack.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	# **A row wider than the column grows both ways from its middle**, as the pause
+	# screen's `Stack` does (`grow_horizontal = 2`): a hint row with the rarity word
+	# in front can pass 560 px in French (rarity-word-ux.md §1.4), and stays centred.
+	_stack.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	_stack.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_stack.add_theme_constant_override(&"separation", LINES_GAP)
 	_lines.add_child(_stack)
@@ -205,6 +210,12 @@ func _build_lines() -> void:
 	_hint_row.add_theme_constant_override(&"separation", HINT_GAP)
 	_hint_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	_stack.add_child(_hint_row)
+	# **How rare the gene read is, at the row's head** (rarity-word-ux.md §5): the
+	# pause screen's row, read-only, and dimmed with the figure for a record.
+	_hint_rarity = _label("Rarity", Figure.HINT_SIZE, Figure.CAPTION_TINT)
+	_hint_rarity.custom_minimum_size = Vector2(0.0, ROW_HEIGHT)
+	_hint_rarity.hide()
+	_hint_row.add_child(_hint_rarity)
 	_hint_level = _label("Level", 14, Figure.LABEL_TINT)
 	_hint_level.hide()
 	_hint_row.add_child(_hint_level)
@@ -523,9 +534,11 @@ func _update_explain() -> void:
 	_says.text = "" if says.is_empty() else "· " + says
 
 
-## **The row under it** (normal_mode.gd's `_update_hint` and `_set_hint`): what
-## the slot is worth to a daughter, its odds -- with a level and its gauge in
-## front for a gene that levels.
+## **The row under it** (normal_mode.gd's `_update_hint` and `_set_hint`): how
+## rare the gene read is, then what the slot is worth to a daughter, its odds --
+## with a level and its gauge in front for a gene that levels -- by the rule the
+## pause screen's row follows ([method Figure.lay_hint_row]). The line above names
+## the same gene, so the word is that gene's.
 func _update_hint() -> void:
 	var slot := _reading()
 	var gene := _gene_at(slot)
@@ -537,17 +550,9 @@ func _update_hint() -> void:
 	elif gene != &"":
 		text = Figure.odds(int(_dna.get(gene, 0)), _show_numbers)
 	var grown: Progression = _levels.get(gene, null) as Progression if gene != &"" else null
-	var levelled := grown != null
-	_hint_level.visible = levelled
-	_hint_gauge.visible = levelled
-	_hint.size_flags_horizontal = Control.SIZE_FILL if levelled else Control.SIZE_EXPAND_FILL
-	_gauge_gene = gene if levelled else &""
-	if not levelled:
-		_hint.text = text
-		return
-	_hint_level.text = Figure.level_text(grown.level())
-	_hint_gauge.queue_redraw()
-	_hint.text = "· " + text if text != "" else ""
+	_gauge_gene = gene if grown != null else &""
+	Figure.lay_hint_row(_hint_rarity, gene, _hint_level, _hint_gauge,
+		Figure.level_text(grown.level()) if grown != null else "", _hint, text)
 
 
 ## **Its numbers** (normal_mode.gd's `_update_numbers`): the copies this body

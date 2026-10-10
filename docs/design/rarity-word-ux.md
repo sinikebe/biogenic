@@ -12,10 +12,10 @@ Today no gene is rare, and the first one arrives with the gene pass. The word is
 for that gene: a player who reads *rare* learns its look and can hunt the next one
 (§7 there).
 
-**Status: designed, prototyped and photographed; not built.** It was prototyped in a
-throwaway copy of the code at `cec8ff9`, with a stand-in for `rarity_of`: the born
-three and the nose common, every other gene uncommon, and any gene forced rare by an
-environment variable. Every frame in §6 was rendered at 1280x720 and 2400x1080, in
+**Status: built in phase 7-2 (§9).** It was designed, prototyped and photographed
+first, in a throwaway copy of the code at `cec8ff9`, with a stand-in for `rarity_of`:
+the born three and the nose common, every other gene uncommon, and any gene forced
+rare by an environment variable. Every frame in §6 was rendered at 1280x720 and 2400x1080, in
 English and French, under `--rendering-driver opengl3 --fixed-fps 60 --seed=12345`,
 and looked at. The prototype is not in the repository. `$N` below is the design
 session's notes folder (`scratchpad/genes/notes/ux7/`), which is not in the repository
@@ -364,3 +364,93 @@ choosing screens say how rare each gene is"*.
    target's breath (`beam-levels.md` §8.4) is an existing, quiet channel for it.
    It is not proposed now: the owner's answer names the screens, and the hunt
    works without it.
+
+---
+
+## 9. As built: phase 7-2, 2026-10-10
+
+Built on phase 7-1 and this spec's commit (`4fa6410`), in the files §7 lists, and as
+§0 to §5 say: of the 60 frames of poses the mockups shot, 59 are **the mockup's own
+frame, to the pixel**, and the 60th is a mockup that caught a tap lapsed (below). The
+frames are kept in the build session's notes (`scratchpad/genes/notes/p72w/shots/`),
+not in the repository, as the mock's were.
+
+| file | what it holds |
+|---|---|
+| `game/genes/rarity.gd` | `WORDS` and `MARKED`, beside the ladder, as §3 |
+| `game/normal/figure.gd` | `rarity_word()` and `rarity_tint()`; `lay_hint_row()`, §1.3's rule for all three screens; `HINT_GAP`, `HINT_SIZE` and `hint_row_width()`, the width of the row it lays out, which the lint measures by |
+| `game/normal/normal_mode.tscn`, `.gd` | §1.3's tree. `_update_explain()` keeps the gene the line names (`_named_gene`) and `_set_hint()` what the row prices, and both lay the row out again (`_lay_hint()`), so the order the two are said in does not matter. `_choose_say()` lays its row out for the locus's gene |
+| `game/menu/cell_figure.gd` | the word in its row, by the same function |
+| `game/i18n/biogenic.pot`, `fr.po` | the three words under `msgctxt "rarity"`, in French `commun`, `peu commun`, `rare`; the fork's hint `fonctionne comme niveau %d jusqu'à votre choix` |
+| `tools/i18n_pot.gd` | the pause row built whole and held to 576 px (`HINT_ROW_ROOM`), from the row's texts by their English (`HINT_ROW_LEVELLED`, `HINT_ROW_PLAIN`); `--check` fails on one the source no longer says |
+| `tools/gene_probe.gd` | a word for every class and none for a class there is not, each lowercase and in the template under its context, every marked class a class -- each shown failing on a table planted wrong -- and the French as a note |
+| `tools/looks_specimens.gd`, `tools/drive.gd` | the ringed eye `ocellusb` rare; `--rects=` names `Rarity`, `SaysRarity` and `SaysText` |
+| `game/i18n/README.md`, `game/genes/README.md` | the word and the row in the room table, the sentence about the rows corrected; the word in the playbook's **Rarity** |
+
+**What differs from §7, and why:**
+
+1. **The four warnings (`HINT_LOSES` and its three siblings) have 470 px, not 560.**
+   §7 item 7 lowered only the texts that share the row with a level; these share it
+   with the word alone, and the built row leaves them 470 beside the widest word. A note
+   saying 560 would mislead a translator, though the built row would catch the overflow.
+   The mouth's line keeps its 430, which is under the 470.
+2. **A cell's detailed view centres a row wider than its column.** Its `Stack` now grows
+   both ways, as the pause screen's does (`grow_horizontal = 2`); `set_anchors_preset`
+   alone had left it growing right. Measured with a scratch harness on the widest row
+   (a beam of two copies past level 10, in French, 574 px): centred on the column, 9 px
+   short of the switch. It would have sat 7 px right of centre, 2 px from it.
+3. **The choosing screen's `Text` spans its row and centres itself when it is alone**,
+   by the pause row's rule (§1.3 lists it `SIZE_FILL`, its state beside the word), so a
+   locus with no gene lays out as it always has: 0 px differ (`chooseempty`).
+4. **The word's labels translate nothing by themselves** (`auto_translate_mode`
+   disabled): the word is said under its context, and looked up again without it could
+   be another message.
+5. **The lint measures the level at 99**, as `HINT_LEVEL`'s own room does, not 20: the
+   digits are as wide.
+6. **The gap after the word is the row's 6 px**, as the gap after the gauge always was:
+   8 px of air before the first `·` after the word, 7 after the gauge, 5 before a `·`
+   inside the words. One `HBoxContainer` has one separation, and narrowing it would move
+   today's level and gauge, so it stays consistent with the level.
+
+**Measured on the build.** The lint's built row: English at most 477 px of 576, French
+574, which are §1.4's own numbers; on screen the French beam's row inks x 502..1074,
+10 px short of the switch's slab, which ends above it. Peak glyph luma at 1280x720 (§2):
+*uncommon* 115, *rare* 161, the name 136, the sentence 153, the odds 98. Nothing else
+moved: the seeded run's hash with an empty library under all three schemes
+(`7397a410`); all ten of `drop_probe`'s seeded-water pins; `Wire.RULES` (`843c9d81`)
+and `Wire.PROTOCOL` 8; `binary_version`; `project.godot`. It ships as content.
+
+**Rendered and judged**, every pose at 1280x720 and 2400x1080, in English and French,
+under `--rendering-driver opengl3 --fixed-fps 60` and the mockups' own commands: `now_` is
+the tree it was built on, `b_` the build, and `r_` the build with a gene forced rare in a
+scratch copy whose `rarity_of` answers rare for the organ named (never committed). Three
+renders each of `b_ringwait` and `b_chooseopen` differ by 0 px. **Against `now_`, every
+frame differs inside its hint row and nowhere else** -- the 96 of them but `loses`
+(below): 2,016 to 3,919 px at 1280x720, in y 589..603 on the pause screen (636..649
+with the numbers on, 664..677 in the tightest screen) and 633..647 on the choosing
+screen; 5,342 to 10,439 px at 2400x1080, in y 885..906 (954..975, 996..1017) and
+951..972. **Where nothing is named, nothing moves**: an empty slot (`pauseempty`) and
+an empty locus (`chooseempty`) are 0 px, at both shapes in both languages.
+
+| frame | what it shows | judged |
+|---|---|---|
+| `b_wait`, `b_toxin`, `b_common`, `b_beam`, `b_fork`, `b_chooseopen`, `b_choose`, `b_detail` | §6's frames, uncommon and common, as the mockups shot them | **passes**: each is its `m1_` frame to the pixel, in both languages and at both shapes |
+| `r_wait`, `r_waitnum`, `r_tight`, `r_beam7`, `r_choose`, `r_detail` | §6's rare frames, forced rare | **passes**: each is its `m1_` frame to the pixel |
+| `b_ringwait`, `b_ringbeam`, `b_ringchoose` | the ringed eye, rare by the catalogue's own rule for a variant: in hand, at level 7, and a daughter's | **passes**: *rare* found at a glance and *rare · level 7* one tint, and `ocellus · ringed`, in its family's violet, still leads |
+| `b_beam`, `b_fork`, French | the widest rows: 574 and 545 px | **passes**: clear of the switch, the fork's shorter French in |
+| `b_waitnum`, `b_tight` | numbers on; two tray rows and numbers on | **passes**: the row two lines lower, and `Act` where it was |
+| `b_mouth` | the mouth read: `common · the mouth · a daughter always wears it` | **passes** |
+| `b_loses2`, `r_loses2` | a ping in hand, armed over the sting: the warning | **passes**: the word is the sting's, uncommon and rare |
+| `b_record` | a cell that died, in its detailed view | **passes**: the word dims with the figure |
+| `b_pauseempty`, `b_chooseempty` | an empty slot and an empty locus read | **passes**: no word, 0 px against today |
+
+**Two things about shooting these, found on the way.** `loses`, the mockups' warning pose,
+catches the arm lapsed on a loaded machine: arming lapses on the wall clock
+(`ARM_TIMEOUT_MS`), and 0.8 s of game time can take longer than 4 s to render. Even
+`m1_loses`'s French frame was caught lapsed, and here so were some of today's and the
+build's: three of the eight `loses` frames, all at 1280x720, differ from today's beyond
+the row, one of the pair caught armed and the other lapsed. `loses2` takes the frame
+0.3 s after the tap, and catches it armed every time. And the first unpaused run in a
+fresh `user://` shows the steering line first, so the division's prompt fades in from
+another state and reads up to 4/255 brighter or darker: shoot from a `HOME` that has
+seen it, or throw that first frame away.

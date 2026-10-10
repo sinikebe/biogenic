@@ -200,6 +200,42 @@ const CELL_CAPTION_SIZE := 16
 ## Both are measured by the page's own code (`programs_page.gd`).
 const ROW_ROOM := 40
 const TRIGGER_LINE_ROOM := 230
+## **The pause screen's hint row, built whole** (docs/design/rarity-word-ux.md §1.4, §7):
+## the row under a gene's line -- how rare the gene is, then a level and its gauge for a
+## gene that levels, then the words (figure.gd's `lay_hint_row`) -- at 14 px, in the
+## 560 px column and 8 px more on each side: wider, it reaches the `numbers` switch at its
+## right, and a cell's detailed view lays the same row out the same way. Built with the
+## language's widest rarity word, its widest level (`level_text` at 99) and the gauge where
+## a level shares the row, and each of the row's texts with the widest words its ROOM
+## names in its placeholders, laid out by figure.gd's own `hint_row_width`. The texts are
+## the row's own, by their English: HINT_ROW_LEVELLED share it with a level -- the odds,
+## the numbers' odds and the fork's lines -- and HINT_ROW_PLAIN with the word alone -- the
+## mouth's and the warnings of a tap that writes over a gene. `--check` fails on one the
+## source no longer says, so a sentence reworded in the game is reworded here.
+const HINT_ROW_ROOM := 576
+const HINT_ROW_SIZE := 14
+const HINT_ROW_LEVELLED: Array[String] = [
+	"one copy · a daughter may not wear it",
+	"two copies · a daughter probably wears it",
+	"three copies · a daughter always wears it",
+	"%s · a daughter always wears it",
+	"%s · %s of daughters wear it",
+	"works as level %d until you choose",
+	"both ways start at the next level",
+	"costs the same to keep as %s",
+	"costs more to keep than %s",
+	"costs less to keep than %s",
+]
+const HINT_ROW_PLAIN: Array[String] = [
+	"the mouth · a daughter always wears it",
+	"%s leaves your dna · your body keeps it",
+	"%s leaves your dna",
+	"%s leaves your dna · level %d ends with this body",
+	"%s leaves your dna · its level %d is lost",
+]
+## The level a levelled row is measured at: the widest a level is said, as `HINT_LEVEL`'s
+## own ROOM measures it.
+const HINT_ROW_LEVEL := 99
 ## The scripts that build those lines, loaded only when a game catalog is being checked.
 const SCREEN_SCRIPTS := {
 	"stats": "res://game/normal/gene_stats.gd",
@@ -211,6 +247,8 @@ const SCREEN_SCRIPTS := {
 	"drops": "res://game/normal/drops.gd",
 	"cells": "res://game/normal/cells.gd",
 	"programs": "res://game/normal/programs_page.gd",
+	"figure": "res://game/normal/figure.gd",
+	"rarity": "res://game/genes/rarity.gd",
 }
 
 enum K { IDENT, STR, NAME, NUM, PUNCT }
@@ -379,6 +417,23 @@ func _collect() -> void:
 		elif not named[1] in _entries[key]["notes"]:
 			_entries[key]["notes"].append(named[1])
 	_check_rooms()
+	_check_hint_row()
+
+
+## **The hint row's texts are the game's** (HINT_ROW_LEVELLED, HINT_ROW_PLAIN): each one
+## a message the source says, and one with placeholders a ROOM that names what goes in
+## them, or the row would be measured with a sentence nobody is shown.
+func _check_hint_row() -> void:
+	for id: String in HINT_ROW_LEVELLED + HINT_ROW_PLAIN:
+		var e: Dictionary = _entries.get("\u0004" + id, {})
+		if e.is_empty():
+			_problems.append(("tools/i18n_pot.gd: the pause hint row is measured with \"%s\", which"
+				+ " the source no longer says: list the row's texts in HINT_ROW_LEVELLED and"
+				+ " HINT_ROW_PLAIN as the game says them now") % id)
+		elif _count_holes(id) > 0 and (not e.has("room") or (e["room"][2] as Array).is_empty()):
+			_problems.append(("%s: \"%s\" is said in the pause hint row, and its ROOM does not say"
+				+ " what goes in its placeholders, so the row cannot be measured with it") % [
+				e["refs"][0], _short(id)])
 
 
 ## **The names of the word tables the catalogue reads out of an organ's file**: its
@@ -1779,14 +1834,21 @@ func _lint_screens(result: Dictionary, shown: String, locale: String, translatio
 		_problem(result, shown, ("a line of the programs inspector's triggers is %d px wide in 14 px"
 			+ " type; the room is %d px: \"%s\"") % [ceili(float(trigger[0])), TRIGGER_LINE_ROOM,
 			_short(String(trigger[1]))], true)
+	var hint: Array = now["hint"]
+	if float(hint[0]) > HINT_ROW_ROOM:
+		_problem(result, shown, ("the pause screen's hint row is %d px wide in %d px type, built with"
+			+ " the widest rarity word and level; the room is %d px, and a wider row reaches the"
+			+ " numbers switch: \"%s\"") % [ceili(float(hint[0])), HINT_ROW_SIZE, HINT_ROW_ROOM,
+			_short(String(hint[1]))], true)
 	var rows: Array = now["numbers"]
 	var tightest := String((rows[0] as Array)[2]) if not rows.is_empty() else "none"
 	return ("built with the game's own code: numbers lines at most %d px of %d (%s), the pause caption"
 		+ " at most %d px of %d, a world's line at most %d px of %d, %s, an instinct's row %d px of"
-		+ " arc (%s, at least %d), the inspector's trigger lines at most %d px of %d") % [ceili(widest),
+		+ " arc (%s, at least %d), the inspector's trigger lines at most %d px of %d, the pause"
+		+ " hint row at most %d px of %d") % [ceili(widest),
 		NUMBERS_ROOM, tightest, ceili(caption), CAPTION_ROOM, ceili(float(line[0])), STATS_ROOM,
 		_cells_said(cells), floori(float(row[0])), row[1], ROW_ROOM, ceili(float(trigger[0])),
-		TRIGGER_LINE_ROOM]
+		TRIGGER_LINE_ROOM, ceili(float(hint[0])), HINT_ROW_ROOM]
 
 
 ## The composed lines in English, measured once, with the line that says so; a line that
@@ -1834,19 +1896,26 @@ func _english_screens() -> Dictionary:
 		print("[i18n] PROBLEM English: a trigger line is %d px wide; the room is %d px: \"%s\"" % [
 			ceili(float(trigger[0])), TRIGGER_LINE_ROOM, String(trigger[1])])
 		_english_problems += 1
+	var hint: Array = now["hint"]
+	if float(hint[0]) > HINT_ROW_ROOM:
+		print("[i18n] PROBLEM English: the pause hint row is %d px wide; the room is %d px: \"%s\"" % [
+			ceili(float(hint[0])), HINT_ROW_ROOM, String(hint[1])])
+		_english_problems += 1
 	print(("[i18n] the lines the game composes, in English: numbers lines at most %d px of %d,"
 		+ " the pause caption at most %d px of %d, a world's line at most %d px of %d, %s, an"
 		+ " instinct's row %d px of arc (%s, at least %d), the inspector's trigger lines at most %d px"
-		+ " of %d") % [ceili(widest), NUMBERS_ROOM, ceili(caption), CAPTION_ROOM,
-		ceili(float(line[0])), STATS_ROOM, _cells_said(cells), floori(float(row[0])), row[1],
-		ROW_ROOM, ceili(float(trigger[0])), TRIGGER_LINE_ROOM])
+		+ " of %d, the pause hint row at most %d px of %d") % [ceili(widest), NUMBERS_ROOM,
+		ceili(caption), CAPTION_ROOM, ceili(float(line[0])), STATS_ROOM, _cells_said(cells),
+		floori(float(row[0])), row[1], ROW_ROOM, ceili(float(trigger[0])), TRIGGER_LINE_ROOM,
+		ceili(float(hint[0])), HINT_ROW_ROOM])
 	return _english
 
 
 ## **Builds every line the game composes**, in the language the TranslationServer is set to,
 ## and returns the widest of each kind: `numbers`, one `[width, text, label]` per gene and
 ## line, widest first; `lead`, the widest `genome · <generation>`; `rest`, the widest
-## numbers clause after it; `line`, the widest world's line ([method _widest_drop_line]).
+## numbers clause after it; `line`, the widest world's line ([method _widest_drop_line]);
+## and `hint`, the pause screen's widest hint row ([method _widest_hint_row]).
 ## They are made by the game's own functions (gene_stats.gd, drops.gd) for
 ## every gene at every copy count, every level and way of a levelled gene, and every body
 ## that changes a number -- so a new gene, or a new tier, is covered without being named.
@@ -1969,8 +2038,11 @@ func _measure_screens() -> Dictionary:
 		return {}
 	var row: Array = page.call(&"row_room", ThemeDB.fallback_font)
 	var trigger: Array = page.call(&"trigger_line_room", ThemeDB.fallback_font)
+	var hint := _widest_hint_row()
+	if hint.is_empty():
+		return {}
 	return {"numbers": numbers, "lead": lead, "rest": rest, "line": line, "row": row,
-		"trigger": trigger, "cells": cells}
+		"trigger": trigger, "cells": cells, "hint": hint}
 
 
 ## **The widest line a world's row can say** (STATS_ROOM), `[width, text]`, built with the
@@ -1986,6 +2058,56 @@ func _widest_drop_line() -> Array:
 		lines.append(String(drops.call(&"age_text", seconds)))
 	lines.append_array(Array(drops.call(&"lines_of", {"empty": false, "file": false})))
 	return _widest(lines, STATS_SIZE)
+
+
+## **The widest the pause screen's hint row can be** (HINT_ROW_ROOM), `[width, text]`, in
+## the language of the moment: its widest rarity word (rarity.gd's `WORDS`, under their
+## context), and its widest level (figure.gd's `level_text`) and the gauge where a level
+## shares the row, with each of the row's texts at its widest ([method _said_now]), laid
+## out by figure.gd's own `hint_row_width`. Empty when a script will not load.
+func _widest_hint_row() -> Array:
+	var figure := _script("figure")
+	var rarity := _script("rarity")
+	if figure == null or rarity == null:
+		return []
+	var words: Variant = _script_const(rarity, "WORDS")
+	if not words is Dictionary or (words as Dictionary).is_empty():
+		return []
+	var word := ""
+	for english: Variant in (words as Dictionary).values():
+		var said := String(TranslationServer.translate(String(english), &"rarity"))
+		if _width_of(said, HINT_ROW_SIZE) > _width_of(word, HINT_ROW_SIZE):
+			word = said
+	var level := String(figure.call(&"level_text", HINT_ROW_LEVEL))
+	var widest: Array = [0.0, ""]
+	for levelled: bool in [true, false]:
+		var at_level := level if levelled else ""
+		var texts: Array[String] = HINT_ROW_LEVELLED if levelled else HINT_ROW_PLAIN
+		for id: String in texts:
+			var text := _said_now(id, HINT_ROW_SIZE)
+			var wide := float(figure.call(&"hint_row_width", ThemeDB.fallback_font, word,
+				at_level, text))
+			if wide > float(widest[0]):
+				widest = [wide, "%s · %s%s" % [word, (at_level + " ▬ · ") if levelled else "",
+					text]]
+	return widest
+
+
+## **[param id] as the language of the moment says it, at its widest**: translated, and its
+## placeholders filled with the widest words its ROOM names, in that language too -- as
+## [method _room_width] fills them for a catalog.
+func _said_now(id: String, size: int) -> String:
+	var said := String(TranslationServer.translate(id))
+	var e: Dictionary = _entries.get("\u0004" + id, {})
+	if _count_holes(id) == 0 or not e.has("room"):
+		return said
+	var fills: Array = e["room"][2]
+	var texts := {}
+	for fill: String in fills:
+		if _is_table(fill):
+			for one: String in _fill_ids(fill):
+				texts[one] = String(TranslationServer.translate(one))
+	return _filled(said, _fill_values(fills, size, texts))
 
 
 ## Every age the game says, a second past each count of minutes, hours and days to 999.

@@ -464,8 +464,11 @@ var library_at := Library.PATH
 ## **The line under the figure is a row now** (beam-levels.md §8.2): a levelled
 ## gene's level and its gauge in front of the words it always had. `Text` is
 ## that label, moved inside; the other two are hidden for every gene that does
-## not level, which is every gene but the beam.
+## not level, which is every gene but the beam. **And at its head, how rare the
+## gene the line above names is** (docs/design/rarity-word-ux.md §1): `Rarity`,
+## hidden where no gene is named.
 @onready var _hint_row: HBoxContainer = $Hud/Pause/Center/Columns/Genome/Lines/Stack/Hint
+@onready var _hint_rarity: Label = $Hud/Pause/Center/Columns/Genome/Lines/Stack/Hint/Rarity
 @onready var _hint_level: Label = $Hud/Pause/Center/Columns/Genome/Lines/Stack/Hint/Level
 @onready var _hint_gauge: Control = $Hud/Pause/Center/Columns/Genome/Lines/Stack/Hint/Gauge
 @onready var _genome_hint: Label = $Hud/Pause/Center/Columns/Genome/Lines/Stack/Hint/Text
@@ -487,7 +490,11 @@ var library_at := Library.PATH
 @onready var _choose_organ: Control = $Hud/Choosing/Says/Explain/Organ
 @onready var _choose_name: Label = $Hud/Choosing/Says/Explain/Gene
 @onready var _choose_line: Label = $Hud/Choosing/Says/Explain/Line
-@onready var _choose_hint: Label = $Hud/Choosing/Says/Hint
+## **The hint is a row of two** (rarity-word-ux.md §1.3): how rare the locus's gene
+## is, then the words it always had.
+@onready var _choose_hint_row: HBoxContainer = $Hud/Choosing/Says/Hint
+@onready var _choose_rarity: Label = $Hud/Choosing/Says/Hint/Rarity
+@onready var _choose_hint: Label = $Hud/Choosing/Says/Hint/Text
 ## The same two lines for a daughter's locus, between her line and her odds.
 @onready var _choose_numbers: Control = $Hud/Choosing/Says/Numbers
 @onready var _pause_tap: Control = $Hud/PauseTap
@@ -4826,30 +4833,34 @@ const ARM_TIMEOUT_MS := 4000
 ## one that is already in the DNA. %s is the short word of the gene that would be
 ## lost (such as `eat` or `ping`): keep %s as it is. "Your body keeps it" means
 ## this cell keeps the organ for the rest of its life, though its daughters will
-## not inherit it. The row is 560 px wide, with a word in place of %s.
-## ROOM: 560 px at 14 px with word
+## not inherit it. The rarity word of the gene that would be lost starts the row,
+## which leaves this 470 px, with a word in place of %s.
+## ROOM: 470 px at 14 px with word
 const HINT_LOSES := "%s leaves your dna · your body keeps it"
 ## TRANSLATORS: The same hint for a gene the DNA carries but the body does not
 ## wear, so there is no second half. %s is the gene's short word.
-## ROOM: 560 px at 14 px with word
+## ROOM: 470 px at 14 px with word
 const HINT_LOSES_CARRIED := "%s leaves your dna"
 ## **And over a gene that levels, the warning names the level** (beam-levels.md
 ## §8.2). The body keeps a gene it wears, level and all, for this life; its
-## daughters never get it. The English takes 355 px of the row's 560.
+## daughters never get it. The English takes 355 px of the 470 the row leaves it
+## beside the rarity word (rarity-word-ux.md §1.4).
 ##
 ## TRANSLATORS: As the hint above, for a gene that has a level (it grows with
 ## use). The first %s is the gene's short word, the %d the level. Keep both,
 ## in this order.
-## ROOM: 560 px at 14 px with word, 99
+## ROOM: 470 px at 14 px with word, 99
 const HINT_LOSES_LEVEL := "%s leaves your dna · level %d ends with this body"
 ## TRANSLATORS: Same, for a levelled gene the body does not wear. %s is the
 ## gene's short word, %d the level.
-## ROOM: 560 px at 14 px with word, 99
+## ROOM: 470 px at 14 px with word, 99
 const HINT_LOSES_LEVEL_CARRIED := "%s leaves your dna · its level %d is lost"
 
-## The row itself: the level, the gauge and the words, centred as one.
-const HINT_ROW_SEPARATION := 6
+## The row itself: the rarity word, the level, the gauge and the words, centred
+## as one. A word is as tall as the words beside it (rarity-word-ux.md §1.3).
+const HINT_ROW_SEPARATION := Figure.HINT_GAP
 const HINT_ROW_HEIGHT := 20.0
+const HINT_WORD_HEIGHT := 19.0
 
 ## **The verb line: what you can do about the slot you are reading.**
 ##
@@ -5030,6 +5041,16 @@ var _explain_tier := 0
 ## **Where that gene works**, the slot venom's sentence and numbers are read at
 ## (dna-slots-ux.md §3.6), or -1.
 var _explain_at := -1
+## **The gene the line names**, whose rarity starts the row under it
+## (rarity-word-ux.md §4): the one [method Figure.explain_name] is handed, which
+## is not [member _explain_gene] for a toxin in hand that is neither form yet, and
+## is the beam's throughout its fork, a way read or not. &"" where no gene is named.
+var _named_gene: StringName = &""
+## **What the row under it says**, as [method _set_hint] was last told: the words,
+## and the gene whose level and gauge go in front of them. The row is laid out
+## again from these whenever the line above names another gene.
+var _hint_said := ""
+var _hint_gene: StringName = &""
 ## **A refused `Shift`+arrow's line**, and the wall-clock msec it holds until.
 var _refusal_text := ""
 var _refusal_until := 0
@@ -5353,26 +5374,28 @@ func _odds(copies: int) -> String:
 ## -- when [param gene] levels -- its level and its gauge in front of it, the
 ## three centred as one group. A waiting gene that the body still wears a level
 ## for shows it too; one that has earned nothing has no progression and shows
-## none.
+## none. **How rare the gene the line above names is goes first**
+## (rarity-word-ux.md §1), whichever gene the row prices: [method _lay_hint].
 ##
 ## **Alone, the words span the row and centre themselves**, exactly as the
-## label they were did before the row existed -- so every screen with no level
-## on it lays out to the pixel as it always has. Beside a level they shrink to
-## their own width, and the row centres the group.
+## label they were did before the row existed -- so every screen with nothing
+## beside them lays out to the pixel as it always has. Beside the word or a
+## level they shrink to their own width, and the row centres the group.
 func _set_hint(text: String, gene: StringName = &"") -> void:
-	var grown: Progression = _genome.progression(gene) if gene != &"" else null
-	var levelled := grown != null
-	_hint_level.visible = levelled
-	_hint_gauge.visible = levelled
-	_genome_hint.size_flags_horizontal = Control.SIZE_FILL if levelled \
-		else Control.SIZE_EXPAND_FILL
-	_gauge_gene = gene if levelled else &""
-	if not levelled:
-		_genome_hint.text = text
-		return
-	_hint_level.text = Figure.level_text(grown.level())
-	_hint_gauge.queue_redraw()
-	_genome_hint.text = "· " + text if text != "" else ""
+	_hint_said = text
+	_hint_gene = gene
+	_lay_hint()
+
+
+## **The row, laid out again** from what [method _set_hint] was last told and the
+## gene the line above names ([member _named_gene]), by the rule all three screens
+## share ([method Figure.lay_hint_row]). Called by both, because the two lines are
+## said in either order and the row must end up reading the one named last.
+func _lay_hint() -> void:
+	var grown: Progression = _genome.progression(_hint_gene) if _hint_gene != &"" else null
+	_gauge_gene = _hint_gene if grown != null else &""
+	Figure.lay_hint_row(_hint_rarity, _named_gene, _hint_level, _hint_gauge,
+		Figure.level_text(grown.level()) if grown != null else "", _genome_hint, _hint_said)
 
 
 ## **The verb line**, kept in step with the hint because the two are read
@@ -5605,6 +5628,11 @@ func _update_explain() -> void:
 	_explain_gene = &"" if undecided else gene
 	_explain_at = at
 	_explain_tier = _copies_of(gene) if gene != &"" else 0
+	# **The word under the line is the named gene's** (rarity-word-ux.md §4) --
+	# the toxin in hand included, and the beam's while its cards are up -- so the
+	# row is laid out again for it, whatever the row itself is pricing.
+	_named_gene = gene
+	_lay_hint()
 	# The numbers read the same gene, through the same resolution, so the two
 	# lines never disagree about their subject (gene-stats.md §6.3).
 	_update_numbers()
@@ -6920,12 +6948,13 @@ const COST_SAME := "costs the same to keep"
 ## TRANSLATORS: The hint under the figure while the two cards are up, in 14 px
 ## type. A gene reached its fork (where it can grow one of two ways) but the
 ## choice was not made yet, so the levels so far count as one level until the
-## player chooses. %d is that level: keep %d. A level and a gauge share the row.
-## ROOM: 430 px at 14 px with 99
+## player chooses. %d is that level: keep %d. The gene's rarity word, a level
+## and a gauge share the row.
+## ROOM: 350 px at 14 px with 99
 const HINT_WORKS_AS := "works as level %d until you choose"
 ## TRANSLATORS: The same hint at the fork itself: whichever way is chosen, it
 ## only starts at the next level.
-## ROOM: 430 px at 14 px
+## ROOM: 350 px at 14 px
 const HINT_BOTH_NEXT := "both ways start at the next level"
 ## The verbs: arming is harmless, and taking is for good.
 ##
@@ -7032,12 +7061,14 @@ var _gauge_fill: StyleBoxFlat = null
 
 
 ## The row under the figure: the level's label and the gauge's box, beside the
-## words that were the whole row before (§8.2). The scene carries the same
-## numbers; this is what binds, as it is for the figure.
+## words that were the whole row before (§8.2), and the rarity word at its head
+## (rarity-word-ux.md §1.3). The scene carries the same numbers; this is what
+## binds, as it is for the figure.
 func _build_level_row() -> void:
 	_hint_row.add_theme_constant_override("separation", HINT_ROW_SEPARATION)
 	_hint_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	_hint_row.custom_minimum_size = Vector2(0.0, HINT_ROW_HEIGHT)
+	_bind_rarity(_hint_rarity)
 	_hint_level.add_theme_font_size_override("font_size", 14)
 	_hint_level.add_theme_color_override("font_color", Figure.LABEL_TINT)
 	_hint_level.hide()
@@ -7047,6 +7078,21 @@ func _build_level_row() -> void:
 	_hint_gauge.draw.connect(_draw_gauge)
 	_gauge_track = Figure.flat(Figure.GAUGE_TRACK, Figure.GAUGE_RADIUS)
 	_gauge_fill = Figure.flat(Figure.GAUGE_TRACK, Figure.GAUGE_RADIUS)
+
+
+## **A rarity word's label** (rarity-word-ux.md §1.3, §2): the row's own 14 px, as
+## tall as the words beside it, hidden until a gene is named. It takes no input --
+## no focus and no hover, so it needs no 48 px target -- and it is never translated
+## by itself: [method Figure.rarity_word] says it, under its context, and a word
+## looked up again without one could be another message's. English spells a common
+## gene and a common cell alike; French does not (`commun`, `commune`).
+func _bind_rarity(label: Label) -> void:
+	label.add_theme_font_size_override("font_size", Figure.HINT_SIZE)
+	label.add_theme_color_override("font_color", Figure.CAPTION_TINT)
+	label.custom_minimum_size = Vector2(0.0, HINT_WORD_HEIGHT)
+	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	label.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	label.hide()
 
 
 ## The gauge ([method Figure.draw_gauge]): a track, and the share of the level
@@ -7610,18 +7656,18 @@ func _cost_beside(way: int) -> String:
 			# TRANSLATORS: The hint under the figure while the two cards are up and a
 			# way is hovered or chosen, in 14 px type: what that way costs the cell
 			# in energy, compared with the other way. %s is the other way's name (see
-			# the cards' titles): keep %s. This one: they cost the same. A level and a
-			# gauge share the row.
-			# ROOM: 430 px at 14 px with way
+			# the cards' titles): keep %s. This one: they cost the same. The gene's
+			# rarity word, a level and a gauge share the row.
+			# ROOM: 350 px at 14 px with way
 			return tr("costs the same to keep as %s") % other
 		1:
 			# TRANSLATORS: As above: this way costs more than the other. %s is the
 			# other way's name.
-			# ROOM: 430 px at 14 px with way
+			# ROOM: 350 px at 14 px with way
 			return tr("costs more to keep than %s") % other
 	# TRANSLATORS: As above: this way costs less than the other. %s is the other
 	# way's name.
-	# ROOM: 430 px at 14 px with way
+	# ROOM: 350 px at 14 px with way
 	return tr("costs less to keep than %s") % other
 
 
@@ -8457,6 +8503,14 @@ func _build_choosing() -> void:
 		column.add_child(_make_choose_cap(CHOOSE_CAP_LOBES + _choose_loci(), -1))
 	_choose_says.offset_top = bottom + CHOOSE_SAYS_GAP
 	_choose_says.offset_bottom = _choose_says.offset_top + CHOOSE_SAYS_H
+	# **The hint is a row of two** (rarity-word-ux.md §1.3): the word and the
+	# words, centred as one, and as tall as the label it was, so `Says` lays out
+	# as it always has.
+	_choose_hint_row.add_theme_constant_override("separation", HINT_ROW_SEPARATION)
+	_choose_hint_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_choose_hint_row.custom_minimum_size = Vector2(0.0, HINT_WORD_HEIGHT)
+	_choose_hint_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_bind_rarity(_choose_rarity)
 	_choose_organ.custom_minimum_size = Figure.EXPLAIN_ORGAN_SIZE
 	_choose_organ.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_choose_organ.draw.connect(_draw_choose_organ)
@@ -8660,9 +8714,9 @@ func _choose_say() -> void:
 		_choose_name.text = ""
 		# A locus with nothing in it still has a direction to explain, which is
 		# what the dart under it is for -- or, inside, the one gene that goes
-		# there, as the pause screen's inside chip says it.
+		# there, as the pause screen's inside chip says it. No gene, no word.
 		_choose_line.text = "" if slot < 0 else Figure.explain_empty(slot)
-		_choose_hint.text = "" if slot < 0 else Figure.hint_empty(slot)
+		_say_choose_hint(gene, "" if slot < 0 else Figure.hint_empty(slot))
 		return
 	_choose_name.text = Figure.explain_name(gene)
 	_choose_name.add_theme_color_override("font_color",
@@ -8678,13 +8732,21 @@ func _choose_say() -> void:
 	# **The level goes in the line, not on the strands** (§8.6): both daughters
 	# carry the same level for every gene they share, so a mark on both strands
 	# would say it twice. `worn · level 7 · one copy · a daughter may not wear
-	# it`; the widest, 400 px, centres clear of both blocks.
+	# it`; the widest, 400 px, centres clear of both blocks -- and 491 with the
+	# word in front (rarity-word-ux.md §1.4).
 	var level := _choose_level(gene)
 	if level > 0:
-		_choose_hint.text = "%s · %s · %s" % [register, Figure.level_text(level),
-			odds]
+		_say_choose_hint(gene, "%s · %s · %s" % [register, Figure.level_text(level),
+			odds])
 	else:
-		_choose_hint.text = "%s · %s" % [register, odds]
+		_say_choose_hint(gene, "%s · %s" % [register, odds])
+
+
+## **The choosing screen's hint row** ([method Figure.lay_hint_row]): how rare
+## [param gene] is -- the gene her line names -- and then [param said], which
+## carries its own level.
+func _say_choose_hint(gene: StringName, said: String) -> void:
+	Figure.lay_hint_row(_choose_rarity, gene, null, null, "", _choose_hint, said)
 
 
 ## **The level a daughter's gene will have**, which is her mother's -- the level

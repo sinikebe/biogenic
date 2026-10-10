@@ -18,7 +18,8 @@ extends Node
 ## a bit reads in their shipped order; how rare each gene is (docs/design/
 ## gene-rarity.md §11.3) -- the ladder, a class on every live organ and none on a form,
 ## the habitats, a weight in the water for every variety of its pool and the commons'
-## share, what the water holds of each class and what its floor costs -- and the senses
+## share, what the water holds of each class and what its floor costs, and the word a
+## player reads for each class (rarity-word-ux.md §7) -- and the senses
 ## by channel and the gift by two tags; every stat table's length and first entry,
 ## every row, and a provider for every stat, live or retired; the founders' parts
 ## declared, and every declared part wired in a water cell and in yours; what each
@@ -791,6 +792,83 @@ func _rarity() -> void:
 		+ " arithmetic, would cost %s and is found") % [Drop.GENE_FLOOR_GAP, _percents(loads),
 		"" if not over else " -- " + CROWDED, _percents(crowd)],
 		not over and _over_budget(crowd))
+	_rarity_words()
+
+
+## **The word a player reads for each class** (docs/design/rarity-word-ux.md §3, §7
+## item 2): every class of the ladder has its word in rarity.gd's `WORDS`, one lowercase
+## word; every word there names a class; every class in `MARKED` is one; and each word is
+## in the template under the context `rarity`, as the screens ask for it. Each is shown
+## failing on tables planted wrong. Its French is said and never failed: a word not yet
+## translated shows in English (§8.3), as a gene word does.
+func _rarity_words() -> void:
+	var faults := _word_faults(Rarity.classes(), Rarity.WORDS, Rarity.MARKED)
+	var some := Rarity.classes()
+	var first: StringName = some[0]
+	var last: StringName = some[some.size() - 1]
+	var fewer := Rarity.WORDS.duplicate()
+	fewer.erase(last)
+	var more := Rarity.WORDS.duplicate()
+	more[&"probelegendary"] = "legendary"
+	var blank := Rarity.WORDS.duplicate()
+	blank[first] = ""
+	var loud := Rarity.WORDS.duplicate()
+	loud[first] = String(Rarity.WORDS[first]).to_upper()
+	var planted := {
+		"a class with no word": [fewer, Rarity.MARKED],
+		"a word for no class": [more, Rarity.MARKED],
+		"an empty word": [blank, Rarity.MARKED],
+		"a word with capitals": [loud, Rarity.MARKED],
+		"a marked class off the ladder": [Rarity.WORDS, [&"probelegendary"]],
+	}
+	var caught: Array[String] = []
+	for how: String in planted:
+		if not _word_faults(some, planted[how][0], planted[how][1]).is_empty():
+			caught.append(how)
+	var held := _template_ids()
+	var unlisted: Array[String] = []
+	for name: StringName in Rarity.WORDS:
+		if not held.has("rarity\u0004" + String(Rarity.WORDS[name])):
+			unlisted.append("\"%s\"" % Rarity.WORDS[name])
+	if not unlisted.is_empty():
+		faults.append("not in the template under the context rarity, so no translator sees it: "
+			+ ", ".join(unlisted))
+	_check(("a word for every class of the ladder and none for a class it has not, %s; marked"
+		+ " %s; each in the template under the context `rarity`%s; and %d tables planted wrong"
+		+ " are found (%s)") % [str(Rarity.WORDS.values()), str(Rarity.MARKED),
+		"" if faults.is_empty() else " -- NOT: " + "; ".join(faults), planted.size(),
+		", ".join(caught)], faults.is_empty() and caught.size() == planted.size())
+	var fr := load(FRENCH) as Translation
+	if fr == null:
+		print("[gene-probe] NOTE no French at %s, so no rarity word is checked for one" % FRENCH)
+		return
+	var said := PackedStringArray()
+	for name: StringName in Rarity.WORDS:
+		var french := String(fr.get_message(StringName(Rarity.WORDS[name]), &"rarity"))
+		said.append("%s %s" % [Rarity.WORDS[name], "\"%s\"" % french if not french.is_empty()
+			else "NOT TRANSLATED"])
+	print("[gene-probe] NOTE the rarity words in French: %s" % ", ".join(said))
+
+
+## **What is wrong with the words [param words] give the classes [param classes]**, and
+## the classes [param marked] marks (rarity-word-ux.md §3): a class with no word, or an
+## empty one; a word that is not lowercase; a word for a name that is no class; a marked
+## name that is no class.
+static func _word_faults(classes: Array, words: Dictionary, marked: Array) -> Array[String]:
+	var out: Array[String] = []
+	for name: Variant in classes:
+		var said: Variant = words.get(name)
+		if not said is String or (said as String).is_empty():
+			out.append("%s has no word" % name)
+		elif (said as String) != (said as String).to_lower():
+			out.append("%s's word \"%s\" is not lowercase" % [name, said])
+	for name: Variant in words:
+		if not classes.has(name):
+			out.append("a word for %s, which is no class" % name)
+	for name: Variant in marked:
+		if not classes.has(name):
+			out.append("%s is marked, and is no class" % name)
+	return out
 
 
 ## A row of a ladder: [param name], its weight and its floor.

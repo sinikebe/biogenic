@@ -144,7 +144,7 @@ catalogs"); the second is for a pull request that claims a complete language.
 | a placeholder lost, added, retyped or reordered; numbered and plain mixed; a `%` that is not a placeholder | |
 | a control character in a translation, other than a line feed: a raw 0x13 where a dash was meant is invisible in an editor and a box on screen | |
 | text wider than the room a message has, a placeholder measured with the widest word that can stand in it (game catalogs; see **Room**) | |
-| a gene's numbers line, the pause caption, a world's line in the world menu, or a cell's lines, wider than their room: the game's own code builds them in the language being checked | |
+| a gene's numbers line, the pause caption, a world's line in the world menu, a cell's lines, or the pause screen's hint row, wider than their room: the game's own code builds them in the language being checked | |
 | a message defined twice, or translated differently by the game's catalog and the launcher's for one language (the engine takes whichever loaded last) | |
 | a catalog none of whose messages is in its template (a launcher file in the game's folder, or the other way round) | |
 | a `.po` anywhere but the two folders (the game never reads it, and `addons/` and `ci/` are wiped by a sync) | |
@@ -242,7 +242,11 @@ The rule: **the English is the message id, and it goes through `tr()`**.
   default name is covered without being named. Their budgets are constants at the top
   of the tool (`NUMBERS_ROOM`, `CAPTION_ROOM`, `STATS_ROOM`, `CELL_LINE_ROOM`,
   `CELL_ROW_ROOM`, `CELL_THEN_ROOM`, `CELL_CAPTION_ROOM`), with the layout they come
-  from; change them with the layout.
+  from; change them with the layout. **The pause screen's hint row** is built the same
+  way (`HINT_ROW_ROOM`), though each of its texts keeps a room of its own: the row is
+  those texts beside the rarity word and a level, and the tool lists them by their
+  English (`HINT_ROW_LEVELLED`, `HINT_ROW_PLAIN`), so a sentence reworded there is
+  reworded in the tool too, or `--check` fails.
 - **Translate the template first, then fill in the values**: `tr("level %d") % n`,
   never `tr("level %d" % n)`.
 - **A whole sentence is one message.** Never join pieces of a sentence that were
@@ -311,6 +315,8 @@ tightest first:
 | a gene's numbers line (two to a gene), built whole | 650 px, 14 px type | 550 px | 18 % |
 | a sentence on the earshot screens, one line | 1180 px, 17 px type | 982 px | 20 % |
 | a cell's two lines on its row in "your cells", each built whole | 402 px, 15 px type | 330 px | 21 % |
+| the pause screen's hint row: `<rarity> · <level> ▬ · <odds>`, built whole with the widest rarity word and level | 576 px, 14 px type | 477 px | 21 % |
+| a gene's rarity word, `common`, `uncommon`, `rare` | 100 px, 14 px type | 78 px (`uncommon`) | 28 % |
 | "numbers", the switch | 80 px, 14 px type | 61 px | 31 % |
 | the replay's `leave` and speed buttons | 64 px, 17 px type | 44 px | 45 % |
 | a world's line in the world menu: its age | 280 px, 15 px type | 116 px | 140 % |
@@ -325,10 +331,14 @@ button has 420 px, and only the name the player typed may give way; its row's li
 402; and the detailed view's line about what pressing its view will do wraps onto two
 lines of 280 px and no more. The lint builds them all with the game's own code in the
 language it is checking, so **every phrase counts towards them, and each has to be about
-as short as its English**. The hint and
-instruction rows under the figure have 560 px (430 px when a level and a gauge share the
-row), and the English takes at most 355 of them, so they are roomy; they are measured
-with the widest gene word in every `%s`. **In short, a translation should be no longer
+as short as its English**. The
+instruction row under the figure has 560 px, and the English takes at most 382 of them, so
+it is roomy. **The hint row above it is built whole**: the gene's rarity word starts it,
+a gene that levels puts its level and gauge next, and then come its words, so they have
+350 px beside a level and 470 px beside the word alone; the lint builds the row with
+your widest rarity word and level and holds it to 576 px, the column and 8 px each side,
+short of the `numbers` switch (French takes 574). Both rows are measured with the widest
+gene word in every `%s`. **In short, a translation should be no longer
 than the English; French and German usually are, so the gene lines, the numbers phrases
 and the cards' lines are where the work is.**
 

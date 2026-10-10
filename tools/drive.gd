@@ -402,7 +402,8 @@ extends Node
 ##   --rects=<seconds>       print `get_global_rect()` for the pause screen's two
 ##                           columns and each of their groups, every slot chip
 ##                           and every waiting gene, and the choosing screen's
-##                           lines (gene-stats.md §3.2), once, at that time. The
+##                           lines (gene-stats.md §3.2) -- the two hint rows' parts,
+##                           the rarity words included -- once, at that time. The
 ##                           column is the one thing in this game measured in
 ##                           canvas pixels rather than judged by eye --
 ##                           docs/design/dna-body.md section 7 -- and a render
@@ -3181,9 +3182,11 @@ func _step_rects() -> void:
 		"Explain": base + "/Genome/Lines/Stack/Explain",
 		"Numbers": base + "/Genome/Lines/Stack/Numbers",
 		"Hint": base + "/Genome/Lines/Stack/Hint",
-		# The row's three parts (beam-levels.md §8.2): the level and its gauge
-		# show only for a gene that levels, and a hidden one prints its rect
-		# all the same -- read `visible` beside it.
+		# The row's parts (beam-levels.md §8.2): the level and its gauge show
+		# only for a gene that levels, and the rarity word only where a gene is
+		# named (rarity-word-ux.md §1.3); a hidden one prints its rect all the
+		# same -- read `visible` beside it.
+		"Rarity": base + "/Genome/Lines/Stack/Hint/Rarity",
 		"Level": base + "/Genome/Lines/Stack/Hint/Level",
 		"Gauge": base + "/Genome/Lines/Stack/Hint/Gauge",
 		"Text": base + "/Genome/Lines/Stack/Hint/Text",
@@ -3201,6 +3204,9 @@ func _step_rects() -> void:
 		"SaysExplain": "Hud/Choosing/Says/Explain",
 		"SaysNumbers": "Hud/Choosing/Says/Numbers",
 		"SaysHint": "Hud/Choosing/Says/Hint",
+		# Its hint is a row of two: the rarity word, and the words.
+		"SaysRarity": "Hud/Choosing/Says/Hint/Rarity",
+		"SaysText": "Hud/Choosing/Says/Hint/Text",
 	}
 	for name: String in paths:
 		var node := _run.get_node_or_null(paths[name])

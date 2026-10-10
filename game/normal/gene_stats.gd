@@ -149,15 +149,15 @@ static func odds_text(copies: int) -> String:
 		# TRANSLATORS: The odds line (14 px type) when the numbers switch is on: the
 		# copies of the gene in words (see "one copy"), a middle dot, then whether a
 		# daughter cell wears the gene. %s is "one copy", "two copies" or "three
-		# copies", already translated: keep it first. A level and a gauge may share
-		# the row, which is 560 px wide.
-		# ROOM: 430 px at 14 px with copies
+		# copies", already translated: keep it first. The gene's rarity word, a level
+		# and a gauge may share the row, which has 576 px.
+		# ROOM: 350 px at 14 px with copies
 		return String(TranslationServer.translate("%s · a daughter always wears it")) \
 			% how_many
 	# TRANSLATORS: The same line when the chance is not certain. The first %s is the
 	# copies in words, as above; the second is a percentage such as "55%", so the
 	# line reads "one copy · 55% of daughters wear it". Keep both %s in this order.
-	# ROOM: 430 px at 14 px with copies, 80%
+	# ROOM: 350 px at 14 px with copies, 80%
 	return String(TranslationServer.translate("%s · %s of daughters wear it")) \
 		% [how_many, Readout.format(chance, U.SHARE)]
 

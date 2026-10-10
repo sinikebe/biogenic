@@ -1351,6 +1351,45 @@ msgstr ""
 msgid "a full tank holds {} s, not {}"
 msgstr ""
 
+#. How often the water makes a gene, in one lowercase word at the start of the
+#. line under the gene's name on the pause and choosing screens: "uncommon ·
+#. two copies · a daughter probably wears it". Commonest first. It says how
+#. seldom the gene is found, not how good it is: a field guide's words. An
+#. adjective about the gene (in French "le gène": "commun", "peu commun",
+#. "rare").
+#. entry: common
+#. Room: at most 100 px in 14 px type; the English takes 60 px.
+#: game/genes/rarity.gd
+msgctxt "rarity"
+msgid "common"
+msgstr ""
+
+#. How often the water makes a gene, in one lowercase word at the start of the
+#. line under the gene's name on the pause and choosing screens: "uncommon ·
+#. two copies · a daughter probably wears it". Commonest first. It says how
+#. seldom the gene is found, not how good it is: a field guide's words. An
+#. adjective about the gene (in French "le gène": "commun", "peu commun",
+#. "rare").
+#. entry: uncommon
+#. Room: at most 100 px in 14 px type; the English takes 78 px.
+#: game/genes/rarity.gd
+msgctxt "rarity"
+msgid "uncommon"
+msgstr ""
+
+#. How often the water makes a gene, in one lowercase word at the start of the
+#. line under the gene's name on the pause and choosing screens: "uncommon ·
+#. two copies · a daughter probably wears it". Commonest first. It says how
+#. seldom the gene is found, not how good it is: a field guide's words. An
+#. adjective about the gene (in French "le gène": "commun", "peu commun",
+#. "rare").
+#. entry: rare
+#. Room: at most 100 px in 14 px type; the English takes 29 px.
+#: game/genes/rarity.gd
+msgctxt "rarity"
+msgid "rare"
+msgstr ""
+
 #. Not the word for English: the name of this catalog's own language, in that
 #. language, as a speaker writes it in a list -- "Français", "Deutsch",
 #. "Português (Brasil)". It is this language's row in the game's language
@@ -3110,9 +3149,9 @@ msgstr ""
 #. The hint under the figure, in 14 px type, about the gene being read: how
 #. many copies of it the cell's DNA holds (one to three) and so how likely a
 #. daughter cell is to wear it (to show it as an organ). The copies are words,
-#. not digits, on purpose. The row is 560 px wide and a level and a gauge
-#. share it, which leaves the text 430 px.
-#. Room: at most 430 px in 14 px type; the English takes 256 px.
+#. not digits, on purpose. The row has 576 px, and the gene's rarity word, a
+#. level and a gauge share it, which leaves the text 350 px.
+#. Room: at most 350 px in 14 px type; the English takes 256 px.
 #: game/normal/figure.gd
 msgid "one copy · a daughter may not wear it"
 msgstr ""
@@ -3120,9 +3159,9 @@ msgstr ""
 #. The hint under the figure, in 14 px type, about the gene being read: how
 #. many copies of it the cell's DNA holds (one to three) and so how likely a
 #. daughter cell is to wear it (to show it as an organ). The copies are words,
-#. not digits, on purpose. The row is 560 px wide and a level and a gauge
-#. share it, which leaves the text 430 px.
-#. Room: at most 430 px in 14 px type; the English takes 279 px.
+#. not digits, on purpose. The row has 576 px, and the gene's rarity word, a
+#. level and a gauge share it, which leaves the text 350 px.
+#. Room: at most 350 px in 14 px type; the English takes 279 px.
 #: game/normal/figure.gd
 msgid "two copies · a daughter probably wears it"
 msgstr ""
@@ -3130,9 +3169,9 @@ msgstr ""
 #. The hint under the figure, in 14 px type, about the gene being read: how
 #. many copies of it the cell's DNA holds (one to three) and so how likely a
 #. daughter cell is to wear it (to show it as an organ). The copies are words,
-#. not digits, on purpose. The row is 560 px wide and a level and a gauge
-#. share it, which leaves the text 430 px.
-#. Room: at most 430 px in 14 px type; the English takes 275 px.
+#. not digits, on purpose. The row has 576 px, and the gene's rarity word, a
+#. level and a gauge share it, which leaves the text 350 px.
+#. Room: at most 350 px in 14 px type; the English takes 275 px.
 #: game/normal/figure.gd
 msgid "three copies · a daughter always wears it"
 msgstr ""
@@ -3265,9 +3304,9 @@ msgstr[1] ""
 #. The odds line (14 px type) when the numbers switch is on: the copies of the
 #. gene in words (see "one copy"), a middle dot, then whether a daughter cell
 #. wears the gene. %s is "one copy", "two copies" or "three copies", already
-#. translated: keep it first. A level and a gauge may share the row, which is
-#. 560 px wide.
-#. Room: at most 430 px in 14 px type, measured with your widest copies phrase
+#. translated: keep it first. The gene's rarity word, a level and a gauge may
+#. share the row, which has 576 px.
+#. Room: at most 350 px in 14 px type, measured with your widest copies phrase
 #. in place of the placeholders; the English takes 275 px.
 #: game/normal/gene_stats.gd
 #, c-format
@@ -3277,7 +3316,7 @@ msgstr ""
 #. The same line when the chance is not certain. The first %s is the copies in
 #. words, as above; the second is a percentage such as "55%", so the line
 #. reads "one copy · 55% of daughters wear it". Keep both %s in this order.
-#. Room: at most 430 px in 14 px type, measured with your widest copies phrase
+#. Room: at most 350 px in 14 px type, measured with your widest copies phrase
 #. and 80% in place of the placeholders; the English takes 263 px.
 #: game/normal/gene_stats.gd
 #, c-format
@@ -3505,8 +3544,9 @@ msgstr ""
 #. already in the DNA. %s is the short word of the gene that would be lost
 #. (such as `eat` or `ping`): keep %s as it is. "Your body keeps it" means
 #. this cell keeps the organ for the rest of its life, though its daughters
-#. will not inherit it. The row is 560 px wide, with a word in place of %s.
-#. Room: at most 560 px in 14 px type, measured with your widest gene word in
+#. will not inherit it. The rarity word of the gene that would be lost starts
+#. the row, which leaves this 470 px, with a word in place of %s.
+#. Room: at most 470 px in 14 px type, measured with your widest gene word in
 #. place of the placeholders; the English takes 293 px.
 #: game/normal/normal_mode.gd
 #, c-format
@@ -3515,7 +3555,7 @@ msgstr ""
 
 #. The same hint for a gene the DNA carries but the body does not wear, so
 #. there is no second half. %s is the gene's short word.
-#. Room: at most 560 px in 14 px type, measured with your widest gene word in
+#. Room: at most 470 px in 14 px type, measured with your widest gene word in
 #. place of the placeholders; the English takes 157 px.
 #: game/normal/normal_mode.gd
 #, c-format
@@ -3525,7 +3565,7 @@ msgstr ""
 #. As the hint above, for a gene that has a level (it grows with use). The
 #. first %s is the gene's short word, the %d the level. Keep both, in this
 #. order.
-#. Room: at most 560 px in 14 px type, measured with your widest gene word and
+#. Room: at most 470 px in 14 px type, measured with your widest gene word and
 #. 99 in place of the placeholders; the English takes 355 px.
 #: game/normal/normal_mode.gd
 #, c-format
@@ -3534,7 +3574,7 @@ msgstr ""
 
 #. Same, for a levelled gene the body does not wear. %s is the gene's short
 #. word, %d the level.
-#. Room: at most 560 px in 14 px type, measured with your widest gene word and
+#. Room: at most 470 px in 14 px type, measured with your widest gene word and
 #. 99 in place of the placeholders; the English takes 282 px.
 #: game/normal/normal_mode.gd
 #, c-format
@@ -3757,8 +3797,9 @@ msgstr ""
 #. The hint under the figure while the two cards are up, in 14 px type. A gene
 #. reached its fork (where it can grow one of two ways) but the choice was not
 #. made yet, so the levels so far count as one level until the player chooses.
-#. %d is that level: keep %d. A level and a gauge share the row.
-#. Room: at most 430 px in 14 px type, measured with 99 in place of the
+#. %d is that level: keep %d. The gene's rarity word, a level and a gauge
+#. share the row.
+#. Room: at most 350 px in 14 px type, measured with 99 in place of the
 #. placeholders; the English takes 229 px.
 #: game/normal/normal_mode.gd
 #, c-format
@@ -3767,7 +3808,7 @@ msgstr ""
 
 #. The same hint at the fork itself: whichever way is chosen, it only starts
 #. at the next level.
-#. Room: at most 430 px in 14 px type; the English takes 218 px.
+#. Room: at most 350 px in 14 px type; the English takes 218 px.
 #: game/normal/normal_mode.gd
 msgid "both ways start at the next level"
 msgstr ""
@@ -3791,8 +3832,9 @@ msgstr ""
 #. The hint under the figure while the two cards are up and a way is hovered
 #. or chosen, in 14 px type: what that way costs the cell in energy, compared
 #. with the other way. %s is the other way's name (see the cards' titles):
-#. keep %s. This one: they cost the same. A level and a gauge share the row.
-#. Room: at most 430 px in 14 px type, measured with your widest way name in
+#. keep %s. This one: they cost the same. The gene's rarity word, a level and
+#. a gauge share the row.
+#. Room: at most 350 px in 14 px type, measured with your widest way name in
 #. place of the placeholders; the English takes 221 px.
 #: game/normal/normal_mode.gd
 #, c-format
@@ -3800,7 +3842,7 @@ msgid "costs the same to keep as %s"
 msgstr ""
 
 #. As above: this way costs more than the other. %s is the other way's name.
-#. Room: at most 430 px in 14 px type, measured with your widest way name in
+#. Room: at most 350 px in 14 px type, measured with your widest way name in
 #. place of the placeholders; the English takes 211 px.
 #: game/normal/normal_mode.gd
 #, c-format
@@ -3808,7 +3850,7 @@ msgid "costs more to keep than %s"
 msgstr ""
 
 #. As above: this way costs less than the other. %s is the other way's name.
-#. Room: at most 430 px in 14 px type, measured with your widest way name in
+#. Room: at most 350 px in 14 px type, measured with your widest way name in
 #. place of the placeholders; the English takes 200 px.
 #: game/normal/normal_mode.gd
 #, c-format

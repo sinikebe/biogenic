@@ -23,10 +23,14 @@ const Kinds := preload("res://game/genes/kinds.gd")
 ## **The variants**: an organ, by a stat or a tag that finds it, and its variants'
 ## entries -- each its own key, order and accent, and a strain its dose and forms.
 ## The organ as shipped stays its own file's, so each copy holds only the variants.
+## **The ringed eye is rare** (docs/design/rarity-word-ux.md §7 item 8), a rare kind of
+## an uncommon organ: no gene in today's water is rare, so this is how the screens' rare
+## word is shot (`tools/drive.tscn -- --specimens=1 --sample=ocellusb`), through the
+## catalogue's own rule for a variant -- the rarer of its organ's class and its own.
 const VARIANTS: Array = [
 	[&"beam_range", [
 		{"variant": &"ringed", "key": &"ocellusb", "order": 950, "born": 0,
-			"look": {"accent": Kinds.MARK_RING}},
+			"look": {"accent": Kinds.MARK_RING}, "water": {"rarity": &"rare"}},
 		{"variant": &"keeled", "key": &"ocellusc", "order": 951, "born": 0,
 			"look": {"accent": Kinds.MARK_DIAMOND}}]],
 	[&"light", [

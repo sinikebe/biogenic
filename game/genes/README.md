@@ -20,7 +20,7 @@ other systems ask.
 | `gene.gd` | The shape of one organ: every field, its default, who reads it. Read it before writing an organ. |
 | `catalogue.gd` | The index (`ORGANS`, one `preload` per organ file) and every question asked of a gene by key. `SHIPPED_ORDERS` pins the order four lists shipped in; the gene pass never edits it. |
 | `stats.gd` | One row per stat: its value with no provider, which way is better, how providers combine, its unit, whether the referee judges it, whether the host decides a contact by it, the group a mechanic reads it in. |
-| `rarity.gd` | The ladder a gene's `water.rarity` names a row of -- `common`, `uncommon`, `rare` -- each class's weight in the water's draw and the living carriers the drop's floor keeps of it, and the share of the drifters' draw the commons always hold. A class is a row: nothing else names one. |
+| `rarity.gd` | The ladder a gene's `water.rarity` names a row of -- `common`, `uncommon`, `rare` -- each class's weight in the water's draw and the living carriers the drop's floor keeps of it, and the share of the drifters' draw the commons always hold. A class is a row: nothing else names one. Beside it, the word a player reads for each class (`WORDS`) and the classes the screens mark (`MARKED`). |
 | `body_plan.gd` | The slots: how many, where, what kind, when earned. |
 | `organs/<organ>.gd` | One organ, its variants and their forms, its words, its look and its numbers on the pause screen. `rhabdom` and `statocyst` are retired. |
 
@@ -409,6 +409,12 @@ retuned when a gene arrives, however many do.
 - **The floor keeps every variety at its class's count** -- two living carriers of a
   common or uncommon one, one of a rare one -- the one short longest first, within a
   budget of one drifter in four. It is a net, not a source.
+- **A player reads the class**, in one word at the head of the row under the gene's
+  line on the pause and choosing screens and a cell's detailed view
+  (`docs/design/rarity-word-ux.md`): `common`, `uncommon` or `rare`, `rarity.gd`'s
+  `WORDS`, and *rare* a step brighter. A new organ brings no word for it. A fourth class
+  brings its word, under the context `rarity`, and its French; the gene probe fails a
+  class with no word.
 - **The probe's printout goes in the pull request**: the gene probe's `NOTE the water
   by class` line -- how many varieties of each class, each one's drifters in a
   newborn's, a sighted and a fully sighted player's drop, the senses' share of the draw
