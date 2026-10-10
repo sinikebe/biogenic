@@ -147,6 +147,12 @@ sentence with no article. Measured in the game's own font
 
 ### 2.1 Colour: one hue a strain
 
+> **Superseded by `gene-looks.md` §3.3** (genes as data, phase 6, 2026-10-05):
+> every strain wears the toxin's orange, its family's, in both its forms, and is
+> told by its beads -- §2.6's discs, diamonds and rings, a variant's accent. Lime,
+> ice and pale moon are gone, and a load is drawn in the hue of the organ that
+> delivered it.
+
 ```gdscript
 # cilia.gd, HUES -- both forms of a strain wear its hue
 &"veneneux": Color(0.84, 0.98, 0.22),   # poison, corrosive -- lime, 71 deg (was 128)

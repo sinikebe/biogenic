@@ -42,8 +42,10 @@ func _init() -> void:
 	order = 14
 	provides = {&"store": STORE_BY_TIER}
 	water = {"weight": 2, "drifter": true}
-	# **Its look** (gene-catalogue.md §7.1): a tuft of two.
-	look = {"shape": TUFT, "hue": Color(0.44, 0.58, 1.00), "count": 2}  # store, 232 deg
+	# **Its look** (gene-looks.md §6): a clear bubble under the skin, one for each
+	# copy. Metabolism's shade 0.
+	family = METABOLISM
+	look = {"shape": ORGANELLE, "shade": 0, "form": Kinds.FORM_BUBBLE}
 
 
 ## **Its numbers on the pause screen** (gene.gd's `lines`): how much the tank holds.

@@ -76,7 +76,7 @@ const GIFT_TIER := 1
 #
 # **A gene that is not in the catalogue is still a gene.** `dominant_of` ranks it
 # after every known one and `tier_of` is a `.get`, so a `{gene: tier}` map that
-# names one keeps it, pays upkeep on it and draws it in cilia.gd's reserved hue.
+# names one keeps it, pays upkeep on it and draws it in cilia.gd's UNKNOWN_TINT.
 # Nothing is silently dropped from a genome here.
 
 # --- Places and forms (docs/design/dna-slots.md §2, §3) -------------------------

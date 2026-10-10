@@ -72,9 +72,12 @@ func _init() -> void:
 	provides = {&"dash_speed": DASH_SPEED_BY_TIER, &"dash_cost": DASH_COST_BY_TIER}
 	water = {"weight": 2, "drifter": true}
 	declares = {"out": [{"name": &"dash", "claims": [&"dash"]}]}
-	# **Its look** (gene-catalogue.md §7.1): a tuft of five, in the rose cilia.gd
-	# held in reserve (genes-and-cilia.md §4.4).
-	look = {"shape": TUFT, "hue": Color(0.94, 0.42, 0.68), "count": 5}  # dash, 333 deg
+	# **Its look** (gene-looks.md §6): a coil, a contractile spring -- which is what a
+	# myoneme is, Vorticella's stalk -- that draws up and lets go: a dash is that
+	# spring released. A bold zigzag, never small loops: at body size loops read as
+	# beads, and beads mean armed.
+	family = MOVING
+	look = {"shape": COIL}
 
 
 ## **Its numbers on the pause screen** (gene.gd's `lines`): how hard a dash bursts, how

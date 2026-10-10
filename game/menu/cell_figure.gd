@@ -517,7 +517,7 @@ func _update_explain() -> void:
 		_gene.text = ""
 		_says.text = "" if slot == SLOT_NONE else Figure.explain_empty(slot)
 		return
-	_gene.text = GenomeNode.name_of(gene)
+	_gene.text = Figure.explain_name(gene)
 	_gene.add_theme_color_override(&"font_color", Color(Cilia.hue(gene), Figure.EXPLAIN_NAME_ALPHA))
 	var says := Figure.explains(gene, slot, _path_of(gene))
 	_says.text = "" if says.is_empty() else "· " + says

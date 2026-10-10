@@ -51,10 +51,11 @@ func _init() -> void:
 	# that fills up with exotica before it has a mouth is a run that cannot eat.
 	water = {"weight": 4, "drifter": true}
 	born = 1
-	# **Its look** (gene-catalogue.md §7.1): two oars, five strokes a side, on both
-	# flanks whatever slot holds it. Five strokes on its tile, 13 px long.
-	look = {"shape": OARS, "hue": Color(0.36, 0.62, 0.98), "count": 5,  # turn, 216 deg
-		"tile_count": 5, "tile_length": 13.0}
+	# **Its look** (gene-looks.md §6): oars, rowing strokes with a knee, on both flanks
+	# whatever slot holds it -- the kind's defaults are the oars it always drew -- in
+	# moving's sky blue.
+	family = MOVING
+	look = {"shape": OARS}
 
 
 ## **Its numbers on the pause screen** (gene.gd's `lines`): how fast it turns, and what

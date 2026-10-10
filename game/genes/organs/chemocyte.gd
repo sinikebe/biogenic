@@ -82,13 +82,10 @@ func _init() -> void:
 	channel = SMELL
 	declares = {"in": [{"name": &"smell", "bearing": false,
 		"values": {&"level": &"level"}}]}
-	# **Its look** (gene-catalogue.md §7.1): the nose owns the scent band, and the
-	# scent band has been nutrient green since Phase 1 -- so the gene that grants it
-	# is a green, in the one wide gap the wheel still had (97 to 136). Same argument
-	# as the axoneme's: a gene whose whole job is one existing signal wears that
-	# signal's family. A chemoreceptor is a *field* of pores, so it wears the
-	# densest tuft in the water -- 8 is the rendered ceiling (plastid.gd).
-	look = {"shape": TUFT, "hue": Color(0.405, 1.00, 0.30), "count": 8}  # smell, 111 deg
+	# **Its look** (gene-looks.md §6): forked bristles, a chemoreceptor's pores, over
+	# its pigment.
+	family = SENSING
+	look = {"shape": TUFT, "tip": Kinds.TIP_FORK}
 
 
 ## **Its numbers on the pause screen** (gene.gd's `lines`): how far it smells, and how

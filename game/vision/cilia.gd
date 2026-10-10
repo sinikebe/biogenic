@@ -39,28 +39,23 @@ static var _home_slots: Array[int] = BodyPlan.home_slots()
 static var _home_genes: Array[StringName] = BodyPlan.home_genes()
 static var _plan_arcs: Array[Vector2] = BodyPlan.arcs()
 
-# --- Palette (§4.4) ---------------------------------------------------------
-# A new gene hue must sit >= 30 degrees from every other gene hue and >= 40
-# degrees from self teal and threat red. Feed breaks the first rule on purpose:
-# the mouth *is* nutrition and the taste lobe is already that green.
+# --- Palette: families (docs/design/gene-looks.md §1) -------------------------
+# Colour shows the family, shape shows the organ, the pause screen names the exact
+# gene (the owner, 2026-10-04). Five families, each a band of the wheel and a way of
+# being built: an organ's hue is one of its family's three shades, and two organs of
+# one family are told apart by their kind (`kinds.gd`), never by colour.
 
-## **Gene identity, one hue used in four places**: the cilia on your body, the
-## cilia on the cell that carries it, the ingest flood at the instant you eat it,
-## and the slot on the genome strip. No legend, no lookup. **Each is its organ
-## file's** (`look.hue`, gene-catalogue.md §7.1), read through the catalogue's
-## looks, which this file holds as its own ([member _looks]).
-## **§4.4's 30-degree separation rule is broken there, deliberately, and it had
-## to be.** The rule was written for adding *one* gene to four. Sixteen genes
-## cannot sit 30 degrees apart on a wheel that also forbids 40 degrees either
-## side of self teal and threat red -- that leaves about 200 usable degrees, so
-## the real spacing is 12. What still carries identity is what §4.4 said carries
-## it when colour fails: **shape**. Every gene has its own stroke count on the
-## body and on the tile (`look.count`), and every tile is labelled with a word.
-## The hue is now the coarse channel, not the only one.
-##
-## What is *not* relaxed: nothing sits within 25 degrees of self teal (168) or
-## of threat red (355), because those two are the only colours in the game whose
-## meaning is a relationship rather than a name. The gene probe holds both.
+## **Gene identity, one hue used in four places**: the organ on your body, the
+## organ on the cell that carries it, the ingest flood at the instant you eat it,
+## and the slot on the genome strip. No legend, no lookup. **Each is its family's**
+## (`families.gd`): the shade its organ file's look picks, worked out by the
+## catalogue and read through its looks, which this file holds as its own ([member
+## _looks]). So the hue says the family -- violet a sense, orange armed or plated,
+## gold inside -- and the **kind** says the organ: a lens or forks, darts or plates,
+## a solid body or a clear one. Measured in OKLCH and held by the gene probe, every
+## band stays at least 30 degrees from self teal and threat red, because those two
+## are the only colours in the game whose meaning is a relationship rather than a
+## name (gene-looks.md §1.3).
 static var _looks: Dictionary = Catalogue.looks()
 ## **Each key's hue and each key's shape** (the catalogue's `hues` and
 ## `shape_by_key`), and **the live keys of each shape** (its `shapes`), held as the
@@ -69,13 +64,17 @@ static var _looks: Dictionary = Catalogue.looks()
 static var _hues: Dictionary = Catalogue.hues()
 static var _shape_of: Dictionary = Catalogue.shape_by_key()
 static var _shaped: Dictionary = Catalogue.shapes()
-## The shapes this file draws by (gene.gd).
+## The kinds this file draws by (`kinds.gd`; gene.gd).
+const Kinds := Catalogue.Kinds
 const MAT := Catalogue.MAT
 const OARS := Catalogue.OARS
 const LASH := Catalogue.LASH
+const COIL := Catalogue.COIL
+const TUFT := Catalogue.TUFT
+const LENS := Catalogue.LENS
 const SPINES := Catalogue.SPINES
-## The shapes drawn on arcs of their own, whatever slot holds them: gene.gd's one list.
-const HOME_SHAPES := Catalogue.HOME_SHAPES
+const PLATES := Catalogue.PLATES
+const ORGANELLE := Catalogue.ORGANELLE
 ## An empty look: what a gene this build does not know has -- a retired one has the
 ## catalogue's own empty look -- and no keys of a shape nothing is drawn as.
 const NO_LOOK := {}
@@ -86,27 +85,16 @@ const NO_KEYS: Array[StringName] = []
 ## dictionary rather than a fresh `{}` per organ per body per frame.
 const NO_EYE := {}
 
-## Held for the next gene, in wheel order, so a later phase does not have to
-## re-derive the separation rule. An unknown gene draws in the first of these
-## rather than in nothing at all -- a body with an invisible organ would be a
-## body the player cannot read, which is worse than a body in a strange colour.
-##
-## **That fallback is now load-bearing rather than defensive.** `rhabdom` was
-## retired (three-senses.md §8 row 2), so a `{gene: tier}` map that still names
-## it -- a dev harness's `--genome=`, a build older than this one -- reaches
-## [method hue_of] with no entry and draws indigo. It is the wrong colour for
-## a gene that no longer exists, and it is a visible organ on a readable body,
-## which is the trade this list was written for.
-##
-## **72 degrees is free again**, which is where `rhabdom`'s yellow-green sat,
-## **and so is 202**, `statocyst`'s sky blue: the owner retired that one too, on
-## 2026-09-28, and a map that still names it draws indigo the same way. Neither
-## is added below because these two are in wheel order and a third entry would
-## change which colour an unknown gene gets.
-const RESERVED_HUES: Array[Color] = [
-	Color(0.48, 0.42, 0.95),  # indigo, 250 deg
-	Color(0.94, 0.42, 0.68),  # rose, 333 deg
-]
+## **A gene this build does not know** -- a later content's, arriving over an older
+## binary, or a retired one that kept no look -- is drawn rather than dropped: **a
+## plain tuft in this tint** (gene-looks.md §2.5). Pale, low in chroma and in no
+## family, so an unknown gene is never passed off as a sense, a mover or a weapon --
+## the indigo it used to take now sits inside the sensing band. A body with an
+## invisible organ would be a body the player cannot read, which is worse than a body
+## with an organ in no colour of its own.
+const UNKNOWN_TINT := Color(0.78, 0.84, 0.82)
+## That plain tuft: the tuft kind's defaults over a pigment, resolved once.
+static var UNKNOWN_LOOK: Dictionary = _frozen(Kinds.resolved({"shape": Kinds.TUFT}))
 
 ## Self, and everything the cell is made of. Also in vision.gd and (as a
 ## Vector3) in signal_bus.gd: it is the launcher's rim colour, and all three
@@ -258,14 +246,11 @@ static func slot_bearing(slot: int) -> float:
 # readable and the gape does not, which is the right way round, because the
 # gape is what decides the encounter and the tier is only how it got that way.
 
-## A tuft's strokes where its look gives no count: an unknown gene's, a retired
-## one's. Every organ's own count is its file's (`look.count`; the oars' is per
-## side).
-const COUNT_EARNED := 4
-
-const LEN_CYTOSTOME := 0.27
-const LEN_CIRRUS := 0.34
-const LEN_FLAGELLUM := 0.62
+## **The home organs' counts and lengths are their kinds' defaults** (`kinds.gd`:
+## the mat's 15 strokes of 0.27, the oars' 5 of 0.34 with a knee at 0.62 bent 34
+## degrees, the lash's 6 of 0.62 swinging 0.26), so a born body draws exactly what
+## it drew before there were kinds. What stays here is each kind's ink and width,
+## and its beat. An earned stroke's length, a tuft's, is the tile's measure.
 const LEN_EARNED := 0.30
 
 const WIDTH_CYTOSTOME := 1.3
@@ -291,9 +276,6 @@ const CYTOSTOME_CURVE := 0.40
 const CIRRUS_HZ := 2.4
 const CIRRUS_WAVE_U := 0.9
 const CIRRUS_SWING_DEG := 30.0
-## The bend in the oar, past the shaft.
-const CIRRUS_KNEE := 0.62
-const CIRRUS_BEND_DEG := 34.0
 ## **The cirrus leans with the steer**: the outboard side of the turn works
 ## harder. A motion cue, not a still-frame cue -- it does not show in a
 ## screenshot and is not claimed to.
@@ -303,7 +285,6 @@ const FLAGELLUM_POINTS := 6
 const FLAGELLUM_WAVE_V := 3.0
 const FLAGELLUM_WAVE_HZ := 5.2
 const FLAGELLUM_WAVE_U := 0.45
-const FLAGELLUM_LASH := 0.26
 ## **A tail held still is drawn still** (docs/design/automation.md §8.1): its
 ## wave stops travelling and its lash goes slack over this many seconds, and
 ## comes back as fast when it is let go -- so a held tail reads as a body at
@@ -363,11 +344,12 @@ const FLARE_HAZE_DENSE := 2.0
 const FLARE_REACH := 1.30
 
 # --- The toxin's two forms (docs/design/dna-slots-ux.md §2) -----------------
-# **The colour is the strain, the shape is where it works.** Venom and poison of
-# one strain wear one hue, so where a toxin works is carried by shape alone: at
-# the front, fangs on the lips; on a side or the stern, barbs out of that arc;
-# inside, granules under the whole skin and nothing at any one arc. A
-# full-vision player tells the three apart at a glance and with no colour.
+# **The colour is the family, the bead is the strain, the shape is where it
+# works** (docs/design/gene-looks.md §2.1, §3.3). The toxin is one kind, `spines`
+# with bead heads, in three places: at the front, fangs on the lips; on a side or
+# the stern, barbs out of that arc; inside, its beads alone, granules under the
+# whole skin and nothing at any one arc. A full-vision player tells the three
+# apart at a glance and with no colour. The numbers below are the three places'.
 
 ## **Venom at the front is fangs on the lips.** It rides on the bite, so it is
 ## drawn on the organ every encounter is read off: barbs standing out of the lip
@@ -570,14 +552,10 @@ const TILE_STROKE_ALPHA := 0.88
 const TILE_CENTRE_Y := 0.66
 const TILE_PIGMENT := 4.2
 
-## An earned organ's strokes on a tile, where its look gives no count, and their
-## length; a home organ's are its look's `tile_count` and `tile_length`.
-const TILE_COUNT_EARNED := 5
+## An earned stroke's length on a tile, 0.30 of a radius at the tile's scale: what
+## the tile's px per body radius are measured by ([constant TILE_PER_R]).
 const TILE_LEN_EARNED := 11.0
-## The toxin's tiles: venom's rods and their beads; poison's granules, on an arc
-## this far outside the dome.
-const TILE_RODS := 4
-const TILE_ROD_BEAD := 1.9
+## An inside form's tile: its granules, on an arc this far outside the dome.
 const TILE_GRANULES := 7
 const TILE_GRANULE_OUT := 4.5
 const TILE_GRANULE_R := 1.45
@@ -592,11 +570,12 @@ const TILE_COMPASS_R := 6.5
 # and by the held-sample disc -- one answer to all four.
 # ---------------------------------------------------------------------------
 
-## The hue of one gene: its organ file's. An unknown gene -- a later phase's,
-## arriving over an older binary in a content pack -- or a retired one takes the
-## first reserved hue rather than drawing as nothing.
+## **The hue of one gene: its family's**, at the shade its look picks. An unknown
+## gene -- a later phase's, arriving over an older binary in a content pack -- or a
+## retired one with no look takes [constant UNKNOWN_TINT] rather than drawing as
+## nothing.
 static func hue(gene: StringName) -> Color:
-	return _hues.get(gene, RESERVED_HUES[0])
+	return _hues.get(gene, UNKNOWN_TINT)
 
 
 ## **The hue of the organ that provides [param stat]** -- the first, where several
@@ -738,13 +717,14 @@ static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 	var mouth := Catalogue.worn_provider(tiers, &"gape")
 	draw_gape(canvas, at, fwd, stb, r, gape, mouth, int(tiers.get(mouth, 0)),
 		not is_self and gape > viewer_radius, fade, unit)
-	# **Venom at the front is on the lips**, drawn after them: a venom worn in a
-	# front slot, or worn nowhere, rides on the bite (food.gd's `toxins_of`
-	# reads the same layout the same way). A body with no mouth draws none.
+	# **Venom at the front is on the lips**, drawn after them: a bite-riding organ
+	# (a look's `lips`) worn in a front slot, or worn nowhere, rides on the bite
+	# (food.gd's `toxins_of` reads the same layout the same way). A body with no
+	# mouth draws none.
 	if gape <= 0.0:
 		return
 	for gene: StringName in tiers:
-		if _shape_of.get(gene, &"") != SPINES or Genome.is_inside_form(gene):
+		if not bool(_look_of(gene).get("lips", false)) or Genome.is_inside_form(gene):
 			continue
 		var tier := int(tiers[gene])
 		var worn := layout.find(gene)
@@ -753,17 +733,19 @@ static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 				float(dose.get("fangs", 0.0)))
 
 
-## **The hue a load of [param kind] is drawn in**: its strain's, which is the
-## hue of the forms that deliver it (dna-slots-ux.md §2.1) -- lime for harm: the
-## first live one's, as signal_bus.gd's STRAIN_COLORS reads it. A kind no form
-## delivers yet takes the first reserved hue, as an unknown gene does, rather than
-## drawing as nothing.
+## **The hue a load of [param kind] is drawn in**: the hue of the organ that
+## delivered it (docs/design/gene-looks.md §3.3) -- the toxin's orange for harm, the
+## first live form's that delivers it, as signal_bus.gd's STRAIN_COLORS reads it.
+## Every strain of one organ wears its organ's colour, so the kinds of load are
+## told apart by their marks -- a roiling lump, a still shard, a swelling haze --
+## which never needed the hue. A kind no form delivers yet takes
+## [constant UNKNOWN_TINT], as an unknown gene does, rather than drawing as nothing.
 static func dose_hue(kind: int) -> Color:
 	for form: StringName in Catalogue.live():
 		var strain := Genome.strain_of(form)
 		if strain != &"" and Doses.kind_of(strain) == kind:
 			return hue(form)
-	return RESERVED_HUES[0]
+	return UNKNOWN_TINT
 
 
 ## The body: an ovoid, narrower at the front, so the cell has a nose even before
@@ -1160,9 +1142,13 @@ static func default_order(tiers: Dictionary) -> Array:
 	return out
 
 
-## The home organs, the earned tufts at their arcs, a venom's barbs on the side
-## it guards, and an inside form's granules round the whole body. [param layout]
-## is resolved: the body's own order, or [method default_order]'s.
+## **Every organ the body wears, drawn by its kind** (docs/design/gene-looks.md §2):
+## the home organs first, each on its home slot's arc whatever slot holds it -- the
+## mouth's mat at the nose, the cirrus's oars on both flanks, the tail's lash at the
+## stern, in the order they always drew -- then every other organ on its own slot's
+## arc, a bite-riding organ's barbs on the side it guards, and an inside form's
+## granules round the whole body. [param layout] is resolved: the body's own order,
+## or [method default_order]'s.
 static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		stb: Vector2, r: float, tiers: Dictionary, clock: float, fade: float,
 		steer: float, unit: float, layout: Array,
@@ -1170,78 +1156,79 @@ static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		dose: Dictionary = NO_DOSE) -> void:
 	if tiers.is_empty():
 		return
-
-	# **The home organs, found by their shape and not their name** (gene.gd): the
-	# mat round the mouth, the oars on both flanks and the lash at the stern, each
-	# on arcs of its own whatever slot holds it, in the order they always drew.
-	for gene: StringName in _shaped.get(MAT, NO_KEYS):
-		var eat := int(tiers.get(gene, 0))
-		if eat > 0:
-			var look: Dictionary = _looks[gene]
-			var mat := PackedVector2Array()
-			_gather_cytostome(mat, at, fwd, stb, r, eat, clock, int(look["count"]),
-				_home_arc(gene, layout))
-			_stroke(canvas, mat, look["hue"],
-				ALPHA_CYTOSTOME * _tier(TIER_ALPHA, eat) * fade,
-				WIDTH_CYTOSTOME * unit)
-
-	for gene: StringName in _shaped.get(OARS, NO_KEYS):
-		var turn := int(tiers.get(gene, 0))
-		if turn > 0:
-			var look: Dictionary = _looks[gene]
-			var oars := PackedVector2Array()
-			var flank := _home_arc(gene, layout)
-			_gather_cirrus(oars, at, fwd, stb, r, turn, clock, steer, 1.0,
-				int(look["count"]), flank)
-			_gather_cirrus(oars, at, fwd, stb, r, turn, clock, steer, -1.0,
-				int(look["count"]), flank)
-			_stroke(canvas, oars, look["hue"],
-				ALPHA_CIRRUS * _tier(TIER_ALPHA, turn) * fade, WIDTH_CIRRUS * unit)
-
-	for gene: StringName in _shaped.get(LASH, NO_KEYS):
-		var swim := int(tiers.get(gene, 0))
-		if swim > 0:
-			var look: Dictionary = _looks[gene]
-			var tails := PackedVector2Array()
-			var own := not is_nan(tail.x)
-			_gather_flagellum(tails, at, fwd, stb, r, swim, tail.x if own else clock,
-				int(look["count"]), _home_arc(gene, layout), tail.y if own else 0.0)
-			_stroke(canvas, tails, look["hue"],
-				ALPHA_FLAGELLUM * _tier(TIER_ALPHA, swim) * fade,
-				WIDTH_FLAGELLUM * unit)
-
+	var sk := _body_skin
+	_on_body(sk, at, fwd, stb, r, unit)
+	sk.steer = steer
+	# **The home organs, found by the body plan and not by their name**: each on its
+	# home slot's arc, in the plan's order -- the nose, the flank, the stern -- which
+	# is the order the mat, the oars and the lash always drew in.
+	for k in _home_genes.size():
+		var home := _home_genes[k]
+		var copies := int(tiers.get(home, 0))
+		if copies > 0:
+			_draw_worn(canvas, sk, home, copies, _home_arc(home, layout), clock, fade,
+				eye if StringName(eye.get("gene", &"")) == home else NO_EYE, tail, 0.0)
 	# **The slot is the arc.** Walked by slot rather than by dictionary order, so
 	# a gene the player placed in the rear-left diagonal is drawn -- and aimed --
 	# in the rear-left diagonal.
 	for slot in layout.size():
 		var gene: StringName = layout[slot]
-		if gene == &"":
+		if gene == &"" or _homes.has(gene) or Genome.is_inside_form(gene):
 			continue
-		var shape: StringName = _shape_of.get(gene, &"")
-		if HOME_SHAPES.has(shape):
+		var copies := int(tiers.get(gene, 0))
+		if copies <= 0:
 			continue
-		var tier := int(tiers.get(gene, 0))
-		if tier <= 0:
-			continue
-		# **Spines are never a tuft** -- the toxin's, today. Inside they have no
-		# arc, and are drawn below; at the front they are on the lips, drawn with
-		# the gape; on a side or the stern they are barbs on the arc they guard --
-		# unless the switch has made a side venom inert, when they draw nothing.
-		if shape == SPINES:
-			if not Genome.is_inside_form(gene) and slot < Genome.INSIDE \
-					and not Genome.is_front(slot) and CellBody.VENOM_SIDES:
-				_draw_guard(canvas, at, fwd, stb, r, gene, tier,
-					arc_for_slot(slot), fade, unit, float(dose.get("guard", 0.0)))
-			continue
-		_draw_earned(canvas, at, fwd, stb, r, gene, tier,
-			arc_for_slot(slot), fade, unit, clock,
-			eye if StringName(eye.get("gene", &"")) == gene else NO_EYE)
-	# **What is inside has no arc**: poison is its granules under the whole skin,
+		var flare := 0.0
+		# **An organ that rides the bite is on the lips at the front** -- the toxin's
+		# venom, today -- and is drawn with the gape; on a side or the stern it is
+		# barbs on the arc it guards, unless the switch has made a side venom inert,
+		# when it draws nothing.
+		if bool(_look_of(gene).get("lips", false)):
+			if slot >= Genome.INSIDE or Genome.is_front(slot) or not CellBody.VENOM_SIDES:
+				continue
+			flare = float(dose.get("guard", 0.0))
+		_draw_worn(canvas, sk, gene, copies, arc_for_slot(slot), clock, fade,
+			eye if StringName(eye.get("gene", &"")) == gene else NO_EYE, tail, flare)
+	# **What is inside has no arc**: its beads are granules under the whole skin,
 	# and nothing at any one place.
 	for gene: StringName in tiers:
 		if Genome.is_inside_form(gene) and int(tiers[gene]) > 0:
 			_draw_granules(canvas, at, fwd, stb, r, gene, int(tiers[gene]), fade,
 				unit, float(dose.get("granules", 0.0)))
+
+
+## **One organ a body wears**, [param gene] at [param copies] on [param arc] of the
+## body skin [param sk]: built by its kind and painted in its family's shade, at its
+## kind's ink and width. [param eye] buds and flares a pigment, and lengthens and
+## brightens the organ as a level arrives; [param flare] is a bite-riding organ's
+## barbs firing, 0..1. **A tail is drawn on its own clock** where the body has one
+## ([param tail], the player's): its wave stops when it is held still.
+static func _draw_worn(canvas: CanvasItem, sk: Stretch, gene: StringName, copies: int,
+		arc: Vector2, clock: float, fade: float, eye: Dictionary, tail: Vector2,
+		flare: float) -> void:
+	var look := _look_of(gene)
+	sk.a0 = arc.x
+	sk.a1 = arc.y
+	sk.lit = clampf(flare, 0.0, 1.0)
+	sk.still = 0.0
+	var own := clock
+	if not is_nan(tail.x) and look["shape"] == LASH \
+			and Catalogue.provides(gene, &"impulse_speed"):
+		own = tail.x
+		sk.still = tail.y
+	# Nothing to flare on nearly every organ drawn: no eye, no lookups.
+	var lit := 1.0
+	var reach := 1.0
+	if not eye.is_empty():
+		var arriving := clampf(float(eye.get("flare", 0.0)), 0.0, 1.0)
+		lit = lerpf(1.0, FLARE_INK, arriving)
+		reach = lerpf(1.0, FLARE_REACH, arriving)
+	var d := _drawn
+	d.clear()
+	_build(d, sk, look, copies, own, reach)
+	_paint(canvas, d, look, hue(gene), _kind_alpha(look) * _tier(TIER_ALPHA, copies) * lit
+		* fade * (1.0 + TOXIN_FLARE_INK * sk.lit), _kind_width(look) * sk.px, sk, eye, own,
+		fade, false)
 
 
 ## **The arc a home organ is drawn on**: its home slot's in the body plan --
@@ -1252,102 +1239,6 @@ static func _home_arc(gene: StringName, layout: Array) -> Vector2:
 	if home >= 0 and home < _plan_arcs.size():
 		return _plan_arcs[home]
 	return BodyPlan.arc(layout.find(gene))
-
-
-## The oral mat: dense, fine, standing just off the surface, with a beat that
-## travels along it. It is the only dense fine mat in the vocabulary, and that
-## texture is `cytostome`'s positive tell -- its hue is deliberately in the
-## nutrient green family and so is the least legible of the four at range.
-static func _gather_cytostome(into: PackedVector2Array, at: Vector2,
-		fwd: Vector2, stb: Vector2, r: float, tier: int, clock: float,
-		strokes: int, arc: Vector2) -> void:
-	var count := _count(strokes, tier)
-	var scale := _tier(TIER_LEN, tier)
-	for i in count:
-		var u := (float(i) + 0.5) / float(count)
-		var t := deg_to_rad(lerpf(arc.x, arc.y, u))
-		var wave := sin(u * CYTOSTOME_WAVE_U - clock * CYTOSTOME_WAVE_HZ)
-		var length := LEN_CYTOSTOME * r * (0.80 + 0.30 * wave) * scale
-		var normal := _normal(fwd, stb, t)
-		var nose := _toward_nose(fwd, stb, t)
-		var swing := deg_to_rad(CYTOSTOME_SWING_DEG) * wave
-		var root := _surface(at, fwd, stb, r, t) + normal * (r * CYTOSTOME_LIFT)
-		# Three points, **curved**: radial where it leaves the skin and at the
-		# full swing only by the tip. Rendered as a straight stroke plus a lean
-		# it was much worse -- at tier 3 the roots are two pixels apart, so a
-		# mat of 26 leaning strokes closes up into a solid green flag and stops
-		# being a texture at all. Curving it keeps every stroke separate at the
-		# root, which is where density is actually read.
-		var mid := root + _swung(normal, nose, swing * CYTOSTOME_CURVE) \
-			* (length * 0.55)
-		var tip := mid + _swung(normal, nose, swing) * (length * 0.45)
-		into.append(root)
-		into.append(mid)
-		into.append(mid)
-		into.append(tip)
-
-
-## Two oars, beating in antiphase, five per side at tier 1. The bend is what
-## separates it from the flagellum at a glance: an oar has a knee, a tail does
-## not.
-static func _gather_cirrus(into: PackedVector2Array, at: Vector2, fwd: Vector2,
-		stb: Vector2, r: float, tier: int, clock: float, steer: float,
-		side: float, strokes: int, flank: Vector2) -> void:
-	# **The port oars are the starboard ones mirrored**: the `oars` shape rows on
-	# both flanks from the one slot it is the home of, so the port arc is the
-	# shape's and never a slot's.
-	var arc := flank if side > 0.0 else Vector2(-flank.y, -flank.x)
-	var count := _count(strokes, tier)
-	var scale := _tier(TIER_LEN, tier)
-	# The outboard side of the turn works harder.
-	var bias := 1.0 + CIRRUS_STEER_BIAS * clampf(-steer * side, -1.0, 1.0)
-	for i in count:
-		var u := (float(i) + 0.5) / float(count)
-		var t := deg_to_rad(lerpf(arc.x, arc.y, u))
-		var phase := clock * CIRRUS_HZ + u * CIRRUS_WAVE_U
-		if side < 0.0:
-			phase += PI
-		var length := LEN_CIRRUS * r * (0.86 + 0.22 * cos(phase)) * scale
-		var normal := _normal(fwd, stb, t)
-		var nose := _toward_nose(fwd, stb, t)
-		var swing := deg_to_rad(CIRRUS_SWING_DEG) * sin(phase) * bias
-		var bend := swing + deg_to_rad(CIRRUS_BEND_DEG) * signf(sin(phase))
-		var bent := _swung(normal, nose, bend)
-		var root := _surface(at, fwd, stb, r, t)
-		var knee := root + _swung(normal, nose, swing) * (length * CIRRUS_KNEE)
-		into.append(root)
-		into.append(knee)
-		into.append(knee)
-		into.append(knee + bent * (length * (1.0 - CIRRUS_KNEE)))
-
-
-## The tail: long, smooth, and carrying a wave that travels out to the tip. The
-## only stroke in the vocabulary that is longer than half the body. [param still]
-## is how far it is held still, 0 to 1: its lash goes slack toward
-## [constant TAIL_HELD_LASH] (its clock is the caller's, and stops).
-static func _gather_flagellum(into: PackedVector2Array, at: Vector2,
-		fwd: Vector2, stb: Vector2, r: float, tier: int, clock: float,
-		strokes: int, arc: Vector2, still: float = 0.0) -> void:
-	var count := _count(strokes, tier)
-	var scale := _tier(TIER_LEN, tier)
-	var slack := lerpf(1.0, TAIL_HELD_LASH, clampf(still, 0.0, 1.0))
-	for i in count:
-		var u := (float(i) + 0.5) / float(count)
-		var t := deg_to_rad(lerpf(arc.x, arc.y, u))
-		var base := sin(u * FLAGELLUM_WAVE_U - clock * FLAGELLUM_WAVE_HZ)
-		var length := LEN_FLAGELLUM * r * (0.82 + 0.26 * base) * scale
-		var dir := _normal(fwd, stb, t)
-		var side := Vector2(-dir.y, dir.x)
-		var root := _surface(at, fwd, stb, r, t)
-		var previous := root
-		for j in range(1, FLAGELLUM_POINTS):
-			var v := float(j) / float(FLAGELLUM_POINTS - 1)
-			var lash := sin(v * FLAGELLUM_WAVE_V - clock * FLAGELLUM_WAVE_HZ
-				+ u * FLAGELLUM_WAVE_U) * length * FLAGELLUM_LASH * v * slack
-			var point := root + dir * (length * v) + side * lash
-			into.append(previous)
-			into.append(point)
-			previous = point
 
 
 ## **One step of a tail's own clock** (automation.md §8.1): `(clock, still)`,
@@ -1361,78 +1252,19 @@ static func step_tail(tail: Vector2, held: bool, delta: float) -> Vector2:
 	return Vector2(tail.x + delta * (1.0 - still), still)
 
 
-## An earned gene: stiff sensory bristles that do not row, over a pigment
-## organelle that is the one filled spot of gene colour on a body.
-##
-## [param eye] is [method draw_cell]'s, already known to be this gene's: the
-## pigment buds while a choice waits and flares as a level arrives. Empty, every
-## factor below is exactly 1 and the organ is drawn as it always was.
-static func _draw_earned(canvas: CanvasItem, at: Vector2, fwd: Vector2,
-		stb: Vector2, r: float, gene: StringName, tier: int, arc: Vector2,
-		fade: float, unit: float, clock: float = 0.0,
-		eye: Dictionary = NO_EYE) -> void:
-	var tone := hue(gene)
-	var mid := deg_to_rad((arc.x + arc.y) * 0.5)
-	var seat := _surface(at, fwd, stb, r * PIGMENT_SEAT, mid)
-	var flare := clampf(float(eye.get("flare", 0.0)), 0.0, 1.0)
-	var bud := int(eye.get("bud", -1))
-	# The whole organ is brighter at the top of a flare, and the haze wider and
-	# denser as well: the flare is the organ lighting up, not a disc on it.
-	var ink := lerpf(1.0, FLARE_INK, flare)
-	var wide := lerpf(1.0, FLARE_HAZE_WIDE, flare)
-	var dense := lerpf(1.0, FLARE_HAZE_DENSE, flare)
-	for k in 3:
-		var q := float(k) / 3.0
-		canvas.draw_circle(seat, r * PIGMENT_HAZE * (1.0 + 1.6 * q) * wide,
-			Color(tone, 0.030 * (1.0 - q) * dense * ink * fade), true, -1.0,
-			true)
-	# **Drawn solid at the top of a flare**: the rim rises to the core's ink, so
-	# the pigment is one bright spot rather than a spot in a ring. Clamped only
-	# once the view's fade is in: point of view draws this body at a third, and
-	# a clamp before that would throw the brightening away.
-	var rim := lerpf(PIGMENT_RIM_ALPHA, PIGMENT_CORE_ALPHA, flare) * ink
-	var core := PIGMENT_CORE_ALPHA * ink
-	if bud < 0:
-		canvas.draw_circle(seat, r * PIGMENT_OUTER,
-			Color(tone, minf(rim * fade, 1.0)), true, -1.0, true)
-		canvas.draw_circle(seat, r * PIGMENT_INNER,
-			Color(tone, minf(core * fade, 1.0)), true, -1.0, true)
-	else:
-		_draw_bud(canvas, seat, _normal(fwd, stb, mid), r, tone, bud, rim, core,
-			clock, fade)
-
-	var count := _count(int((_looks.get(gene, NO_LOOK) as Dictionary).get("count",
-		COUNT_EARNED)), tier)
-	var scale := _tier(TIER_LEN, tier)
-	var reach := lerpf(1.0, FLARE_REACH, flare)
-	var strokes := PackedVector2Array()
-	for i in count:
-		var u := (float(i) + 0.5) / float(count)
-		var t := deg_to_rad(lerpf(arc.x, arc.y, u))
-		# No clock: a sensory cilium does not row. The variation across the arc
-		# is a standing bow rather than a wave, so the arc reads as a tuft and
-		# not as a picket fence.
-		var length := LEN_EARNED * r * (0.88 + 0.14 * sin(u * PI)) * scale \
-			* reach
-		var dir := _normal(fwd, stb, t)
-		var root := _surface(at, fwd, stb, r, t)
-		strokes.append(root)
-		strokes.append(root + dir * length)
-	_stroke(canvas, strokes, tone,
-		ALPHA_EARNED * _tier(TIER_ALPHA, tier) * ink * fade, WIDTH_EARNED * unit)
-
-
 ## **The pigment, doubled**: two lobes side by side along the arc, where the one
 ## disc was, and further apart for every level banked since the fork opened --
 ## an organelle about to divide, which is the one way a body can say *something
 ## here is waiting to be decided* without a word or a rhythm. [param normal] is
-## the skin's outward normal at the seat; the lobes sit across it.
+## the skin's outward normal at the seat; the lobes sit across it. A variant's
+## lobes are its accent ([param mark]), each at the size its one mark has.
 ##
 ## They shimmer in antiphase on the body's own [param clock], so the pair
 ## breathes as one organ rather than as two lights.
 static func _draw_bud(canvas: CanvasItem, seat: Vector2, normal: Vector2,
 		r: float, tone: Color, banked: int, rim: float, core: float,
-		clock: float, fade: float) -> void:
+		clock: float, fade: float, mark: StringName = Kinds.MARK_DISC,
+		px: float = 1.0) -> void:
 	var along := normal.orthogonal()
 	var apart := r * (BUD_APART
 		+ BUD_APART_PER_LEVEL * float(clampi(banked, 0, BUD_BANKED_MAX)))
@@ -1440,19 +1272,26 @@ static func _draw_bud(canvas: CanvasItem, seat: Vector2, normal: Vector2,
 	for side: float in [-1.0, 1.0]:
 		var lobe := seat + along * (apart * side)
 		var shimmer := BUD_INK * (1.0 + wave * side)
+		if mark != Kinds.MARK_DISC:
+			_draw_mark(canvas, mark, lobe, r * BUD_R * ACCENT_PIGMENT, along, tone,
+				minf(core * shimmer * fade, 1.0), px)
+			continue
 		canvas.draw_circle(lobe, r * BUD_R,
 			Color(tone, minf(rim * shimmer * fade, 1.0)), true, -1.0, true)
 		canvas.draw_circle(lobe, r * BUD_CORE,
 			Color(tone, minf(core * shimmer * fade, 1.0)), true, -1.0, true)
 
 
-## **Venom at the front: fangs on the lips** (dna-slots-ux.md §2.2). One pair
-## per copy, standing out of the lip bow's two corners and splayed away from the
-## centreline, a bead at each tip. [param flare] is 0..1, the venom landing.
+## **Fangs on the lips** (dna-slots-ux.md §2.2): a bite-riding organ's spines in a
+## front slot -- the toxin's venom -- one pair per copy, standing out of the lip
+## bow's two corners and splayed away from the centreline, a bead at each tip in
+## its seat's mark: a variant's accent, or the disc. [param flare] is 0..1, the
+## venom landing.
 static func _draw_fangs(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		stb: Vector2, r: float, gape: float, gene: StringName, tier: int,
 		fade: float, unit: float, flare: float = 0.0) -> void:
 	var tone := hue(gene)
+	var mark := _bead_mark(_look_of(gene))
 	var base := at + fwd * (r * OVOID_ALONG * GAPE_SEAT)
 	var pairs := clampi(tier, 1, 3)
 	var lit := clampf(flare, 0.0, 1.0)
@@ -1480,45 +1319,21 @@ static func _draw_fangs(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 			var tip := root + out * length
 			lines.append(root)
 			lines.append(tip)
-			_draw_bead(canvas, tip, bead, tone, FANG_ALPHA * ink, lit)
+			_draw_bead(canvas, tip, bead, tone, FANG_ALPHA * ink, lit, mark,
+				out.orthogonal(), unit)
 	_stroke(canvas, lines, tone, FANG_ALPHA * ink, FANG_WIDTH * unit)
 
 
-## **Venom on a side or the stern: barbs on that arc** (dna-slots-ux.md §2.3).
-## Two a copy, evenly across the arc's middle, fanned [constant GUARD_FAN]
-## degrees either side of the normal at the ends. [param flare] is 0..1, a
-## mouth biting the side they guard.
-static func _draw_guard(canvas: CanvasItem, at: Vector2, fwd: Vector2,
-		stb: Vector2, r: float, gene: StringName, tier: int, arc: Vector2,
-		fade: float, unit: float, flare: float = 0.0) -> void:
-	var tone := hue(gene)
-	var count := 2 * clampi(tier, 1, 3)
-	var lit := clampf(flare, 0.0, 1.0)
-	var length := maxf(r * GUARD_LEN * _tier(TIER_LEN, tier), GUARD_MIN * unit) \
-		* (1.0 + TOXIN_FLARE_LONG * lit)
-	var bead := maxf(r * GUARD_BEAD, BEAD_MIN * unit) * (1.0 + TOXIN_FLARE_BEAD * lit)
-	var ink := fade * (1.0 + TOXIN_FLARE_INK * lit)
-	var lines := PackedVector2Array()
-	for i in count:
-		var u := (float(i) + 0.5) / float(count)
-		var t := deg_to_rad(lerpf(arc.x, arc.y, lerpf(GUARD_FROM, 1.0 - GUARD_FROM, u)))
-		var out := _normal(fwd, stb, t).rotated(deg_to_rad(GUARD_FAN) * lerpf(-1.0, 1.0, u))
-		var root := _surface(at, fwd, stb, r, t)
-		var tip := root + out * length
-		lines.append(root)
-		lines.append(tip)
-		_draw_bead(canvas, tip, bead, tone, GUARD_ALPHA * ink, lit)
-	_stroke(canvas, lines, tone, GUARD_ALPHA * ink, GUARD_WIDTH * unit)
-
-
-## **Poison: granules under the whole skin, and no arc** (dna-slots-ux.md
-## §2.4). [constant GRANULE_COUNT] by copies, scattered just inside the rim
-## round the body, the mouth's arc left clear. [param flare] is 0..1, the poison
-## being taken.
+## **An inside form: its beads under the whole skin, and no arc**
+## (dna-slots-ux.md §2.4; gene-looks.md §2.1) -- granules, [constant
+## GRANULE_COUNT] by copies, scattered just inside the rim round the body, the
+## mouth's arc left clear, each in its seat's mark: a variant's accent, or the
+## disc. [param flare] is 0..1, the poison being taken.
 static func _draw_granules(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		stb: Vector2, r: float, gene: StringName, tier: int, fade: float,
 		unit: float, flare: float = 0.0) -> void:
 	var tone := hue(gene)
+	var mark := _bead_mark(_look_of(gene))
 	var lit := clampf(flare, 0.0, 1.0)
 	var count := _count(GRANULE_COUNT, tier)
 	var dot := maxf(r * GRANULE_R, GRANULE_MIN * unit) * (1.0 + TOXIN_FLARE_BEAD * lit)
@@ -1528,18 +1343,881 @@ static func _draw_granules(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		var t := deg_to_rad(lerpf(GRANULE_FROM, 360.0 - GRANULE_FROM, u))
 		var jitter := 0.07 * sin(float(i) * 2.3 + 1.1) - 0.02
 		_draw_bead(canvas, _surface(at, fwd, stb, r * (GRANULE_SEAT + jitter), t),
-			dot, tone, ink, lit)
+			dot, tone, ink, lit, mark, _normal(fwd, stb, t).orthogonal(), unit)
 
 
-## One bead of a toxin, and while it flares, a three-ring haze round it.
+## **The mark a bead is drawn as**: its look's, where its seat is the beads -- a
+## variant's accent, or the disc -- and the disc for any other inside form's.
+static func _bead_mark(look: Dictionary) -> StringName:
+	return look["mark"] if look["seat"] == Kinds.SEAT_BEADS else Kinds.MARK_DISC
+
+
+## One bead of a toxin -- in [param mark], a disc unless a variant's accent says
+## otherwise, never under [constant ACCENT_BEAD_MIN] canvas px then -- and, while
+## it flares, a three-ring haze round it. [param along] is the way a diamond or a
+## bar lies; [param px] is how many of the canvas's units make one pixel.
 static func _draw_bead(canvas: CanvasItem, at: Vector2, size: float, tone: Color,
-		alpha: float, flare: float) -> void:
+		alpha: float, flare: float, mark: StringName = Kinds.MARK_DISC,
+		along: Vector2 = Vector2.RIGHT, px: float = 1.0) -> void:
 	if flare > 0.0:
 		for q in 3:
 			var k := float(q) / 3.0
 			canvas.draw_circle(at, size * (2.0 + 4.8 * k),
 				Color(tone, 0.10 * (1.0 - k) * flare), true, -1.0, true)
-	canvas.draw_circle(at, size, Color(tone, minf(alpha, 1.0)), true, -1.0, true)
+	if mark == Kinds.MARK_DISC:
+		canvas.draw_circle(at, size, Color(tone, minf(alpha, 1.0)), true, -1.0, true)
+		return
+	_draw_mark(canvas, mark, at, maxf(size, ACCENT_BEAD_MIN * px), along, tone,
+		minf(alpha, 1.0), px)
+
+
+# ---------------------------------------------------------------------------
+# The kinds (docs/design/gene-looks.md §2, §3). **One generator per kind, drawn
+# on a skin** -- a stretch of a body's arc, or a tile's dome -- so a body and a
+# tile are one vocabulary, which is the promise this file makes at its top. A
+# generator only builds: its strokes into one `draw_multiline`, as the fringe
+# always was, its curves and closed outlines into one polyline each, its fills
+# and its marks. [method _paint] draws what it built. A tile is the same organ
+# at the tile's scale, so the explaining line's glyph and the quick placement's
+# buds, which are tiles, follow every kind for nothing.
+# ---------------------------------------------------------------------------
+
+## **Where an organ is drawn, its skin** (gene-looks.md §2.2): a stretch of a body's
+## arc, or a tile's dome.
+## On a body, [member at], [member fwd], [member stb] and [member r] are the body
+## and [member a0] to [member a1] the arc in ovoid degrees; on a tile [member at]
+## is the dome's centre, [member r] its radius in px and the arc in radians.
+## [member unit] is the length every kind's numbers are fractions of: the body's
+## radius, or a tile's px per body radius. [member px] is how many of the
+## canvas's units make one pixel, for the floors that are pixels. The rest is
+## what the body is doing there: its [member steer], its tail held
+## [member still], a weapon's flare ([member lit]).
+class Stretch extends RefCounted:
+	var tile := false
+	var at := Vector2.ZERO
+	var fwd := Vector2.UP
+	var stb := Vector2.RIGHT
+	var r := 1.0
+	var a0 := 0.0
+	var a1 := 0.0
+	var unit := 1.0
+	var px := 1.0
+	var steer := 0.0
+	var still := 0.0
+	var lit := 0.0
+
+
+## **One organ, built and not yet drawn**: the strokes of its one
+## `draw_multiline`, its curves and closed outlines -- **a polyline each**: a
+## continuous line built from separate segments shows a bright dot at every
+## joint, and dots are what *armed* looks like (gene-looks.md §2.2) -- its fills,
+## each a polygon and its share of the organ's ink, and its marks, each
+## `[seat, at, size, along]`.
+class Drawn extends RefCounted:
+	var lines := PackedVector2Array()
+	var paths: Array[PackedVector2Array] = []
+	var fills: Array = []
+	var marks: Array = []
+
+	func clear() -> void:
+		lines.clear()
+		paths.clear()
+		fills.clear()
+		marks.clear()
+
+
+## **The one skin and the one build every body's organs are drawn through**, each
+## refilled for the next organ: nothing is made per organ per body per frame but
+## the points themselves.
+static var _body_skin := Stretch.new()
+static var _drawn := Drawn.new()
+
+## **Tile px per body radius**, so a tile organ is the body's organ at the tile's
+## scale: 11 px for an earned stroke of 0.30 r, 36.7 for a whole radius.
+const TILE_PER_R := TILE_LEN_EARNED / LEN_EARNED
+## **What a tile holds** (gene-looks.md §2.2): no reach past this many body radii --
+## 17 px, today's tallest, the tail's -- so the explaining line's row stays as it was
+## measured; no more strands of a lash than this, or it tangles; no more strokes of
+## a mat than this, or it closes into a flag on the dome.
+const TILE_REACH_MAX := 0.46
+const TILE_LASH_MAX := 3
+const TILE_MAT_MAX := 11
+## The tile's oars are held at this phase of their beat, where the knee shows.
+const TILE_OARS_PHASE := 0.9
+## A tile's skin stops this many radians short of the dome's ends.
+const TILE_SKIN_INSET := 0.12
+## A bead-headed spine's stroke on a tile, against the tile's own width: a weapon
+## reads heavier.
+const TILE_SPINE_WIDTH := 1.2
+
+## **An accent** (gene-looks.md §3.1): at a pigment, a variant's mark at this share
+## of the pigment's disc; a ring's stroke this share of its radius; a mark at the
+## basal body or an organelle's centre at this share of the organ's ink, and every
+## bead of an accent other than a disc never under [constant ACCENT_BEAD_MIN] canvas
+## px, which is what a ring, a diamond or a bar needs to read as one.
+const ACCENT_PIGMENT := 0.85
+const ACCENT_RING := 0.42
+const ACCENT_RING_MIN := 1.2
+const ACCENT_INK := 1.15
+const ACCENT_BEAD_MIN := 2.6
+## **The basal body** (§3.1): where a cilium or a flagellum is rooted in a real
+## cell, this far inside the skin at the arc's middle, and this big -- both of r.
+const BASAL_DEPTH := 0.11
+const BASAL_SIZE := 0.085
+
+## **Tier is magnitude** (§2.3): a tuft's and a spine's fan opens this many degrees a
+## copy past the first, so their tips stay apart as the count grows.
+const FAN_PER_COPY := 6.0
+## A tuft: its bent stems in this many steps; a fork's or a three-way tip's arms
+## this far from the stem and this long, of the bristle; a ring tip's radius, of r
+## and never under its floor in px; a hook's curl.
+const TUFT_BEND_STEPS := 4
+const TUFT_FORK_DEG := 34.0
+const TUFT_ARM := 0.46
+const TUFT_RING := 0.06
+const TUFT_RING_MIN := 1.5
+const TUFT_HOOK_DEG := 40.0
+const TUFT_HOOK_STEP := 0.11
+## A coil: how far its zigzag swings either side, of r; how far its springs lean
+## apart; how fast it breathes, drawing up and letting go.
+const COIL_AMP := 0.10
+const COIL_LEAN := 20.0
+const COIL_BREATH := 2.4
+## A lens: standing this far off the skin, of r, over this share of the arc, filled
+## at this share of the organ's ink, its outline in this many steps.
+const LENS_LIFT := 0.04
+const LENS_FROM := 0.10
+const LENS_FILL := 0.80
+const LENS_STEPS := 10
+## A spear's head, of r and never under its floor in px, and how far back its
+## barbs sweep.
+const SPEAR_HEAD := 0.10
+const SPEAR_HEAD_MIN := 2.6
+const SPEAR_HEAD_DEG := 28.0
+## A plate: how thick, how far off the skin, and how far each overlaps the next.
+const PLATE_THICK := 0.075
+const PLATE_LIFT := 0.035
+const PLATE_OVERLAP := 1.45
+## **An organelle is one a copy** (§2.3): where each sits along its arc and how
+## much deeper, by how many there are -- three things are counted without counting;
+## its outline in this many steps; its centre's mark, of its size.
+const ORGANELLE_SEATS := {
+	1: [[0.5, 0.0]],
+	2: [[0.22, 0.0], [0.78, 0.10]],
+	3: [[0.12, 0.0], [0.88, 0.04], [0.5, 0.36]],
+}
+const ORGANELLE_STEPS := 18
+const ORGANELLE_MARK := 0.36
+
+
+## [param look] drawn: [param gene]'s resolved look, or a plain tuft for a gene this
+## build does not know.
+static func _look_of(gene: StringName) -> Dictionary:
+	var look: Dictionary = _looks.get(gene, NO_LOOK)
+	return look if not look.is_empty() else UNKNOWN_LOOK
+
+
+## [param sk] made a stretch of the body at [param at], its arc set per organ.
+static func _on_body(sk: Stretch, at: Vector2, fwd: Vector2, stb: Vector2, r: float,
+		px: float) -> void:
+	sk.tile = false
+	sk.at = at
+	sk.fwd = fwd
+	sk.stb = stb
+	sk.r = r
+	sk.unit = r
+	sk.px = px
+	sk.steer = 0.0
+	sk.still = 0.0
+	sk.lit = 0.0
+
+
+## A tile's dome at [param centre], [param dome] px across the radius, its organ at
+## [param scale].
+static func _tile_skin(centre: Vector2, dome: float, scale: float) -> Stretch:
+	var sk := Stretch.new()
+	sk.tile = true
+	sk.at = centre
+	sk.r = dome
+	sk.a0 = TILE_ARC_FROM + TILE_SKIN_INSET
+	sk.a1 = TILE_ARC_TO - TILE_SKIN_INSET
+	sk.unit = TILE_PER_R * scale
+	return sk
+
+
+## The point of [param sk] at [param u], 0 to 1 along its arc.
+static func _sk_root(sk: Stretch, u: float) -> Vector2:
+	if sk.tile:
+		var a := lerpf(sk.a0, sk.a1, u)
+		return sk.at + Vector2(cos(a), sin(a)) * sk.r
+	return _surface(sk.at, sk.fwd, sk.stb, sk.r, deg_to_rad(lerpf(sk.a0, sk.a1, u)))
+
+
+## **[param sk] at [param u], all at once**: its point ([member _at_root]), its
+## outward normal ([member _at_normal]) and **the way a stroke there leans as it
+## swings** ([member _at_lean]) -- toward the nose on a body, which is how every
+## swing in genes-and-cilia.md §4.2 is measured, and one way round on a tile. The
+## point is [method _sk_root]'s to the bit.
+static func _frame(sk: Stretch, u: float) -> void:
+	_frame_on(sk.tile, sk.at, sk.fwd, sk.stb, sk.r, sk.a0, sk.a1, u)
+
+
+## **[method _frame], on a stretch already unpacked**: what the home organs' kinds
+## call, a stroke at a time. Every body in the water wears them, so this is most of
+## what a fringe costs to build (gene-looks.md §9.2), and a stretch's fields are
+## looked up by name each time they are read: one call and one normal a stroke,
+## from locals, where it was three calls, two normals and seventeen lookups.
+static func _frame_on(tile: bool, at: Vector2, fwd: Vector2, stb: Vector2, r: float,
+		a0: float, a1: float, u: float) -> void:
+	if tile:
+		var a := lerpf(a0, a1, u)
+		var n := Vector2(cos(a), sin(a))
+		_at_root = at + n * r
+		_at_normal = n
+		_at_lean = Vector2(n.y, -n.x)
+		return
+	var t := deg_to_rad(lerpf(a0, a1, u))
+	var normal := _normal(fwd, stb, t)
+	_at_root = _surface(at, fwd, stb, r, t)
+	_at_normal = normal
+	# The unit tangent toward the nose: the normal turned a quarter, in whichever
+	# sense reduces |t|. On the starboard flank that is one way round and on the
+	# port flank the other, so the two sides lean toward the same nose rather than
+	# mirroring each other into a shape that has no front.
+	_at_lean = Vector2(normal.y, -normal.x) if wrapf(t, -PI, PI) >= 0.0 \
+		else Vector2(-normal.y, normal.x)
+
+
+## What [method _frame] last found: read at once, before the next organ's.
+static var _at_root := Vector2.ZERO
+static var _at_normal := Vector2.UP
+static var _at_lean := Vector2.RIGHT
+
+
+## The way [param sk] runs at [param u], toward its arc's far end.
+static func _sk_along(sk: Stretch, u: float) -> Vector2:
+	var d := _sk_root(sk, u + 0.01) - _sk_root(sk, u - 0.01)
+	return d.normalized() if d.length_squared() > 0.0 else Vector2.RIGHT
+
+
+## +1 where a positive turn takes a normal toward the arc's far end, -1 where it
+## takes it back: so a fan opens and a spring leans apart on any canvas.
+static func _sk_hand(sk: Stretch) -> float:
+	if sk.tile:
+		return 1.0
+	return 1.0 if sk.stb.cross(sk.fwd) < 0.0 else -1.0
+
+
+## A point [param depth] body radii under [param sk] at [param u].
+static func _sk_inner(sk: Stretch, u: float, depth: float) -> Vector2:
+	_frame(sk, u)
+	return _at_root - _at_normal * (depth * sk.unit)
+
+
+## **A sense's pigment**, at the middle of its arc: the seat it has always had on a
+## body, 0.80 of the way out, and the dome's on a tile.
+static func _sk_seat(sk: Stretch) -> Vector2:
+	if sk.tile:
+		return sk.at + Vector2(0.0, -sk.r * PIGMENT_SEAT)
+	return _surface(sk.at, sk.fwd, sk.stb, sk.r * PIGMENT_SEAT,
+		deg_to_rad((sk.a0 + sk.a1) * 0.5))
+
+
+## A length of [param look]'s at [param tier] copies, as a fraction of r: no more
+## than [constant TILE_REACH_MAX] on a tile.
+static func _length_of(sk: Stretch, look: Dictionary) -> float:
+	var length := float(look["length"])
+	return minf(length, TILE_REACH_MAX) if sk.tile else length
+
+
+## **[param look]'s strokes' ink, by kind**: the home organs' kinds keep the ink
+## they always had, so a variant of one is drawn as its organ is; a bead-headed
+## spine is a weapon's, the guard's; every other kind an earned organ's.
+static func _kind_alpha(look: Dictionary) -> float:
+	match look["shape"]:
+		MAT:
+			return ALPHA_CYTOSTOME
+		OARS:
+			return ALPHA_CIRRUS
+		LASH:
+			return ALPHA_FLAGELLUM
+		SPINES:
+			if look["tip"] == Kinds.TIP_BEAD:
+				return GUARD_ALPHA
+	return ALPHA_EARNED
+
+
+## **And their width, by kind**, as [method _kind_alpha] has their ink.
+static func _kind_width(look: Dictionary) -> float:
+	match look["shape"]:
+		MAT:
+			return WIDTH_CYTOSTOME
+		OARS:
+			return WIDTH_CIRRUS
+		LASH:
+			return WIDTH_FLAGELLUM
+		SPINES:
+			if look["tip"] == Kinds.TIP_BEAD:
+				return GUARD_WIDTH
+	return WIDTH_EARNED
+
+
+## **Builds [param look] at [param tier] copies on [param sk] into [param d]**, on
+## [param clock], its lengths times [param reach]: one generator per kind.
+static func _build(d: Drawn, sk: Stretch, look: Dictionary, tier: int, clock: float,
+		reach: float) -> void:
+	match look["shape"]:
+		MAT:
+			_kind_mat(d, sk, look, tier, clock, reach)
+		OARS:
+			_kind_oars(d, sk, look, tier, clock, reach)
+		LASH:
+			_kind_lash(d, sk, look, tier, clock, reach)
+		COIL:
+			_kind_coil(d, sk, look, tier, clock, reach)
+		LENS:
+			_kind_lens(d, sk, look, tier, reach)
+		SPINES:
+			_kind_spines(d, sk, look, tier, reach)
+		PLATES:
+			_kind_plates(d, sk, look, tier, reach)
+		ORGANELLE:
+			_kind_organelle(d, sk, look, tier)
+		_:
+			_kind_tuft(d, sk, look, tier, reach)
+
+
+## **Draws [param d]**, [param look]'s, in [param tone] at [param alpha] and
+## [param width]: its fills, its strokes in one call, each curve and outline in
+## one, then its marks. **A ghost** -- a hole being tried, not an organ -- is
+## strokes and outlines only, its pigment at the [param fade] it is given.
+static func _paint(canvas: CanvasItem, d: Drawn, look: Dictionary, tone: Color,
+		alpha: float, width: float, sk: Stretch, eye: Dictionary, clock: float,
+		fade: float, ghost: bool) -> void:
+	if alpha <= 0.0:
+		return
+	if not ghost:
+		for fill: Array in d.fills:
+			canvas.draw_colored_polygon(fill[0], Color(tone, minf(alpha * float(fill[1]),
+				1.0)))
+	_stroke(canvas, d.lines, tone, alpha, width)
+	for path: PackedVector2Array in d.paths:
+		canvas.draw_polyline(path, Color(tone, minf(alpha, 1.0)), width, true)
+	var mark: StringName = look["mark"]
+	for one: Array in d.marks:
+		var at: Vector2 = one[1]
+		var size: float = one[2]
+		var along: Vector2 = one[3]
+		match one[0]:
+			Kinds.SEAT_PIGMENT:
+				_paint_pigment(canvas, at, size, along, tone, mark, alpha, sk, eye, clock,
+					fade)
+			Kinds.SEAT_BEADS:
+				_draw_bead(canvas, at, size, tone, alpha, sk.lit, mark, along, sk.px)
+			_:
+				_draw_mark(canvas, mark, at, size, along, tone,
+					minf(alpha * ACCENT_INK, 1.0), sk.px)
+
+
+## **A sense's pigment**: on a body the organelle it has always been -- a three-ring
+## haze, a rim and a core, or, at a fork, two lobes ([method _draw_bud]); brighter,
+## wider and solid as a level arrives ([param eye]) -- and on a tile a plain disc.
+## **A variant's accent takes the disc's place** ([param mark], at
+## [constant ACCENT_PIGMENT] of it), over the same haze. [param size] is the body's
+## radius, or the tile's disc.
+static func _paint_pigment(canvas: CanvasItem, at: Vector2, size: float, along: Vector2,
+		tone: Color, mark: StringName, alpha: float, sk: Stretch, eye: Dictionary,
+		clock: float, fade: float) -> void:
+	if sk.tile:
+		var ink := minf(0.85 * alpha / TILE_STROKE_ALPHA, 1.0)
+		if mark == Kinds.MARK_DISC:
+			canvas.draw_circle(at, size, Color(tone, ink), true, -1.0, true)
+		else:
+			_draw_mark(canvas, mark, at, size * 1.1, along, tone, ink, sk.px)
+		return
+	var r := size
+	var flare := clampf(float(eye.get("flare", 0.0)), 0.0, 1.0)
+	var bud := int(eye.get("bud", -1))
+	# The whole organ is brighter at the top of a flare, and the haze wider and
+	# denser as well: the flare is the organ lighting up, not a disc on it.
+	var lit := lerpf(1.0, FLARE_INK, flare)
+	var wide := lerpf(1.0, FLARE_HAZE_WIDE, flare)
+	var dense := lerpf(1.0, FLARE_HAZE_DENSE, flare)
+	for k in 3:
+		var q := float(k) / 3.0
+		canvas.draw_circle(at, r * PIGMENT_HAZE * (1.0 + 1.6 * q) * wide,
+			Color(tone, 0.030 * (1.0 - q) * dense * lit * fade), true, -1.0, true)
+	# **Drawn solid at the top of a flare**: the rim rises to the core's ink, so
+	# the pigment is one bright spot rather than a spot in a ring. Clamped only
+	# once the view's fade is in: point of view draws this body at a third, and
+	# a clamp before that would throw the brightening away.
+	var rim := lerpf(PIGMENT_RIM_ALPHA, PIGMENT_CORE_ALPHA, flare) * lit
+	var core := PIGMENT_CORE_ALPHA * lit
+	if bud >= 0:
+		_draw_bud(canvas, at, along.orthogonal(), r, tone, bud, rim, core, clock, fade,
+			mark, sk.px)
+		return
+	if mark != Kinds.MARK_DISC:
+		_draw_mark(canvas, mark, at, r * PIGMENT_OUTER * ACCENT_PIGMENT, along, tone,
+			minf(core * fade, 1.0), sk.px)
+		return
+	canvas.draw_circle(at, r * PIGMENT_OUTER,
+		Color(tone, minf(rim * fade, 1.0)), true, -1.0, true)
+	canvas.draw_circle(at, r * PIGMENT_INNER,
+		Color(tone, minf(core * fade, 1.0)), true, -1.0, true)
+
+
+## **A mark** (gene-looks.md §3.1): a filled disc; a hollow ring, its stroke
+## [constant ACCENT_RING] of its radius; a diamond, a square on its point, square to
+## the skin; or a bar, a short slab lying along it -- at [param at], [param size]
+## across the radius, [param along] the way the skin runs there. Nothing for none.
+static func _draw_mark(canvas: CanvasItem, mark: StringName, at: Vector2, size: float,
+		along: Vector2, tone: Color, alpha: float, px: float = 1.0) -> void:
+	match mark:
+		Kinds.MARK_DISC:
+			canvas.draw_circle(at, size, Color(tone, alpha), true, -1.0, true)
+		Kinds.MARK_RING:
+			canvas.draw_arc(at, size * 1.05, 0.0, TAU, 16, Color(tone, alpha),
+				maxf(size * ACCENT_RING, ACCENT_RING_MIN * px), true)
+		Kinds.MARK_DIAMOND:
+			var a := along * (size * 1.25)
+			var b := along.orthogonal() * (size * 1.25)
+			canvas.draw_colored_polygon(PackedVector2Array([at + a, at + b, at - a, at - b]),
+				Color(tone, alpha))
+		Kinds.MARK_BAR:
+			var a := along * (size * 1.5)
+			var b := along.orthogonal() * (size * 0.55)
+			canvas.draw_colored_polygon(PackedVector2Array([at + a + b, at - a + b,
+				at - a - b, at + a - b]), Color(tone, alpha))
+
+
+## **A variant's accent, drawn on its own** -- in a chip's first lobe, before a
+## waiting gene's word -- [param mark] at [param at], [param size] across the
+## radius, in [param tone] at [param alpha]. Nothing for a gene with none.
+static func draw_accent(canvas: CanvasItem, mark: StringName, at: Vector2, size: float,
+		tone: Color, alpha: float) -> void:
+	_draw_mark(canvas, mark, at, size, Vector2.RIGHT, tone, alpha)
+
+
+## **[param gene]'s accent**: the mark a variant wears, `&""` for its organ as
+## shipped and for a gene this build does not know.
+static func accent_of(gene: StringName) -> StringName:
+	return StringName(_look_of(gene).get("accent", &""))
+
+
+## The basal body's mark, for a kind whose seat it is and a variant that wears one.
+static func _basal(d: Drawn, sk: Stretch, look: Dictionary) -> void:
+	if look["seat"] != Kinds.SEAT_BASAL or look["mark"] == Kinds.MARK_NONE:
+		return
+	d.marks.append([Kinds.SEAT_BASAL, _sk_inner(sk, 0.5, BASAL_DEPTH),
+		BASAL_SIZE * sk.unit, _sk_along(sk, 0.5)])
+
+
+## A sense's pigment mark: the body's radius on a body, the tile's disc on a tile.
+static func _pigment(d: Drawn, sk: Stretch) -> void:
+	d.marks.append([Kinds.SEAT_PIGMENT, _sk_seat(sk),
+		TILE_PIGMENT * sk.unit / TILE_PER_R if sk.tile else sk.r, _sk_along(sk, 0.5)])
+
+
+## **mat** -- the eating build: dense fine cilia standing just off the skin, a beat
+## travelling along them -- the oral membranelles. **The mouth's own, exactly**:
+## three points a cilium, curved -- radial where it leaves the skin and at the full
+## swing only by the tip. Rendered as a straight stroke plus a lean it was much
+## worse: at three copies the roots are two pixels apart, so a mat of 26 leaning
+## strokes closes up into a solid flag and stops being a texture at all. Curving it
+## keeps every stroke separate at the root, which is where density is read.
+static func _kind_mat(d: Drawn, sk: Stretch, look: Dictionary, tier: int, clock: float,
+		reach: float) -> void:
+	var count := _count(int(look["count"]), tier)
+	if sk.tile:
+		count = mini(count, TILE_MAT_MAX)
+	var length0 := _length_of(sk, look)
+	var scale := _tier(TIER_LEN, tier) * reach
+	var lines := d.lines
+	var tile := sk.tile
+	var at := sk.at
+	var fwd := sk.fwd
+	var stb := sk.stb
+	var r := sk.r
+	var unit := sk.unit
+	var a0 := sk.a0
+	var a1 := sk.a1
+	for i in count:
+		var u := (float(i) + 0.5) / float(count)
+		var wave := sin(u * CYTOSTOME_WAVE_U - clock * CYTOSTOME_WAVE_HZ)
+		var length := length0 * unit * (0.80 + 0.30 * wave) * scale
+		_frame_on(tile, at, fwd, stb, r, a0, a1, u)
+		var normal := _at_normal
+		var nose := _at_lean
+		var swing := deg_to_rad(CYTOSTOME_SWING_DEG) * wave
+		var root := _at_root + normal * (unit * CYTOSTOME_LIFT)
+		var mid := root + _swung(normal, nose, swing * CYTOSTOME_CURVE) \
+			* (length * 0.55)
+		var tip := mid + _swung(normal, nose, swing) * (length * 0.45)
+		lines.append(root)
+		lines.append(mid)
+		lines.append(mid)
+		lines.append(tip)
+	_basal(d, sk, look)
+
+
+## **oars** -- rowing strokes with a knee, beating in waves: the cirrus's build, and
+## the knee is what separates it from a lash at a glance. **On a body both flanks**,
+## the arc and its mirror, in antiphase -- the port oars the starboard ones mirrored,
+## so the port arc is the kind's and never a slot's -- and the outboard side of a
+## turn works harder ([member Stretch.steer]). On a tile, one dome.
+static func _kind_oars(d: Drawn, sk: Stretch, look: Dictionary, tier: int, clock: float,
+		reach: float) -> void:
+	var count := _count(int(look["count"]), tier)
+	var length0 := _length_of(sk, look)
+	var scale := _tier(TIER_LEN, tier) * reach
+	var knee := float(look["knee"])
+	var bend := deg_to_rad(float(look["bend"]))
+	var flank := Vector2(sk.a0, sk.a1)
+	var lines := d.lines
+	var tile := sk.tile
+	var at := sk.at
+	var fwd := sk.fwd
+	var stb := sk.stb
+	var r := sk.r
+	var unit := sk.unit
+	for side: float in ([1.0] if tile else [1.0, -1.0]):
+		if side < 0.0:
+			sk.a0 = -flank.y
+			sk.a1 = -flank.x
+		var a0 := sk.a0
+		var a1 := sk.a1
+		var bias := 1.0 + CIRRUS_STEER_BIAS * clampf(-sk.steer * side, -1.0, 1.0)
+		for i in count:
+			var u := (float(i) + 0.5) / float(count)
+			var phase := clock * CIRRUS_HZ + u * CIRRUS_WAVE_U
+			if side < 0.0:
+				phase += PI
+			if tile:
+				phase += TILE_OARS_PHASE
+			var length := length0 * unit * (0.86 + 0.22 * cos(phase)) * scale
+			_frame_on(tile, at, fwd, stb, r, a0, a1, u)
+			var normal := _at_normal
+			var nose := _at_lean
+			var swing := deg_to_rad(CIRRUS_SWING_DEG) * sin(phase) * bias
+			var bent := _swung(normal, nose, swing + bend * signf(sin(phase)))
+			var root := _at_root
+			var at_knee := root + _swung(normal, nose, swing) * (length * knee)
+			lines.append(root)
+			lines.append(at_knee)
+			lines.append(at_knee)
+			lines.append(at_knee + bent * (length * (1.0 - knee)))
+		_basal(d, sk, look)
+	sk.a0 = flank.x
+	sk.a1 = flank.y
+
+
+## **lash** -- long smooth strands carrying a wave out to the tip, the only stroke
+## in the vocabulary longer than half the body: the tail, and with two waves a whip.
+## [member Stretch.still] is how far it is held still, 0 to 1: its lash goes slack
+## toward [constant TAIL_HELD_LASH], its clock the caller's, stopping.
+static func _kind_lash(d: Drawn, sk: Stretch, look: Dictionary, tier: int, clock: float,
+		reach: float) -> void:
+	var count := _count(int(look["count"]), tier)
+	if sk.tile:
+		count = mini(count, TILE_LASH_MAX)
+	var length0 := _length_of(sk, look)
+	var scale := _tier(TIER_LEN, tier) * reach
+	var slack := lerpf(1.0, TAIL_HELD_LASH, clampf(sk.still, 0.0, 1.0))
+	var wave := float(look["wave"])
+	var waves := float(look["waves"])
+	# Five segments a wave, the tail's own six points for one.
+	var points := FLAGELLUM_POINTS
+	if waves > 1.0:
+		points = ceili(float(FLAGELLUM_POINTS - 1) * waves) + 1
+	var lines := d.lines
+	var tile := sk.tile
+	var at := sk.at
+	var fwd := sk.fwd
+	var stb := sk.stb
+	var r := sk.r
+	var unit := sk.unit
+	var a0 := sk.a0
+	var a1 := sk.a1
+	for i in count:
+		var u := (float(i) + 0.5) / float(count)
+		var base := sin(u * FLAGELLUM_WAVE_U - clock * FLAGELLUM_WAVE_HZ)
+		var length := length0 * unit * (0.82 + 0.26 * base) * scale
+		_frame_on(tile, at, fwd, stb, r, a0, a1, u)
+		var dir := _at_normal
+		var side := Vector2(-dir.y, dir.x)
+		var root := _at_root
+		var previous := root
+		for j in range(1, points):
+			var v := float(j) / float(points - 1)
+			var lash := sin(v * waves * FLAGELLUM_WAVE_V - clock * FLAGELLUM_WAVE_HZ
+				+ u * FLAGELLUM_WAVE_U) * length * wave * v * slack
+			var point := root + dir * (length * v) + side * lash
+			lines.append(previous)
+			lines.append(point)
+			previous = point
+	_basal(d, sk, look)
+
+
+## **coil** -- a contractile spring: a bold zigzag standing off the skin that draws
+## up and lets go, slowly, on the body's clock. Small loops were tried first, and at
+## body size loops read as beads, which mean *armed* (gene-looks.md §10).
+static func _kind_coil(d: Drawn, sk: Stretch, look: Dictionary, tier: int, clock: float,
+		reach: float) -> void:
+	var count := _count(int(look["count"]), tier)
+	var span := _length_of(sk, look) * _tier(TIER_LEN, tier) * reach * sk.unit
+	var zigs := int(look["turns"]) * 2 + 1
+	var amp := COIL_AMP * sk.unit
+	var hand := _sk_hand(sk)
+	for i in count:
+		var u := (float(i) + 0.5) / float(count)
+		_frame(sk, u)
+		var root := _at_root
+		var dir := _at_normal.rotated(deg_to_rad(COIL_LEAN) * (u - 0.5) * 2.0 * hand)
+		var across := dir.orthogonal()
+		var length := span * (0.84 + 0.16 * sin(clock * COIL_BREATH + float(i) * 1.9))
+		var spring := PackedVector2Array([root])
+		for k in range(1, zigs + 1):
+			var v := float(k) / float(zigs)
+			var off := 0.0 if k == zigs else (1.0 if k % 2 == 1 else -1.0)
+			spring.append(root + dir * (length * v) + across * (amp * off))
+		d.paths.append(spring)
+	_basal(d, sk, look)
+
+
+## **tuft** -- the sensing build: stiff, still bristles fanned over a pigment, the
+## one filled spot of a sense's colour on a body. No clock: a sensory cilium does not
+## row, and the variation across the arc is a standing bow rather than a wave, so
+## the arc reads as a tuft and not as a picket fence. Its tip is its identity --
+## plain, forked, ringed, hooked, three-way -- and a bend splays the outer bristles
+## away from the middle, as feelers do.
+static func _kind_tuft(d: Drawn, sk: Stretch, look: Dictionary, tier: int,
+		reach: float) -> void:
+	var count := _count(int(look["count"]), tier)
+	var span := _length_of(sk, look) * _tier(TIER_LEN, tier) * reach * sk.unit
+	var tip: StringName = look["tip"]
+	var bend := deg_to_rad(float(look["bend"]))
+	var ring := maxf(TUFT_RING * sk.unit, TUFT_RING_MIN * sk.px)
+	var fan := deg_to_rad(float(look["fan"]) + FAN_PER_COPY * float(maxi(tier - 1, 0)))
+	var hand := _sk_hand(sk)
+	for i in count:
+		var u := (float(i) + 0.5) / float(count)
+		_frame(sk, u)
+		var root := _at_root
+		var normal := _at_normal.rotated(fan * (u - 0.5) * 2.0 * hand)
+		var length := span * (0.88 + 0.14 * sin(u * PI))
+		var stem := length
+		match tip:
+			Kinds.TIP_RING:
+				stem = length - ring
+			Kinds.TIP_FORK, Kinds.TIP_TRI:
+				stem = length * 0.58
+			Kinds.TIP_HOOK:
+				stem = length * 0.66
+		var dir := normal
+		var end := root + normal * stem
+		if bend == 0.0:
+			d.lines.append(root)
+			d.lines.append(end)
+		else:
+			var along := _sk_along(sk, u)
+			var side := clampf((u - 0.5) * 2.0, -1.0, 1.0)
+			var bent := PackedVector2Array([root])
+			end = root
+			for k in TUFT_BEND_STEPS:
+				var angle := bend * side * float(k + 1) / float(TUFT_BEND_STEPS)
+				dir = (normal * cos(angle) + along * sin(angle)).normalized()
+				end += dir * (stem / float(TUFT_BEND_STEPS))
+				bent.append(end)
+			d.paths.append(bent)
+		match tip:
+			Kinds.TIP_FORK, Kinds.TIP_TRI:
+				var arms: Array = [-1.0, 1.0] if tip == Kinds.TIP_FORK else [-1.0, 0.0, 1.0]
+				for arm: float in arms:
+					d.lines.append(end)
+					d.lines.append(end + dir.rotated(deg_to_rad(TUFT_FORK_DEG) * arm)
+						* (length * TUFT_ARM))
+			Kinds.TIP_HOOK:
+				# A crook: the last third curls back over the stem's outer side.
+				var crook := PackedVector2Array([end])
+				var turn := 1.0 if u >= 0.5 else -1.0
+				for k in 5:
+					crook.append(crook[crook.size() - 1] + dir.rotated(
+						deg_to_rad(TUFT_HOOK_DEG * float(k + 1)) * turn * hand)
+						* (length * TUFT_HOOK_STEP))
+				d.paths.append(crook)
+			Kinds.TIP_RING:
+				var centre := end + dir * ring
+				var loop := PackedVector2Array()
+				for k in 13:
+					var a := TAU * float(k) / 12.0
+					loop.append(centre + Vector2(cos(a), sin(a)) * ring)
+				d.paths.append(loop)
+	_pigment(d, sk)
+
+
+## **lens** -- an eye: a clear lens standing on the skin over a pigment. The ocellus
+## is a real camera eye, and a lens is what no bristle organ has. Filled: as an
+## outline it read as a hook, not an eye (gene-looks.md §10).
+static func _kind_lens(d: Drawn, sk: Stretch, look: Dictionary, tier: int,
+		reach: float) -> void:
+	var bulge := float(look["bulge"]) * _tier(TIER_LEN, tier) * reach * sk.unit
+	var lift := LENS_LIFT * sk.unit
+	var outer := PackedVector2Array()
+	var inner := PackedVector2Array()
+	for k in LENS_STEPS + 1:
+		var v := float(k) / float(LENS_STEPS)
+		var u := lerpf(LENS_FROM, 1.0 - LENS_FROM, v)
+		_frame(sk, u)
+		var root := _at_root
+		var normal := _at_normal
+		inner.append(root + normal * lift)
+		outer.append(root + normal * (lift + bulge * sin(v * PI)))
+	inner.reverse()
+	outer.append_array(inner)
+	d.fills.append([outer.duplicate(), LENS_FILL])
+	outer.append(outer[0])
+	d.paths.append(outer)
+	_pigment(d, sk)
+
+
+## **spines** -- the armed build: hard straight shafts, fanned, each with a head --
+## a spear for a dart (a trichocyst's real spindle), a bead for a toxin, a barbed
+## hook. Never under [constant GUARD_MIN] canvas px. A bead-headed spine's accent is
+## its beads; [member Stretch.lit] is it firing, longer, with bigger beads.
+static func _kind_spines(d: Drawn, sk: Stretch, look: Dictionary, tier: int,
+		reach: float) -> void:
+	var per_copy := int(look["per_copy"])
+	var count := per_copy * clampi(tier, 1, 3) if per_copy > 0 \
+		else _count(int(look["count"]), tier)
+	var length := maxf(_length_of(sk, look) * sk.unit * _tier(TIER_LEN, tier) * reach,
+		GUARD_MIN * sk.px) * (1.0 + TOXIN_FLARE_LONG * sk.lit)
+	var fan := deg_to_rad(float(look["fan"]) + FAN_PER_COPY * float(maxi(tier - 1, 0)))
+	var hand := _sk_hand(sk)
+	var tip: StringName = look["tip"]
+	var head := maxf(SPEAR_HEAD * sk.unit, SPEAR_HEAD_MIN * sk.px)
+	var bead := maxf(GUARD_BEAD * sk.unit, BEAD_MIN * sk.px) \
+		* (1.0 + TOXIN_FLARE_BEAD * sk.lit)
+	for i in count:
+		var w := (float(i) + 0.5) / float(count)
+		var u := lerpf(GUARD_FROM, 1.0 - GUARD_FROM, w)
+		_frame(sk, u)
+		var root := _at_root
+		var dir := _at_normal.rotated(fan * lerpf(-1.0, 1.0, w) * hand)
+		var end := root + dir * length
+		d.lines.append(root)
+		d.lines.append(end)
+		match tip:
+			Kinds.TIP_SPEAR:
+				for s: float in [-1.0, 1.0]:
+					d.lines.append(end)
+					d.lines.append(end - dir.rotated(deg_to_rad(SPEAR_HEAD_DEG) * s) * head)
+			Kinds.TIP_BARB:
+				# A barbed hook: one barb back along a side, and the point bent over.
+				d.lines.append(end)
+				d.lines.append(end - dir.rotated(deg_to_rad(32.0) * hand) * head)
+				d.lines.append(end)
+				d.lines.append(end + dir.rotated(deg_to_rad(-110.0) * hand) * (head * 0.9))
+			_:
+				d.marks.append([Kinds.SEAT_BEADS, end, bead, dir.orthogonal()])
+	_basal(d, sk, look)
+
+
+## **plates** -- armour: overlapping scales lying along the skin over a thickened
+## rim, the one build that runs along a body rather than out of it. The pellicle is
+## a real layer of plates under the membrane.
+static func _kind_plates(d: Drawn, sk: Stretch, look: Dictionary, tier: int,
+		reach: float) -> void:
+	var count := _count(int(look["count"]), tier)
+	var thick := PLATE_THICK * sk.unit * _tier(TIER_LEN, tier) * reach
+	var lift := PLATE_LIFT * sk.unit
+	var width := PLATE_OVERLAP / float(count)
+	for i in count:
+		var c := (float(i) + 0.5) / float(count)
+		var plate := PackedVector2Array()
+		for k in 7:
+			var v := float(k) / 6.0
+			var u := clampf(c + (v - 0.5) * width, 0.0, 1.0)
+			_frame(sk, u)
+			plate.append(_at_root + _at_normal * (lift + thick * sin(v * PI)))
+		d.paths.append(plate)
+	# The skin under them, doubled: a thickened rim.
+	var rim := PackedVector2Array()
+	for k in 9:
+		var u := float(k) / 8.0
+		_frame(sk, u)
+		rim.append(_at_root + _at_normal * lift)
+	d.paths.append(rim)
+	_basal(d, sk, look)
+
+
+## **organelle** -- the metabolism build: bodies under the skin at the arc, and
+## nothing outside it. **One a copy**: tier is how many. Its form is its identity --
+## a plastid's solid lens, a vacuole's clear bubble, a mitochondrion's long rod with
+## a fold, a stack of cisternae, a contractile vacuole's canals -- and its centre
+## the seat of a variant's accent.
+static func _kind_organelle(d: Drawn, sk: Stretch, look: Dictionary, tier: int) -> void:
+	var form: StringName = look["form"]
+	var size := float(look["size"]) * sk.unit
+	var depth := float(look["depth"])
+	for seat: Array in ORGANELLE_SEATS[clampi(tier, 1, 3)]:
+		var u: float = seat[0]
+		var at := _sk_inner(sk, u, depth + float(seat[1]))
+		var along := _sk_along(sk, u)
+		var across := along.orthogonal()
+		var outline := PackedVector2Array()
+		for k in ORGANELLE_STEPS:
+			var a := TAU * float(k) / float(ORGANELLE_STEPS)
+			var x := cos(a)
+			var y := sin(a)
+			match form:
+				Kinds.FORM_LENS:
+					outline.append(at + along * (x * size * 1.25) + across * (y * size * 0.80))
+				Kinds.FORM_CAPSULE:
+					# A stadium: flat sides, round ends.
+					outline.append(at + along * (signf(x) * pow(absf(x), 0.45) * size * 1.75)
+						+ across * (y * size * 0.50))
+				Kinds.FORM_STAR:
+					outline.append(at + Vector2(x, y) * (size * 0.70))
+				_:
+					outline.append(at + Vector2(x, y) * size)
+		match form:
+			Kinds.FORM_STACK:
+				# Three flat cisternae, stacked: a Golgi body or a thylakoid stack.
+				for k in 3:
+					var off := (float(k) - 1.0) * size * 0.55
+					var bow := 0.25 * size * (1.0 - absf(float(k) - 1.0) * 0.4)
+					var cistern := PackedVector2Array()
+					for j in 7:
+						var v := float(j) / 6.0
+						cistern.append(at + along * lerpf(-size * 1.3, size * 1.3, v)
+							+ across * (off + bow * sin(v * PI)))
+					d.paths.append(cistern)
+			Kinds.FORM_STAR:
+				# A contractile vacuole: a bubble with canals running out of it.
+				d.fills.append([outline.duplicate(), 0.12])
+				for k in 6:
+					var out := Vector2.from_angle(TAU * float(k) / 6.0 + 0.3)
+					d.lines.append(at + out * (size * 0.72))
+					d.lines.append(at + out * (size * 1.45))
+			Kinds.FORM_CAPSULE:
+				d.fills.append([outline.duplicate(), 0.10])
+				var folds := PackedVector2Array([at - along * (size * 1.35)])
+				for k in range(1, 7):
+					var v := float(k) / 6.0
+					var off := 0.0 if k == 6 else (1.0 if k % 2 == 1 else -1.0)
+					folds.append(at + along * lerpf(-size * 1.35, size * 1.35, v)
+						+ across * (off * size * 0.34))
+				d.paths.append(folds)
+			Kinds.FORM_LENS:
+				d.fills.append([outline.duplicate(), 0.85])
+			_:
+				d.fills.append([outline.duplicate(), 0.12])
+		if form != Kinds.FORM_STACK:
+			outline.append(outline[0])
+			d.paths.append(outline)
+		if look["mark"] != Kinds.MARK_NONE:
+			d.marks.append([Kinds.SEAT_CENTRE, at, size * ORGANELLE_MARK, along])
 
 
 # ---------------------------------------------------------------------------
@@ -1680,17 +2358,21 @@ const VACANCY_DOT_MIN := 1.6     ## canvas px
 const VACANCY_ALPHA := 0.52
 const VACANCY_HELD := 1.7        ## how much brighter the one socket being tried gets
 
-## The organ that is not there yet. Same strokes as [constant LEN_EARNED], at a
-## fraction of the length, standing off the skin by [constant GHOST_GAP] -- and
-## that gap is not a margin, it is the message.
-## Measured, not chosen: at 0.13 the tuft sat inside the cirrus oars and the
+## **The organ that is not there yet**: the waiting gene's own kind
+## (docs/design/gene-looks.md §4), faint, on a skin lifted [constant GHOST_GAP]
+## clear of the body -- and that gap is not a margin, it is the message.
+## Measured, not chosen: at 0.13 the ghost sat inside the cirrus oars and the
 ## gape's starboard stem -- which is seated at t 54, the exact middle of free
 ## arc 1 -- and the one thing it had to say, *this is not attached*, was the
 ## thing the crowding took away. At 0.24 it floats outboard of every rowing
 ## cilium and inboard of the flagellum, in a band of the body nothing else uses.
-const GHOST_GAP := 0.24          ## of r, skin to the root of the floating tuft
-const GHOST_LEN := 0.74          ## of LEN_EARNED
+## **Strokes and outlines only**: an organelle cannot float clear of the skin, so
+## its ghost is its outline, unfilled, and a sense's pigment is at the ghost's
+## own ink -- filled, the ghost read as an organ, not a hole.
+const GHOST_GAP := 0.24          ## of r, skin to the lifted skin
 const GHOST_ALPHA := 0.74
+## The pigment of a ghost, as a share of its strokes' ink.
+const GHOST_PIGMENT := 0.6
 const GHOST_BEAT := 0.5          ## extra on the beat, as a fraction of the base
 const GHOST_WIDTH := 1.7
 
@@ -1855,7 +2537,7 @@ static func draw_pending(canvas: CanvasItem, at: Vector2, heading: float,
 
 	for i in free.size():
 		_draw_socket(canvas, at, fwd, stb, r, free[i], tone, i == tried,
-			wilt, pulse, fade, unit)
+			wilt, pulse, fade, unit, gene if held else &"")
 	if not held:
 		return
 	var target := seat
@@ -1986,41 +2668,21 @@ static func free_arcs(order: Array) -> Array[Vector2]:
 
 
 ## One empty socket: the beads that are always there, and -- on the one socket
-## the sample is currently reaching for -- the tuft it would become, floating
-## clear of the skin.
+## the sample is currently reaching for -- the organ it would become, [param gene]'s
+## own kind, floating clear of the skin.
 ##
 ## **[param tuft] is one socket's privilege, not every free socket's, and the
 ## render is why.** Drawn on all four holes of a grown cell it was a halo of
 ## sixteen pale spikes standing off the skin at every diagonal: louder than the
 ## real fringe, and it read as *this cell has four new organs* rather than as
-## *one gene is waiting*. One tuft, on the hole the thread is pointing at, is
+## *one gene is waiting*. One ghost, on the hole the thread is pointing at, is
 ## the same sentence at a quarter of the ink -- and because the vesicle drifts,
 ## a genome with three holes in it is still shown trying each of them in turn,
 ## which is what the four at once were trying to say and could not.
 static func _draw_socket(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		stb: Vector2, r: float, arc: Vector2, tone: Color, tuft: bool,
-		wilt: float, beat: float, fade: float, unit: float) -> void:
-	var strokes := PackedVector2Array()
-	# **The tuft stays on the skin and the bead has moved off it.** The two say
-	# different things now: the bead is the hole in the DNA, by the nucleus,
-	# where the gene is actually going; the tuft is the organ that hole would
-	# become, drawn where an organ would stand and not touching the body. They
-	# are on the same bearing, so the thread, the bead and the tuft read as one
-	# line out from the middle.
-	if tuft:
-		for i in COUNT_EARNED:
-			var u := (float(i) + 0.5) / float(COUNT_EARNED)
-			var t := deg_to_rad(lerpf(arc.x, arc.y, u))
-			var dir := _normal(fwd, stb, t)
-			var root := _surface(at, fwd, stb, r, t)
-			# It starts *off* the body and ends short of where a real one
-			# would. Both halves of that are the reading: it is not rooted, and
-			# it is not finished.
-			var length := LEN_EARNED * r * GHOST_LEN * (0.30 + 0.70 * wilt) \
-				* (0.86 + 0.14 * sin(u * PI))
-			var lift := root + dir * (r * GHOST_GAP)
-			strokes.append(lift)
-			strokes.append(lift + dir * length)
+		wilt: float, beat: float, fade: float, unit: float,
+		gene: StringName = &"") -> void:
 	var dot := maxf(r * VACANCY_DOT, VACANCY_DOT_MIN * unit)
 	# **Only the socket being tried brightens.** Lifting every free socket when
 	# a sample arrived put sixteen bright beads round the rim of a grown cell
@@ -2029,10 +2691,26 @@ static func _draw_socket(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 	var ink := clampf(VACANCY_ALPHA * (VACANCY_HELD if tuft else 1.0), 0.0, 1.0)
 	canvas.draw_circle(_socket_bead(at, fwd, stb, r, arc), dot,
 		Color(tone, ink * fade), true, -1.0, true)
-	if tuft:
-		_stroke(canvas, strokes, tone,
-			GHOST_ALPHA * (0.34 + 0.66 * wilt) * (1.0 + GHOST_BEAT * beat) * fade,
-			GHOST_WIDTH * unit)
+	if not tuft or gene == &"":
+		return
+	# **The ghost stays on the skin and the bead has moved off it.** The two say
+	# different things now: the bead is the hole in the DNA, by the nucleus,
+	# where the gene is actually going; the ghost is the organ that hole would
+	# become, drawn where an organ would stand and not touching the body -- on the
+	# body's own skin lifted [constant GHOST_GAP] clear, at the body's own scale.
+	# They are on the same bearing, so the thread, the bead and the ghost read as
+	# one line out from the middle.
+	var sk := Stretch.new()
+	_on_body(sk, at, fwd, stb, r * (1.0 + GHOST_GAP), unit)
+	sk.unit = r
+	sk.a0 = arc.x
+	sk.a1 = arc.y
+	var ghost := GHOST_ALPHA * (0.34 + 0.66 * wilt) * (1.0 + GHOST_BEAT * beat) * fade
+	var look := _look_of(gene)
+	var d := Drawn.new()
+	_build(d, sk, look, 1, 0.0, 1.0)
+	_paint(canvas, d, look, tone, ghost, GHOST_WIDTH * unit, sk, NO_EYE, 0.0,
+		ghost * GHOST_PIGMENT, true)
 
 
 ## The sample: a vesicle circling the nucleus, with a thread out toward the
@@ -2194,8 +2872,11 @@ static func _to_segment(point: Vector2, a: Vector2, b: Vector2) -> float:
 # something you consult, and a still one is easier to read than a live one.
 # ---------------------------------------------------------------------------
 
-## The organ on a genome tile: a dome of the gene's own strokes, so the tile and
-## the body are one vocabulary. [param size] is the tile's own rect.
+## The organ on a genome tile: **its own kind on the tile's dome** -- the same
+## generator a body is drawn by, at the tile's scale (docs/design/gene-looks.md
+## §2.2) -- so the tile and the body are one vocabulary. An inside form is the dome,
+## a pigment and its beads on an arc just outside it: its granules, at a tile's
+## size. [param size] is the tile's own rect.
 ##
 ## [param alpha] is the second, weaker channel behind the pips: a gene the DNA
 ## carries and the body does not wear draws its strokes fainter. The pips do the
@@ -2205,7 +2886,12 @@ static func _to_segment(point: Vector2, a: Vector2, b: Vector2) -> float:
 ## no 76px tile to put an organ in, so the one organ on the pause screen is the
 ## **selected** gene's, drawn once beside the sentence that explains it -- which
 ## is a smaller row than a tile and needs the geometry to come with it.
-static func draw_tile_organ(canvas: CanvasItem, gene: StringName, tier: int,
+##
+## **Tier is drawn as rungs by the strand itself**, so a tile is always one copy:
+## at 13 pixels a 22% length difference is one pixel, so magnitude cannot carry it
+## here the way it does on a body. This is the one place the two vocabularies
+## deliberately differ, and the tile says why -- it is a label, not an organism.
+static func draw_tile_organ(canvas: CanvasItem, gene: StringName, _tier: int,
 		centre: Vector2, alpha: float = TILE_STROKE_ALPHA,
 		scale: float = 1.0) -> void:
 	var tone := hue(gene)
@@ -2213,67 +2899,79 @@ static func draw_tile_organ(canvas: CanvasItem, gene: StringName, tier: int,
 	var arc_r := TILE_ARC_RADIUS * scale
 	canvas.draw_arc(centre, arc_r, TILE_ARC_FROM, TILE_ARC_TO, 32,
 		Color(tone, TILE_ARC_ALPHA * ink), TILE_ARC_WIDTH * scale, true)
-
-	# **Spines are two tiles, by place** -- the toxin's two forms (dna-slots-ux.md
-	# §2.5): venom four beaded rods standing out of the dome, poison the dome, the
-	# pigment and seven dots on an arc just outside it -- the granules, at a tile's
-	# size.
-	var look: Dictionary = _looks.get(gene, NO_LOOK)
-	var shape: StringName = look.get("shape", &"")
-	if shape == SPINES:
-		if Genome.is_inside_form(gene):
-			canvas.draw_circle(centre + Vector2(0.0, -arc_r * PIGMENT_SEAT),
-				TILE_PIGMENT * scale, Color(tone, 0.85 * ink), true, -1.0, true)
-			for i in TILE_GRANULES:
-				var u := (float(i) + 0.5) / float(TILE_GRANULES)
-				var angle := lerpf(TILE_ARC_FROM - 0.15, TILE_ARC_TO + 0.15, u)
-				canvas.draw_circle(centre + Vector2(cos(angle), sin(angle))
-					* (arc_r + TILE_GRANULE_OUT * scale), TILE_GRANULE_R * scale,
-					Color(tone, minf(alpha, 1.0)), true, -1.0, true)
-			return
-		var rods := PackedVector2Array()
-		for i in TILE_RODS:
-			var u := (float(i) + 0.5) / float(TILE_RODS)
-			var angle := lerpf(TILE_ARC_FROM + 0.25, TILE_ARC_TO - 0.25, u)
-			var dir := Vector2(cos(angle), sin(angle))
-			var tip := centre + dir * (arc_r + TILE_LEN_EARNED * 0.85 * scale)
-			rods.append(centre + dir * (arc_r * 0.55))
-			rods.append(tip)
-			canvas.draw_circle(tip, TILE_ROD_BEAD * scale, Color(tone, 0.95 * ink),
-				true, -1.0, true)
-		_stroke(canvas, rods, tone, alpha, TILE_ARC_WIDTH * 1.35 * scale)
-		return
-
-	var count := int(look.get("tile_count", look.get("count", TILE_COUNT_EARNED)))
-	var length := float(look.get("tile_length", TILE_LEN_EARNED)) * scale
-	var earned := not HOME_SHAPES.has(shape)
-	if earned:
+	var look := _look_of(gene)
+	if Genome.is_inside_form(gene):
 		canvas.draw_circle(centre + Vector2(0.0, -arc_r * PIGMENT_SEAT),
 			TILE_PIGMENT * scale, Color(tone, 0.85 * ink), true, -1.0, true)
+		var mark := _bead_mark(look)
+		for granule: Vector2 in _tile_granules(centre, arc_r, scale):
+			_draw_bead(canvas, granule, TILE_GRANULE_R * scale, tone, alpha, 0.0, mark,
+				(granule - centre).orthogonal().normalized())
+		return
+	var sk := _tile_skin(centre, arc_r, scale)
+	var d := _drawn
+	d.clear()
+	_build(d, sk, look, 1, 0.0, 1.0)
+	_paint(canvas, d, look, tone, alpha, TILE_ARC_WIDTH * scale * _tile_width(look), sk,
+		NO_EYE, 0.0, 1.0, false)
 
-	var strokes := PackedVector2Array()
-	for i in count:
-		var u := (float(i) + 0.5) / float(count)
-		var angle := lerpf(TILE_ARC_FROM, TILE_ARC_TO, u)
-		var dir := Vector2(cos(angle), sin(angle))
-		var root := centre + dir * arc_r
-		var span := length
-		if shape == MAT:
-			# The same metachronal wave the body wears, held still at clock 0.
-			span *= 0.80 + 0.30 * sin(u * CYTOSTOME_WAVE_U)
-		elif shape == OARS:
-			span *= 0.86 + 0.22 * cos(u * CIRRUS_WAVE_U)
-		elif shape == LASH:
-			span *= 0.82 + 0.26 * sin(u * FLAGELLUM_WAVE_U)
-		else:
-			span *= 0.88 + 0.14 * sin(u * PI)
-		strokes.append(root)
-		strokes.append(root + dir * span)
-	_stroke(canvas, strokes, tone, alpha, TILE_ARC_WIDTH * scale)
-	# Tier is drawn as rungs by the strand itself: at 13 pixels a 22% length
-	# difference is one pixel, so magnitude cannot carry it here the way it does
-	# on a body. This is the one place the two vocabularies deliberately differ,
-	# and the tile says why -- it is a label, not an organism.
+
+## An inside form's granules on a tile: seven, on an arc just outside the dome.
+static func _tile_granules(centre: Vector2, arc_r: float, scale: float) -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for i in TILE_GRANULES:
+		var u := (float(i) + 0.5) / float(TILE_GRANULES)
+		var angle := lerpf(TILE_ARC_FROM - 0.15, TILE_ARC_TO + 0.15, u)
+		out.append(centre + Vector2(cos(angle), sin(angle))
+			* (arc_r + TILE_GRANULE_OUT * scale))
+	return out
+
+
+## A kind's stroke on a tile, against the tile's own width.
+static func _tile_width(look: Dictionary) -> float:
+	if look["shape"] == SPINES and look["tip"] == Kinds.TIP_BEAD:
+		return TILE_SPINE_WIDTH
+	return 1.0
+
+
+## **Where [param gene]'s tile organ reaches**, at one scale, about its centre: the
+## dome, every stroke, curve, fill and mark the tile draws -- with half a stroke's
+## width and a mark's own reach -- built by the same generator and drawn on nothing.
+## What the gene probe holds every live organ's tile to: inside a tile, and under
+## the explaining line's row (gene-looks.md §8, check 4).
+static func tile_bounds(gene: StringName) -> Rect2:
+	var look := _look_of(gene)
+	var width := TILE_ARC_WIDTH * _tile_width(look)
+	var box := Rect2(Vector2(cos(TILE_ARC_FROM), sin(TILE_ARC_FROM)) * TILE_ARC_RADIUS,
+		Vector2.ZERO)
+	for k in 33:
+		var a := lerpf(TILE_ARC_FROM, TILE_ARC_TO, float(k) / 32.0)
+		box = box.expand(Vector2(cos(a), sin(a)) * TILE_ARC_RADIUS)
+	box = box.grow(TILE_ARC_WIDTH * 0.5)
+	if Genome.is_inside_form(gene):
+		box = box.merge(Rect2(Vector2(0.0, -TILE_ARC_RADIUS * PIGMENT_SEAT), Vector2.ZERO)
+			.grow(TILE_PIGMENT))
+		for granule: Vector2 in _tile_granules(Vector2.ZERO, TILE_ARC_RADIUS, 1.0):
+			box = box.merge(Rect2(granule, Vector2.ZERO).grow(maxf(TILE_GRANULE_R,
+				ACCENT_BEAD_MIN) * 1.5))
+		return box
+	var sk := _tile_skin(Vector2.ZERO, TILE_ARC_RADIUS, 1.0)
+	var d := Drawn.new()
+	_build(d, sk, look, 1, 0.0, 1.0)
+	var points := d.lines.duplicate()
+	for path: PackedVector2Array in d.paths:
+		points.append_array(path)
+	for fill: Array in d.fills:
+		points.append_array(fill[0])
+	for point: Vector2 in points:
+		box = box.merge(Rect2(point, Vector2.ZERO).grow(width * 0.5))
+	for one: Array in d.marks:
+		var reach := float(one[2])
+		if one[0] == Kinds.SEAT_BEADS and look["mark"] != Kinds.MARK_DISC:
+			reach = maxf(reach, ACCENT_BEAD_MIN)
+		# A diamond reaches 1.25 of its size, a bar 1.5, a ring 1.05 and its stroke.
+		box = box.merge(Rect2(one[1], Vector2.ZERO).grow(reach * 1.5))
+	return box
 
 
 ## **Which arc this slot is, drawn small.** A compass with one dart on it,
@@ -2606,21 +3304,11 @@ static func _stroke(canvas: CanvasItem, points: PackedVector2Array, tone: Color,
 	canvas.draw_multiline(points, Color(tone, alpha), width, true)
 
 
-## The unit tangent at [param t] that points toward the nose, which is the
-## direction every swing in §4.2 is measured in.
-## The outward normal turned [param angle] toward the nose. Every swing in §4.2
-## is measured this way, so there is one definition of which way a cilium leans.
+## The outward normal turned [param angle] toward the nose ([member _at_lean]).
+## Every swing in §4.2 is measured this way, so there is one definition of which
+## way a cilium leans.
 static func _swung(normal: Vector2, nose: Vector2, angle: float) -> Vector2:
 	return (normal * cos(angle) + nose * sin(angle)).normalized()
-
-
-static func _toward_nose(fwd: Vector2, stb: Vector2, t: float) -> Vector2:
-	var n := _normal(fwd, stb, t)
-	# Rotate the normal a quarter turn, in whichever sense reduces |t|. On the
-	# starboard flank that is one way round and on the port flank the other, so
-	# the two sides lean toward the same nose rather than mirroring each other
-	# into a shape that has no front.
-	return Vector2(n.y, -n.x) if wrapf(t, -PI, PI) >= 0.0 else Vector2(-n.y, n.x)
 
 
 static func _tier(ladder: Array[float], tier: int) -> float:
@@ -2629,3 +3317,9 @@ static func _tier(ladder: Array[float], tier: int) -> float:
 
 static func _count(base: int, tier: int) -> int:
 	return maxi(1, int(roundf(float(base) * _tier(TIER_COUNT, tier))))
+
+
+## [param value] made read-only and handed back.
+static func _frozen(value: Dictionary) -> Dictionary:
+	value.make_read_only()
+	return value

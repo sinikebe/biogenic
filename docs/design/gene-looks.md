@@ -16,13 +16,14 @@ all of it, and today's seventeen keys redrawn. It is the one part of that plan a
 sees on a body. The catalogue's fields, the probe's checks and the build follow from it
 (§7 to §9).
 
-**Status: designed and mocked, not built.** Mocked in the design worktree on dev
-`77f90c3` by changing `cilia.gd`, `signal_bus.gd` and `figure.gd` locally and adding a
-specimen sheet (`tools/looks_sheet.tscn`). The mock is kept as a patch beside the
-frames, not in the repository. Every frame in §10 was rendered at 1280x720 and
-2400x1080 under `--rendering-driver opengl3 --fixed-fps 60 --seed=12345` and looked at,
-in colour, in luminance only, and through a deuteranope simulation. One frame rendered
-three times differs by **0 pixels**.
+**Status: built in phase 6, 2026-10-10.** §13 is what the build did and measured,
+and where it differs from the sections above. Designed and mocked first, in the design
+worktree on dev `77f90c3`, by changing `cilia.gd`, `signal_bus.gd` and `figure.gd`
+locally and adding a specimen sheet (`tools/looks_sheet.tscn`). The mock is kept as a
+patch beside the frames, not in the repository. Every frame in §10 was rendered at
+1280x720 and 2400x1080 under `--rendering-driver opengl3 --fixed-fps 60 --seed=12345`
+and looked at, in colour, in luminance only, and through a deuteranope simulation. One
+frame rendered three times differs by **0 pixels**.
 
 `$N` below is the design session's notes folder (`scratchpad/genes/notes/ux/`), not in
 the repository: `$N/shots/` holds the frames, `$N/mock.patch` the mock, and
@@ -635,7 +636,7 @@ pixels. Three renders of `one` differ by **0 pixels** (`det1`–`det3`).
    to the inside says, while it is now drawn inside the skin. It was already slightly
    untrue (a sun faces nothing). If players stumble on it, the sentence wants a per-organ
    word, which the catalogue's words allow.
-7. **The tray chip's accent is specified, not mocked.**
+7. **The tray chip's accent is specified, not mocked.** Built and shot in phase 6 (§13).
 8. **Whether metabolism genes should one day go in inside slots** is a game question, not
    a look. If they do, an inside organelle draws round the nucleus instead of at an arc,
    as the toxin's inside form drops its arc: a few lines in that kind, not mocked.
@@ -652,3 +653,158 @@ pixels. Three renders of `one` differ by **0 pixels** (`det1`–`det3`).
 
 Nothing else here is a name or changes what the game is. The colours, the shapes and
 the toxin leaving lime for orange are looks, decided above and photographed.
+
+---
+
+## 13. As built: phase 6, 2026-10-10
+
+Built on phase 4's tree (`b63e365`), in the files §9.1 lists. The frames are kept in
+the build session's notes (`scratchpad/genes/notes/p6/shots/`), not in the repository,
+as the mock's were.
+
+| file | what it holds |
+|---|---|
+| `game/genes/families.gd` | the five families, each three shades and the kinds it is built as |
+| `game/genes/kinds.gd` | the nine kinds as data (§7): each parameter's default, range or values, and whether it is structural; each kind's seat and its mark as shipped; the four accents. `resolved()` fills a look's defaults in, `signature()` is what makes it its own organ, `faults()` is what the probe reports |
+| the organ files | `family`, and a `look` of a kind and its parameters (§6). No colour |
+| `game/genes/catalogue.gd` | every look resolved once (`look()`), `family_of()`, `hue_of()` (its family's shade), `as_shipped()`, and `VARIANT_WORDS` among a key's words |
+| `game/vision/cilia.gd` | a generator per kind, `_kind_mat` to `_kind_organelle`, on a `Stretch`: a body's arc or a tile's dome. The fringe, the tile and the hole's ghost dispatch by kind. `UNKNOWN_TINT`, `ACCENT_BEAD_MIN`, `draw_accent()`, `accent_of()`, `tile_bounds()` |
+| `game/perception/signal_bus.gd` | `LIGHT_COLOR`, light's own amber; `BEAM_COLOR` and `PING_COLOR`, the hue of the organ on the channel; `STRAIN_COLORS`, the delivering organ's; `CHANNEL_LOBES`, the lobe each channel lights |
+| `game/normal/figure.gd` | the accent in a chip's first lobe and before a waiting gene's word; `explain_name()`, `organ · variant`, for the pause screen and a cell's detailed view alike |
+| `tools/gene_probe.gd` | §8's checks |
+| `tools/looks_sheet.tscn`, `tools/looks_specimens.gd`, `tools/drive.gd --specimens=1` | the specimen sheet, and the variants and spare organs it files to be photographed |
+
+**A body's own organs are drawn as they were**, in their family's colours. The home
+organs' kinds were run against today's three functions, `_gather_cytostome`,
+`_gather_cirrus` and `_gather_flagellum`, kept verbatim in a scratch harness: 12,000
+organ poses at random headings, radii, clocks, steering and copies from 0 to 4, one
+pose in seven on a mirrored canvas. Of 756,194 points, **0 differ, bit for bit**. Only
+the earned organs change shape.
+
+**What did not move**, measured on the build: the seeded run's hash with an empty
+library under all three control schemes (`7397a410`); every `drop_probe` pin, the
+membrane's among them (its digest is still `67a6afe687b3b316`: the membrane's pin
+hashes what the cell feels, not its colours); `Wire.RULES`, which no look is part of;
+`DropSave.rules()`; saves; and the words. No string was added, so the template and `fr.po` are unchanged.
+`net_probe`, `net_fuzz` and `net_drop` pass, each in a network namespace of its own.
+
+**What the probe reads today:**
+
+| check | today |
+|---|---|
+| 1, 2 | 17 keys: `mat` 1, `oars` 1, `lash` 2, `tuft` 4, `lens` 1, `coil` 1, `spines` 3, `plates` 1, `organelle` 3 |
+| 3 | builds in use: eating 1, moving 4, sensing 5, defending 3, metabolism 3 |
+| 4 | every tile inside the 76 px tile and the line's 34 x 26 glyph box at 0.6; the tallest, the tail, 28.7 px above the tile's centre |
+| 5 | no variants yet |
+| 6 to 9 | the nearest two families 20.8°; self teal 38.6°, threat red 33.1°, food green 41.3°; the least lightness between two families 0.049 |
+| 10 | 7 copies of a hue, each its source's |
+| 11 | touch, smell, light, beam and ping, each on its lobe |
+
+**Each check was seen failing.** Nineteen faults were planted one at a time in a
+scratch copy, and the probe failed every one on the check it was planted for: a family
+its kind is not built for, a look with a hue, a length out of range, a parameter its
+kind has not, shade 3, two senses alike at a glance, a tile reach past its box, a
+variant with no accent, a variant wearing its organ's mark, two variants with one
+accent, a variant setting a length, four variants on a seat with three marks to spare
+(*make a new organ*), a shade off its family's lightness, a band within 20° of
+another, moving pulled toward teal, two families at one lightness, a pad copying a
+colour literal, a turn provided by two families, and a channel with no lobe.
+
+**Rendered and judged**: every frame of §9.4, from the build, at 1280x720 and
+2400x1080 -- the waiting tray among them, which the mock did not shoot (`tray`, and
+`trayplain` with genes as shipped) -- and the movement pads (`pads`), which neither
+listed. Before is `b63e365`, whose frames are the mock's before to the pixel. Three
+renders of `one` at each size differ by **0 pixels**.
+
+| frame | 1280x720 | 2400x1080 |
+|---|---|---|
+| `fv`: full vision, the player and six posed cells | **pass**, and the mock's frame within 0.5 % of its pixels (the pigment's seat, below). Read by family | **pass** |
+| `one_compare` (`_zoom`, `_zoomgrey`, `_zoomdeut`) | **pass**: in luminance and to a deuteranope, every organ is its own shape | **pass** |
+| `sheet`, `sheet_grey`, `sheet_deut`, against `before_sheet_*` | **pass**: the seventeen tiles all differ in greyscale; to a deuteranope, moving and sensing meet in one blue and are told by the pigment, and eating, defending and metabolism meet in one yellow and are told by their builds. Before, seventeen hues on as many tufts | **pass** |
+| `sheet_vari` (+ `_grey`, `_deut`): an eye ringed and keeled, a see-tuft barred, a tail with a disc, three strains, a plastid ringed, a vacuole cored | **pass**, every accent a shape in greyscale. The faintest pair is a strain's disc against its diamond beads, at true size | **pass** |
+| `sheet_room` | the hook, the bent rings, the stack and the star read; the three-way tip, the barb and the four-turn coil on a tile, as §2.4 counts them. **A two-wave lash at three copies on a forward arc is a brush** (below) | the same |
+| `pause` | **pass**: five colour groups, nothing moved in the layout | **pass** |
+| `pausevar`: the ringed eye's chip tapped, a paralysing strain | **pass**: the ring and the diamond in their chips' first lobes; the line reads `ocellus · ringed` | **pass** |
+| `tray`: a keeled eye and a paralysing strain waiting | **pass**: the accent before the word, small at this size and clear | **pass** |
+| `trayplain`: genes as shipped waiting | **pass**: no accent, and every word where it was | **pass** |
+| `choose` | **pass**: the strand's rungs group by family; the poison's marker is orange | **pass** |
+| `flood` | **pass**, orange; the mock's frame within 0.16 % | **pass** |
+| `lobes` | **unchanged to the eye**: the beam's lobe moves ΔE 0.015 and the ping's 0.039 in OKLab, the light's not at all | **unchanged** |
+| `offer_plastid`, `offer_ampulla` | **pass**: the bud is the organ's tile; the ghost is a hollow lens for the plastid, and pores over a dim pigment for the ampulla | **pass** |
+| `pads`, the third control scheme | **pass**: the four movement pads are one blue now, and dash's glyph is the coil's tile, a spring, smaller in its pad than the tuft it was | **pass** |
+
+**Where it differs from the sections above, and why:**
+
+- **A sense's pigment stays where it was**, 0.80 of the way out (`PIGMENT_SEAT`). The
+  mock had moved it; nothing above asks for it, and the build keeps today's body
+  exactly. It is nearly all of the 0.13 to 0.52 % of pixels by which the build's frames
+  differ from the mock's.
+- **The bead of the hole being tried keeps its brightening.** The mock reused the flag
+  that brightens it to skip the old tuft, and its bead went dim with it.
+- **The probe's shade step is 4.5° to 10°, not §8's 5° to 10°.** The eating shades of
+  §1.3, written to two decimals, step 5.1° and 4.9°. The colours are the design's, and
+  the check allows for their rounding.
+- **Ink and width go by kind**: a `mat`, `oars` or `lash` keeps its home organ's, a
+  bead-tipped spine the guard's, and every other kind an earned organ's. So a variant
+  of a home organ is drawn exactly as its organ is.
+- **What a tile holds**: no reach past 0.46 r, the tail's 17 px; at most three strands
+  of a lash and eleven strokes of a mat; and its oars held where the knee shows.
+- **On the tray**, the accent is 3.6 px before the word, as on the chip, and moves the
+  word along by its width. A gene as shipped moves nothing.
+- **A variant with no word of its own is named by its variant's name**, so the line
+  never reads `organ · ` and nothing. The probe asks every variant for its word.
+- **`LIGHT_COLOR` is a constant.** `stigma` is violet now, and the light lobe stays
+  light's amber whichever organ drives it. `CHANNEL_LOBES` is the map check 11 reads.
+
+**Cost** (§9.2), measured here and not on a phone. The same command on both trees,
+interleaved, four rounds, with other work on the machine: 52 bodies a frame through
+`draw_cell` at full vision's radii -- born cells wearing an earned organ, drifters,
+peers wearing four to seven genes at one to three copies, the toxin in both forms, and
+five bodies with every slot full at three copies -- timed over 240 frames after 60.
+
+| `_draw` for 52 bodies, ms a frame | before | phase 6 |
+|---|---|---|
+| p10 | 21.3 to 21.5 | 24.4 to 25.2, **+15 %** |
+| p50 | 23.4 to 24.6 | 27.3 to 28.8, **+15 %** |
+| p90 | 34.8 to 36.9 | 39.6 to 42.9 |
+
+The whole frame, which llvmpipe rasterises on this machine's CPU, did not move beyond
+its noise (p50 152 to 167 ms before, 153 to 168 after).
+
+**As first built it was +26 %.** The home organs' kinds asked the skin for each
+stroke's point, normal and lean in three calls, seventeen lookups of the skin's fields
+by name among them, where today's functions had them as arguments; they took up to
+twice as long to build. Now one call a stroke reads them from locals (`_frame_on`), with
+the same arithmetic -- the frames shot before and after the change are identical to the
+pixel -- and a home organ builds within a few microseconds of today's. What is left is
+a few microseconds an organ of dispatch, and the organs that draw more than a tuft did.
+By body, the least of 50 samples of 30 bodies each, µs:
+
+| body, or what an earned organ adds to a born one | before | phase 6 |
+|---|---|---|
+| a drifter: oars and a tail | 195 | 235 |
+| a born cell: mouth, oars, tail | 227 | 249 |
+| the same at three copies | 308 | 331 |
+| a sense, one copy or three: a plain tuft, a lens, forks, ring tips, feelers | 62 to 80 | 111 to 184 |
+| plates | 48 to 74 | 120 to 133 |
+| an organelle, one copy / three | 72 to 83 / 65 to 75 | 42 to 74 / 117 to 173 |
+| darts, the whip, the spring | 67 to 77 | 47 to 57 |
+| the toxin's barbs; its poison inside | 36 to 64; 144 to 217 | 53 to 78; 157 to 191 |
+| every slot full at three copies | 776 | 944 |
+
+**What to watch on the phone**: the dev app's frame readout, its `dropped` row, in
+full vision with a crowded water in view, against the build before this one. A phone's
+GPU also pays for each antialiased polyline and polygon, which llvmpipe cannot show:
+ring tips, lenses, plates and organelles are outlines and fills where a tuft was
+strokes. If it drops frames, the levers are fewer steps in those outlines
+(`ORGANELLE_STEPS` 18, a ring tip's 13 points, `LENS_STEPS` 10), the dispatch, and
+leaving a body a few pixels across its family colours without its kinds' details.
+
+**Left open, besides §11:**
+
+1. **A tail's variant worn on a forward arc is a brush**: a lash on 24 to 28° of skin
+   is six strands close together. The sheet seats a home organ's variant on its organ's
+   home arc, as the mock did; where the game seats one is phase 5's variants and the
+   body plan's.
+2. **The movement pads are one colour.** Each was its organ's hue; they are told apart
+   by place and glyph, which they always were.

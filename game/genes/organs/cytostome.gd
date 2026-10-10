@@ -68,11 +68,12 @@ func _init() -> void:
 	# and nobody would pick it.
 	tags = [ALWAYS_EXPRESSED, NEVER_DRIFTS]
 	born = 1
-	# **Its look** (gene-catalogue.md §7.1): the oral mat, dense, fine and in the
-	# nutrient green family -- the mouth *is* nutrition, so it breaks cilia.gd's
-	# spacing rule on purpose. Nine strokes on its tile, eight px long.
-	look = {"shape": MAT, "hue": Color(0.62, 1.00, 0.38), "count": 15,  # eat, 95 deg
-		"tile_count": 9, "tile_length": 8.0}
+	# **Its look** (gene-looks.md §6): the oral mat, eating's one build -- dense fine
+	# cilia with a beat travelling along them -- whose kind's defaults are the mat it
+	# always drew. Eating's shade 2, the end of the band nearest food green: the mouth
+	# *is* nutrition.
+	family = EATING
+	look = {"shape": MAT, "shade": 2}
 
 
 ## **Its numbers on the pause screen** (gene.gd's `lines`): what it swallows and bites,
