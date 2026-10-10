@@ -175,7 +175,7 @@ with placeholder addresses:
 ```
 [net] refused 203.0.113.9: not on this network -- a call from outside needs an invite, on port 45772
 [net] hung up on 1587052382 (192.0.2.40): different versions -- it speaks protocol 7, this 8
-[net] hung up on 432877036 (192.0.2.43): different versions -- it judges by other rules: 1bc1c542 at content 41, this 95c66e7e at content 42
+[net] hung up on 432877036 (192.0.2.43): different versions -- it judges by other rules: 1bc1c542 at content 41, this c382d531 at content 42
 [net] cut 694971552 (192.0.2.41): malformed: an event of type 4 that does not read -- 12 points -- barred 60 s
 [net] 1945108233 (192.0.2.42) done after 1800 s -- frames 51234, events 312, over budget 0, points 0, fouls 0
 ```
@@ -273,7 +273,7 @@ release that changes one of them (a new gene a body can swim or bite with, say)
 splits phones on the old content from the server on the new until both have it.
 The log line says which: `it speaks protocol 7, this 8`, or `it judges by other
 rules`, with both fingerprints and both content versions -- the lower content is
-the older. The server's first line names its own: `protocol 8, rules 95c66e7e…`. A
+the older. The server's first line names its own: `protocol 8, rules c382d531…`. A
 caller from the internet that has not proved an invite is told less: only which game
 is older, never the server's fingerprint or its content version.
 
