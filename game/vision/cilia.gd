@@ -1293,7 +1293,7 @@ static func _draw_fangs(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 	var tone := hue(gene)
 	var mark := _bead_mark(_look_of(gene))
 	var base := at + fwd * (r * OVOID_ALONG * GAPE_SEAT)
-	var pairs := clampi(tier, 1, 3)
+	var pairs := clampi(tier, 1, Genome.TIER_MAX)
 	var lit := clampf(flare, 0.0, 1.0)
 	var length := maxf(gape * FANG_LEN * _tier(TIER_LEN, tier), FANG_MIN * unit) \
 		* (1.0 + TOXIN_FLARE_LONG * lit)
@@ -1500,7 +1500,9 @@ const PLATE_LIFT := 0.035
 const PLATE_OVERLAP := 1.45
 ## **An organelle is one a copy** (§2.3): where each sits along its arc and how
 ## much deeper, by how many there are -- three things are counted without counting;
-## its outline in this many steps; its centre's mark, of its size.
+## its outline in this many steps; its centre's mark, of its size. A seating for each
+## number of copies up to genome.gd's TIER_MAX: more copies than it seats are drawn at
+## its last.
 const ORGANELLE_SEATS := {
 	1: [[0.5, 0.0]],
 	2: [[0.22, 0.0], [0.78, 0.10]],
@@ -2088,7 +2090,7 @@ static func _kind_lens(d: Drawn, sk: Stretch, look: Dictionary, tier: int,
 static func _kind_spines(d: Drawn, sk: Stretch, look: Dictionary, tier: int,
 		reach: float) -> void:
 	var per_copy := int(look["per_copy"])
-	var count := per_copy * clampi(tier, 1, 3) if per_copy > 0 \
+	var count := per_copy * clampi(tier, 1, Genome.TIER_MAX) if per_copy > 0 \
 		else _count(int(look["count"]), tier)
 	var length := maxf(_length_of(sk, look) * sk.unit * _tier(TIER_LEN, tier) * reach,
 		GUARD_MIN * sk.px) * (1.0 + TOXIN_FLARE_LONG * sk.lit)
@@ -2160,7 +2162,7 @@ static func _kind_organelle(d: Drawn, sk: Stretch, look: Dictionary, tier: int) 
 	var form: StringName = look["form"]
 	var size := float(look["size"]) * sk.unit
 	var depth := float(look["depth"])
-	for seat: Array in ORGANELLE_SEATS[clampi(tier, 1, 3)]:
+	for seat: Array in ORGANELLE_SEATS[clampi(tier, 1, ORGANELLE_SEATS.size())]:
 		var u: float = seat[0]
 		var at := _sk_inner(sk, u, depth + float(seat[1]))
 		var along := _sk_along(sk, u)
