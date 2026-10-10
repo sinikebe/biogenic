@@ -10054,6 +10054,23 @@ func _check_server() -> void:
 	a_pin = [a_cell, a_home, 0.0]
 	pins = [a_pin, b_pin]
 	await _server_until(func() -> bool: return a_food.person() != null, pins)
+	var a_solo := not bool(a_food.call(&"mirroring"))
+	# **And back in the room's water as the room has it.** The room holds a guest
+	# that comes back -- no snapshots go to it -- until its first frame from the
+	# water arrives (pond.gd's `awaiting`), and a tap the room has not answered
+	# inside REACH_TIMEOUT swims on alone, then swaps in again at its next
+	# ordinary frame (normal_mode.gd's `_enter_timed_out`, then the swap). Once in
+	# CI the answer came late: the guest swam alone, and the checks below read a
+	# mirror it no longer had. So this waits for the room to be sending to it
+	# again, through that swap if it took one -- an unanswered tap and the swap's
+	# own wait, and a second for both frames.
+	var a_back := await _pond_until(func() -> bool:
+		var g: Object = pond.call("_guest_by_id", int(a_net.my_id()))
+		return g != null and food.person(int(g.slot)) != null and not bool(g.awaiting) \
+			and bool(a_food.call(&"mirroring")), 2.0 * NetSession.REACH_TIMEOUT + 1.0, pins)
+	_says(a_back >= 0.0, "server: the first guest, back from being eaten, is in the room's"
+		+ " water as the room has it, and sent its snapshots again"
+		+ (" -- through a swap, its tap not answered in time" if a_solo else ""))
 
 	# **The water, on the guest in the second slot.** A chewer's bite is felt
 	# at its true bearing, and that guest's snapshots carry its own wound --
