@@ -973,7 +973,9 @@ func _ready() -> void:
 	# Read before _apply_mode(), which is what carries it into the world view: a
 	# player who chose "forward up" last run must not have to choose it again.
 	# The view itself was read above, before the drop opened on its cell.
-	_camera_locked = RunState.load_camera_locked()
+	# While the switch is off (CAMERA_SWITCH), a saved `forward up` stays on disk
+	# and is not obeyed.
+	_camera_locked = CAMERA_SWITCH and RunState.load_camera_locked()
 	# Read in the same breath and for the same reason: a player who chose
 	# `stick` last run must not have to choose it again.
 	if scheme < 0:
@@ -1069,6 +1071,8 @@ func _ready() -> void:
 
 	_view_button.pressed.connect(_toggle_camera)
 	_update_view_button()
+	# Off for now, caption and all: see CAMERA_SWITCH.
+	_view_panel.visible = CAMERA_SWITCH
 
 	# **The wells a thumb presses are the pause target's own slab**, built by the
 	# one function that knows what a slab is. What you press looks like a piece
@@ -3233,6 +3237,18 @@ func _apply_mode() -> void:
 func _show_self(on: bool) -> void:
 	_soma.set_active(on)
 	_returns.set_active(on)
+
+
+## **The camera switch is off for now** (owner, 2026-10-11), and the pause screen
+## does not show it. Its `forward up` turns the world round the cell, and the
+## drop's edge does not turn with it: the edge is drawn by the water shader, which
+## is anchored to the world by an origin and a scale with no rotation term
+## (vision.gd's `set_camera_locked`). So the drawn edge was not where the real one
+## is: a cell swimming into the real edge was rightly stopped there, but looked
+## stopped by an invisible wall, with the drawn wall out of line with it. Every run
+## keeps the world still, north up, whatever an earlier build saved. Set this back
+## to true once the water shader turns with the world.
+const CAMERA_SWITCH := false
 
 
 ## **Forward is always up.** Beside `light` on the pause column, same slab, same
