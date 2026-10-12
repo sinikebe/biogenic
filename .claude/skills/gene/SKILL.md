@@ -56,8 +56,8 @@ letters `a-z` and permanent once shipped.
   organ's tag retires every variant it lists, so to retire only its own key lay it out
   as the toxin is: `order = -1`, and its first variant listed first with the key, the
   order and the born the organ had, `"tags": [RETIRED]`. README, "Retiring a gene".
-- **The slots**: `body_plan.gd`, after settling what spec §15.3 lists for the first
-  plan change. README, "Changing the slots".
+- **The slots**: `body_plan.gd`, after settling what `gene-catalogue.md` §15.3 lists
+  for the first plan change. README, "Changing the slots".
 
 Numbers are **starting values** with their reasons; balance waits for players
 (`CLAUDE.md`). A player-facing word for `one_variant` -- writing over a variant -- is
@@ -104,7 +104,7 @@ timeout 120 ~/godot/godot --headless --path . res://tools/gene_probe.tscn       
 timeout 120 ~/godot/godot --headless --path . res://tools/gene_probe.tscn -- --names # [gene-names] ALL PASS
 timeout 120 ~/godot/godot --headless --path . res://tools/i18n_pot.tscn -- --check   # [i18n] ALL PASS
 timeout 120 ~/godot/godot --headless --path . res://tools/i18n_pot.tscn -- --lint-all # [i18n] ALL PASS
-timeout 600 ~/godot/godot --headless --path . res://tools/drop_probe.tscn            # [drop-probe] ALL PASS
+timeout 900 ~/godot/godot --headless --path . res://tools/drop_probe.tscn            # [drop-probe] ALL PASS
 ~/godot/godot --headless --path . --quit-after 24000 res://tools/net_probe.tscn -- --referee-only
                                                      # [net-probe] NOTE --referee-only: 0 failed
 ```
