@@ -107,7 +107,7 @@ const SHIPPED: Array[StringName] = [
 	&"ocellus", &"chemocyte", &"ampulla",
 	&"axoneme", &"palp", &"myoneme",
 	&"trichocyst", &"pellicle", &"veneneux", &"plastid", &"vacuole", &"crista",
-	&"toxicyst"]
+	&"toxicyst", &"haptonema"]
 const SHIPPED_PLACELESS: Array[StringName] = [&"rhabdom", &"statocyst"]
 ## **The order each list a draw or a bit reads shipped in** -- catalogue.gd's
 ## `SHIPPED_ORDERS`, kept here as well so that a change there fails here: what a
@@ -124,7 +124,7 @@ const SHIPPED_LISTS := {
 	&"sense": [&"chemocyte", &"ampulla", &"ocellus", &"stigma"],
 	&"gift": [&"ocellus", &"ampulla", &"chemocyte", &"stigma"],
 	&"declares": [&"ocellus", &"ampulla", &"chemocyte", &"stigma", &"palp", &"myoneme",
-		&"axoneme", &"flagellum"],
+		&"axoneme", &"flagellum", &"haptonema"],
 }
 
 ## **The stats a mechanic reads together, as one organ's** -- `stats.gd`'s groups, by
