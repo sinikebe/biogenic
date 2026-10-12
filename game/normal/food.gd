@@ -3238,6 +3238,15 @@ func _push_local(b: Body, owns: bool) -> void:
 	var d := offset.length()
 	var overlap := b.radius + _cell.radius - d
 	if overlap <= 0.0:
+		# **Held** (game/mechanics/grip.gd): your cling, or theirs.
+		var pull := Grip.pair_pull(-overlap, _cell.clinging(),
+			Stats.of(_cell.worn(), &"tether"), Stats.of(_cell.worn(), &"grip"),
+			b.clinging, b.stat_tether, b.stat_grip)
+		if pull > 0.0:
+			var part := _give_way(b.radius, _cell.radius)
+			_cell.position -= offset / d * (pull * part * PUSH_SHARE)
+			if owns:
+				b.pos += offset / d * (pull * (1.0 - part) * PUSH_SHARE)
 		return
 	var normal := offset / d if d > 0.001 else -_forward(b.heading)
 	# Share it by **area**, so a big body shoulders a small one aside
@@ -9219,7 +9228,7 @@ func _separate_drop() -> void:
 		var b := _cells[i]
 		if not b.seeded or b.inert:
 			continue
-		var reach := b.radius + _widest_now
+		var reach := b.radius + _widest_now + (b.stat_tether if b.clinging else 0.0)
 		var bound := _pair_bound(reach)
 		_pair_ids.resize(0)
 		_drop.grid.query(b.pos, reach + Drop.GRID_SLACK, _pair_ids)
@@ -9235,6 +9244,16 @@ func _separate_drop() -> void:
 			var d := offset.length()
 			var overlap := b.radius + other.radius - d
 			if overlap <= 0.0:
+				# **Held** (game/mechanics/grip.gd): a cling draws a body it
+				# touched back in, as far as its tether reaches.
+				var pull := Grip.pair_pull(-overlap, b.clinging, b.stat_tether, b.stat_grip,
+					other.clinging, other.stat_tether, other.stat_grip)
+				if pull > 0.0:
+					var toward := -offset / d
+					var part := _give_way(other.radius, b.radius)
+					b.pos = m.contain(b.pos + toward * (pull * part * PUSH_SHARE), b.radius)
+					other.pos = m.contain(other.pos - toward * (pull * (1.0 - part) * PUSH_SHARE),
+						other.radius)
 				continue
 			var normal := offset / d if d > 0.001 else _forward(b.heading)
 			var share := _give_way(other.radius, b.radius)
