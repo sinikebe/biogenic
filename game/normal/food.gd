@@ -7256,7 +7256,7 @@ func drop_state() -> Dictionary:
 			behaviour.append(int(list_of[b.brain]))
 		steer.append(b.steer)
 		# Bit 3 since pack 4, a held tail (automation.md §5.3, §9.2): optional, so a
-		# pack-3 build reading it ignores it.; bit 5 since the haptonema, a cling.
+		# pack-3 build reading it ignores it. Bit 5 since the haptonema, a cling.
 		acts.append((1 if b.holding else 0) | (2 if b.resting else 0)
 			| (4 if b.swimming else 0) | (8 if b.tail_held else 0) | (16 if b.clinging else 0))
 		push.append(b.push)

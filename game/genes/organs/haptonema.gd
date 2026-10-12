@@ -59,18 +59,6 @@ const GENE_SAYS := {&"haptonema.cling": "cling"}
 ## which holds on to what it touches. Lowercase.
 ## ROOM: 856 px at 15 px
 const GENE_EXPLAINS := {&"haptonema.cling": "cling · hold on to what you touch, and keep it close"}
-## **What an instinct using it says while it waits for its level.**
-##
-## TRANSLATORS: Said of an "instinct" (a rule the player wrote) that cannot act
-## yet. Lowercase.
-## ROOM: 856 px at 14 px
-const GENE_ASLEEP := {&"haptonema.cling": "asleep: needs your cling"}
-## **What the page says when it is picked too early.**
-##
-## TRANSLATORS: Said when the player picks an action their cell cannot do yet.
-## Lowercase.
-## ROOM: 856 px at 14 px
-const GENE_NEEDS := {&"haptonema.cling": "cling needs your cling"}
 
 
 func _init() -> void:
@@ -84,7 +72,7 @@ func _init() -> void:
 	# claiming the `swimming` trigger like the flagellum's hold does, from level 1:
 	# any cell that carries it can use it. Declared last of every gene's parts, so
 	# its owner's bits come after every other.
-	declares = {"out": [{"name": &"cling", "claims": [&"swimming"], "level": 1}]}
+	declares = {"out": [{"name": &"cling", "claims": [&"cling"]}]}
 	# **Its look** (gene-looks.md §6): a coil that wraps -- the grip is more wrap,
 	# so four turns where myoneme's default two reads as a spring. In moving's shade
 	# 1: one step off the tail's shade 0, so a tile with both tells them apart.
