@@ -909,6 +909,9 @@ func _ready() -> void:
 	# with nothing on the far end is free, and a branch here would be a branch
 	# in the frame loop of a game that is single-player almost all the time.
 	_food.pulsed.connect(_on_pulsed)
+	# What the ping places as its echoes land (ping-as-outline.md §13), for both
+	# views to hold.
+	_food.echoed.connect(_on_echoed)
 	_net = NetSession.current
 	if _net != null and not is_instance_valid(_net):
 		_net = null
@@ -2050,6 +2053,16 @@ func _hear_others() -> void:
 			+ FoodField.PING_WIDTH_GAIN[tier] * alpha, FoodField.PING_WIDTH_MAX)
 		var hold := FoodField.PING_RING * 2.0 * radius / FoodField.PING_SPEED
 		_bus.ping(_cell.bearing_to(at), level, width, hold)
+
+
+## **What this cell's ping placed as an echo landed** (ping-as-outline.md §13): a
+## point at two copies, the side of a body the wave reached at three. Into both
+## views' own marks, as a meal is; each holds the ones it is showing.
+func _on_echoed(mark: Dictionary) -> void:
+	if not _food.in_water:
+		return
+	_vision.mark_echo(mark)
+	_returns.mark_echo(mark)
 
 
 ## **This cell's `ampulla` fired.** The other player hears it, and what crosses

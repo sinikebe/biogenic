@@ -34,6 +34,11 @@ shipped constants and says so. Three byte-identical runs of the measured command
 differed by **0 pixels** on this build (§8.0), so the comparisons below are
 comparisons.
 
+**Reworked on 2026-10-12 (§13).** The cell sees its call for a second as it leaves
+and each echo for the last second of its way home; two copies place a point where an
+answer came off, three draw the side of the body the wave reached; and nothing passes
+a body. Where §13 and an earlier section disagree, §13 is what is built.
+
 ---
 
 ## 0. The rule this spec does not break, and the one it corrects
@@ -1037,3 +1042,79 @@ while building it.
   screen. §6.2: two distance scales in one picture.
 - **Drawing the returns in the interior.** §4 and §10 row 3, which the owner has
   now answered (a). That is vision, and it is the next gene's to sell.
+
+---
+
+## 13. The owner's rework, 2026-10-12: what the cell can know
+
+> "The waves are broken. We'll do it another way. At level 0, we only see the wave
+> leave the body for 1s then it fades out. And echoes only show up when they're 1s
+> about to reach our body back. This is more logical than being able to know where
+> the wave is at each frame. Level 2 adds the ability to auto correlate direction
+> and distance to place a point on the map that's not identifiable. Level 3 draws
+> the outline of objects, but cannot draw the part of the objects that are behind
+> objects (including the object itself). We remove the ability of waves to go
+> through objects for now, so we don't see through/behind."
+> — the owner
+
+**This section replaces §6 where the two disagree.** §6 drew every front over its
+whole flight and every echo over its whole way home, in full vision; the cell can
+know neither. What it can know is that it called, and that something answered.
+
+The levels are the organ's copies, the dots on its chip: the `ampulla` has no levels
+of its own as the beam does, and the owner's three steps are its three copies. The
+first ("level 0") is one copy.
+
+### 13.1 What is drawn, in both views
+
+| Copies | The call | An answer |
+|---|---|---|
+| 1 | its front, for the first second of its flight, fading through it | its echo, for the last second of its way home, coming into view over the first quarter of that second |
+| 2 | the same | the same, and **a point where it came off** as it lands: the body's near pole, or the rim's nearest point. One plain point in the ping's hue, the same for a meal, a hunter or the rim |
+| 3 | the same | the same, and **the side of the body the wave reached** in place of the point: the arc between the two tangents from the organ, less every part a nearer body or the cell's own hides. Never the far side, which the body hides itself. The rim gets its nearest stretch, `EDGE_ECHO_RADIUS` either side |
+
+A point or an outline is held where the wave met the body, in the water's own
+coordinates, and fades over one call (`ping_period`: 12 s at two copies, 15.2 s at
+three), so the map is one sweep deep. The membrane is untouched: its lobe still lands
+with the echo, and the hum still breathes once a call.
+
+### 13.2 Nothing passes a body
+
+`PING_THROUGH_BY_TIER` is 0 at every copy count, where two and three copies let 0.34
+and 0.58 of a pulse through. A body behind another is silent to every ping, the cell's
+own hull hides everything astern of the organ at every copy count, and an outline can
+have no part the wave could not reach. The stat and its rows stay, so that it can come
+back as a table. It is not one the referee judges, so `Wire.RULES` does not move.
+
+Water cells hear by the same law (`_call_of`), so a water cell with two or three
+copies no longer hears behind a body either. That is a change to what the water does,
+and the seeded pins move with it where a run carries one.
+
+### 13.3 As built
+
+- **`food.gd`**: `PING_SEEN_OUT`, `PING_SEEN_BACK` and `PING_SEEN_RISE` (1 s, 1 s,
+  0.25 s), and `front_seen()` and `echo_seen()`, which both views draw by, so they
+  cannot disagree about when a wave is in sight. The player's call works out what
+  each return lets it place (`_shape_of`, `_seen_arcs`): the outline is sampled every
+  `PING_OUTLINE_STEP` (6 world units) of rim, at most `PING_OUTLINE_POINTS` (48), each
+  point kept while no body crosses the straight path to it from the organ. It rides
+  home on the echo and is emitted as `echoed` when the echo lands. Water cells' calls
+  work out nothing of it.
+- **`vision.gd` and `returns.gd`** hold each mark (`mark_echo`) and draw it fading:
+  in full vision in world space, in point of view at the figure's scale, front up,
+  each point of an outline carried to the screen so it stays where the body was while
+  the cell turns.
+- **The replay**: the recorder keeps each mark as an `echo` event beside the meals,
+  and the replay hands it to both panes, so a replay places what the run placed.
+
+### 13.4 What to watch
+
+Not measured, at the owner's word (*"Don't playtest. Implement, push to dev, I'll do
+it"*). Starting values, each one line:
+
+- **Is a second enough** to tell where a call went and where an answer came from?
+  `PING_SEEN_OUT` and `PING_SEEN_BACK`.
+- **Is one call the right life for the map?** Points from one sweep fade as the next
+  sweep's land. The mark's `life`.
+- **Do outlines read as bodies** at three copies? `PING_OUTLINE_STEP` sets how finely
+  they follow a rim, and the outline's width and alpha in both views how loud they are.

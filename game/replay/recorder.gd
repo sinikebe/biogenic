@@ -296,7 +296,8 @@ var _sensations: Array = []
 ## [[t, kind, at, nutrition, gene], ...] -- `motes.struck` and `food.eaten`,
 ## with the world positions the bus is not allowed to carry; and `gone`, the
 ## friend leaving the water for good, where `nutrition` holds how -- vision.gd's
-## `Gone` -- as the run told its own view ([method friend_gone]).
+## `Gone` -- as the run told its own view ([method friend_gone]). And `echo`,
+## what the ping placed ([method _on_echoed]), with the whole mark after them.
 var _marks: Array = []
 ## [[t, Delta, index, payload], ...] -- the index a slot for BODY, a floc's id
 ## for SETTLE and CLEAR, and 0 for the rest; a BODY row carries the body's id
@@ -389,6 +390,7 @@ func _ready() -> void:
 		_motes.struck.connect(_on_struck)
 	if _food != null:
 		_food.eaten.connect(_on_eaten)
+		_food.echoed.connect(_on_echoed)
 
 
 ## **After every other node in the run**, which is what being its last child
@@ -926,6 +928,18 @@ func _on_struck(_bearing: float, _strength: float, at: Vector2) -> void:
 func _on_eaten(nutrition: float, gene: StringName, at: Vector2) -> void:
 	if _recording:
 		_mark(&"eaten", at, nutrition, gene)
+
+
+## **What the ping placed as an echo landed** (ping-as-outline.md §13): its place
+## and outline, kept whole after the usual four, for the replay's two views to
+## hold as the run's did.
+func _on_echoed(mark: Dictionary) -> void:
+	if not _recording:
+		return
+	_marks.append([_clock, &"echo", mark.get("at", Vector2.ZERO), 0.0, &"",
+		mark.duplicate(true)])
+	if _marks.size() > PRUNE_ABOVE:
+		_marks = _slice_from(_marks, _clock - float(SECONDS))
 
 
 ## **The friend left the water for good, and how** -- vision.gd's `Gone`: eaten,

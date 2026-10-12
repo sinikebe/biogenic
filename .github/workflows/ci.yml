@@ -308,11 +308,17 @@ jobs:
         # since where a run starts is chosen by the water round it. 69,549 lines,
         # from 69,349, the same hash under all three schemes.
         #
+        # **Re-pinned at the sonar rework** (docs/design/ping-as-outline.md §13),
+        # from 701cc268...: the water changed on purpose. Nothing passes a body
+        # now, so a water cell with two or three copies of the ping no longer
+        # hears behind a body, and the water round the cell moves with it.
+        # 69,441 lines, from 69,549, the same hash under all three schemes.
+        #
         # Each run prints about ten megabytes, so it goes to a file rather than
         # a variable. About twenty seconds a scheme.
         run: |
           set -uo pipefail
-          pinned="701cc2684080d05586c12610b4fea1aacefbb0431caad24b9ca0e4fe204d7e52"
+          pinned="167a5ccd5f8de114202732b78ce5f8b80e3bbdd6621829a9d0de4e01bdc14a90"
           log=$(mktemp)
           fail=0
           for scheme in 0 1 2; do

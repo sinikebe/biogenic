@@ -521,6 +521,10 @@ func _fire_events() -> void:
 		_mark_at += 1
 		if row[1] == &"struck":
 			_panes.mark_struck(row[2])
+		elif row[1] == &"echo":
+			# What the ping placed as an echo landed (ping-as-outline.md §13),
+			# the whole mark kept after the usual four.
+			_panes.mark_echo(row[5])
 		elif row[1] == &"gone":
 			# How the friend left, as the run told its view: the recorder keeps
 			# it where a meal keeps its nutrition.

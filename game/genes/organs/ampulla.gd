@@ -54,22 +54,18 @@ const PING_PERIOD_BY_TIER: Array[float] = [0.0, 8.8, 12.0, 15.2]
 
 ## **How much of the pulse survives one body in the way, including your own.**
 ## The pulse leaves the membrane at the organ's own arc and stops on everything
-## it meets, so the body it left is the first thing in the way: a tier-1
-## `ampulla` is stone blind astern of the slot it is worn in, which is the whole
-## of the owner's *"not at the first level of the gene"*.
+## it meets, so the body it left is the first thing in the way: an `ampulla` is
+## stone blind astern of the slot it is worn in.
 ##
-## Applied **once per occluder, multiplying**, so a return two bodies deep at
-## tier 3 comes back at 0.58 x 0.58 = 0.34 and three deep at 0.20. A dimmer
-## echo rather than a range or a depth count: the membrane has intensity and
-## intensity is what a fainter echo is, a count is a step the player cannot
-## count, and this one needs no rule for *how deep* -- four bodies deep at tier
-## 3 is 0.11 of an echo the range has already faded, which is a mark nobody
-## reads, and at tier 1 the first body ends it.
-##
-## The ambiguity it makes -- a shadowed near body and a clear far body both read
-## faint -- is already answered in a channel that exists: returns are staggered
-## by their own flight time, so the shadowed near body still answers *early*.
-const PING_THROUGH_BY_TIER: Array[float] = [0.0, 0.0, 0.34, 0.58]
+## **Nothing passes, at any copies, for now** (owner, 2026-10-12;
+## ping-as-outline.md §13): *"We remove the ability of waves to go through
+## objects for now, so we don't see through/behind."* Two and three copies let
+## 0.34 and 0.58 of a pulse through a body before, which is what let a cell hear
+## behind another -- and an outline drawn of what the wave reached cannot have a
+## part the wave never could. The stat stays, so that it can come back as a
+## table: applied **once per occluder, multiplying** (food.gd's `_call_of`), a
+## dimmer echo rather than a depth count.
+const PING_THROUGH_BY_TIER: Array[float] = [0.0, 0.0, 0.0, 0.0]
 
 
 # --- Its words (gene.gd; gene-catalogue.md §8.1) -------------------------------------

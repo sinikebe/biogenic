@@ -2641,6 +2641,14 @@ among its siblings there too.
   short three to five counts running, every run over by 14 s; none after. §3.3's
   promise is for a floor under its budget, and through the fill it is not. Today's
   drops catch up at their first count.
+  **And the same holds after the fill** (the sonar rework, 2026-10-12;
+  ping-as-outline.md §13): when more varieties go short at once than one drifter in
+  four gives back in a count, the last in the queue waits on the budget. The crowded
+  drop met it once the sonar's water moved -- six rare varieties short at count 79,
+  the sixth given back at count 82, the floor giving three, two and three across
+  those counts, all its budget allowed. So both checks count a run whose last two
+  counts the floor spent its whole budget across apart (`rare_waited`), print it, and
+  hold only the others against the floor.
 - **Rarity 1's catalogue is the mixed hundred and a little more**: two uncommon organs,
   because the mixed hundred alone holds the commons at a third to the last digit, which
   does not bind (20 of 60); a variant that sets no class beside a new common organ and
