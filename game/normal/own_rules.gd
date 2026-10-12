@@ -194,6 +194,7 @@ func _decide() -> void:
 	body.swimming = false
 	body.push = 0.0
 	body.tail_held = false
+	body.clinging = false
 	acted = 0
 	for won: Array in fired:
 		var k := int(won[0])
@@ -322,6 +323,7 @@ func _forget() -> void:
 	body.swimming = false
 	body.push = 0.0
 	body.tail_held = false
+	body.clinging = false
 	body.tumble = -1
 	body.tumble_tick = -1
 	body.hit = 0.0

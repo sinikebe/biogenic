@@ -1124,6 +1124,9 @@ class Body:
 	## [method CellBody.hold_level]. Under [member tails_beat] a tail beats
 	## unless this holds it.
 	var tail_held := false
+	## **Holding on** (haptonema's `cling`), claimed on its last tick and held
+	## until its next: it holds what it touches -- the drop's rim or a cell.
+	var clinging := false
 	## **The level its tail works at**: the worn copies of the organ that beats --
 	## the best of any key of it, as its rules count it -- as its beam's level is its
 	## copies (`_eye_of`). Made with its body ([method _refresh_body]).
@@ -5941,6 +5944,7 @@ func _renew(b: Body) -> void:
 	b.swimming = false
 	b.push = 0.0
 	b.tail_held = false
+	b.clinging = false
 	b.tumble = -1
 	b.tumble_tick = -1
 	b.stun = 0.0
@@ -7238,9 +7242,9 @@ func drop_state() -> Dictionary:
 			behaviour.append(int(list_of[b.brain]))
 		steer.append(b.steer)
 		# Bit 3 since pack 4, a held tail (automation.md §5.3, §9.2): optional, so a
-		# pack-3 build reading it ignores it.
+		# pack-3 build reading it ignores it.; bit 5 since the haptonema, a cling.
 		acts.append((1 if b.holding else 0) | (2 if b.resting else 0)
-			| (4 if b.swimming else 0) | (8 if b.tail_held else 0))
+			| (4 if b.swimming else 0) | (8 if b.tail_held else 0) | (16 if b.clinging else 0))
 		push.append(b.push)
 		tumble.append(b.tumble)
 		tumble_tick.append(b.tumble_tick)
@@ -7600,6 +7604,7 @@ func _load_rules(state: Dictionary, slots: PackedInt32Array) -> void:
 			b.resting = (acts[k] & 2) != 0
 			b.swimming = (acts[k] & 4) != 0
 			b.tail_held = (acts[k] & 8) != 0
+			b.clinging = (acts[k] & 16) != 0
 		if not push.is_empty():
 			b.push = push[k]
 		if not tumble.is_empty():
@@ -8362,7 +8367,8 @@ func _wire() -> void:
 	}
 	wire_parts(_readers, {&"smell": _read_smell, &"shadow": _read_shadow,
 		&"touch": _read_touch, &"beam": _read_beam, &"echo": _read_echo}, true)
-	wire_parts(_triggers, {&"dash": _dash_on, &"push": _push_on, &"hold": _hold_on}, false)
+	wire_parts(_triggers, {&"dash": _dash_on, &"push": _push_on, &"hold": _hold_on,
+		&"cling": _cling_on}, false)
 	_read_with = _read_input
 	founders()
 
@@ -8754,6 +8760,7 @@ func _rest_on(_i: int, b: Body, _k: int, _report: Array, _before: Variant, _tick
 	b.resting = true
 	b.holding = false
 	b.tail_held = tails_beat and b.tail_level >= b.stat_hold
+	b.clinging = false
 
 
 ## `flagellum.hold`, declared at the tail's hold level: its tail is held
@@ -8761,6 +8768,12 @@ func _rest_on(_i: int, b: Body, _k: int, _report: Array, _before: Variant, _tick
 ## (automation.md §4.2).
 func _hold_on(_i: int, b: Body, _k: int, _report: Array, _before: Variant, _tick: int) -> void:
 	b.tail_held = true
+
+
+## `haptonema.cling`: it holds on to what it touches -- the drop's rim or a
+## cell (game/mechanics/grip.gd).
+func _cling_on(_i: int, b: Body, _k: int, _report: Array, _before: Variant, _tick: int) -> void:
+	b.clinging = true
 
 
 ## `myoneme.dash`: a burst forward, on its cooldown and at its price.
@@ -8825,6 +8838,7 @@ func _decide_by_rules(index: int, b: Body) -> void:
 	b.swimming = false
 	b.push = 0.0
 	b.tail_held = false
+	b.clinging = false
 	for won: Array in _fired:
 		var k := int(won[0])
 		var act: Callable = _triggers.get(list.rules[k].output, Callable())
@@ -9053,6 +9067,7 @@ func _stun(b: Body, from: Vector2, seconds: float) -> void:
 	# with a level-2 tail, held. The stun itself stops every tail, whatever its
 	# level ([method _tail_beats]).
 	b.tail_held = tails_beat and b.tail_level >= b.stat_hold
+	b.clinging = false
 	_feel_hit(b, from, 1.0)
 	_stat(&"stuns")
 
