@@ -68,6 +68,7 @@ const DropSave := preload("res://game/normal/drop_save.gd")
 ## is. This file decides where a dose is delivered and when a body dies of one;
 ## the arithmetic is doses.gd's, and the numbers cell.gd's.
 const Doses := preload("res://game/mechanics/doses.gd")
+const Grip := preload("res://game/mechanics/grip.gd")
 
 ## A meal, in the cell's own terms.
 ##
@@ -1191,6 +1192,8 @@ class Body:
 	var stat_dash_tier := 0
 	var stat_dash_speed := 0.0
 	var stat_dash_cost := 0.0
+	var stat_grip := 0.0
+	var stat_tether := 0.0
 
 	func _init() -> void:
 		derive()
@@ -1217,6 +1220,8 @@ class Body:
 		stat_dash_tier = Stats.tier(g, &"dash_speed")
 		stat_dash_speed = Stats.of(g, &"dash_speed")
 		stat_dash_cost = Stats.of(g, &"dash_cost")
+		stat_grip = Stats.of(g, &"grip")
+		stat_tether = Stats.of(g, &"tether")
 
 	## **The slots it wears its organs in**: a person's worn order, as they sent it,
 	## or the default order a water cell is drawn in (cilia.gd) -- where a mechanic
@@ -8884,6 +8889,9 @@ func _move_ruled(b: Body, delta: float) -> void:
 		b.dash_v *= exp(-CellBody.DRAG * delta)
 		if b.dash_v < 1.0:
 			b.dash_v = 0.0
+	# **Holding on** (game/mechanics/grip.gd): a cling at the rim keeps it there.
+	if b.clinging and _drop != null:
+		pace = Grip.held_pace(pace, Grip.at_rim(_drop.meniscus, b.pos, b.radius, b.stat_tether))
 	b.pos += _forward(b.heading) * pace * delta
 	b.speed = pace
 
