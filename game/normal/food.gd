@@ -130,6 +130,15 @@ signal darted(bearing: float)
 ## tier 3, never at tier 0. Nothing is connected to it in single player and an
 ## unconnected emit is free.
 signal pulsed
+## **An answer this cell's ping can place** (ping-as-outline.md §13), as its echo
+## lands: at [constant PING_FIX_TIER] copies the place it came off, worked out of
+## the way it came home and how long it took; at [constant PING_OUTLINE_TIER] the
+## part of the outline the wave reached as well. [param mark] is `{at, arcs, tier,
+## life}`: the place in the water; the outline as `[centre, radius, from, to]` arcs
+## in world angles, empty below three copies; the copies it was called with; and
+## how long the place is worth holding, one call. The views hold it and the
+## recorder keeps it. Below two copies nothing is emitted.
+signal echoed(mark: Dictionary)
 ## **Something happened to the other player, in this water** -- shared-pond.md
 ## §1.3. The same six things the shipped signals above say to this cell, said
 ## about the person in [constant PERSON_SLOT] instead: [param what] is a
@@ -821,6 +830,32 @@ const PING_GRAZE := 0.24
 ## it is enough because the cap was already discarding more than the shadow
 ## does.
 const PING_SILENT := 0.03
+## **How long the cell sees its own wave leave, and an echo come home**, in
+## seconds (ping-as-outline.md §13, the owner's rework of 2026-10-12). The cell
+## knows it called, so it sees the wave go -- for a second, and then the wave is
+## out of its knowing; and it knows an echo only as it arrives, so it sees one for
+## the last second of the way home and never on the way out. Where a wave is at
+## every frame was something no cell could know.
+const PING_SEEN_OUT := 1.0
+const PING_SEEN_BACK := 1.0
+## The first part of that last second, over which an echo comes into view, so it
+## arrives rather than pops.
+const PING_SEEN_RISE := 0.25
+## **What the copies add** (§13). At two, each answer goes on the map as a place
+## and nothing more: the way it came home and the time it took say where, and
+## nothing says what. At three, the cell draws the side of the body the wave
+## reached, less whatever a nearer body hid -- never its far side, which the body
+## hides itself.
+const PING_FIX_TIER := 2
+const PING_OUTLINE_TIER := 3
+## How much rim one point of an outline stands for, in world units, and the most
+## points one outline is worked out at.
+const PING_OUTLINE_STEP := 6.0
+const PING_OUTLINE_POINTS := 48
+## The organ sits on the cell's own skin, so the cell's own body is tested for
+## being in the way at a little under its radius: the skin a path leaves from is
+## not itself in the way.
+const PING_SKIN_SHRINK := 0.98
 
 # --- The wake ---------------------------------------------------------------
 const WAKE_RANGE := 760.0
@@ -4035,6 +4070,12 @@ func _step_pings(delta: float) -> void:
 				_cell.bearing_to(echo[1]), float(echo[3]), float(echo[2])])
 			continue
 		pings.append([_cell.bearing_to(echo[1]), echo[2], echo[3], echo[4]])
+		# What the copies let it place, worked out at the call and carried home
+		# with it (§13): held for one call, as long as the map is worth.
+		if echo.size() > 5:
+			var mark: Dictionary = (echo[5] as Dictionary).duplicate()
+			mark["life"] = ping_period
+			echoed.emit(mark)
 		_echoes.remove_at(i)
 	# Nearest home first, so a view -- or the recorder, which has room for four
 	# -- keeps the ones about to land. `_echoes` is in no useful order once two
@@ -4066,6 +4107,21 @@ func _step_pings(delta: float) -> void:
 static func ping_level(path: float, reach: float) -> float:
 	return pow(clampf(1.0 - path / (2.0 * reach), 0.0, 1.0), PING_FALLOFF) \
 		* exp(-PING_ATTENUATION * path)
+
+
+## **How much of a front [param front] units out the cell still sees**
+## (ping-as-outline.md §13): all of it as it leaves the skin, none
+## [constant PING_SEEN_OUT] later. Both views draw a front by it, so they cannot
+## disagree about when it went out of sight.
+static func front_seen(front: float) -> float:
+	return 1.0 - clampf(front / (PING_SPEED * PING_SEEN_OUT), 0.0, 1.0)
+
+
+## **How much of an echo [param r] units from home the cell sees**: none until
+## its last [constant PING_SEEN_BACK], and all of it from
+## [constant PING_SEEN_RISE] into that.
+static func echo_seen(r: float) -> float:
+	return clampf((PING_SEEN_BACK - r / PING_SPEED) / PING_SEEN_RISE, 0.0, 1.0)
 
 
 ## Everything inside reach the pulse can actually reach, nearest first, capped
@@ -4114,13 +4170,18 @@ static func ping_level(path: float, reach: float) -> float:
 ## lands until it rings out (automation.md §4.1).
 func _cast_ping() -> void:
 	var from := _echoes.size()
-	_call_of(_player_eye(), _sense_ids(), _echoes)
+	var shapes: Array = []
+	_call_of(_player_eye(), _sense_ids(), _echoes, shapes)
 	for k in range(from, _echoes.size()):
 		var one: Array = _echoes[k]
 		var due := float(one[0])
 		var hold := float(one[4])
 		player_calls.append([_call_t + due, one[1], due * PING_SPEED * 0.5,
 			hold * PING_SPEED / (2.0 * PING_RING), _call_t + due + hold])
+		# What the copies can place of it (§13), carried home on the echo and
+		# handed to the views as it lands. None below two copies.
+		if k - from < shapes.size():
+			one.append(shapes[k - from])
 
 
 ## **An observer's call** (behaviour.md §12.1): the returns its pulse would
@@ -4129,7 +4190,12 @@ func _cast_ping() -> void:
 ## how loud, how wide the organ reports it and how long it rings -- as
 ## [method _cast_ping] above describes. Read off the observer and those bodies
 ## and nothing else.
-func _call_of(o: Observer, scan: PackedInt32Array, out: Array) -> void:
+##
+## Given [param shapes], an array, and two copies or more, it also appends what
+## each return lets the caller place ([method _shape_of]), one for each entry it
+## appended to [param out] and in the same order. Only the player's call asks.
+func _call_of(o: Observer, scan: PackedInt32Array, out: Array,
+		shapes: Variant = null) -> void:
 	# Clamped here and not trusted: the run writes it every frame, and a headless
 	# boot casts a pulse before the first write lands.
 	var tier := clampi(o.ping_tier, 0, PING_RETURNS_BY_TIER.size() - 1)
@@ -4155,7 +4221,8 @@ func _call_of(o: Observer, scan: PackedInt32Array, out: Array) -> void:
 		var d := b.pos.distance_to(o.pos) - b.radius
 		if d >= o.ping_range:
 			continue
-		found.append([maxf(d, 0.0), b.pos, b.radius])
+		# The last field: not the meniscus.
+		found.append([maxf(d, 0.0), b.pos, b.radius, false])
 	# **The meniscus answers** (the drop, §3.2): the largest reflector a pulse
 	# can meet, heard from its nearest point as one body EDGE_ECHO_RADIUS wide
 	# -- the widest, longest echo in the game. The hull, the bodies in the way
@@ -4164,7 +4231,7 @@ func _call_of(o: Observer, scan: PackedInt32Array, out: Array) -> void:
 		var edge := _drop.meniscus.depth(o.pos)
 		if edge < o.ping_range:
 			found.append([maxf(edge, 0.0), _drop.meniscus.nearest_rim(o.pos),
-				Drop.EDGE_ECHO_RADIUS])
+				Drop.EDGE_ECHO_RADIUS, true])
 	if found.is_empty():
 		return
 	found.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
@@ -4230,7 +4297,8 @@ func _call_of(o: Observer, scan: PackedInt32Array, out: Array) -> void:
 		var width := minf(PING_WIDTH_FLOOR[tier] + PING_WIDTH_GAIN[tier] * alpha,
 			PING_WIDTH_MAX)
 		var hold := PING_RING * 2.0 * radius_i / PING_SPEED
-		heard.append([float(found[i][0]), at, level, width, hold])
+		# The last field is where in `found` it was, for [method _shape_of].
+		heard.append([float(found[i][0]), at, level, width, hold, i])
 		if heard.size() >= PING_RETURNS_BY_TIER[tier]:
 			break
 	var due := 0.0
@@ -4241,6 +4309,101 @@ func _call_of(o: Observer, scan: PackedInt32Array, out: Array) -> void:
 		var flight := 2.0 * d / PING_SPEED
 		due = flight if i == 0 else maxf(flight, due + PING_MIN_GAP)
 		out.append([due, heard[i][1], heard[i][2], heard[i][3], heard[i][4]])
+	if shapes is Array and o.ping_tier >= PING_FIX_TIER:
+		for one: Array in heard:
+			(shapes as Array).append(_shape_of(o, origin, found, int(one[5])))
+
+
+## **What one return lets the caller place** (ping-as-outline.md §13): the point
+## it came off -- a body's near pole, or the rim's nearest point -- and, at
+## [constant PING_OUTLINE_TIER] copies, the part of its outline the wave reached:
+## the side facing the organ, less whatever a nearer body hides. Never the far
+## side: the body hides that itself. Worked out at the call, off the bodies the
+## call was heard off ([param found], nearest first), which is where the wave met
+## them. Returns `{at, arcs, tier}`.
+func _shape_of(o: Observer, origin: Vector2, found: Array, i: int) -> Dictionary:
+	var at: Vector2 = found[i][1]
+	var radius: float = found[i][2]
+	var arcs: Array = []
+	if bool(found[i][3]):
+		# The meniscus, heard from its nearest point as a body
+		# [constant Drop.EDGE_ECHO_RADIUS] wide: that much of the rim either side.
+		if o.ping_tier >= PING_OUTLINE_TIER and _drop != null:
+			var rim := _drop.meniscus
+			var mid := (at - rim.center).angle()
+			var half := Drop.EDGE_ECHO_RADIUS / maxf(rim.radius, 1.0)
+			arcs = _seen_arcs(o, origin, rim.center, rim.radius, mid - half, mid + half,
+				found, i)
+		return {"at": at, "arcs": arcs, "tier": o.ping_tier}
+	var toward := origin - at
+	var apart := toward.length()
+	if apart <= radius:
+		# The organ is inside it: there is no side facing it to draw.
+		return {"at": at, "arcs": arcs, "tier": o.ping_tier}
+	if o.ping_tier >= PING_OUTLINE_TIER:
+		# The side facing the organ runs between the two tangents from it, which
+		# meet the rim `acos(r / d)` either side of the line to it.
+		var mid := toward.angle()
+		var half := acos(radius / apart)
+		arcs = _seen_arcs(o, origin, at, radius, mid - half, mid + half, found, i)
+	return {"at": at + toward / apart * radius, "arcs": arcs, "tier": o.ping_tier}
+
+
+## **The parts of a rim the wave reached**, as `[centre, radius, from, to]` arcs:
+## [param from] to [param to] in world angles about [param centre], a point every
+## [constant PING_OUTLINE_STEP] of rim, each kept while nothing in [param found]
+## but the body it is on ([param own]) -- nor the caller's own body -- crosses the
+## straight path to it from [param origin]. A run of kept points is one arc.
+func _seen_arcs(o: Observer, origin: Vector2, centre: Vector2, radius: float,
+		from: float, to: float, found: Array, own: int) -> Array:
+	var steps := clampi(ceili((to - from) * radius / PING_OUTLINE_STEP), 2,
+		PING_OUTLINE_POINTS)
+	var arcs: Array = []
+	var start := 0.0
+	var last := 0.0
+	var open := false
+	for s in steps + 1:
+		var angle := lerpf(from, to, float(s) / float(steps))
+		var seen := not _path_blocked(o, origin,
+			centre + Vector2(cos(angle), sin(angle)) * radius, found, own)
+		if seen and not open:
+			start = angle
+			open = true
+		elif not seen and open:
+			if last > start:
+				arcs.append([centre, radius, start, last])
+			open = false
+		last = angle
+	if open and last > start:
+		arcs.append([centre, radius, start, last])
+	return arcs
+
+
+## **Whether anything stands between [param origin] and [param to]**: a body in
+## [param found] other than the one [param to] is on, or the caller's own body,
+## which the organ sits on the skin of. The meniscus hides nothing from inside it.
+func _path_blocked(o: Observer, origin: Vector2, to: Vector2, found: Array,
+		own: int) -> bool:
+	var path := to - origin
+	var length := path.length_squared()
+	if length <= 0.0001:
+		return false
+	if _crosses(origin, path, length, o.pos, o.radius * PING_SKIN_SHRINK):
+		return true
+	for j in found.size():
+		if j == own or bool(found[j][3]):
+			continue
+		if _crosses(origin, path, length, found[j][1], float(found[j][2])):
+			return true
+	return false
+
+
+## Whether the segment from [param origin] along [param path] (whose squared
+## length is [param length]) passes inside the circle at [param centre].
+static func _crosses(origin: Vector2, path: Vector2, length: float, centre: Vector2,
+		radius: float) -> bool:
+	var t := clampf((centre - origin).dot(path) / length, 0.0, 1.0)
+	return (origin + path * t).distance_squared_to(centre) < radius * radius
 
 
 ## `palp`. The nearest body inside touch range, as a bearing and a closeness --

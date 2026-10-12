@@ -280,6 +280,15 @@ func mark_meal(nutrition: float, gene: StringName, at: Vector2) -> void:
 		_vision.mark_meal(nutrition, gene, at)
 
 
+## **What the ping placed as an echo landed** (ping-as-outline.md §13), into
+## both panes' own marks, as the run hands it to both of its views.
+func mark_echo(mark: Dictionary) -> void:
+	if _vision != null:
+		_vision.mark_echo(mark)
+	if _returns != null:
+		_returns.mark_echo(mark)
+
+
 ## **The friend left the water for good, and how** (shared-pond-ux.md §3, §5),
 ## as the run told its own view: a meal ring where they were, a faint, or the
 ## arrival fade reversed -- which a body leaving its slot cannot say alone.

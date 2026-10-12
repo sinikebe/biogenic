@@ -13,7 +13,9 @@ extends CanvasLayer
 ## **Nothing else follows them in.** No bodies, no silhouettes, no scent bloom,
 ## no wounds, no threat colour, nothing a sense did not touch. Only the returns
 ## themselves, and only while the sense is actually returning them. If this file
-## ever draws a cell, it has gone past the line.
+## ever draws a cell, it has gone past the line. The one outline it draws is a
+## return too: at three copies the ping draws the side of a body its wave
+## reached, and nothing the wave did not (ping-as-outline.md §13).
 ##
 ## **A drawing change, not a simulation change.** Everything here is read out of
 ## `food.gd` exactly as it stands, the same way `vision.gd` reads it, and nothing
@@ -159,6 +161,21 @@ const ECHO_STEPS := 18
 ## ambiguity pose: at any instant three or four are inside the frame, so this
 ## cuts a tail that is mostly off screen anyway.
 const ECHO_DRAWN := 6
+## **What the ping placed as an echo landed** (ping-as-outline.md §13): at two
+## copies a point, the pointer's size and a little quieter, because it says where
+## something was and not what; at three the side of the body the wave reached, an
+## outline a little thicker than the wave it outlives. Both in the ping's hue,
+## whatever answered.
+const FIX_HALO := 11.0
+const FIX_HALO_ALPHA := 0.14
+const FIX_CORE := 3.4
+const FIX_CORE_ALPHA := 0.80
+const OUTLINE_WIDTH := 2.4
+const OUTLINE_ALPHA := 0.78
+## World units of rim one segment of a drawn outline stands for, and the most
+## segments one arc is drawn with.
+const OUTLINE_STEP := 6.0
+const OUTLINE_STEPS := 48
 
 ## **Whether something other than the field is stepping the water.** Left false
 ## by the run, where [method FoodField.is_processing] and the cell being in the
@@ -176,6 +193,8 @@ var _cell: CellBody = null
 var _food: FoodField = null
 ## A sweep's hits, held and fading (beam-levels.md §4.3).
 var _glow := _new_glow()
+## [[mark, age], ...] -- what the ping placed (§13), each held for its `life`.
+var _echo_marks: Array = []
 @onready var _marks: Control = $Marks
 
 
@@ -203,6 +222,16 @@ func set_active(on: bool) -> void:
 		# Held marks are claims about a moment; one that was hidden through a
 		# pause or full vision is stale when it comes back.
 		_glow.clear()
+		_echo_marks.clear()
+
+
+## **What the ping placed as an echo landed** (ping-as-outline.md §13), from the
+## run as it happens and from the replay as it was recorded. Held for the mark's
+## own `life`, one call, fading; not taken while the layer is off.
+func mark_echo(mark: Dictionary) -> void:
+	if not visible:
+		return
+	_echo_marks.append([mark, 0.0])
 
 
 ## **Which part of the screen the marks are drawn in.** The whole viewport in
@@ -221,6 +250,11 @@ func _process(delta: float) -> void:
 	if not visible:
 		return
 	_catch_hits(delta)
+	for i in range(_echo_marks.size() - 1, -1, -1):
+		var held: Array = _echo_marks[i]
+		held[1] = float(held[1]) + delta
+		if float(held[1]) >= float((held[0] as Dictionary).get("life", 0.0)):
+			_echo_marks.remove_at(i)
 	_marks.queue_redraw()
 
 
@@ -244,6 +278,7 @@ func _draw_marks() -> void:
 	var centre := _marks.size * 0.5
 	_draw_wave(centre)
 	_draw_echoes(centre)
+	_draw_echo_marks(centre)
 	_draw_pointers(centre)
 
 
@@ -386,10 +421,12 @@ func _draw_wave(centre: Vector2) -> void:
 		var r := front * SCALE
 		if r > horizon:
 			continue
-		# Fades with how much of its reach it has spent, the same way full
-		# vision fades it: the arc is off the screen long before it is out of
-		# range, so this is the only thing that can say *it is still going*.
-		var carry := 1.0 - clampf(front / reach, 0.0, 1.0)
+		# Seen for the first second of its flight and fading through it, the
+		# same way full vision draws it (ping-as-outline.md §13): past that,
+		# where the wave has got to is nothing the cell could know.
+		var carry := FoodField.front_seen(front)
+		if carry <= 0.0:
+			continue
 		_wave_arc(origin, r, mid - PI * 0.5, mid + PI * 0.5, carry)
 		if through > 0.0:
 			# Inset by [constant WAVE_SEAM] at both ends: flush, the two arcs
@@ -426,7 +463,9 @@ func _draw_echoes(centre: Vector2) -> void:
 		var r: float = float(echo[0]) * SCALE
 		if r > horizon:
 			continue
-		var level := clampf(float(echo[3]), 0.0, 1.0)
+		# Only for the last second of its way home (§13), the only part of it
+		# the cell hears.
+		var level := clampf(float(echo[3]), 0.0, 1.0) * FoodField.echo_seen(float(echo[0]))
 		if level <= 0.0:
 			continue
 		drawn += 1
@@ -446,6 +485,71 @@ func _draw_echoes(centre: Vector2) -> void:
 			seen = seen or vis > 0.0
 		if seen:
 			_marks.draw_polyline_colors(points, colors, ECHO_WIDTH, true)
+
+
+## **What the ping placed** (ping-as-outline.md §13), where the wave met it and
+## fading over one call: a plain point at two copies -- the same for a meal, a
+## hunter or the rim, because nothing in an echo says which -- and at three the
+## side of the body the wave reached, as the arcs the field worked out.
+func _draw_echo_marks(centre: Vector2) -> void:
+	if _echo_marks.is_empty():
+		return
+	var tone := Cilia.hue_on(Catalogue.PING)
+	for held: Array in _echo_marks:
+		var mark: Dictionary = held[0]
+		var life := maxf(float(mark.get("life", 0.0)), 0.001)
+		var fade := 1.0 - clampf(float(held[1]) / life, 0.0, 1.0)
+		if fade <= 0.0:
+			continue
+		var arcs: Array = mark.get("arcs", [])
+		if arcs.is_empty():
+			_draw_fix(centre, mark.get("at", Vector2.ZERO), tone, fade)
+			continue
+		for arc: Array in arcs:
+			_draw_outline(centre, arc, tone, fade)
+
+
+## One placed point, at [param fade]: hidden inside the skin, as a pointer is.
+func _draw_fix(centre: Vector2, point: Vector2, tone: Color, fade: float) -> void:
+	var at := _on_screen(centre, point)
+	var vis := fade * _edge_fade(at) * smoothstep(_cell.radius * POINT_SKIN,
+		_cell.radius * POINT_CLEAR, point.distance_to(_cell.position))
+	if vis <= 0.0:
+		return
+	_marks.draw_circle(at, FIX_HALO, Color(tone, FIX_HALO_ALPHA * vis), true, -1.0, true)
+	_marks.draw_circle(at, FIX_CORE, Color(tone, FIX_CORE_ALPHA * vis), true, -1.0, true)
+
+
+## One arc of an outline, `[centre, radius, from, to]` in the water's own
+## coordinates, carried to this screen point by point -- so it stays where the
+## body was while this cell turns and moves -- and faded at each point by the
+## membrane's edge, as the wave is.
+func _draw_outline(centre: Vector2, arc: Array, tone: Color, fade: float) -> void:
+	var middle: Vector2 = arc[0]
+	var radius := float(arc[1])
+	var from := float(arc[2])
+	var to := float(arc[3])
+	var steps := clampi(ceili((to - from) * radius / OUTLINE_STEP), 2, OUTLINE_STEPS)
+	var points := PackedVector2Array()
+	var colors := PackedColorArray()
+	points.resize(steps + 1)
+	colors.resize(steps + 1)
+	var seen := false
+	for i in steps + 1:
+		var t := lerpf(from, to, float(i) / float(steps))
+		var p := _on_screen(centre, middle + Vector2(cos(t), sin(t)) * radius)
+		var vis := _edge_fade(p) * fade
+		points[i] = p
+		colors[i] = Color(tone, OUTLINE_ALPHA * vis)
+		seen = seen or vis > 0.0
+	if seen:
+		_marks.draw_polyline_colors(points, colors, OUTLINE_WIDTH, true)
+
+
+## A place in the water, on this screen: at its bearing from the cell and its
+## distance, at the figure's scale -- front up, as every mark here is.
+func _on_screen(centre: Vector2, point: Vector2) -> Vector2:
+	return centre + _ray(_cell.bearing_to(point)) * point.distance_to(_cell.position) * SCALE
 
 
 ## One half of the wavefront, from [param from] to [param to] in screen angles,

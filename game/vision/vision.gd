@@ -125,6 +125,17 @@ const PING_STEPS := Cilia.WAVE_STEPS
 ## by two draw calls composites twice; measured in point of view, the ring's
 ## 257 and 150 summed sRGB above base met in a 407 bead at each seam.
 const PING_SEAM := Cilia.WAVE_SEAM
+## **What the ping placed** (ping-as-outline.md §13), in canvas pixels: a point
+## the size of a sweep's held hit and as bright, since it is the same kind of
+## claim; an outline a little thicker than the wave, which it outlives.
+const ECHO_FIX_HALO := 9.0
+const ECHO_FIX_HALO_ALPHA := 0.16
+const ECHO_FIX_CORE := 3.4
+const ECHO_FIX_CORE_ALPHA := 0.88
+const ECHO_OUTLINE_WIDTH := 2.4
+const ECHO_OUTLINE_ALPHA := 0.80
+## World units of rim one segment of a drawn outline stands for.
+const ECHO_OUTLINE_STEP := 6.0
 
 # --- The other player -------------------------------------------------------
 ## **How far past the newest frame the friend is carried: a fifth of a second,
@@ -464,6 +475,9 @@ var _ghosts: Array[Array] = []
 var _meals: Array[Array] = []
 ## [[world position, world direction, strength, age], ...] -- reported wakes.
 var _wakes: Array[Array] = []
+## [[mark, age], ...] -- what the ping placed as each echo landed
+## (ping-as-outline.md §13), each held for its `life`, one call.
+var _echo_marks: Array[Array] = []
 
 
 func _ready() -> void:
@@ -577,6 +591,7 @@ func forget() -> void:
 	_ghosts.clear()
 	_meals.clear()
 	_wakes.clear()
+	_echo_marks.clear()
 
 
 func is_active() -> bool:
@@ -645,6 +660,7 @@ func _process(delta: float) -> void:
 	_age(_ghosts, 1, delta, GHOST_LIFE)
 	_age(_meals, 2, delta, GHOST_LIFE)
 	_age(_wakes, 3, delta, WAKE_LIFE)
+	_age_echo_marks(delta)
 	_catch_beam_hits(delta)
 
 	if _water.size.x > 1.0:
@@ -1168,6 +1184,25 @@ func mark_struck(at: Vector2) -> void:
 
 func mark_meal(nutrition: float, gene: StringName, at: Vector2) -> void:
 	_on_eaten(nutrition, gene, at)
+
+
+## **What the ping placed as an echo landed** (ping-as-outline.md §13), from the
+## run as it happens and from the replay as it was recorded: a place at two
+## copies, the side of a body the wave reached at three. Held for the mark's own
+## `life`, one call, fading.
+func mark_echo(mark: Dictionary) -> void:
+	if not _active:
+		return
+	_echo_marks.append([mark, 0.0])
+
+
+## Each placed mark aged, and let go at the end of its own life.
+func _age_echo_marks(delta: float) -> void:
+	for i in range(_echo_marks.size() - 1, -1, -1):
+		var held: Array = _echo_marks[i]
+		held[1] = float(held[1]) + delta
+		if float(held[1]) >= float((held[0] as Dictionary).get("life", 0.0)):
+			_echo_marks.remove_at(i)
 
 
 ## A body-relative bearing turned back into a world direction. The one place
@@ -1724,10 +1759,12 @@ func _catch_beam_hits(delta: float) -> void:
 				k, float(beam[0]))
 
 
-## **The `ampulla`.** Every wavefront currently in flight, as a half-ring
-## expanding out of **the organ's own point on the membrane** and fading as it
-## goes -- and every echo on its way back, as a short arc contracting onto the
-## same point.
+## **The `ampulla`.** Each wavefront for the first second of its flight, as a
+## half-ring expanding out of **the organ's own point on the membrane** and
+## fading as it goes -- and each echo for the last second of its way back, as a
+## short arc contracting onto the same point (ping-as-outline.md §13, the owner's
+## rework: the cell sees its call leave and its answers arrive, and nothing in
+## between). Then what two and three copies place of each answer.
 ##
 ## The same two-register agreement the beam has: point of view gets a run of
 ## marks on the contour as each body answers, and here the thing that produced
@@ -1757,15 +1794,15 @@ func _draw_ping(a: float) -> void:
 	var mid := dir.angle()
 	var tone := Cilia.hue_on(Catalogue.PING)
 	var through := clampf(_food_node.ping_through, 0.0, 1.0)
-	# **All of them, not just the newest.** Up to eleven pulses are in this
-	# water at once at tier 3, and drawing one while the skin reported another
-	# was the contradiction ping-as-outline.md §7 photographed.
+	# **All of them, not just the newest** -- but each only for the second it is
+	# seen leaving (ping-as-outline.md §13): past that, where a wave has got to
+	# is nothing the cell could know.
 	for front: float in _food_node.ping_fronts:
 		if front <= 0.0:
 			continue
-		# Off the top of the screen long before it reaches its range, so the
-		# fade is the thing that has to sell "it is still going".
-		var fade := 1.0 - clampf(front / reach, 0.0, 1.0)
+		var fade := FoodField.front_seen(front)
+		if fade <= 0.0:
+			continue
 		# Brighter than a threshold ring, because those are measuring
 		# instruments and this is a thing the cell actually did.
 		_world.draw_arc(origin, front, mid - PI * 0.5, mid + PI * 0.5,
@@ -1781,17 +1818,48 @@ func _draw_ping(a: float) -> void:
 	# The echoes. Brighter and thicker than the front that started them: the
 	# front is the question going out and this is the answer coming back, and
 	# the moment the mechanic becomes legible is the moment one of these lands.
+	# Each only for the last second of its way home (§13), which is the only
+	# part of it the cell hears.
 	for echo: Array in _food_node.ping_echoes:
 		var r: float = float(echo[0])
 		if r <= 0.0:
 			continue
-		var level := clampf(float(echo[3]), 0.0, 1.0)
+		var level := clampf(float(echo[3]), 0.0, 1.0) * FoodField.echo_seen(r)
 		if level <= 0.0:
 			continue
 		var span := deg_to_rad(clampf(float(echo[2]), 1.0, 180.0))
 		var at := float(echo[1]) - PI * 0.5
 		_world.draw_arc(origin, r, at - span, at + span, PING_STEPS,
 			Color(tone, 0.80 * level * a), 2.6 / ZOOM, true)
+	_draw_echo_marks(a, tone)
+
+
+## **What the ping placed** (ping-as-outline.md §13), where the wave met it and
+## fading over one call: a plain point at two copies, the same for a meal, a
+## hunter or the rim, because nothing in an echo says which; at three, the side
+## of the body the wave reached, drawn as the arcs the field worked out.
+func _draw_echo_marks(a: float, tone: Color) -> void:
+	for held: Array in _echo_marks:
+		var mark: Dictionary = held[0]
+		var life := maxf(float(mark.get("life", 0.0)), 0.001)
+		var fade := (1.0 - clampf(float(held[1]) / life, 0.0, 1.0)) * a
+		if fade <= 0.0:
+			continue
+		var arcs: Array = mark.get("arcs", [])
+		if arcs.is_empty():
+			var at: Vector2 = mark.get("at", Vector2.ZERO)
+			_world.draw_circle(at, ECHO_FIX_HALO / ZOOM,
+				Color(tone, ECHO_FIX_HALO_ALPHA * fade), true, -1.0, true)
+			_world.draw_circle(at, ECHO_FIX_CORE / ZOOM,
+				Color(tone, ECHO_FIX_CORE_ALPHA * fade), true, -1.0, true)
+			continue
+		for arc: Array in arcs:
+			var radius := float(arc[1])
+			var from := float(arc[2])
+			var to := float(arc[3])
+			_world.draw_arc(arc[0], radius, from, to,
+				clampi(ceili((to - from) * radius / ECHO_OUTLINE_STEP), 2, PING_STEPS),
+				Color(tone, ECHO_OUTLINE_ALPHA * fade), ECHO_OUTLINE_WIDTH / ZOOM, true)
 
 
 ## Threshold rings, drawn only while the cell is within RING_WINDOW of crossing
