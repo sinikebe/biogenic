@@ -143,6 +143,7 @@ const TOGETHER: Array = [
 	[&"ping_range", &"ping_period", &"ping_through"],
 	[&"dash_speed", &"dash_cost"],
 	[&"dart_range", &"dart_cooldown"],
+	[&"grip", &"tether"],
 ]
 
 ## **The families and the kinds** (docs/design/gene-looks.md §1, §2, §7): what a
