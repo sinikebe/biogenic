@@ -1360,6 +1360,12 @@ func _driven() -> bool:
 	return autopilot and instincts != null
 
 
+## **Whether the cell holds on to what it touches** (the haptonema's `cling`):
+## while the instincts drive it and claim a cling. The hand has no cling yet.
+func clinging() -> bool:
+	return _driven() and bool(instincts.call(&"clings"))
+
+
 ## **A dash an instinct fires** (automation.md §4.2): the hand's own burst, on its
 ## cooldown and at its price -- past [member steering_off], which silences the
 ## hand only, as a water body's rules fire its dash.

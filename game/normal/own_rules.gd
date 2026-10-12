@@ -268,6 +268,11 @@ func holds_tail() -> bool:
 	return body.tail_held
 
 
+## Whether the instincts hold on to what the cell touches: the haptonema's `cling`.
+func clings() -> bool:
+	return body.clinging
+
+
 # --- The handover (§2.2, §2.3) ------------------------------------------------------
 
 ## **The autopilot takes the cell**: from its next tick, with nothing held from

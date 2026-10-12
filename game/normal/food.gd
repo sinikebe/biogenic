@@ -9249,6 +9249,10 @@ func _separate_drop() -> void:
 ## bearing, as grit is, at most once in SHORE_GAP. Pressing on keeps knocking.
 func _contain_player(knock: bool) -> void:
 	var m := _drop.meniscus
+	# **Holding on** (game/mechanics/grip.gd): a cling at the rim stops the cell there.
+	if _cell.clinging() and Grip.at_rim(m, _cell.position, _cell.radius,
+			Stats.of(_cell.worn(), &"tether")):
+		_cell.velocity = Vector2.ZERO
 	if m.inside(_cell.position, _cell.radius):
 		return
 	var out := (_cell.position - m.center).normalized()
