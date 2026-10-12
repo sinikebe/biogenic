@@ -90,5 +90,5 @@ func lines(t: int, _level: int, _path: StringName, ctx: Dictionary, _slot: int,
 	# is the shove a cell gives to let go; "past touching" is how far beyond just
 	# touching it keeps holding.
 	return [[Readout.item("absorbs {} of a held push-off", [grip], [U.SHARE]),
-			Readout.item("holds on {} px past touching", [tether], [U.DISTANCE])],
+			Readout.item("holds on {} µm past touching", [tether], [U.DISTANCE])],
 		[wear]]

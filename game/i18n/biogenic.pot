@@ -604,7 +604,7 @@ msgstr ""
 #. line takes 550 px.
 #: game/genes/organs/haptonema.gd
 #, python-brace-format
-msgid "holds on {} px past touching"
+msgid "holds on {} µm past touching"
 msgstr ""
 
 #. A gene's name as the player reads it on a chip beside three small dots: one
