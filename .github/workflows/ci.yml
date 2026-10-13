@@ -321,11 +321,17 @@ jobs:
         # move with it. 69,441 lines, as before, the same hash under all three
         # schemes.
         #
+        # **Re-pinned with the haptonema** (docs/design/haptonema.md §2), from
+        # 77258a82...: the water changed on purpose. The haptonema is common and
+        # a drifter, a fourth common organ in every draw, so the water round the
+        # cell differs from the first body it seeds. 69,471 lines, from 69,441,
+        # the same hash under all three schemes.
+        #
         # Each run prints about ten megabytes, so it goes to a file rather than
         # a variable. About twenty seconds a scheme.
         run: |
           set -uo pipefail
-          pinned="77258a8272ec72898396e034d781c8a01eca614b336b908d5d2fd332321b0f06"
+          pinned="e636a790112cdd1dbbc655eaae4b3b611d2fcec8600036c0f719daa1b5dbb04f"
           log=$(mktemp)
           fail=0
           for scheme in 0 1 2; do
