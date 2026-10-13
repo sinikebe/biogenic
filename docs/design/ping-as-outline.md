@@ -1095,11 +1095,12 @@ and the seeded pins move with it where a run carries one.
 - **`food.gd`**: `PING_SEEN_OUT`, `PING_SEEN_BACK` and `PING_SEEN_RISE` (1 s, 1 s,
   0.25 s), and `front_seen()` and `echo_seen()`, which both views draw by, so they
   cannot disagree about when a wave is in sight. The player's call works out what
-  each return lets it place (`_shape_of`, `_seen_arcs`): the outline is sampled every
-  `PING_OUTLINE_STEP` (6 world units) of rim, at most `PING_OUTLINE_POINTS` (48), each
-  point kept while no body crosses the straight path to it from the organ. It rides
-  home on the echo and is emitted as `echoed` when the echo lands. Water cells' calls
-  work out nothing of it.
+  each return lets it place (`_shape_of`, `_seen_runs`): the body's rim is sampled
+  every `PING_OUTLINE_STEP` (6 world units), between `PING_OUTLINE_MIN` (16) and
+  `PING_OUTLINE_POINTS` (96) points round it, each point kept while it faces the organ
+  and no body crosses the straight path to it. It rides home on the echo and is
+  emitted as `echoed` when the echo lands. Water cells' calls work out nothing of it.
+  §13.5 moved the rim from the circle to the drawn ovoid.
 - **`vision.gd` and `returns.gd`** hold each mark (`mark_echo`) and draw it fading:
   in full vision in world space, in point of view at the figure's scale, front up,
   each point of an outline carried to the screen so it stays where the body was while
@@ -1118,3 +1119,49 @@ it"*). Starting values, each one line:
   sweep's land. The mark's `life`.
 - **Do outlines read as bodies** at three copies? `PING_OUTLINE_STEP` sets how finely
   they follow a rim, and the outline's width and alpha in both views how loud they are.
+
+### 13.5 As played, 2026-10-13
+
+The owner: *"Now you can playtest the ping gene."* Played at one, two and three
+copies, in both views, at 1280x720 and 2400x1080, at the drop's rim (`--start=edge`)
+and in the replay. One and two copies were right as built: the front goes out of
+sight a second after it leaves, an echo comes into sight a second before it lands, and
+a point is left where the answer came off, fading over one call. Two things were not.
+
+**An outline drew through the body.** The water measures a body as a circle of its
+radius, and a mark was placed on that circle; but every body is *drawn* as the ovoid
+of `cilia.gd` -- 1.18 radii long, 0.94 wide, narrower at the nose. In full vision a
+three-copy outline was a circular arc cutting across the drawn body, and a two-copy
+point sat inside it, a fifth of a radius in from a nose turned toward the cell. Both
+are placed on the ovoid now, through `Cilia.skin_point` -- the curve the body is drawn
+with -- turned the way the body pointed at the call: the point is the rim nearest the
+organ, the outline the part of the rim that faces the organ and that no body hides.
+The ovoid is convex (measured: no point of it curves in), so a point faces the organ
+exactly when its outward normal does. Point of view, which draws no body, gets an
+outline with a nose and a heading in it, which is more than a circle said.
+
+**A body behind another was still heard.** With nothing passing a body (§13.2), a
+nearer body still took only `clear` out of a return -- how far the path to the
+farther body's middle passed from the nearer one's middle, as a share of its radius.
+So a body wholly behind the edge of a bigger one came home at up to four fifths: seed
+7, a body of radius 80 at 300 units, and a body at −48.9° behind its edge was heard at
+0.53 at three copies -- and, its outline wholly hidden, placed as a point. That is
+hearing behind a body, which §13 rules out. A return now loses **the share of the arc
+the body spans from the organ that nearer bodies span across**, overlaps counted once
+(`_hidden_share`): wholly behind is silent, half behind is half. In the same pose the
+hidden body is silent and the fifth return goes to the next body in sight. The rim
+hides nothing from inside it, as it already did for an outline.
+
+That is a change to what the water hears, since every caller hears by `_call_of`, and
+the seeded pins moved with it (`ci.yml` check 8, `drop_probe`'s traces). It is not a
+rule the referee copies, so `Wire.RULES` does not move.
+
+Seen and left as built:
+
+- **A mark is where the body was when the call went out**, not where it is: a cell
+  swimming at the caller is ahead of its own outline by the time the echo lands, by
+  its speed times the round trip. That is the information a sonar has, and older the
+  farther it came from.
+- **The rim's stretch in point of view is faint** when it is near the top of the
+  screen, where the view fades everything toward the membrane's edge, the wave
+  included.

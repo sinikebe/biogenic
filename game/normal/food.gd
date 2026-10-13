@@ -37,10 +37,11 @@ const Genome := preload("res://game/normal/genome.gd")
 ## by key and by stat, and this file names no gene to work them out.
 const Catalogue := preload("res://game/genes/catalogue.gd")
 const Stats := preload("res://game/genes/stats.gd")
-## **Only for [method Cilia.mouth_touches]**, which is where the lip bow's
-## geometry is defined and therefore where the water has to ask whether a mouth
-## is actually on something. Nothing else in that file is read from here and
-## nothing here draws. The preload chain is cilia -> genome -> cell, so this
+## **For [method Cilia.mouth_touches]**, which is where the lip bow's geometry is
+## defined and therefore where the water has to ask whether a mouth is actually
+## on something; and for [method Cilia.skin_point], the curve every body is drawn
+## with, which is what the ping places its marks on (ping-as-outline.md §13.5).
+## Nothing here draws. The preload chain is cilia -> genome -> cell, so this
 ## adds no cycle.
 const Cilia := preload("res://game/vision/cilia.gd")
 ## **The drop**, this water's environment file (docs/design/ocean.md §13), and
@@ -848,10 +849,14 @@ const PING_SEEN_RISE := 0.25
 ## hides itself.
 const PING_FIX_TIER := 2
 const PING_OUTLINE_TIER := 3
-## How much rim one point of an outline stands for, in world units, and the most
-## points one outline is worked out at.
+## How much rim one point of an outline stands for, in world units, and the
+## fewest and most points one body's whole rim is worked out at -- about half of
+## them face the organ. A body's rim is [constant PING_RIM_LENGTH] radii round:
+## the drawn ovoid's, measured.
 const PING_OUTLINE_STEP := 6.0
-const PING_OUTLINE_POINTS := 48
+const PING_OUTLINE_MIN := 16
+const PING_OUTLINE_POINTS := 96
+const PING_RIM_LENGTH := 6.74
 ## The organ sits on the cell's own skin, so the cell's own body is tested for
 ## being in the way at a little under its radius: the skin a path leaves from is
 ## not itself in the way.
@@ -4152,13 +4157,14 @@ static func echo_seen(r: float) -> float:
 ##
 ## - the **hull**, which is the emitter looking at the hemisphere it faces, with
 ##   [constant PING_GRAZE]'s soft edge on it;
-## - every **nearer body**, by how centrally the path crosses it -- dead through
-##   the middle takes the full bite, a graze past the rim takes none.
+## - the **nearer bodies**, by how much of the body they hide from the organ
+##   between them ([method _hidden_share]) -- wholly behind one takes the full
+##   bite, half behind it half.
 ##
-## Both survive at [member ping_through], per occluder, multiplying. So a
-## tier-1 cell hears nothing at all behind its own organ, and a tier-3 one hears
-## through itself at 0.58 and never quite as well as around itself, which is the
-## right direction for a build that has spent three tiers on one gene.
+## Both survive at [member ping_through]. It is 0 at every tier for now
+## (`ampulla.gd`; ping-as-outline.md §13.2), so no cell hears anything behind
+## its own organ or behind a body; the stat stays so that a tier can hear
+## through again.
 ##
 ## What they multiply into is [method ping_level] over the echo's whole path,
 ## out and back.
@@ -4221,8 +4227,9 @@ func _call_of(o: Observer, scan: PackedInt32Array, out: Array,
 		var d := b.pos.distance_to(o.pos) - b.radius
 		if d >= o.ping_range:
 			continue
-		# The last field: not the meniscus.
-		found.append([maxf(d, 0.0), b.pos, b.radius, false])
+		# The last two fields: not the meniscus, and which way it points, for
+		# the ovoid [method _shape_of] places on.
+		found.append([maxf(d, 0.0), b.pos, b.radius, false, b.heading])
 	# **The meniscus answers** (the drop, §3.2): the largest reflector a pulse
 	# can meet, heard from its nearest point as one body EDGE_ECHO_RADIUS wide
 	# -- the widest, longest echo in the game. The hull, the bodies in the way
@@ -4231,7 +4238,7 @@ func _call_of(o: Observer, scan: PackedInt32Array, out: Array,
 		var edge := _drop.meniscus.depth(o.pos)
 		if edge < o.ping_range:
 			found.append([maxf(edge, 0.0), _drop.meniscus.nearest_rim(o.pos),
-				Drop.EDGE_ECHO_RADIUS, true])
+				Drop.EDGE_ECHO_RADIUS, true, 0.0])
 	if found.is_empty():
 		return
 	found.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
@@ -4249,8 +4256,16 @@ func _call_of(o: Observer, scan: PackedInt32Array, out: Array,
 		var open := smoothstep(-PING_GRAZE, PING_GRAZE,
 			path.normalized().dot(dir))
 		level *= lerpf(o.ping_through, 1.0, open)
-		# Everything nearer is in the way, and "nearer" is measured from the
-		# cell while the path is measured from the organ -- so the two orders
+		# **Everything nearer is in the way, by how much of the body it hides**
+		# (ping-as-outline.md §13.5): the share of the arc the body spans from
+		# the organ that nearer bodies span across ([method _hidden_share]). A
+		# body wholly behind another is silent, one half behind it comes home at
+		# half. It was how near the path to the body's middle passed another's
+		# middle, which let a body wholly behind the edge of a bigger one come
+		# home at four fifths -- heard, and placed, through it.
+		#
+		# "Nearer" is measured from the cell while the path is measured from
+		# the organ -- so the two orders
 		# are not quite the same order, and `for j in i` can skip a body that
 		# was genuinely across this path.
 		#
@@ -4271,29 +4286,19 @@ func _call_of(o: Observer, scan: PackedInt32Array, out: Array,
 		# [constant PUSH_SHARE], so 97% of one is gone in five frames, against
 		# a pulse that fires once every 1.4 to 3.2 seconds.
 		var axis := path / reach if reach > 0.001 else dir
-		for j in i:
-			if level <= PING_SILENT:
-				break
-			var other: Vector2 = found[j][1]
-			var to_j := other - origin
-			var along := to_j.dot(axis)
-			# Not between the organ and the body: a body off the back of the
-			# emitter or beyond the target is not in this path.
-			if along <= 0.0 or along >= reach:
-				continue
-			var radius_j: float = found[j][2]
-			if radius_j <= 0.0:
-				continue
-			var clear := clampf((to_j - axis * along).length() / radius_j, 0.0, 1.0)
-			level *= lerpf(o.ping_through, 1.0, clear)
+		# How wide it is from the organ, half each side of the path. The organ
+		# -to-centre distance is floored at the radius, so a body the organ is
+		# inside does not ask `asin` for more than 1.
+		var radius_i: float = found[i][2]
+		var spread := asin(clampf(radius_i / maxf(reach, radius_i), 0.0, 1.0))
+		if level > PING_SILENT:
+			level *= lerpf(o.ping_through, 1.0,
+				1.0 - _hidden_share(origin, axis, reach, spread, found, i))
 		if level <= PING_SILENT:
 			continue
 		# The two readings beside the level, out of numbers this loop already
-		# has. `span` is organ-to-centre and is floored at the radius, so a body
-		# the organ is inside does not ask `asin` for more than 1.
-		var radius_i: float = found[i][2]
-		var span := maxf(reach, radius_i)
-		var alpha := rad_to_deg(asin(clampf(radius_i / span, 0.0, 1.0)))
+		# has.
+		var alpha := rad_to_deg(spread)
 		var width := minf(PING_WIDTH_FLOOR[tier] + PING_WIDTH_GAIN[tier] * alpha,
 			PING_WIDTH_MAX)
 		var hold := PING_RING * 2.0 * radius_i / PING_SPEED
@@ -4314,69 +4319,143 @@ func _call_of(o: Observer, scan: PackedInt32Array, out: Array,
 			(shapes as Array).append(_shape_of(o, origin, found, int(one[5])))
 
 
+## **How much of a body nearer bodies hide from the organ**, 0..1: the share of
+## the arc it spans from [param origin] -- [param spread] either side of
+## [param axis], the way to its middle, [param reach] away -- that the bodies
+## before it in [param found] span across, overlaps counted once. A body counts
+## when its middle is between the organ and this one's along the way to it; the
+## meniscus hides nothing from inside it.
+static func _hidden_share(origin: Vector2, axis: Vector2, reach: float, spread: float,
+		found: Array, i: int) -> float:
+	if spread <= 0.0:
+		return 0.0
+	var cover: Array[Vector2] = []
+	for j in i:
+		if bool(found[j][3]):
+			continue
+		var to_j: Vector2 = found[j][1] - origin
+		var along := to_j.dot(axis)
+		# Not between the organ and the body: a body off the back of the emitter
+		# or beyond the target is not in this path.
+		if along <= 0.0 or along >= reach:
+			continue
+		var radius_j: float = found[j][2]
+		if radius_j <= 0.0:
+			continue
+		var apart := to_j.length()
+		# An organ inside a body is wholly behind it.
+		var half := PI if apart <= radius_j else asin(radius_j / apart)
+		var off := axis.angle_to(to_j)
+		var lo := maxf(off - half, -spread)
+		var hi := minf(off + half, spread)
+		if hi > lo:
+			cover.append(Vector2(lo, hi))
+	if cover.is_empty():
+		return 0.0
+	if cover.size() > 1:
+		cover.sort_custom(func(a: Vector2, b: Vector2) -> bool: return a.x < b.x)
+	var hidden := 0.0
+	var run := cover[0]
+	for k in range(1, cover.size()):
+		if cover[k].x > run.y:
+			hidden += run.y - run.x
+			run = cover[k]
+		else:
+			run.y = maxf(run.y, cover[k].y)
+	hidden += run.y - run.x
+	return clampf(hidden / (2.0 * spread), 0.0, 1.0)
+
+
 ## **What one return lets the caller place** (ping-as-outline.md §13): the point
-## it came off -- a body's near pole, or the rim's nearest point -- and, at
-## [constant PING_OUTLINE_TIER] copies, the part of its outline the wave reached:
-## the side facing the organ, less whatever a nearer body hides. Never the far
-## side: the body hides that itself. Worked out at the call, off the bodies the
-## call was heard off ([param found], nearest first), which is where the wave met
-## them. Returns `{at, arcs, tier}`.
+## it came off -- the body's rim nearest the organ, or the meniscus's nearest
+## point -- and, at [constant PING_OUTLINE_TIER] copies, the part of its outline
+## the wave reached: the side facing the organ, less whatever a nearer body hides.
+## Never the far side: the body hides that itself. Worked out at the call, off the
+## bodies the call was heard off ([param found], nearest first), which is where
+## the wave met them. Returns `{at, lines, tier}`, `lines` the outline as runs of
+## points in the water's own coordinates.
+##
+## **On the body as it is drawn** (§13.5): the ovoid of [method Cilia.skin_point],
+## turned the way the body pointed, and not the circle the water measures it by.
+## The ovoid is 1.18 radii long and 0.94 wide, so a circle drew through the body
+## and a point sat inside it.
 func _shape_of(o: Observer, origin: Vector2, found: Array, i: int) -> Dictionary:
 	var at: Vector2 = found[i][1]
 	var radius: float = found[i][2]
-	var arcs: Array = []
+	var outline := o.ping_tier >= PING_OUTLINE_TIER
+	var points := PackedVector2Array()
+	var seen := PackedByteArray()
 	if bool(found[i][3]):
 		# The meniscus, heard from its nearest point as a body
 		# [constant Drop.EDGE_ECHO_RADIUS] wide: that much of the rim either side.
-		if o.ping_tier >= PING_OUTLINE_TIER and _drop != null:
-			var rim := _drop.meniscus
-			var mid := (at - rim.center).angle()
-			var half := Drop.EDGE_ECHO_RADIUS / maxf(rim.radius, 1.0)
-			arcs = _seen_arcs(o, origin, rim.center, rim.radius, mid - half, mid + half,
-				found, i)
-		return {"at": at, "arcs": arcs, "tier": o.ping_tier}
-	var toward := origin - at
-	var apart := toward.length()
-	if apart <= radius:
+		if not outline or _drop == null:
+			return {"at": at, "lines": [], "tier": o.ping_tier}
+		var rim := _drop.meniscus
+		var mid := (at - rim.center).angle()
+		var half := Drop.EDGE_ECHO_RADIUS / maxf(rim.radius, 1.0)
+		var steps := clampi(ceili(2.0 * Drop.EDGE_ECHO_RADIUS / PING_OUTLINE_STEP), 2,
+			PING_OUTLINE_POINTS)
+		for s in steps + 1:
+			var angle := lerpf(mid - half, mid + half, float(s) / float(steps))
+			var p := rim.center + Vector2(cos(angle), sin(angle)) * rim.radius
+			points.append(p)
+			seen.append(0 if _path_blocked(o, origin, p, found, i) else 1)
+		return {"at": at, "lines": _seen_runs(points, seen, false), "tier": o.ping_tier}
+	if origin.distance_to(at) <= radius:
 		# The organ is inside it: there is no side facing it to draw.
-		return {"at": at, "arcs": arcs, "tier": o.ping_tier}
-	if o.ping_tier >= PING_OUTLINE_TIER:
-		# The side facing the organ runs between the two tangents from it, which
-		# meet the rim `acos(r / d)` either side of the line to it.
-		var mid := toward.angle()
-		var half := acos(radius / apart)
-		arcs = _seen_arcs(o, origin, at, radius, mid - half, mid + half, found, i)
-	return {"at": at + toward / apart * radius, "arcs": arcs, "tier": o.ping_tier}
+		return {"at": at, "lines": [], "tier": o.ping_tier}
+	var heading := float(found[i][4])
+	var steps := clampi(ceili(PING_RIM_LENGTH * radius / PING_OUTLINE_STEP),
+		PING_OUTLINE_MIN, PING_OUTLINE_POINTS)
+	var near := at
+	var nearest := INF
+	for s in steps:
+		var t := TAU * float(s) / float(steps)
+		var p := Cilia.skin_point(at, heading, radius, t)
+		var gap := p.distance_squared_to(origin)
+		if gap < nearest:
+			nearest = gap
+			near = p
+		if outline:
+			# The ovoid is convex, so a point of it faces the organ exactly when
+			# its outward normal does -- the lift of one unit along it.
+			var out := Cilia.skin_point(at, heading, radius, t, 1.0) - p
+			points.append(p)
+			seen.append(1 if out.dot(origin - p) > 0.0
+				and not _path_blocked(o, origin, p, found, i) else 0)
+	var lines := _seen_runs(points, seen, true) if outline else []
+	return {"at": near, "lines": lines, "tier": o.ping_tier}
 
 
-## **The parts of a rim the wave reached**, as `[centre, radius, from, to]` arcs:
-## [param from] to [param to] in world angles about [param centre], a point every
-## [constant PING_OUTLINE_STEP] of rim, each kept while nothing in [param found]
-## but the body it is on ([param own]) -- nor the caller's own body -- crosses the
-## straight path to it from [param origin]. A run of kept points is one arc.
-func _seen_arcs(o: Observer, origin: Vector2, centre: Vector2, radius: float,
-		from: float, to: float, found: Array, own: int) -> Array:
-	var steps := clampi(ceili((to - from) * radius / PING_OUTLINE_STEP), 2,
-		PING_OUTLINE_POINTS)
-	var arcs: Array = []
-	var start := 0.0
-	var last := 0.0
-	var open := false
-	for s in steps + 1:
-		var angle := lerpf(from, to, float(s) / float(steps))
-		var seen := not _path_blocked(o, origin,
-			centre + Vector2(cos(angle), sin(angle)) * radius, found, own)
-		if seen and not open:
-			start = angle
-			open = true
-		elif not seen and open:
-			if last > start:
-				arcs.append([centre, radius, start, last])
-			open = false
-		last = angle
-	if open and last > start:
-		arcs.append([centre, radius, start, last])
-	return arcs
+## **The runs of [param points] the wave reached**, each two points or more, as
+## [PackedVector2Array]s: [param seen] holds 1 for a point it reached. A
+## [param ring] closes on itself, so a run can pass its first point.
+static func _seen_runs(points: PackedVector2Array, seen: PackedByteArray,
+		ring: bool) -> Array:
+	var count := points.size()
+	var lines: Array = []
+	var first := 0
+	if ring:
+		# Start just past a point it did not reach, so no run is cut in two.
+		first = seen.find(0)
+		if first < 0:
+			var whole := points.duplicate()
+			if count > 0:
+				whole.append(points[0])
+			return [whole]
+		first += 1
+	var run := PackedVector2Array()
+	for k in count:
+		var at := (first + k) % count
+		if seen[at] != 0:
+			run.append(points[at])
+			continue
+		if run.size() >= 2:
+			lines.append(run)
+		run = PackedVector2Array()
+	if run.size() >= 2:
+		lines.append(run)
+	return lines
 
 
 ## **Whether anything stands between [param origin] and [param to]**: a body in

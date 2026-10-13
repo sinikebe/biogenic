@@ -314,11 +314,18 @@ jobs:
         # hears behind a body, and the water round the cell moves with it.
         # 69,441 lines, from 69,549, the same hash under all three schemes.
         #
+        # **Re-pinned at the sonar playtest** (ping-as-outline.md §13.5), from
+        # 167a5ccd...: the water changed on purpose. A body is heard by how much
+        # of it the nearer bodies leave in sight, so one wholly behind another is
+        # silent where it was heard through its edge, and the water's choices
+        # move with it. 69,441 lines, as before, the same hash under all three
+        # schemes.
+        #
         # Each run prints about ten megabytes, so it goes to a file rather than
         # a variable. About twenty seconds a scheme.
         run: |
           set -uo pipefail
-          pinned="167a5ccd5f8de114202732b78ce5f8b80e3bbdd6621829a9d0de4e01bdc14a90"
+          pinned="77258a8272ec72898396e034d781c8a01eca614b336b908d5d2fd332321b0f06"
           log=$(mktemp)
           fail=0
           for scheme in 0 1 2; do
