@@ -69,6 +69,7 @@ const DropSave := preload("res://game/normal/drop_save.gd")
 ## is. This file decides where a dose is delivered and when a body dies of one;
 ## the arithmetic is doses.gd's, and the numbers cell.gd's.
 const Doses := preload("res://game/mechanics/doses.gd")
+const Grip := preload("res://game/mechanics/grip.gd")
 
 ## A meal, in the cell's own terms.
 ##
@@ -1164,6 +1165,9 @@ class Body:
 	## [method CellBody.hold_level]. Under [member tails_beat] a tail beats
 	## unless this holds it.
 	var tail_held := false
+	## **Holding on** (haptonema's `cling`), claimed on its last tick and held
+	## until its next: it holds what it touches -- the drop's rim or a cell.
+	var clinging := false
 	## **The level its tail works at**: the worn copies of the organ that beats --
 	## the best of any key of it, as its rules count it -- as its beam's level is its
 	## copies (`_eye_of`). Made with its body ([method _refresh_body]).
@@ -1228,6 +1232,8 @@ class Body:
 	var stat_dash_tier := 0
 	var stat_dash_speed := 0.0
 	var stat_dash_cost := 0.0
+	var stat_grip := 0.0
+	var stat_tether := 0.0
 
 	func _init() -> void:
 		derive()
@@ -1254,6 +1260,8 @@ class Body:
 		stat_dash_tier = Stats.tier(g, &"dash_speed")
 		stat_dash_speed = Stats.of(g, &"dash_speed")
 		stat_dash_cost = Stats.of(g, &"dash_cost")
+		stat_grip = Stats.of(g, &"grip")
+		stat_tether = Stats.of(g, &"tether")
 
 	## **The slots it wears its organs in**: a person's worn order, as they sent it,
 	## or the default order a water cell is drawn in (cilia.gd) -- where a mechanic
@@ -3270,6 +3278,18 @@ func _push_local(b: Body, owns: bool) -> void:
 	var d := offset.length()
 	var overlap := b.radius + _cell.radius - d
 	if overlap <= 0.0:
+		# **Held** (game/mechanics/grip.gd): your cling, or theirs -- asked only of
+		# a pair one of which clings, since this is every body near the cell.
+		var mine := _cell.clinging()
+		if not mine and not b.clinging:
+			return
+		var pull := Grip.pair_pull(-overlap, mine, _cell.stat(&"tether"), _cell.stat(&"grip"),
+			b.clinging, b.stat_tether, b.stat_grip)
+		if pull > 0.0:
+			var part := _give_way(b.radius, _cell.radius)
+			_cell.position -= offset / d * (pull * part * PUSH_SHARE)
+			if owns:
+				b.pos += offset / d * (pull * (1.0 - part) * PUSH_SHARE)
 		return
 	var normal := offset / d if d > 0.001 else -_forward(b.heading)
 	# Share it by **area**, so a big body shoulders a small one aside
@@ -6183,6 +6203,7 @@ func _renew(b: Body) -> void:
 	b.swimming = false
 	b.push = 0.0
 	b.tail_held = false
+	b.clinging = false
 	b.tumble = -1
 	b.tumble_tick = -1
 	b.stun = 0.0
@@ -6877,6 +6898,10 @@ var _next_id := 1
 ## **The widest body there has been.** A bound only ever has to be too big, so
 ## it only grows.
 var _widest_now := 0.0
+## **The longest tether anything has held by** (game/mechanics/grip.gd): how much
+## further the solid bodies' pairs are looked for, once a body has clung. Only
+## grows, as the widest body's bound does.
+var _tether_held := 0.0
 ## **The bodies near the player this frame**, gathered once after the step:
 ## every sense, the player's contacts and [method hunter] read these and
 ## nothing else, because nothing past them reaches any of it.
@@ -7139,6 +7164,7 @@ func _reset_drop() -> void:
 	_flocs = 0
 	_next_id = 1
 	_widest_now = 0.0
+	_tether_held = 0.0
 	_eco_clock = 0.0
 	_gene_clock = 0.0
 	_floor_clock = 0.0
@@ -7480,9 +7506,9 @@ func drop_state() -> Dictionary:
 			behaviour.append(int(list_of[b.brain]))
 		steer.append(b.steer)
 		# Bit 3 since pack 4, a held tail (automation.md §5.3, §9.2): optional, so a
-		# pack-3 build reading it ignores it.
+		# pack-3 build reading it ignores it. Bit 5 since the haptonema, a cling.
 		acts.append((1 if b.holding else 0) | (2 if b.resting else 0)
-			| (4 if b.swimming else 0) | (8 if b.tail_held else 0))
+			| (4 if b.swimming else 0) | (8 if b.tail_held else 0) | (16 if b.clinging else 0))
 		push.append(b.push)
 		tumble.append(b.tumble)
 		tumble_tick.append(b.tumble_tick)
@@ -7842,6 +7868,7 @@ func _load_rules(state: Dictionary, slots: PackedInt32Array) -> void:
 			b.resting = (acts[k] & 2) != 0
 			b.swimming = (acts[k] & 4) != 0
 			b.tail_held = (acts[k] & 8) != 0
+			b.clinging = (acts[k] & 16) != 0
 		if not push.is_empty():
 			b.push = push[k]
 		if not tumble.is_empty():
@@ -8604,7 +8631,8 @@ func _wire() -> void:
 	}
 	wire_parts(_readers, {&"smell": _read_smell, &"shadow": _read_shadow,
 		&"touch": _read_touch, &"beam": _read_beam, &"echo": _read_echo}, true)
-	wire_parts(_triggers, {&"dash": _dash_on, &"push": _push_on, &"hold": _hold_on}, false)
+	wire_parts(_triggers, {&"dash": _dash_on, &"push": _push_on, &"hold": _hold_on,
+		&"cling": _cling_on}, false)
 	_read_with = _read_input
 	founders()
 
@@ -8996,6 +9024,7 @@ func _rest_on(_i: int, b: Body, _k: int, _report: Array, _before: Variant, _tick
 	b.resting = true
 	b.holding = false
 	b.tail_held = tails_beat and b.tail_level >= b.stat_hold
+	b.clinging = false
 
 
 ## `flagellum.hold`, declared at the tail's hold level: its tail is held
@@ -9003,6 +9032,13 @@ func _rest_on(_i: int, b: Body, _k: int, _report: Array, _before: Variant, _tick
 ## (automation.md §4.2).
 func _hold_on(_i: int, b: Body, _k: int, _report: Array, _before: Variant, _tick: int) -> void:
 	b.tail_held = true
+
+
+## `haptonema.cling`: it holds on to what it touches -- the drop's rim or a
+## cell (game/mechanics/grip.gd).
+func _cling_on(_i: int, b: Body, _k: int, _report: Array, _before: Variant, _tick: int) -> void:
+	b.clinging = true
+	_tether_held = maxf(_tether_held, b.stat_tether)
 
 
 ## `myoneme.dash`: a burst forward, on its cooldown and at its price.
@@ -9067,6 +9103,7 @@ func _decide_by_rules(index: int, b: Body) -> void:
 	b.swimming = false
 	b.push = 0.0
 	b.tail_held = false
+	b.clinging = false
 	for won: Array in _fired:
 		var k := int(won[0])
 		var act: Callable = _triggers.get(list.rules[k].output, Callable())
@@ -9112,6 +9149,9 @@ func _move_ruled(b: Body, delta: float) -> void:
 		b.dash_v *= exp(-CellBody.DRAG * delta)
 		if b.dash_v < 1.0:
 			b.dash_v = 0.0
+	# **Holding on** (game/mechanics/grip.gd): a cling at the rim keeps it there.
+	if b.clinging and _drop != null:
+		pace = Grip.held_pace(pace, Grip.at_rim(_drop.meniscus, b.pos, b.radius, b.stat_tether))
 	b.pos += _forward(b.heading) * pace * delta
 	b.speed = pace
 
@@ -9295,6 +9335,7 @@ func _stun(b: Body, from: Vector2, seconds: float) -> void:
 	# with a level-2 tail, held. The stun itself stops every tail, whatever its
 	# level ([method _tail_beats]).
 	b.tail_held = tails_beat and b.tail_level >= b.stat_hold
+	b.clinging = false
 	_feel_hit(b, from, 1.0)
 	_stat(&"stuns")
 
@@ -9438,7 +9479,9 @@ func _separate_drop() -> void:
 		var b := _cells[i]
 		if not b.seeded or b.inert:
 			continue
-		var reach := b.radius + _widest_now
+		# **And the longest tether held** (grip.gd): a pair is met once, from the
+		# side met first, so that side's reach has to cover the other's hold too.
+		var reach := b.radius + _widest_now + _tether_held
 		var bound := _pair_bound(reach)
 		_pair_ids.resize(0)
 		_drop.grid.query(b.pos, reach + Drop.GRID_SLACK, _pair_ids)
@@ -9454,6 +9497,16 @@ func _separate_drop() -> void:
 			var d := offset.length()
 			var overlap := b.radius + other.radius - d
 			if overlap <= 0.0:
+				# **Held** (game/mechanics/grip.gd): a cling draws a body it
+				# touched back in, as far as its tether reaches.
+				var pull := Grip.pair_pull(-overlap, b.clinging, b.stat_tether, b.stat_grip,
+					other.clinging, other.stat_tether, other.stat_grip)
+				if pull > 0.0:
+					var toward := -offset / d
+					var part := _give_way(other.radius, b.radius)
+					b.pos = m.contain(b.pos + toward * (pull * part * PUSH_SHARE), b.radius)
+					other.pos = m.contain(other.pos - toward * (pull * (1.0 - part) * PUSH_SHARE),
+						other.radius)
 				continue
 			var normal := offset / d if d > 0.001 else _forward(b.heading)
 			var share := _give_way(other.radius, b.radius)
@@ -9468,6 +9521,10 @@ func _separate_drop() -> void:
 ## bearing, as grit is, at most once in SHORE_GAP. Pressing on keeps knocking.
 func _contain_player(knock: bool) -> void:
 	var m := _drop.meniscus
+	# **Holding on** (game/mechanics/grip.gd): a cling at the rim stops the cell there.
+	if _cell.clinging() and Grip.at_rim(m, _cell.position, _cell.radius,
+			_cell.stat(&"tether")):
+		_cell.velocity = Vector2.ZERO
 	if m.inside(_cell.position, _cell.radius):
 		return
 	var out := (_cell.position - m.center).normalized()

@@ -45,6 +45,7 @@ const ORGANS: Array[GDScript] = [
 	preload("res://game/genes/organs/plastid.gd"),
 	preload("res://game/genes/organs/vacuole.gd"),
 	preload("res://game/genes/organs/crista.gd"),
+	preload("res://game/genes/organs/haptonema.gd"),
 	# Retired, and kept known for good (§4.4).
 	preload("res://game/genes/organs/rhabdom.gd"),
 	preload("res://game/genes/organs/statocyst.gd"),
@@ -196,6 +197,7 @@ static var _born_order: Array[StringName] = []
 ## its first live key; and whether every organ that declares parts goes by its
 ## own key alone ([method by_organ]).
 static var _declares := {}
+static var _buttons := []
 static var _first_keys := {}
 static var _owners_are_keys := true
 ## The live keys that earn levels.
@@ -480,6 +482,26 @@ static func born_order() -> Array[StringName]:
 ## them by organ ([method by_organ]).
 static func declares() -> Dictionary:
 	return _declares
+
+
+## **The parts a hand may press** (docs/design/haptonema.md §4): every output a
+## gene declares with `"button": true`, as `[part, name, organ, level]` -- its
+## qualified name (`haptonema.cling`), its own name (`cling`), its organ and the
+## level it waits for -- in the order [method declares] holds them.
+static func buttons() -> Array:
+	return _buttons
+
+
+## **The buttons of a body whose keys work at [param levels]** (key to level, as
+## [method worn_levels] makes them): each of [method buttons] whose organ it works
+## at the part's level or more, in their order -- a pad each (controls.gd) and a
+## key each (cell.gd's BUTTON_KEYS), in that order.
+static func worn_buttons(levels: Dictionary) -> Array:
+	var out := []
+	for one: Array in _buttons:
+		if organ_level(levels, one[2]) >= int(one[3]):
+			out.append(one)
+	return out
 
 
 ## **[param levels] -- a key to the level it works at -- by organ**: each organ to
@@ -952,6 +974,13 @@ static func _index() -> void:
 		declared[organ] = organ_declares[organ]
 	declared.make_read_only()
 	_declares = declared
+	_buttons = []
+	for organ: StringName in declared:
+		for one: Dictionary in (declared[organ] as Dictionary).get("out", []):
+			if bool(one.get("button", false)):
+				_buttons.append([StringName("%s.%s" % [organ, one["name"]]),
+					StringName(one["name"]), organ, int(one.get("level", 1))])
+	_buttons.make_read_only()
 	_first_keys = first_keys
 	_owners_are_keys = owners_are_keys
 	_tagged = {}

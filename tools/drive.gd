@@ -68,8 +68,10 @@ extends Node
 ##   --key-down=<seconds>:<key>
 ##   --key-up=<seconds>:<key>
 ##                           press a key and leave it down, then let it go; the
-##                           same key names as --tap=, repeatable. --tap= is a
-##                           press and its release in one frame, which cannot
+##                           same key names as --tap= -- and `q`, `f` and `c`,
+##                           the genes' buttons (haptonema.md §4) --
+##                           repeatable. --tap= is a press and its release in
+##                           one frame, which cannot
 ##                           pose a gesture that *is* the hold: `E` opens the
 ##                           body to place a gene, `A` / `D` walk the lit slot
 ##                           while it stays down, and letting go is what places
@@ -3753,6 +3755,11 @@ func _keycode(name: String) -> Key:
 		"n": return KEY_N
 		# The autopilot's key (automation-ux.md §5.2), read raw as `N` is.
 		"r": return KEY_R
+		# The genes' buttons, in their order (haptonema.md §4): the first a body
+		# has, the second, the third.
+		"q": return KEY_Q
+		"f": return KEY_F
+		"c": return KEY_C
 		_: return KEY_NONE
 
 
