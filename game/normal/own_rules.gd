@@ -194,6 +194,7 @@ func _decide() -> void:
 	body.swimming = false
 	body.push = 0.0
 	body.tail_held = false
+	body.clinging = false
 	acted = 0
 	for won: Array in fired:
 		var k := int(won[0])
@@ -267,6 +268,11 @@ func holds_tail() -> bool:
 	return body.tail_held
 
 
+## Whether the instincts hold on to what the cell touches: the haptonema's `cling`.
+func clings() -> bool:
+	return body.clinging
+
+
 # --- The handover (§2.2, §2.3) ------------------------------------------------------
 
 ## **The autopilot takes the cell**: from its next tick, with nothing held from
@@ -322,6 +328,7 @@ func _forget() -> void:
 	body.swimming = false
 	body.push = 0.0
 	body.tail_held = false
+	body.clinging = false
 	body.tumble = -1
 	body.tumble_tick = -1
 	body.hit = 0.0

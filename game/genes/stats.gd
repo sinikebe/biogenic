@@ -108,6 +108,10 @@ const ROWS := {
 		"judged": false, "contact": true, "group": &""},
 	&"swallow_stacks": {"none": 0.0, "better": HIGHER, "combine": BEST,
 		"unit": "stacks", "judged": false, "contact": true, "group": &""},
+	## The haptonema's hold: grip is the share of a held cell's push-off it absorbs,
+	## tether the slack past touching before the hold breaks; the host decides a hold (contact) and judges a guest's (judged).
+	&"grip": {"none": 0.0, "better": HIGHER, "combine": BEST, "unit": "of a push", "judged": true, "contact": true, "group": &"grip"},
+	&"tether": {"none": 0.0, "better": HIGHER, "combine": BEST, "unit": "µm", "judged": true, "contact": true, "group": &"grip"},
 }
 
 ## **The stats whose mechanic acts from a place** (gene-catalogue.md §5.2): the
