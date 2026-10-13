@@ -120,7 +120,8 @@ const SHIPPED_PLACELESS: Array[StringName] = [&"rhabdom", &"statocyst"]
 const SHIPPED_LISTS := {
 	&"drifter": [&"cirrus", &"flagellum", &"stigma", &"chemocyte", &"ampulla",
 		&"ocellus", &"axoneme", &"palp", &"myoneme",
-		&"trichocyst", &"pellicle", &"veneneux", &"plastid", &"vacuole", &"crista"],
+		&"trichocyst", &"pellicle", &"veneneux", &"plastid", &"vacuole", &"crista",
+		&"haptonema"],
 	&"sense": [&"chemocyte", &"ampulla", &"ocellus", &"stigma"],
 	&"gift": [&"ocellus", &"ampulla", &"chemocyte", &"stigma"],
 	&"declares": [&"ocellus", &"ampulla", &"chemocyte", &"stigma", &"palp", &"myoneme",
@@ -1340,10 +1341,11 @@ func _strains_split() -> void:
 
 
 ## **The commons keep their share** (gene-rarity.md §2.3): uncommon organs of the
-## probe's own, three of them, filed until the commons would hold less than
-## COMMON_SHARE of the drifters' draw -- they hold it exactly, every common its weight,
-## and every other organ scaled alike, in drift as in the water: one set of weights,
-## where every variety of an organ is in the pool and drifts.
+## probe's own, filed one at a time until the commons would hold less than
+## COMMON_SHARE of the drifters' draw -- three while the commons were three, six
+## once the haptonema made them four -- they hold it exactly, every common its
+## weight, and every other organ scaled alike, in drift as in the water: one set of
+## weights, where every variety of an organ is in the pool and drifts.
 func _crowded_commons() -> void:
 	var before := _weights_now()
 	var share_before := _commons_share()
@@ -1355,14 +1357,18 @@ func _crowded_commons() -> void:
 		elif other == &"" and Catalogue.rarity_of(key) != Rarity.commonest():
 			other = key
 	var uncommon: StringName = Rarity.classes()[1]
-	var names: Array[StringName] = [&"probewidea", &"probewideb", &"probewidec"]
-	for k in names.size():
+	var names: Array[StringName] = []
+	var share := share_before
+	# Until the others are scaled: the commons at COMMON_SHARE by the newcomers' own
+	# weight alone is the line, not past it.
+	while Catalogue.water_weight(other) >= float(before[other]) and names.size() < 12:
 		var wide := Gene.new()
-		wide.organ = names[k]
-		wide.order = 987 + k
+		wide.organ = StringName("probewide" + "abcdefghijkl"[names.size()])
+		wide.order = 987 + names.size()
 		wide.water = {"rarity": uncommon, "drifter": true}
 		Catalogue.register(wide)
-	var share := _commons_share()
+		names.append(wide.organ)
+		share = _commons_share()
 	var weights := [Catalogue.water_weight(common), Catalogue.water_weight(other),
 		Catalogue.water_weight(names[0])]
 	var unlike: Array[StringName] = []
@@ -1372,11 +1378,11 @@ func _crowded_commons() -> void:
 	for name: StringName in names:
 		Catalogue.forget(name)
 	var scale := float(weights[1]) / float(before[other])
-	_check(("and three uncommon organs of the probe's own crowd the commons from %.1f %% of the"
+	_check(("and %d uncommon organs of the probe's own crowd the commons from %.1f %% of the"
 		+ " drifters' draw: they keep %.1f %%, COMMON_SHARE's, %s its %.1f, %s scaled by %.3f"
 		+ " like the newcomers (%.3f), and in drift every variety of the pool weighs what it"
 		+ " weighs in the water%s; and forgotten, every weight is what it was (%s)") % [
-		100.0 * share_before, 100.0 * share, common, weights[0], other, scale,
+		names.size(), 100.0 * share_before, 100.0 * share, common, weights[0], other, scale,
 		float(weights[2]) / Rarity.weight(uncommon),
 		"" if unlike.is_empty() else " -- NOT %s" % str(unlike), str(_weights_now() == before)],
 		share_before > Rarity.COMMON_SHARE and is_equal_approx(share, Rarity.COMMON_SHARE)

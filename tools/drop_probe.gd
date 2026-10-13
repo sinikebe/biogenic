@@ -2112,15 +2112,6 @@ const LOOK_FRAMES := 600
 const LINEAGE_LOOKS := 30
 
 
-## **A variety no seeded water can make** (game/genes/README.md, "The seeded runs"):
-## no draw's weight, no drift's, not born and no sense -- the haptonema today, which
-## only a player's choice brings. Lineage 4 holds the water carries every variety it
-## can make; one it cannot make is not missing from it.
-static func _unmade(gene: StringName) -> bool:
-	return Catalogue.water_weight(gene) <= 0.0 and Catalogue.drift_weight(gene) <= 0.0 \
-		and not Catalogue.born().has(gene) and not Catalogue.tagged(&"sense").has(gene)
-
-
 ## **A census, every ten seconds of a drop**: the hunters against today's count
 ## once the first minute is over, the least of it kept, and how many of the
 ## genes the living carry, the least of it kept -- a gene of two forms counted
@@ -2149,7 +2140,7 @@ func _lineage_look(field: WatchedDrop, t: float, seen: Dictionary) -> void:
 	# divide on, which [method _lineage_summary] copies over whatever this kept.
 	var gaps: Dictionary = seen.get("gaps", {})
 	for gene: StringName in Catalogue.live():
-		if GenomeNode.variety(gene) != gene or _unmade(gene):
+		if GenomeNode.variety(gene) != gene:
 			continue
 		if genes.has(gene):
 			gaps[gene] = 0

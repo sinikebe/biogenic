@@ -3382,12 +3382,16 @@ func _update_controls() -> void:
 	# the moment the tail can be held still: under `anywhere` the one control
 	# there is, so that scheme's screen stays empty until then.
 	var hold := _cell.can_hold()
+	# **And so are the genes' buttons** (haptonema.md §4), from the moment a worn
+	# gene brings one.
+	var buttons: Array = _cell.buttons()
 	# The pond's still moments behave as a pinch does (UX §0.5, §5): the
 	# steering control stays drawn and dead, and the action pads go.
-	_controls.update((not _floating() or hold) and _life == Life.ALIVE
-			and _controls_previewed(),
+	_controls.update((not _floating() or hold or not buttons.is_empty())
+			and _life == Life.ALIVE and _controls_previewed(),
 		_split >= Split.PINCH or _held or _water_beat >= 0.0 or _entering_held,
-		_cell.provider(&"push_accel") != &"", _cell.provider(&"dash_speed") != &"", hold)
+		_cell.provider(&"push_accel") != &"", _cell.provider(&"dash_speed") != &"", hold,
+		buttons)
 
 
 ## True while the world layer is the thing behind the Hud. Read by the pause

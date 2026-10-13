@@ -437,6 +437,9 @@ var _dash_timer := 0.0
 ## at [method hold_level] -- as [method _process] read it: what the views draw
 ## still, and what the step that stopped the stroke clock decided.
 var _held := false
+## [method buttons] and [method clinging] this frame ([method _process]).
+var _buttons_now: Array = []
+var _cling := false
 ## **What this body wears buys it, read once a body** ([method _bought_now]): the
 ## genome and its body's version they were read off; stat to value, stat to the
 ## organ that provides it and to its tier, channel to the organ that drives it;
@@ -599,6 +602,11 @@ static func dosed(loads: PackedFloat64Array, hurt: float, body_radius: float,
 
 
 func _process(delta: float) -> void:
+	# **The buttons and the cling** (haptonema.md §4), once a frame: what the body
+	# wears can press, and whether it holds on -- the instincts' claim while the
+	# autopilot has the cell, the hand's button otherwise.
+	_buttons_now = _worn_buttons()
+	_cling = bool(instincts.call(&"clings")) if _driven() else hand_holds(&"cling")
 	# **The hand, or the heading the instincts hold** (automation.md §4.2, §18.4):
 	# while the autopilot has the cell its instincts steer, in proportion inside
 	# HOLD_BAND, and the hand's keys and fingers move nothing.
@@ -1196,7 +1204,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		# `myoneme` on desktop. Space is the only key normal mode spends besides
 		# the steer keys, the push and hold keys (polled, in `_pushing` and
-		# `_holding`), V and R, and it is the one key nothing else wants.
+		# `_holding`), the buttons' keys (polled, in `hand_holds`), V and R, and
+		# it is the one key nothing else wants.
 		var key := event as InputEventKey
 		if key.pressed and not key.echo:
 			# **A new press of a key the hand drives with takes the cell back**
@@ -1269,9 +1278,9 @@ func _hand_pressed() -> void:
 
 
 ## The keys the hand drives with: steering, the push and the hold, by their
-## actions and by the letters read raw, and the dash's Space.
+## actions and by the letters read raw, the dash's Space and the buttons' keys.
 const HAND_ACTIONS: Array[StringName] = [&"ui_left", &"ui_right", &"ui_up", &"ui_down"]
-const HAND_KEYS: Array[int] = [KEY_A, KEY_D, KEY_W, KEY_S, KEY_SPACE]
+const HAND_KEYS: Array[int] = [KEY_A, KEY_D, KEY_W, KEY_S, KEY_SPACE, KEY_Q, KEY_F, KEY_C]
 
 
 func _hand_key(key: InputEventKey) -> bool:
@@ -1361,9 +1370,53 @@ func _driven() -> bool:
 
 
 ## **Whether the cell holds on to what it touches** (the haptonema's `cling`):
-## while the instincts drive it and claim a cling. The hand has no cling yet.
+## the instincts' claim while the autopilot has the cell, and otherwise the hand's
+## button for it ([method hand_holds]), held, not toggled, as the tail's hold is.
+## Made once a frame, at the top of [method _process]: the field asks it of every
+## body near the cell.
 func clinging() -> bool:
-	return _driven() and bool(instincts.call(&"clings"))
+	return _cling
+
+
+## **The buttons this body has** (docs/design/haptonema.md §4): each part a gene it
+## wears lets the hand press (`Catalogue.worn_buttons`), `[part, name, organ,
+## level]`, in the catalogue's order -- what controls.gd draws a pad for and
+## [constant BUTTON_KEYS] binds a key to, in that order. Made once a frame, at the
+## top of [method _process].
+func buttons() -> Array:
+	return _buttons_now
+
+
+## [method buttons], worked out.
+func _worn_buttons() -> Array:
+	if genome == null:
+		return []
+	return Catalogue.worn_buttons(Catalogue.worn_levels(worn(), genome))
+
+
+## **The keys the buttons take, in order**: the first button a body has is `Q`, the
+## next `F`, then `C` -- letters nothing else in the run reads. Read raw, as `W`
+## and `S` are, since a content pack adds no input action; a fourth button has
+## its pad alone.
+const BUTTON_KEYS: Array[int] = [KEY_Q, KEY_F, KEY_C]
+
+
+## **Whether the hand holds the button of the part named [param part]** -- `cling`
+## -- by its pad (controls.gd) or its key ([constant BUTTON_KEYS]): what a mechanic
+## the hand can work asks, as the tail's hold asks [method _holding]. False while
+## the hand is silenced, and for a part this body has no button for.
+func hand_holds(part: StringName) -> bool:
+	if steering_off:
+		return false
+	var list := buttons()
+	for k in list.size():
+		if StringName(list[k][1]) != part:
+			continue
+		if k < BUTTON_KEYS.size() and Input.is_key_pressed(BUTTON_KEYS[k]):
+			return true
+		if controls != null and bool(controls.button_held(StringName(list[k][0]))):
+			return true
+	return false
 
 
 ## **A dash an instinct fires** (automation.md §4.2): the hand's own burst, on its

@@ -3278,9 +3278,12 @@ func _push_local(b: Body, owns: bool) -> void:
 	var d := offset.length()
 	var overlap := b.radius + _cell.radius - d
 	if overlap <= 0.0:
-		# **Held** (game/mechanics/grip.gd): your cling, or theirs.
-		var pull := Grip.pair_pull(-overlap, _cell.clinging(),
-			Stats.of(_cell.worn(), &"tether"), Stats.of(_cell.worn(), &"grip"),
+		# **Held** (game/mechanics/grip.gd): your cling, or theirs -- asked only of
+		# a pair one of which clings, since this is every body near the cell.
+		var mine := _cell.clinging()
+		if not mine and not b.clinging:
+			return
+		var pull := Grip.pair_pull(-overlap, mine, _cell.stat(&"tether"), _cell.stat(&"grip"),
 			b.clinging, b.stat_tether, b.stat_grip)
 		if pull > 0.0:
 			var part := _give_way(b.radius, _cell.radius)
@@ -6895,6 +6898,10 @@ var _next_id := 1
 ## **The widest body there has been.** A bound only ever has to be too big, so
 ## it only grows.
 var _widest_now := 0.0
+## **The longest tether anything has held by** (game/mechanics/grip.gd): how much
+## further the solid bodies' pairs are looked for, once a body has clung. Only
+## grows, as the widest body's bound does.
+var _tether_held := 0.0
 ## **The bodies near the player this frame**, gathered once after the step:
 ## every sense, the player's contacts and [method hunter] read these and
 ## nothing else, because nothing past them reaches any of it.
@@ -7157,6 +7164,7 @@ func _reset_drop() -> void:
 	_flocs = 0
 	_next_id = 1
 	_widest_now = 0.0
+	_tether_held = 0.0
 	_eco_clock = 0.0
 	_gene_clock = 0.0
 	_floor_clock = 0.0
@@ -9030,6 +9038,7 @@ func _hold_on(_i: int, b: Body, _k: int, _report: Array, _before: Variant, _tick
 ## cell (game/mechanics/grip.gd).
 func _cling_on(_i: int, b: Body, _k: int, _report: Array, _before: Variant, _tick: int) -> void:
 	b.clinging = true
+	_tether_held = maxf(_tether_held, b.stat_tether)
 
 
 ## `myoneme.dash`: a burst forward, on its cooldown and at its price.
@@ -9470,7 +9479,9 @@ func _separate_drop() -> void:
 		var b := _cells[i]
 		if not b.seeded or b.inert:
 			continue
-		var reach := b.radius + _widest_now + (b.stat_tether if b.clinging else 0.0)
+		# **And the longest tether held** (grip.gd): a pair is met once, from the
+		# side met first, so that side's reach has to cover the other's hold too.
+		var reach := b.radius + _widest_now + _tether_held
 		var bound := _pair_bound(reach)
 		_pair_ids.resize(0)
 		_drop.grid.query(b.pos, reach + Drop.GRID_SLACK, _pair_ids)
@@ -9512,7 +9523,7 @@ func _contain_player(knock: bool) -> void:
 	var m := _drop.meniscus
 	# **Holding on** (game/mechanics/grip.gd): a cling at the rim stops the cell there.
 	if _cell.clinging() and Grip.at_rim(m, _cell.position, _cell.radius,
-			Stats.of(_cell.worn(), &"tether")):
+			_cell.stat(&"tether")):
 		_cell.velocity = Vector2.ZERO
 	if m.inside(_cell.position, _cell.radius):
 		return

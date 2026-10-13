@@ -1,7 +1,11 @@
 extends "res://game/genes/gene.gd"
-## `haptonema`: **the grip**. It holds on to what it touches -- the drop's edge or
-## another cell -- absorbing a share of any push-off and keeping the hold for a
-## little slack past touching. Any cell that carries it can use it (level 1).
+## `haptonema`: **the grip**, after the haptonema of the haptophyte algae -- the
+## thread between their two flagella that coils, sticks and holds on to what it
+## touches. While it clings, a cell holds on to what it touches -- the drop's edge,
+## where it stops, or another cell, which it draws back to touching while it lies
+## within its tether -- and lets go past that. Any cell that carries it can cling
+## (level 1): its instincts, with `cling`, or your hand, on its button
+## (docs/design/haptonema.md).
 ##
 ## Tier 0 is the cell that has lost this organ entirely (§9.7 allows it): no grip,
 ## no tether; its tables start at zero on purpose.
@@ -13,12 +17,15 @@ extends "res://game/genes/gene.gd"
 const Readout := preload("res://game/mechanics/readout.gd")
 const U := Readout.Unit
 
-## **Share of a held cell's push-off absorbed**, by tier; tier 0 = no organ, so it
-## starts at zero and climbs to full absorption -- starting values; balance waits
-## for players.
+## **How hard the hold draws a held cell back**, by tier: the share of the gap past
+## touching it closes each step (game/mechanics/grip.gd's `tether_pull`), so at full
+## grip a cell that drifts off is back against the skin within a few frames, and at
+## half it is drawn back half as hard. Tier 0 is no organ, which holds nothing.
+## Starting values; balance waits for players.
 const GRIP_BY_TIER: Array[float] = [0.0, 0.5, 0.75, 1.0]
-## **Px of slack beyond touching before the hold breaks**, by tier; zero with no
-## organ, a few px at tier 1 -- starting values; balance waits for players.
+## **How far past touching the hold reaches before it lets go**, in µm (world
+## units), by tier: a cell farther off than this is not held, and one held that
+## breaks away past it is let go. Starting values; balance waits for players.
 const TETHER_BY_TIER: Array[float] = [0.0, 6.0, 9.0, 12.0]
 
 
@@ -65,14 +72,17 @@ func _init() -> void:
 	organ = &"haptonema"
 	order = 17
 	provides = {&"grip": GRIP_BY_TIER, &"tether": TETHER_BY_TIER}
-	water = {"rarity": &"rare", "drifter": false}
-	tags = [NEVER_DRIFTS]
+	# **Common, for now** (the owner, 2026-10-13: "Make it common for now"): the
+	# water makes it as it makes a mouth or a tail, and drift may bring it, so a
+	# player meets it in the first minutes of a run (haptonema.md §2).
+	water = {"rarity": &"common", "drifter": true}
 	born = 0
-	# **The cling** (automation.md §4.3): it holds on to what the cell touches,
-	# claiming the `swimming` trigger like the flagellum's hold does, from level 1:
-	# any cell that carries it can use it. Declared last of every gene's parts, so
-	# its owner's bits come after every other.
-	declares = {"out": [{"name": &"cling", "claims": [&"cling"]}]}
+	# **The cling** (automation.md §4.3): it holds on to what the cell touches, a
+	# claim of its own, from level 1 -- any cell that carries it can use it.
+	# Declared last of every gene's parts, so its owner's bits come after every
+	# other. **A button** (gene.gd's `declares`): your hand clings too, on its pad
+	# or its key, while it is held.
+	declares = {"out": [{"name": &"cling", "claims": [&"cling"], "button": true}]}
 	# **Its look** (gene-looks.md §6): a coil that wraps -- the grip is more wrap,
 	# so four turns where myoneme's default two reads as a spring. In moving's shade
 	# 1: one step off the tail's shade 0, so a tile with both tells them apart.
@@ -80,15 +90,16 @@ func _init() -> void:
 	look = {"shape": COIL, "shade": 1, "turns": 4}
 
 
-## **Its numbers on the pause screen** (gene.gd's `lines`): how much of a push-off it
-## absorbs, and how far past touching it holds.
+## **Its numbers on the pause screen** (gene.gd's `lines`): how hard it holds, and
+## how far past touching it lets go.
 func lines(t: int, _level: int, _path: StringName, ctx: Dictionary, _slot: int,
 		wear: Dictionary) -> Array:
 	var grip := stat_at(&"grip", t)
 	var tether := stat_at(&"tether", t)
-	# TRANSLATORS: The grip gene (`haptonema`, shown as `cling`). "A held push-off"
-	# is the shove a cell gives to let go; "past touching" is how far beyond just
-	# touching it keeps holding.
-	return [[Readout.item("absorbs {} of a held push-off", [grip], [U.SHARE]),
-			Readout.item("holds on {} µm past touching", [tether], [U.DISTANCE])],
+	# TRANSLATORS: The grip gene (`haptonema`, shown as `cling`), which holds on to
+	# what the cell touches. "Grips at {} strength": how hard it draws a held cell
+	# back, as a percentage; "lets go {} µm past touching": how far a held cell can
+	# move off the skin before the hold breaks.
+	return [[Readout.item("grips at {} strength", [grip], [U.SHARE]),
+			Readout.item("lets go {} µm past touching", [tether], [U.DISTANCE])],
 		[wear]]

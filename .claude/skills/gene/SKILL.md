@@ -45,6 +45,9 @@ letters `a-z` and permanent once shipped.
   import again (`xvfb-run -a ~/godot/godot --path . --import`), which writes the file's
   `.uid` -- commit it, never write one by hand. README, "An organ on mechanics the game
   has" and "Rarity".
+- **A part the hand can press**: `"button": true` on the output in `declares` gives
+  it a pad under every scheme and a key; the mechanic asks `cell.hand_holds(&"<part>")`.
+  README, "An organ on mechanics the game has", step 3.
 - **A new mechanic**: the mechanic, reading stats by name; its rows in `stats.gd`
   (`none`, `better`, `combine`, `unit`, `judged`, `contact`, `group`); `SEATED` for one
   that acts from a place, which then takes every number it uses -- its stats through

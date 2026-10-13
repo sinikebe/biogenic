@@ -237,6 +237,11 @@ var one_variant := false
 ## senses and the outputs it triggers. Empty for an organ that only acts on its
 ## own, as the dart, the call and the mouth do (§3.3). A part may wait for a
 ## level (automation.md §4.3). Its words are its file's (below).
+##
+## **An output with `"button": true` is the hand's as well** (docs/design/
+## haptonema.md §4): a body that wears its organ at the part's level has a pad for
+## it under every control scheme and a key, and while either is held the part acts
+## as it does while an instinct claims it. The pad is drawn as the organ's tile.
 var declares := {}
 
 # --- Its words (gene-catalogue.md §8.1) -----------------------------------------------

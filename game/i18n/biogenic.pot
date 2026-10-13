@@ -583,28 +583,30 @@ msgstr ""
 msgid "cling · hold on to what you touch, and keep it close"
 msgstr ""
 
-#. The grip gene (`haptonema`, shown as `cling`). "A held push-off" is the
-#. shove a cell gives to let go; "past touching" is how far beyond just
-#. touching it keeps holding.
+#. The grip gene (`haptonema`, shown as `cling`), which holds on to what the
+#. cell touches. "Grips at {} strength": how hard it draws a held cell back,
+#. as a percentage; "lets go {} µm past touching": how far a held cell can
+#. move off the skin before the hold breaks.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
 #. joined with a middle dot into a line of at most 650 px; the longest English
 #. line takes 550 px.
 #: game/genes/organs/haptonema.gd
 #, python-brace-format
-msgid "absorbs {} of a held push-off"
+msgid "grips at {} strength"
 msgstr ""
 
-#. The grip gene (`haptonema`, shown as `cling`). "A held push-off" is the
-#. shove a cell gives to let go; "past touching" is how far beyond just
-#. touching it keeps holding.
+#. The grip gene (`haptonema`, shown as `cling`), which holds on to what the
+#. cell touches. "Grips at {} strength": how hard it draws a held cell back,
+#. as a percentage; "lets go {} µm past touching": how far a held cell can
+#. move off the skin before the hold breaks.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
 #. joined with a middle dot into a line of at most 650 px; the longest English
 #. line takes 550 px.
 #: game/genes/organs/haptonema.gd
 #, python-brace-format
-msgid "holds on {} µm past touching"
+msgid "lets go {} µm past touching"
 msgstr ""
 
 #. A gene's name as the player reads it on a chip beside three small dots: one

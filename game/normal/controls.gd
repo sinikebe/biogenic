@@ -1,6 +1,6 @@
 extends Control
-## The drawn controls, for the two schemes that have any -- and the hold pad,
-## for all three.
+## The drawn controls, for the two schemes that have any -- and the hold pad and
+## the genes' buttons, for all three.
 ##
 ## docs/design/controls.md. The owner asked for "a left right joystick and
 ## buttons", chosen from the pause menu. There are three schemes and this file
@@ -10,6 +10,11 @@ extends Control
 ## invisible and inert, **but for one pad**: the hold, which exists only while
 ## the tail can be held still (docs/design/automation-ux.md §6, rows 29, 37 and
 ## 41), and is drawn under every scheme, `anywhere` included, from that moment.
+##
+## **And a gene's button** (docs/design/haptonema.md §4): a pad for each part a
+## worn gene declares with `"button": true` -- the haptonema's cling first -- held
+## like the hold, drawn under every scheme as the hold is, stacked up the right
+## edge above the bottom row, each with its organ's tile for its mark.
 ##
 ## **This node never enters the GUI pass, and that is not tidiness.** It is a
 ## `Control` for its rect and nothing else: `MOUSE_FILTER_IGNORE`, no children,
@@ -57,9 +62,13 @@ const DASH := 4
 ## **The tail held still** (automation-ux.md §6): a pad of its own, held like
 ## push, drawn only while the tail is at its hold level (`cell.gd`'s `can_hold`).
 const HOLD := 5
+## **A gene's button**: the first is this id, the next one more, and so on -- one
+## per part of [member _buttons], in its order.
+const BUTTON := 6
 
 ## Draw and hit-test order. Never overlapping, so the order is only a
-## convention -- but a stated one is cheaper than a proof.
+## convention -- but a stated one is cheaper than a proof. The buttons follow it,
+## in their own order.
 const ORDER: Array[int] = [STICK, PORT, STARBOARD, PUSH, DASH, HOLD]
 
 ## The mouse, as a pointer index. Touch indices are >= 0, so -1 is free.
@@ -229,6 +238,9 @@ var _has_push := false
 var _has_dash := false
 ## Whether the hold pad is drawn: the tail can be held still.
 var _has_hold := false
+## **The buttons drawn**, `[part, name, organ, level]` each (`cell.gd`'s
+## `buttons`), in order: pad [constant BUTTON] + k is the k-th.
+var _buttons: Array = []
 var _acting := true
 
 var _well: StyleBoxFlat = null
@@ -266,17 +278,20 @@ func setup(wells: Dictionary) -> void:
 ## is the pinch of a division, where the action pads go and the steering
 ## control stays; [param push], [param dash] and [param hold] are the genome --
 ## **a pad exists only when the organ that works it does**, and the hold only
-## while the tail is at its hold level (`cell.gd`'s `can_hold`).
-func update(shown: bool, quiet: bool, push: bool, dash: bool, hold: bool) -> void:
+## while the tail is at its hold level (`cell.gd`'s `can_hold`); [param buttons]
+## is `cell.gd`'s `buttons`, a pad each.
+func update(shown: bool, quiet: bool, push: bool, dash: bool, hold: bool,
+		buttons: Array = []) -> void:
 	var acting := not quiet
 	if visible == shown and _acting == acting and _has_push == push \
-			and _has_dash == dash and _has_hold == hold:
+			and _has_dash == dash and _has_hold == hold and _buttons == buttons:
 		return
 	visible = shown
 	_acting = acting
 	_has_push = push
 	_has_dash = dash
 	_has_hold = hold
+	_buttons = buttons.duplicate()
 	# A control that stopped being drawn cannot stay held: the thumb on it is
 	# now a thumb on open water, and under `stick` and `pads` open water is
 	# inert. Done here rather than by the caller so the two cannot disagree.
@@ -338,6 +353,12 @@ func rect_of(id: int) -> Rect2:
 			return Rect2(size.x - EDGE - BOX * inboard - PAD_GAP * (inboard - 1.0), top,
 				BOX, BOX)
 		_:
+			# **A button**: stacked up the right edge, above the dash's corner --
+			# the first just above the bottom row, where the right thumb reaches up
+			# from it, every scheme alike.
+			if id >= BUTTON:
+				var k := float(id - BUTTON + 1)
+				return Rect2(size.x - EDGE - BOX, top - (BOX + PAD_GAP) * k, BOX, BOX)
 			return Rect2()
 
 
@@ -358,7 +379,8 @@ func _live(id: int) -> bool:
 			# Under every scheme, `anywhere` too: the one control it draws.
 			return _has_hold and _acting
 		_:
-			return false
+			# A button, under every scheme, as the hold is.
+			return id >= BUTTON and id - BUTTON < _buttons.size() and _acting
 
 
 ## The control under a canvas point, or [constant NONE]. **The only place a rect
@@ -367,10 +389,18 @@ func _live(id: int) -> bool:
 ## later event of a gesture is dispatched on whose finger it is, so nothing ever
 ## asks what is under a finger now.
 func hit(at: Vector2) -> int:
-	for id: int in ORDER:
+	for id: int in _ids():
 		if _live(id) and rect_of(id).has_point(at):
 			return id
 	return NONE
+
+
+## [constant ORDER], then a button id for each of [member _buttons].
+func _ids() -> Array[int]:
+	var ids := ORDER.duplicate()
+	for k in _buttons.size():
+		ids.append(BUTTON + k)
+	return ids
 
 
 func _held(id: int) -> bool:
@@ -525,6 +555,16 @@ func holding() -> bool:
 	return _held(HOLD)
 
 
+## **True while the button of [param part]** -- a part's qualified name,
+## `haptonema.cling` -- **is held**, under any scheme. `cell.gd` asks it of the
+## buttons its body has.
+func button_held(part: StringName) -> bool:
+	for k in _buttons.size():
+		if StringName(_buttons[k][0]) == part:
+			return _held(BUTTON + k)
+	return false
+
+
 ## True while a **steering** control is held. At a division that is what decides
 ## the lean, because a thumb parked on the stick sits at canvas x 144 whichever
 ## way it is pushing -- which is the port half either way -- and under `pads`
@@ -539,12 +579,12 @@ func steering() -> bool:
 # ---------------------------------------------------------------------------
 
 func _draw() -> void:
-	# Under `anywhere` [method _live] answers true for the hold pad alone, so that
-	# is all this draws there: the scheme stays an empty screen until the tail
-	# can be held.
+	# Under `anywhere` [method _live] answers true for the hold pad and the
+	# buttons alone, so that is all this draws there: the scheme stays an empty
+	# screen until the tail can be held or a gene brings a button.
 	if _well == null:
 		return
-	for id: int in ORDER:
+	for id: int in _ids():
 		if not _live(id):
 			continue
 		var box := rect_of(id)
@@ -564,6 +604,11 @@ func _draw() -> void:
 				_draw_burst(box, ink)
 			HOLD:
 				draw_hold_mark(self, box.get_center(), ink)
+			_:
+				# A button: its organ's tile, as the dash pad is the myoneme's.
+				Cilia.draw_tile_organ(self,
+					Catalogue.first_key(StringName(_buttons[id - BUTTON][2])), 1,
+					box.get_center() + Vector2(0.0, BURST_SEAT), ink, BURST_SCALE)
 
 
 func _draw_channel(box: Rect2, lit: bool, ink: float) -> void:
