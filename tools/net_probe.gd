@@ -10000,6 +10000,15 @@ func _check_server() -> void:
 	b_home = b_cell.position
 	b_pin = [b_cell, b_home, 0.0]
 	pins = [a_pin, b_pin]
+	# **Held in clear water while the first comes back in.** The autopilot leaves
+	# the second wherever its turns and dashes took it -- 913 units swum, once --
+	# maybe past the water it cleared, and it is held still there through the
+	# first's re-entry and then glides across the room's live drop. Once in CI (at
+	# the sonar playtest, ping-as-outline.md §13.5) it died there before the first
+	# was back in the pond -- its replay held no friend -- and every check of the
+	# meeting after it failed with it. So the water round it goes, as round the
+	# autopilot's start, and the meeting says how the second died if not by it.
+	_pond_clear_line(food, b_home, b_home, 600.0)
 
 	# **The server decides a meeting of the two, and both hear it.** The guest
 	# in slot 68 is this cell's side of the players' rule on a dedicated host,
@@ -10033,13 +10042,19 @@ func _check_server() -> void:
 		return (bool(a_ate[0])
 			and _line_of(a_run) == NormalMode.LINE_ATE), 1.0, [a_pin])
 	a_food.eaten.disconnect(on_a_eaten)
+	var b_ended := ""
+	if int(b_food.died_of) != FoodField.Cause.SWALLOWED \
+			or int(b_food.died_by) != FoodField.By.FRIEND:
+		b_ended = " -- NOT: the second died of %s by %s, its wound %.2f" % [
+			str(FoodField.Cause.find_key(int(b_food.died_of))),
+			str(FoodField.By.find_key(int(b_food.died_by))), float(b_cell.wound)]
 	_says(b_down >= 0.0 and bool(a_ate[0]) and b_slot_empty
 			and int(b_food.died_of) == FoodField.Cause.SWALLOWED
 			and int(b_food.died_by) == FoodField.By.FRIEND
 			and _line_of(a_run) == NormalMode.LINE_ATE,
 		"server: the first guest swallows the second -- a meal for the first and"
 		+ " '%s' said to it; SWALLOWED by the friend for the second, and its"
-		% _line_of(a_run) + " slot empty on the server")
+		% _line_of(a_run) + " slot empty on the server" + b_ended)
 
 	# ----------------------------------------------------------------------
 	# **UX §9 item 7, from a guest's seat** (shared-pond.md §5, Phase 3):

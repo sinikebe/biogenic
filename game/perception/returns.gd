@@ -172,10 +172,6 @@ const FIX_CORE := 3.4
 const FIX_CORE_ALPHA := 0.80
 const OUTLINE_WIDTH := 2.4
 const OUTLINE_ALPHA := 0.78
-## World units of rim one segment of a drawn outline stands for, and the most
-## segments one arc is drawn with.
-const OUTLINE_STEP := 6.0
-const OUTLINE_STEPS := 48
 
 ## **Whether something other than the field is stepping the water.** Left false
 ## by the run, where [method FoodField.is_processing] and the cell being in the
@@ -490,7 +486,8 @@ func _draw_echoes(centre: Vector2) -> void:
 ## **What the ping placed** (ping-as-outline.md §13), where the wave met it and
 ## fading over one call: a plain point at two copies -- the same for a meal, a
 ## hunter or the rim, because nothing in an echo says which -- and at three the
-## side of the body the wave reached, as the arcs the field worked out.
+## side of the body the wave reached, through the points the field worked out on
+## its rim.
 func _draw_echo_marks(centre: Vector2) -> void:
 	if _echo_marks.is_empty():
 		return
@@ -501,12 +498,12 @@ func _draw_echo_marks(centre: Vector2) -> void:
 		var fade := 1.0 - clampf(float(held[1]) / life, 0.0, 1.0)
 		if fade <= 0.0:
 			continue
-		var arcs: Array = mark.get("arcs", [])
-		if arcs.is_empty():
+		var lines: Array = mark.get("lines", [])
+		if lines.is_empty():
 			_draw_fix(centre, mark.get("at", Vector2.ZERO), tone, fade)
 			continue
-		for arc: Array in arcs:
-			_draw_outline(centre, arc, tone, fade)
+		for line: PackedVector2Array in lines:
+			_draw_outline(centre, line, tone, fade)
 
 
 ## One placed point, at [param fade]: hidden inside the skin, as a pointer is.
@@ -520,24 +517,18 @@ func _draw_fix(centre: Vector2, point: Vector2, tone: Color, fade: float) -> voi
 	_marks.draw_circle(at, FIX_CORE, Color(tone, FIX_CORE_ALPHA * vis), true, -1.0, true)
 
 
-## One arc of an outline, `[centre, radius, from, to]` in the water's own
-## coordinates, carried to this screen point by point -- so it stays where the
-## body was while this cell turns and moves -- and faded at each point by the
-## membrane's edge, as the wave is.
-func _draw_outline(centre: Vector2, arc: Array, tone: Color, fade: float) -> void:
-	var middle: Vector2 = arc[0]
-	var radius := float(arc[1])
-	var from := float(arc[2])
-	var to := float(arc[3])
-	var steps := clampi(ceili((to - from) * radius / OUTLINE_STEP), 2, OUTLINE_STEPS)
+## One run of an outline, points in the water's own coordinates, carried to this
+## screen point by point -- so it stays where the body was while this cell turns
+## and moves -- and faded at each point by the membrane's edge, as the wave is.
+func _draw_outline(centre: Vector2, line: PackedVector2Array, tone: Color,
+		fade: float) -> void:
 	var points := PackedVector2Array()
 	var colors := PackedColorArray()
-	points.resize(steps + 1)
-	colors.resize(steps + 1)
+	points.resize(line.size())
+	colors.resize(line.size())
 	var seen := false
-	for i in steps + 1:
-		var t := lerpf(from, to, float(i) / float(steps))
-		var p := _on_screen(centre, middle + Vector2(cos(t), sin(t)) * radius)
+	for i in line.size():
+		var p := _on_screen(centre, line[i])
 		var vis := _edge_fade(p) * fade
 		points[i] = p
 		colors[i] = Color(tone, OUTLINE_ALPHA * vis)

@@ -134,8 +134,6 @@ const ECHO_FIX_CORE := 3.4
 const ECHO_FIX_CORE_ALPHA := 0.88
 const ECHO_OUTLINE_WIDTH := 2.4
 const ECHO_OUTLINE_ALPHA := 0.80
-## World units of rim one segment of a drawn outline stands for.
-const ECHO_OUTLINE_STEP := 6.0
 
 # --- The other player -------------------------------------------------------
 ## **How far past the newest frame the friend is carried: a fifth of a second,
@@ -1837,7 +1835,8 @@ func _draw_ping(a: float) -> void:
 ## **What the ping placed** (ping-as-outline.md §13), where the wave met it and
 ## fading over one call: a plain point at two copies, the same for a meal, a
 ## hunter or the rim, because nothing in an echo says which; at three, the side
-## of the body the wave reached, drawn as the arcs the field worked out.
+## of the body the wave reached, drawn through the points the field worked out
+## on its rim.
 func _draw_echo_marks(a: float, tone: Color) -> void:
 	for held: Array in _echo_marks:
 		var mark: Dictionary = held[0]
@@ -1845,21 +1844,17 @@ func _draw_echo_marks(a: float, tone: Color) -> void:
 		var fade := (1.0 - clampf(float(held[1]) / life, 0.0, 1.0)) * a
 		if fade <= 0.0:
 			continue
-		var arcs: Array = mark.get("arcs", [])
-		if arcs.is_empty():
+		var lines: Array = mark.get("lines", [])
+		if lines.is_empty():
 			var at: Vector2 = mark.get("at", Vector2.ZERO)
 			_world.draw_circle(at, ECHO_FIX_HALO / ZOOM,
 				Color(tone, ECHO_FIX_HALO_ALPHA * fade), true, -1.0, true)
 			_world.draw_circle(at, ECHO_FIX_CORE / ZOOM,
 				Color(tone, ECHO_FIX_CORE_ALPHA * fade), true, -1.0, true)
 			continue
-		for arc: Array in arcs:
-			var radius := float(arc[1])
-			var from := float(arc[2])
-			var to := float(arc[3])
-			_world.draw_arc(arc[0], radius, from, to,
-				clampi(ceili((to - from) * radius / ECHO_OUTLINE_STEP), 2, PING_STEPS),
-				Color(tone, ECHO_OUTLINE_ALPHA * fade), ECHO_OUTLINE_WIDTH / ZOOM, true)
+		for line: PackedVector2Array in lines:
+			_world.draw_polyline(line, Color(tone, ECHO_OUTLINE_ALPHA * fade),
+				ECHO_OUTLINE_WIDTH / ZOOM, true)
 
 
 ## Threshold rings, drawn only while the cell is within RING_WINDOW of crossing

@@ -63,8 +63,8 @@ const PING_PERIOD_BY_TIER: Array[float] = [0.0, 8.8, 12.0, 15.2]
 ## 0.34 and 0.58 of a pulse through a body before, which is what let a cell hear
 ## behind another -- and an outline drawn of what the wave reached cannot have a
 ## part the wave never could. The stat stays, so that it can come back as a
-## table: applied **once per occluder, multiplying** (food.gd's `_call_of`), a
-## dimmer echo rather than a depth count.
+## table: applied to the share of a body the nearer ones hide (food.gd's
+## `_hidden_share`), a dimmer echo rather than a depth count.
 const PING_THROUGH_BY_TIER: Array[float] = [0.0, 0.0, 0.0, 0.0]
 
 

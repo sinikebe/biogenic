@@ -2751,13 +2751,18 @@ func _determinism() -> void:
 ## output, because the water changed on purpose: nothing passes a body now, so a water
 ## cell with two or three copies of the ping no longer hears behind a body. Nothing
 ## else moved: the rules two builds agree on and the floor are as they were.
+## **Re-recorded at the sonar playtest** (ping-as-outline.md §13.5), from the check's
+## own output, because the water changed on purpose: a body is heard by how much of
+## it the nearer bodies leave in sight, so one wholly behind another is silent where
+## it was heard through its edge. Nothing else moved: the rules two builds agree on
+## and the floor are as they were.
 const THREE_ONE_LINES: Array[String] = [
-	"[census] t 40  living 549 (drifters 353, hunters 196)  flocs 103  | hunters at r40 0, mean r 28.9, hunger 0.51  | could swallow r26/r34/r40 99/33/16  dread 1.55/0.56/0.24  genes 17  | spawned 835  died: swallowed 210 chewed 1 starved 96 (r40 0) poisoned 2  | grazed by the water 26, by drifters 1, dissolved 0, snow kept 2, remains 98  | runs 0 at you 0 misses 0 darts 3 dashes 0  floors: gene 0+0 drifter 0  | sum 1451138638",
-	"[lineage] t 40  hunters 196, born 27  generation mean 1.14 max 3  families 190 (largest 2)  dna apart 79  | cruise 68.6 notice 723 mouth 1.44 upkeep 1.24 genes worn 4.32 carried 4.68  tails 184 sighted 196 at r40 0  | divisions 23 (trade 10 drift 13 faithfully 0), daughters 46: tailless 15, given a sense 16  | the spawner's peers 130 (for the floor 130, for venom 0), drifters 150, left to births 0  | worn cytostome 1.44 cirrus 1.22 flagellum 1.36 stigma 0.27 ocellus 0.33 chemocyte 0.29 ampulla 0.23 axoneme 0.07 palp 0.06 myoneme 0.07 trichocyst 0.06 pellicle 0.09 veneneux 0.04 plastid 0.02 vacuole 0.06 crista 0.10 toxicyst 0.03  | commonest 16x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 16x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 9x cytostome:1,cirrus:1,flagellum:1,stigma:1",
-	"[behaviour] t 40  hunters 196: on the founders' rules 196, other lists 0  | founders' rules fired 7163/15394/685/634/3663/35717/1908  | meals of hunters with a nose 73, radar 67, laser 75  | water darts 3, stuns 3, your wakes 0  | now holding a heading 78, resting 75, swimming 121, pushing 8, stunned 0, echoes in flight 87",
-	"[census] t 40  living 549 (drifters 454, hunters 95)  flocs 80  | hunters at r40 0, mean r 30.0, hunger 0.46  | could swallow r26/r34/r40 43/2/2  dread 0.63/0.06/0.02  genes 17  | spawned 709  died: swallowed 117 chewed 0 starved 55 (r40 0) poisoned 0  | grazed by the water 6, by drifters 2, dissolved 0, snow kept 3, remains 55  | runs 0 at you 0 misses 0 darts 6 dashes 0  floors: gene 0+1 drifter 0  | sum 2393542290",
-	"[lineage] t 40  hunters 95, born 21  generation mean 1.23 max 3  families 85 (largest 2)  dna apart 58  | cruise 61.2 notice 765 mouth 1.19 upkeep 1.14 genes worn 4.26 carried 4.88  tails 86 sighted 95 at r40 0  | divisions 12 (trade 7 drift 5 faithfully 0), daughters 24: tailless 10, given a sense 6  | the spawner's peers 32 (for the floor 31, for venom 1), drifters 122, left to births 0  | worn cytostome 1.19 cirrus 1.18 flagellum 1.12 stigma 0.22 ocellus 0.32 chemocyte 0.25 ampulla 0.33 axoneme 0.02 palp 0.04 myoneme 0.03 trichocyst 0.08 pellicle 0.07 veneneux 0.03 plastid 0.03 vacuole 0.07 crista 0.03 toxicyst 0.03  | commonest 16x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 7x cytostome:1,cirrus:1,flagellum:1,chemocyte:1 ; 6x cytostome:1,cirrus:1,flagellum:1,ocellus:1",
-	"[behaviour] t 40  hunters 95: on the founders' rules 95, other lists 0  | founders' rules fired 3803/7001/377/316/2107/20015/285  | meals of hunters with a nose 19, radar 41, laser 43  | water darts 6, stuns 6, your wakes 0  | now holding a heading 38, resting 40, swimming 53, pushing 1, stunned 0, echoes in flight 55",
+	"[census] t 40  living 550 (drifters 353, hunters 197)  flocs 104  | hunters at r40 1, mean r 29.7, hunger 0.47  | could swallow r26/r34/r40 103/41/22  dread 1.77/0.70/0.36  genes 17  | spawned 846  died: swallowed 232 chewed 0 starved 91 (r40 0) poisoned 0  | grazed by the water 18, by drifters 0, dissolved 0, snow kept 1, remains 91  | runs 0 at you 0 misses 0 darts 4 dashes 0  floors: gene 0+0 drifter 0  | sum 1872384567",
+	"[lineage] t 40  hunters 197, born 40  generation mean 1.20 max 2  families 182 (largest 2)  dna apart 80  | cruise 68.6 notice 786 mouth 1.53 upkeep 1.25 genes worn 4.32 carried 4.71  tails 182 sighted 197 at r40 1  | divisions 27 (trade 13 drift 14 faithfully 0), daughters 54: tailless 20, given a sense 18  | the spawner's peers 133 (for the floor 133, for venom 0), drifters 158, left to births 0  | worn cytostome 1.53 cirrus 1.26 flagellum 1.34 stigma 0.21 ocellus 0.28 chemocyte 0.31 ampulla 0.29 axoneme 0.08 palp 0.07 myoneme 0.08 trichocyst 0.05 pellicle 0.08 veneneux 0.03 plastid 0.05 vacuole 0.06 crista 0.09 toxicyst 0.02  | commonest 16x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 10x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 7x cytostome:1,cirrus:1,flagellum:1,chemocyte:1",
+	"[behaviour] t 40  hunters 197: on the founders' rules 197, other lists 0  | founders' rules fired 7552/15616/612/609/4009/34961/1717  | meals of hunters with a nose 75, radar 70, laser 76  | water darts 4, stuns 4, your wakes 0  | now holding a heading 70, resting 89, swimming 108, pushing 6, stunned 0, echoes in flight 124",
+	"[census] t 40  living 551 (drifters 456, hunters 95)  flocs 76  | hunters at r40 0, mean r 30.3, hunger 0.53  | could swallow r26/r34/r40 51/4/2  dread 0.53/0.06/0.02  genes 16  | spawned 701  died: swallowed 103 chewed 0 starved 53 (r40 0) poisoned 0  | grazed by the water 7, by drifters 2, dissolved 0, snow kept 2, remains 53  | runs 0 at you 0 misses 0 darts 8 dashes 0  floors: gene 0+1 drifter 0  | sum 3878125691",
+	"[lineage] t 40  hunters 95, born 11  generation mean 1.12 max 2  families 90 (largest 2)  dna apart 43  | cruise 62.4 notice 770 mouth 1.15 upkeep 1.12 genes worn 4.35 carried 4.77  tails 90 sighted 95 at r40 0  | divisions 6 (trade 2 drift 4 faithfully 0), daughters 12: tailless 6, given a sense 5  | the spawner's peers 37 (for the floor 36, for venom 1), drifters 109, left to births 0  | worn cytostome 1.15 cirrus 1.16 flagellum 1.15 stigma 0.20 ocellus 0.33 chemocyte 0.27 ampulla 0.28 axoneme 0.04 palp 0.07 myoneme 0.05 trichocyst 0.05 pellicle 0.07 veneneux 0.03 plastid 0.09 vacuole 0.04 crista 0.02 toxicyst 0.00  | commonest 16x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 13x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 9x cytostome:1,cirrus:1,flagellum:1,chemocyte:1",
+	"[behaviour] t 40  hunters 95: on the founders' rules 95, other lists 0  | founders' rules fired 3547/7105/367/340/2247/20121/290  | meals of hunters with a nose 20, radar 38, laser 36  | water darts 8, stuns 8, your wakes 0  | now holding a heading 43, resting 35, swimming 60, pushing 2, stunned 0, echoes in flight 44",
 ]
 ## What phase 3-2's behaviour line adds after phase 3-1's, for a water whose
 ## rules never changed: one behaviour, every hunter on it, no change made.
@@ -5969,7 +5974,10 @@ const MEMBRANE: Array[String] = ["concentration", "taste_level", "shadow", "shad
 ## water they read is not -- every draw of the water is a float draw by `water_weight`
 ## now, `stigma` and `ampulla` weigh 2, and drift is weighted (the lines above say what
 ## did not move).
-const DEV_MEMBRANE := "322be6f6cab0160d237cc898c97c67b2ebaf05a24e1f72aabe895f1c75aa8fa1"
+## **Re-recorded at the sonar playtest** (ping-as-outline.md §13.5), from the check's
+## own output: the call hears by how much of a body the nearer ones leave in sight,
+## and its echoes carry the outline on the drawn ovoid, which `_echoes` holds.
+const DEV_MEMBRANE := "e9c24254d80cfb13262c9059283a2c291b751bd709766f5e2d6b77d4b7a70341"
 
 
 ## **1. With the rules off it is pack 2, the membrane** (behaviour.md §12.3):
@@ -6986,10 +6994,15 @@ func _modular() -> void:
 ## output, because the water changed on purpose: nothing passes a body now, so a water
 ## cell with two or three copies of the ping no longer hears behind a body. Nothing
 ## else moved: the rules two builds agree on and the floor are as they were.
+## **Re-recorded at the sonar playtest** (ping-as-outline.md §13.5), from the check's
+## own output, because the water changed on purpose: a body is heard by how much of
+## it the nearer bodies leave in sight, so one wholly behind another is silent where
+## it was heard through its edge. Nothing else moved: the rules two builds agree on
+## and the floor are as they were.
 const PACK3_LINES: Array[String] = [
-	"[census] t 300  living 544 (drifters 247, hunters 297)  flocs 210  | hunters at r40 0, mean r 29.5, hunger 0.54  | could swallow r26/r34/r40 185/93/52  dread 3.07/1.70/0.92  genes 17  | spawned 4201  died: swallowed 3109 chewed 14 starved 1145 (r40 0) poisoned 7  | grazed by the water 863, by drifters 7, dissolved 109, snow kept 7, remains 1152  | runs 0 at you 0 misses 0 darts 51 dashes 0  floors: gene 0+0 drifter 0  | sum 97040218",
-	"[lineage] t 300  hunters 297, born 69  generation mean 1.48 max 9  families 287 (largest 2)  dna apart 112  | cruise 76.1 notice 728 mouth 1.78 upkeep 1.48 genes worn 4.38 carried 4.76  tails 275 sighted 297 at r40 0  | divisions 618 (trade 319 drift 299 faithfully 0), daughters 1236: tailless 279, given a sense 349  | the spawner's peers 2169 (for the floor 2169, for venom 0), drifters 1477, left to births 7  | worn cytostome 1.78 cirrus 1.78 flagellum 1.61 stigma 0.30 ocellus 0.35 chemocyte 0.29 ampulla 0.26 axoneme 0.11 palp 0.06 myoneme 0.07 trichocyst 0.06 pellicle 0.12 veneneux 0.05 plastid 0.11 vacuole 0.07 crista 0.08 toxicyst 0.03  | commonest 8x cytostome:2,cirrus:2,flagellum:2,ocellus:1 ; 7x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 7x cytostome:1,cirrus:1,flagellum:1,stigma:1",
-	"[behaviour] t 300  hunters 297: on the founders' rules 257, other lists 40  | founders' rules fired 89105/149957/6772/9850/31008/329801/12186  | meals of hunters with a nose 1076, radar 1240, laser 1214  | water darts 51, stuns 51, your wakes 0  | now holding a heading 107, resting 115, swimming 182, pushing 13, stunned 0, echoes in flight 144  | behaviours 29, unchanged 86.5 %  | rules changed 618: nudge 320, replace 114, swap 62, copy 63, drop 59",
+	"[census] t 300  living 543 (drifters 248, hunters 295)  flocs 202  | hunters at r40 0, mean r 29.2, hunger 0.55  | could swallow r26/r34/r40 183/91/52  dread 3.27/1.66/0.88  genes 17  | spawned 4263  died: swallowed 3233 chewed 14 starved 1136 (r40 0) poisoned 5  | grazed by the water 860, by drifters 10, dissolved 105, snow kept 6, remains 1141  | runs 0 at you 0 misses 0 darts 50 dashes 16  floors: gene 0+0 drifter 0  | sum 2164665945",
+	"[lineage] t 300  hunters 295, born 71  generation mean 1.84 max 17  families 276 (largest 4)  dna apart 101  | cruise 79.2 notice 774 mouth 1.77 upkeep 1.52 genes worn 4.49 carried 4.84  tails 279 sighted 295 at r40 0  | divisions 668 (trade 332 drift 336 faithfully 0), daughters 1336: tailless 259, given a sense 328  | the spawner's peers 2222 (for the floor 2222, for venom 0), drifters 1486, left to births 5  | worn cytostome 1.77 cirrus 1.70 flagellum 1.75 stigma 0.31 ocellus 0.31 chemocyte 0.34 ampulla 0.32 axoneme 0.10 palp 0.10 myoneme 0.15 trichocyst 0.06 pellicle 0.17 veneneux 0.03 plastid 0.12 vacuole 0.16 crista 0.09 toxicyst 0.02  | commonest 8x cytostome:1,cirrus:2,flagellum:1,stigma:1 ; 7x cytostome:1,cirrus:2,flagellum:1,ampulla:1 ; 6x cytostome:1,cirrus:1,flagellum:2,ampulla:1",
+	"[behaviour] t 300  hunters 295: on the founders' rules 251, other lists 44  | founders' rules fired 87797/148750/5836/9097/34184/330672/11404  | meals of hunters with a nose 1270, radar 1115, laser 1237  | water darts 50, stuns 50, your wakes 0  | now holding a heading 114, resting 118, swimming 172, pushing 12, stunned 0, echoes in flight 143  | behaviours 30, unchanged 85.4 %  | rules changed 668: nudge 344, replace 125, swap 52, copy 80, drop 67",
 ]
 ## **The same five minutes in the game's water** (row 37), pinned as
 ## [constant DEV_LINES] pins pack 2's: [method _five_minutes]' drop, seed 1, as
@@ -7016,10 +7029,15 @@ const PACK3_LINES: Array[String] = [
 ## output, because the water changed on purpose: nothing passes a body now, so a water
 ## cell with two or three copies of the ping no longer hears behind a body. Nothing
 ## else moved: the rules two builds agree on and the floor are as they were.
+## **Re-recorded at the sonar playtest** (ping-as-outline.md §13.5), from the check's
+## own output, because the water changed on purpose: a body is heard by how much of
+## it the nearer bodies leave in sight, so one wholly behind another is silent where
+## it was heard through its edge. Nothing else moved: the rules two builds agree on
+## and the floor are as they were.
 const TAIL_LINES: Array[String] = [
-	"[census] t 300  living 541 (drifters 250, hunters 291)  flocs 163  | hunters at r40 0, mean r 29.4, hunger 0.51  | could swallow r26/r34/r40 191/98/55  dread 3.45/1.76/0.85  genes 17  | spawned 4443  died: swallowed 3426 chewed 11 starved 1160 (r40 0) poisoned 4  | grazed by the water 958, by drifters 4, dissolved 76, snow kept 7, remains 1164  | runs 0 at you 0 misses 0 darts 69 dashes 6  floors: gene 0+0 drifter 0  | sum 753295962",
-	"[lineage] t 300  hunters 291, born 77  generation mean 1.67 max 15  families 274 (largest 3)  dna apart 115  | cruise 79.3 notice 763 mouth 1.89 upkeep 1.49 genes worn 4.50 carried 4.92  tails 275 sighted 291 at r40 0  | divisions 699 (trade 319 drift 380 faithfully 0), daughters 1398: tailless 299, given a sense 336  | the spawner's peers 2235 (for the floor 2235, for venom 0), drifters 1653, left to births 8  | worn cytostome 1.89 cirrus 1.51 flagellum 1.75 stigma 0.30 ocellus 0.27 chemocyte 0.35 ampulla 0.32 axoneme 0.11 palp 0.07 myoneme 0.12 trichocyst 0.09 pellicle 0.15 veneneux 0.08 plastid 0.09 vacuole 0.16 crista 0.10 toxicyst 0.03  | commonest 7x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 6x cytostome:1,cirrus:1,flagellum:2,stigma:1 ; 6x cytostome:2,cirrus:1,flagellum:1,ampulla:1",
-	"[behaviour] t 300  hunters 291: on the founders' rules 239, other lists 52  | founders' rules fired 95436/126723/6079/10232/36325/347515/13801  | meals of hunters with a nose 1260, radar 1234, laser 1412  | water darts 69, stuns 69, your wakes 0  | now holding a heading 95, resting 121, swimming 208, pushing 12, stunned 1, echoes in flight 152  | behaviours 42, unchanged 82.5 %  | rules changed 699: nudge 359, replace 137, swap 69, copy 70, drop 64",
+	"[census] t 300  living 552 (drifters 248, hunters 304)  flocs 199  | hunters at r40 0, mean r 29.1, hunger 0.49  | could swallow r26/r34/r40 195/99/49  dread 3.32/1.63/0.87  genes 17  | spawned 4394  died: swallowed 3289 chewed 7 starved 1209 (r40 0) poisoned 6  | grazed by the water 964, by drifters 9, dissolved 78, snow kept 5, remains 1215  | runs 0 at you 0 misses 0 darts 69 dashes 12  floors: gene 0+0 drifter 0  | sum 3593235484",
+	"[lineage] t 300  hunters 304, born 71  generation mean 1.60 max 11  families 290 (largest 2)  dna apart 114  | cruise 80.2 notice 784 mouth 1.85 upkeep 1.51 genes worn 4.38 carried 4.77  tails 292 sighted 304 at r40 0  | divisions 669 (trade 322 drift 347 faithfully 0), daughters 1338: tailless 265, given a sense 348  | the spawner's peers 2234 (for the floor 2234, for venom 0), drifters 1605, left to births 13  | worn cytostome 1.85 cirrus 1.67 flagellum 1.77 stigma 0.29 ocellus 0.28 chemocyte 0.29 ampulla 0.38 axoneme 0.11 palp 0.09 myoneme 0.11 trichocyst 0.05 pellicle 0.06 veneneux 0.03 plastid 0.09 vacuole 0.11 crista 0.10 toxicyst 0.05  | commonest 8x cytostome:1,cirrus:1,flagellum:1,chemocyte:1 ; 7x cytostome:1,cirrus:1,flagellum:1,stigma:1 ; 7x cytostome:1,cirrus:1,flagellum:2,ampulla:1",
+	"[behaviour] t 300  hunters 304: on the founders' rules 255, other lists 49  | founders' rules fired 90027/125148/6316/9773/35517/343627/12760  | meals of hunters with a nose 1173, radar 1247, laser 1298  | water darts 69, stuns 69, your wakes 0  | now holding a heading 92, resting 138, swimming 226, pushing 10, stunned 0, echoes in flight 189  | behaviours 34, unchanged 84.5 %  | rules changed 669: nudge 347, replace 143, swap 56, copy 66, drop 57",
 ]
 ## **The player's seeded trace** ([method _tail_trace]): forty seconds of a cell
 ## stepped by its own drive, wearing a tail of two copies that nobody holds,
@@ -7040,8 +7058,12 @@ const TAIL_LINES: Array[String] = [
 ## **Re-recorded at the sonar rework** (ping-as-outline.md §13), from the check's own
 ## output: the senses' arithmetic is the same, and the water they read is not -- a
 ## water cell with two or three copies of the ping no longer hears behind a body.
-const PACK3_TRACE := "a4802c904e076808024b936cc5a843ae9e668063344a7a94620fa50ff5cb7172"
-const TAIL_TRACE := "11412d0047d608101af6412b50c67287f623c5bce76c39336ff66964eef054a7"
+## **Re-recorded at the sonar playtest** (ping-as-outline.md §13.5), from the check's
+## own output: the water they read hears by how much of a body the nearer ones leave
+## in sight, the player's call included, and the player's echoes carry an outline on
+## the drawn ovoid.
+const PACK3_TRACE := "210ce1be9cf920e1799c69db1318577f23fb7b2b9dcd70e7d9f2bfe89460606f"
+const TAIL_TRACE := "78a0b5de569af80f0d3542672d4a2e29201fdaff79a4bcb649f4e9ed7204c119"
 ## A tail of two copies, the level a tail can be held still at, on a born body.
 const TWO_TAILS := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2}
 const ONE_TAIL := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
