@@ -149,9 +149,9 @@ the hunters' mean mouth copies.
 | | now: r26 / r34 / r40 | `dev`: r26 / r34 / r40 | mouth copies, now / `dev` |
 |---|---|---|---|
 | 0 min | **0 / 0 / 0** | 19 / 2 / 0 | 1.00 / 1.14 |
-| 5 min | 36 / 2 / 1 | 35 / 9 / 4 | 1.06 / 1.20 |
-| 15 min | 34 / 8 / 5 | 43 / 12 / 7 | 1.16 / 1.35 |
-| 30 min | 34 / 2 / 2 | 48 / 13 / 11 | 1.07 / 1.39 |
+| 5 min | 38 / 6 / 4 | 35 / 9 / 4 | 1.15 / 1.20 |
+| 15 min | 32 / 5 / 4 | 43 / 12 / 7 | 1.10 / 1.35 |
+| 30 min | 43 / 6 / 4 | 48 / 13 / 11 | 1.19 / 1.39 |
 
 What it says:
 
@@ -161,9 +161,9 @@ What it says:
 - **Danger to a grown cell builds slowly.** Mouths that end a cell at r34 or r40
   need copies a family has to grow. In thirty minutes the families grew a few,
   and lost them again.
-- **Hunters turn over fast.** The water made 2,166 newborns in thirty minutes to
-  keep its floor of 96. The families divided 1,082 times, but at thirty minutes
-  the mean generation was 1.7: most hunters are young, and the floor keeps
+- **Hunters turn over fast.** The water made 2,266 newborns in thirty minutes to
+  keep its floor of 96, 32 of them carrying the toxin back. The families divided
+  1,043 times, but at thirty minutes the mean generation was 2.0: most hunters are young, and the floor keeps
   topping the drop up with fresh newborns. That turnover is what keeps the
   water's evolution slow. `dev`'s numbers show the same turnover (1,312
   divisions, generation 1.9); the difference is that its arrivals came already
