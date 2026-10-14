@@ -2774,9 +2774,11 @@ func _determinism() -> void:
 ## §1, §2), from the check's own output, because the water changed on purpose: every
 ## body it makes from nothing with a mouth is a newborn -- the born body and a gift
 ## sense at r26 -- and every drop is made at the one share, 0.826, so a seeded run
-## differs from its first fill. The two drops these were, a sighted player's and a
-## newborn's from the one seed, were the same drop twice, and are one: three lines,
-## not six. Nothing else moved: the rules two builds agree on are as they were.
+## differs from its first fill. And the toxin, which no newborn carries, is given to as
+## many of a new drop's founders as the floor keeps, and back by as many peers as a
+## count found missing. The two drops these were, a sighted player's and a newborn's
+## from the one seed, were the same drop twice, and are one: three lines, not six.
+## Nothing else moved: the rules two builds agree on are as they were.
 const THREE_ONE_LINES: Array[String] = [
 	"[census] t 40  living 552 (drifters 458, hunters 94)  flocs 71  | hunters at r40 0, mean r 29.9, hunger 0.52  | could swallow r26/r34/r40 27/0/0  dread 0.48/0.02/0.00  genes 18  | spawned 692  died: swallowed 103 chewed 0 starved 39 (r40 0) poisoned 0  | grazed by the water 8, by drifters 0, dissolved 0, snow kept 10, remains 39  | runs 0 at you 0 misses 0 darts 4 dashes 0  floors: gene 0+2 drifter 0  | sum 874881005",
 	"[lineage] t 40  hunters 94, born 2  generation mean 1.02 max 2  families 94 (largest 1)  dna apart 35  | cruise 56.5 notice 653 mouth 1.02 upkeep 1.00 genes worn 4.03 carried 4.32  tails 94 sighted 94 at r40 0  | divisions 2 (trade 2 drift 0 faithfully 0), daughters 4: tailless 1, given a sense 1  | the spawner's peers 42 (for the floor 40, for venom 2), drifters 95, left to births 0  | worn cytostome 1.02 cirrus 0.99 flagellum 1.00 stigma 0.28 ocellus 0.30 chemocyte 0.16 ampulla 0.28 axoneme 0.00 palp 0.00 myoneme 0.00 trichocyst 0.01 pellicle 0.00 veneneux 0.01 plastid 0.00 vacuole 0.00 crista 0.00 toxicyst 0.01 haptonema 0.00  | commonest 28x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 25x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 25x cytostome:1,cirrus:1,flagellum:1,stigma:1",
@@ -5868,9 +5870,11 @@ const IDENTITY_DNA := {&"cytostome": 2, &"cirrus": 1, &"flagellum": 1, &"chemocy
 ## §1, §2), from the check's own output, because the water changed on purpose: every
 ## body it makes from nothing with a mouth is a newborn -- the born body and a gift
 ## sense at r26 -- and every drop and the empty room are made at the one share, 0.826,
-## so a seeded run differs from its first fill. The two drops are seeds 1 and 2, no
-## longer a newborn's and a sighted player's. Nothing else moved: the rules two builds
-## agree on are as they were.
+## so a seeded run differs from its first fill. And the toxin, which no newborn carries,
+## is given to as many of a new drop's founders as the floor keeps, and back by as many
+## peers as a count found missing. The two drops are seeds 1 and 2, no longer a
+## newborn's and a sighted player's. Nothing else moved: the rules two builds agree on
+## are as they were.
 const IDENTITY_LINES: Array[String] = [
 	"[census] t 30  living 529 (drifters 436, hunters 93)  flocs 33  | hunters at r40 0, mean r 31.9, hunger 0.46  | could swallow r26/r34/r40 49/0/0  dread 0.49/0.01/0.00  genes 17  | spawned 671  died: swallowed 137 chewed 1 starved 4 (r40 0) poisoned 0  | grazed by the water 4, by drifters 0, dissolved 0, snow kept 3, remains 4  | runs 218 at you 0 misses 71 darts 3 dashes 1  floors: gene 0+2 drifter 0  | sum 2695603989",
 	"[census] t 60  living 535 (drifters 442, hunters 93)  flocs 43  | hunters at r40 41, mean r 35.7, hunger 0.50  | could swallow r26/r34/r40 72/2/1  dread 1.14/0.13/0.00  genes 17  | spawned 837  died: swallowed 277 chewed 2 starved 23 (r40 0) poisoned 0  | grazed by the water 12, by drifters 1, dissolved 0, snow kept 3, remains 23  | runs 463 at you 0 misses 183 darts 7 dashes 21  floors: gene 0+3 drifter 0  | sum 3311062124",
@@ -5912,9 +5916,11 @@ const IDENTITY_LINES: Array[String] = [
 ## §1, §2), from the check's own output, because the water changed on purpose: every
 ## body it makes from nothing with a mouth is a newborn -- the born body and a gift
 ## sense at r26 -- and every drop is made at the one share, 0.826, so a seeded run
-## differs from its first fill. The two drops these were, a newborn's and a sighted
-## player's from seed 1, were the same drop twice, and are one: two lines, not four.
-## Nothing else moved: the rules two builds agree on are as they were.
+## differs from its first fill. And the toxin, which no newborn carries, is given to as
+## many of a new drop's founders as the floor keeps, and back by as many peers as a
+## count found missing. The two drops these were, a newborn's and a sighted player's
+## from seed 1, were the same drop twice, and are one: two lines, not four. Nothing else
+## moved: the rules two builds agree on are as they were.
 const DEV_LINES: Array[String] = [
 	"[census] t 300  living 538 (drifters 433, hunters 105)  flocs 70  | hunters at r40 0, mean r 31.6, hunger 0.49  | could swallow r26/r34/r40 68/20/12  dread 0.96/0.33/0.16  genes 18  | spawned 2253  died: swallowed 1923 chewed 70 starved 241 (r40 0) poisoned 2  | grazed by the water 174, by drifters 4, dissolved 39, snow kept 14, remains 243  | runs 3620 at you 0 misses 1716 darts 30 dashes 314  floors: gene 0+4 drifter 0  | sum 645869958",
 	"[lineage] t 300  hunters 105, born 105  generation mean 7.57 max 15  families 38 (largest 8)  dna apart 83  | cruise 95.3 notice 1230 mouth 1.46 upkeep 2.10 genes worn 6.13 carried 7.33  tails 71 sighted 105 at r40 0  | divisions 521 (trade 255 drift 266 faithfully 0), daughters 1042: tailless 355, given a sense 165  | the spawner's peers 20 (for the floor 16, for venom 4), drifters 1678, left to births 0  | worn cytostome 1.46 cirrus 1.86 flagellum 1.70 stigma 0.31 ocellus 0.76 chemocyte 1.12 ampulla 0.74 axoneme 0.59 palp 0.22 myoneme 0.20 trichocyst 0.35 pellicle 0.63 veneneux 0.24 plastid 0.61 vacuole 0.61 crista 0.37 toxicyst 0.11 haptonema 0.93  | commonest 1x cytostome:1,chemocyte:3,ampulla:1,axoneme:2,trichocyst:2,pellicle:3 ; 1x cytostome:1,cirrus:1,flagellum:3,chemocyte:3,ampulla:3,haptonema:2 ; 1x cytostome:1,cirrus:1,flagellum:3,ocellus:2,chemocyte:2,myoneme:1,plastid:2",
@@ -6047,7 +6053,8 @@ const MEMBRANE: Array[String] = ["concentration", "taste_level", "shadow", "shad
 ## the senses' arithmetic is the same, and the water they read draws a fourth common.
 ## **Re-recorded when the water stopped reading senses** (water-evolves.md), from the
 ## check's own output: the senses' arithmetic is the same, and the water they read is
-## not -- every body it makes from nothing with a mouth is a newborn, at one share.
+## not -- every body it makes from nothing with a mouth is a newborn, at one share, and
+## a new drop's founders carry the toxin as the floor keeps it.
 const DEV_MEMBRANE := "ccf3b156c78b8f26e87515d82fd3999d301fedce3b04bc0235e3e2ddf0fcc4b2"
 
 
@@ -7074,11 +7081,13 @@ func _modular() -> void:
 ## **Re-recorded when the water stopped reading senses** (docs/design/water-evolves.md
 ## §1, §2), from the check's own output, because the water changed on purpose: every
 ## body it makes from nothing with a mouth is a newborn -- the born body and a gift
-## sense at r26 -- and every drop is made at the one share, 0.826, where a fully
-## sighted player's was made at 0.45, so a seeded run differs from its first fill. It
-## is no longer a fully sighted player's drop: `--sensed=` is gone, and
-## `eco_probe.gd --seed=1 --until=300` makes the same one. Nothing else moved: the
-## rules two builds agree on are as they were.
+## sense at r26 -- and every drop is made at the one share, 0.826, where a fully sighted
+## player's was made at 0.45, so a seeded run differs from its first fill. And the
+## toxin, which no newborn carries, is given to as many of a new drop's founders as the
+## floor keeps, and back by as many peers as a count found missing. It is no longer a
+## fully sighted player's drop: `--sensed=` is gone, and `eco_probe.gd --seed=1
+## --until=300` makes the same one. Nothing else moved: the rules two builds agree on
+## are as they were.
 const PACK3_LINES: Array[String] = [
 	"[census] t 300  living 552 (drifters 457, hunters 95)  flocs 133  | hunters at r40 0, mean r 29.8, hunger 0.55  | could swallow r26/r34/r40 29/3/1  dread 0.43/0.05/0.02  genes 17  | spawned 1577  died: swallowed 711 chewed 7 starved 399 (r40 0) poisoned 0  | grazed by the water 147, by drifters 2, dissolved 156, snow kept 9, remains 399  | runs 0 at you 0 misses 0 darts 11 dashes 0  floors: gene 0+8 drifter 0  | sum 4254592507",
 	"[lineage] t 300  hunters 95, born 20  generation mean 1.45 max 9  families 87 (largest 3)  dna apart 45  | cruise 58.8 notice 724 mouth 1.07 upkeep 1.07 genes worn 4.15 carried 4.76  tails 88 sighted 95 at r40 0  | divisions 92 (trade 37 drift 55 faithfully 0), daughters 184: tailless 70, given a sense 49  | the spawner's peers 382 (for the floor 374, for venom 8), drifters 640, left to births 0  | worn cytostome 1.07 cirrus 1.00 flagellum 1.00 stigma 0.26 ocellus 0.26 chemocyte 0.25 ampulla 0.34 axoneme 0.04 palp 0.02 myoneme 0.00 trichocyst 0.00 pellicle 0.08 veneneux 0.02 plastid 0.06 vacuole 0.00 crista 0.04 toxicyst 0.00 haptonema 0.08  | commonest 22x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 19x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 18x cytostome:1,cirrus:1,flagellum:1,stigma:1",
@@ -7122,9 +7131,11 @@ const PACK3_LINES: Array[String] = [
 ## **Re-recorded when the water stopped reading senses** (docs/design/water-evolves.md
 ## §1, §2), from the check's own output, because the water changed on purpose: every
 ## body it makes from nothing with a mouth is a newborn -- the born body and a gift
-## sense at r26 -- and every drop is made at the one share, 0.826, where a fully
-## sighted player's was made at 0.45, so a seeded run differs from its first fill.
-## Nothing else moved: the rules two builds agree on are as they were.
+## sense at r26 -- and every drop is made at the one share, 0.826, where a fully sighted
+## player's was made at 0.45, so a seeded run differs from its first fill. And the
+## toxin, which no newborn carries, is given to as many of a new drop's founders as the
+## floor keeps, and back by as many peers as a count found missing. Nothing else moved:
+## the rules two builds agree on are as they were.
 const TAIL_LINES: Array[String] = [
 	"[census] t 300  living 553 (drifters 458, hunters 95)  flocs 127  | hunters at r40 0, mean r 30.3, hunger 0.63  | could swallow r26/r34/r40 36/2/1  dread 0.50/0.06/0.02  genes 18  | spawned 1788  died: swallowed 976 chewed 2 starved 420 (r40 0) poisoned 0  | grazed by the water 191, by drifters 2, dissolved 149, snow kept 19, remains 420  | runs 0 at you 0 misses 0 darts 23 dashes 0  floors: gene 0+11 drifter 0  | sum 2989972236",
 	"[lineage] t 300  hunters 95, born 34  generation mean 1.86 max 6  families 78 (largest 5)  dna apart 53  | cruise 64.6 notice 769 mouth 1.06 upkeep 1.16 genes worn 4.45 carried 5.13  tails 86 sighted 95 at r40 0  | divisions 163 (trade 70 drift 93 faithfully 0), daughters 326: tailless 105, given a sense 81  | the spawner's peers 356 (for the floor 345, for venom 11), drifters 877, left to births 0  | worn cytostome 1.06 cirrus 1.14 flagellum 1.16 stigma 0.29 ocellus 0.33 chemocyte 0.33 ampulla 0.43 axoneme 0.11 palp 0.03 myoneme 0.00 trichocyst 0.00 pellicle 0.04 veneneux 0.01 plastid 0.03 vacuole 0.13 crista 0.09 toxicyst 0.03 haptonema 0.23  | commonest 20x cytostome:1,cirrus:1,flagellum:1,stigma:1 ; 17x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 15x cytostome:1,cirrus:1,flagellum:1,ampulla:1",
@@ -7157,7 +7168,8 @@ const TAIL_LINES: Array[String] = [
 ## the water the senses read draws a fourth common.
 ## **Re-recorded when the water stopped reading senses** (water-evolves.md), from the
 ## check's own output: the senses' arithmetic is the same, and the water they read is
-## not -- every body it makes from nothing with a mouth is a newborn, at one share.
+## not -- every body it makes from nothing with a mouth is a newborn, at one share, and
+## a new drop's founders carry the toxin as the floor keeps it.
 const PACK3_TRACE := "239e4eaac6204d95cc67619f412261ea10ff78fa2ab555b173b7e9f4e3f44cf8"
 const TAIL_TRACE := "a2d8d801df914d9c55dcf410ab812d4056759d37c62668413cc41b81072a2743"
 ## A tail of two copies, the level a tail can be held still at, on a born body.
@@ -9307,10 +9319,11 @@ const DEV_MUTATIONS_CAME := 214
 ## draws the toxin is set apart, as before.
 ## **Re-recorded with the haptonema** (haptonema.md §2), from the check's own output:
 ## the water draws a fourth common, so every draw after the first differs.
-## **Re-recorded when the water stopped reading senses** (water-evolves.md §1), from
-## the check's own output: what the water draws for a body with a mouth is a newborn,
-## the born body and a gift sense, so this is the digest of 3,000 of those, and none
-## draws the toxin -- the floor gives it, through a peer (check 8 above).
+## **Re-recorded when the water stopped reading senses** (water-evolves.md §1), from the
+## check's own output: what the water draws for a body with a mouth is a newborn, the
+## born body and a gift sense, so this is the digest of 3,000 of those, and none draws
+## the toxin: the floor gives it, to as many of a new drop's founders as it keeps and
+## then through a peer (check 8 above).
 const DEV_DRAWS := "902be53eb53d9ac2aecc5013cea42a7d330e4e9aba82114505e7d1f31d1700fd"
 const DEV_DRAWS_TOXIC := 0
 
