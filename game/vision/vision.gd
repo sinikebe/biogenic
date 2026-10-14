@@ -355,8 +355,7 @@ const MATTER_TINT := Color(0.46, 0.72, 0.62)
 ## The water's own structure, and the cull boundary drawn in it.
 const WATER_TINT := Color(0.10, 0.62, 0.52)
 ## Food, in exactly the green the nose's band was drawn in until it moved onto
-## the nose itself (three-senses.md §2.6): the colour of the substance, and the
-## scent haze's.
+## the nose itself (three-senses.md §2.6): the colour of the substance.
 const FOOD_TINT := Color(0.35, 0.88, 0.42)
 ## The colour of the thing that can eat you. Full vision only, never on the
 ## membrane -- which is the whole point of it. It no longer belongs to a species:
@@ -1370,8 +1369,7 @@ func _draw_hits(a: float) -> void:
 ## body only when that far from it is still off the frame.
 ##
 ## Measured off the drawing rather than chosen. The widest thing a body draws
-## is its scent haze, a [constant HAZE_OUTER] `3 r` bloom whose texture corners
-## are transparent -- `3.05 r` counting the filter's last texel. Everything
+## was its scent haze, a `3 r` bloom, gone since 2026-10-14; everything
 ## cilia.gd draws lies inside `mouth_reach` at the widest gape in the game,
 ## `1.24 r + 1.3 x 1.40 r = 3.06 r`; searched over every tier-3 organ, clock
 ## and steer, the lip tips reach `1.87 r`, the flagellum `2.18 r` and the oral
@@ -1386,11 +1384,6 @@ const CULL_MARGIN := 32.0
 ## drawing paths would drift, and the thing the player reads off a body would
 ## stop being true of their own.
 ##
-## What this file still owns is the **scent haze**, because the haze is not a
-## property of the cell -- it is the drawn form of the scent field the nose
-## is reading, and it is therefore a property of the
-## relationship between that cell and this one.
-##
 ## Only bodies that can reach the frame are drawn: see [constant CULL_REACH].
 ## The rings, wakes, meals and ghosts are other functions and are not culled.
 func _draw_cells(a: float) -> void:
@@ -1402,7 +1395,7 @@ func _draw_cells(a: float) -> void:
 	# A body is skipped only when nothing it draws can reach the frame: the
 	# test is against the circle round the whole frame, so it holds at any
 	# camera spin, and against the body's drawn extent rather than its centre,
-	# so a haze or a mouth hanging into the frame from a body just outside it
+	# so a mouth hanging into the frame from a body just outside it
 	# is still drawn. The circle is found through `$World`'s own transform, the
 	# one these draws are about to be placed by, rather than off `_camera`.
 	var frame := _frame.size
@@ -1445,20 +1438,6 @@ func _draw_cells(a: float) -> void:
 		var ab := a
 		if _fade_in.has(i):
 			ab = a * clampf(float(_fade_in[i]) / SignalBus.DEATH_RETURN, 0.0, 1.0)
-		# The scent as a soft haze rather than a ring: a ring here would be a
-		# boundary, and the cell cannot perceive a boundary.
-		#
-		# **Gene-blind, and it stays gene-blind** -- always FOOD_TINT, never the
-		# body's colour -- but weighted by exactly what the taste field weights
-		# the body by, so a cell too big to fit in the mouth fades out of the
-		# drawn scent as it fades out of the smelled one. If it were gene
-		# coloured, full vision would be showing a distinction point of view
-		# cannot make, in the one channel where the two views must agree.
-		# food.gd owns the curve; this reads it. §4.5, last paragraph.
-		var smell := smoothstep(FoodField.EDIBLE_FADE_OUT, FoodField.EDIBLE_FADE_IN,
-			r / maxf(_cell.gape(), 0.001))
-		_draw_scent(p, r, smell * ab)
-
 		# The wound is drawn here and nowhere else in the game: full vision is
 		# entitled to ground truth, and point of view finds out by biting and
 		# by being bitten.
@@ -1487,12 +1466,12 @@ func _dose_felt(felt: Vector3) -> Dictionary:
 ## then held to the same exact cull as today's water. A cell is drawn by the one
 ## routine every cell is; a floc is not a cell and is drawn as the clump it is.
 ##
-## **The bloom weighs a body by the size its mouth measures** (ocean.md §14.1),
-## `pellicle` counted, through the same curve the taste field does -- so it says
-## what the nose smells, and never more.
+## **No scent haze round anything** (the owner, 2026-10-14; three-senses.md §2.6):
+## the green bloom round every edible cell, floc and friend, which said what your
+## mouth could take whether or not you had a nose, is gone. Smell shows on your
+## nose alone, and in no other mark on screen.
 func _draw_drop_cells(a: float, middle: Vector2, half: float) -> void:
 	var bodies := _food_node.bodies()
-	var gape := _cell.gape()
 	var margin := CULL_MARGIN / ZOOM
 	var widest := CellBody.DIVIDE_RADIUS * CULL_REACH
 	for i: int in _food_node.bodies_near(middle, half + widest + margin):
@@ -1503,13 +1482,8 @@ func _draw_drop_cells(a: float, middle: Vector2, half: float) -> void:
 		if p.distance_squared_to(middle) > reach * reach:
 			continue
 		if bool(b.inert):
-			var settle := float(b.settle)
-			# The bloom round a floc and never over it, as round a friend: a
-			# clump that does not hide its middle glowed like a lamp (§7.6).
-			_draw_scent_ring(p, r, FoodField.taste_weight(r, gape) * settle * a)
-			_draw_floc(p, r, settle, int(b.id), a)
+			_draw_floc(p, r, float(b.settle), int(b.id), a)
 			continue
-		_draw_scent(p, r, FoodField.taste_weight(_food_node.swallow_size_of(i), gape) * a)
 		# **A division coming** (lineage.md §6.4): every cell's nucleus doubles
 		# from DIVIDE_WARN_RADIUS as yours does, read off the radius -- which the
 		# wire and the replay already carry -- since every body at forty divides.
@@ -1560,121 +1534,12 @@ func _draw_floc(at: Vector2, r: float, settle: float, id: int, a: float) -> void
 			true)
 
 
-## **"I can eat it", drawn loudly enough to be seen.** This is the only mark
-## full vision has for the commonest decision in the game, and as shipped it was
-## not a weak mark, it was no mark: measured off the render, the haze ring
-## around an edible cell came out **0.5 of 255 greener than empty water**, while
-## the water shader's own organic wash swings through ±25 in the same channel.
-## The three defects were all arithmetic and all in one line:
-##
-## - the outermost of the three rings was drawn at alpha exactly zero, every
-##   frame, for every cell -- `(1 - t)` with `t` reaching 1;
-## - the largest ring was the faintest, so what ink there was got spread from
-##   2.9 to 6.0 body radii, a cloud twelve bodies wide and dense nowhere;
-## - the peak alpha, 0.0093, was a third of what the dithering can even carry.
-##
-## **Nothing about what it means has changed, and nothing may.** It is still
-## `FOOD_TINT` on every edible cell whatever gene it carries, still weighted by
-## exactly `food.gd`'s taste curve, so it still says precisely what the nose
-## smells and never more. What changed is that it is now a
-## bloom that hugs the body -- brightest at the rim, gone by three radii --
-## instead of a wash spread so thin it fell under the water's own texture.
-## Hugging the body is also what keeps it from being mistaken for that texture:
-## the wash is hundreds of pixels across and attached to nothing, and this is
-## concentric with a cell and the size of that cell.
-##
-## **One texture, not a stack of discs**, and the reason is the sentence the old
-## code wrote and then broke: *a ring here would be a boundary, and the cell
-## cannot perceive a boundary.* Six concentric `draw_circle`s at a visible alpha
-## are six boundaries -- built that way first, rendered, and it banded at
-## 1280x720 and worse at 2400x1080, where the canvas scale makes each band half
-## again as wide. A radial `GradientTexture2D` drawn once per cell has no edge
-## anywhere, costs one `draw_texture_rect` instead of six polygons, and is plain
-## `ImageTexture` under GL Compatibility.
-##
-## The ramp holds flat out to 0.42 and then falls away, so the brightest part of
-## the bloom is the annulus **just outside the rim** rather than the middle --
-## the middle is behind the body and cannot be seen anyway. Measured after, in
-## median green of 255 out from a r18 edible cell: **99** at the rim, 36 at
-## 1.3 r, 24 at 1.65 r, water by 2.7 r. An inedible cell of any size stays flat
-## at 10-12, which is the water.
-const HAZE_OUTER := 3.0
-## Alpha at the plateau, before the edibility weight.
-const HAZE_PEAK := 0.24
-const HAZE_TEXTURE_SIZE := 128
-
-var _haze: GradientTexture2D = null
-
-
-## Built once. A run draws it four times a frame and never changes it.
-func _build_haze() -> GradientTexture2D:
-	var ramp := Gradient.new()
-	ramp.offsets = PackedFloat32Array([0.0, 0.42, 0.62, 0.82, 1.0])
-	ramp.colors = PackedColorArray([
-		Color(1, 1, 1, 1.00), Color(1, 1, 1, 0.90), Color(1, 1, 1, 0.42),
-		Color(1, 1, 1, 0.12), Color(1, 1, 1, 0.0)])
-	var tex := GradientTexture2D.new()
-	tex.gradient = ramp
-	tex.fill = GradientTexture2D.FILL_RADIAL
-	tex.fill_from = Vector2(0.5, 0.5)
-	tex.fill_to = Vector2(1.0, 0.5)
-	tex.width = HAZE_TEXTURE_SIZE
-	tex.height = HAZE_TEXTURE_SIZE
-	return tex
-
-
-func _draw_scent(at: Vector2, r: float, strength: float) -> void:
-	if strength <= 0.0:
-		return
-	if _haze == null:
-		_haze = _build_haze()
-	var reach := r * HAZE_OUTER
-	_world.draw_texture_rect(_haze,
-		Rect2(at - Vector2(reach, reach), Vector2(reach, reach) * 2.0), false,
-		Color(FOOD_TINT, HAZE_PEAK * strength))
-
-
-## **The friend's scent** (shared-pond-ux.md §0.1): the same bloom at the same
-## strength with its middle taken out to the rim, so the smell sits round a
-## person and never over one. Laid over the body, the haze tinted an edible
-## friend the green of an edible water cell -- rendered beside one of their size,
-## the two were the same object but for the trail -- and the untinted body is the
-## only person mark a still frame has.
-var _haze_ring: GradientTexture2D = null
-
-
-func _draw_scent_ring(at: Vector2, r: float, strength: float) -> void:
-	if strength <= 0.0:
-		return
-	if _haze_ring == null:
-		var rim := 1.0 / HAZE_OUTER
-		var ramp := Gradient.new()
-		ramp.offsets = PackedFloat32Array([0.0, rim * 0.92, rim * 1.12, 0.42, 0.62, 0.82, 1.0])
-		ramp.colors = PackedColorArray([
-			Color(1, 1, 1, 0.0), Color(1, 1, 1, 0.0), Color(1, 1, 1, 0.90),
-			Color(1, 1, 1, 0.90), Color(1, 1, 1, 0.42), Color(1, 1, 1, 0.12),
-			Color(1, 1, 1, 0.0)])
-		_haze_ring = GradientTexture2D.new()
-		_haze_ring.gradient = ramp
-		_haze_ring.fill = GradientTexture2D.FILL_RADIAL
-		_haze_ring.fill_from = Vector2(0.5, 0.5)
-		_haze_ring.fill_to = Vector2(1.0, 0.5)
-		_haze_ring.width = HAZE_TEXTURE_SIZE
-		_haze_ring.height = HAZE_TEXTURE_SIZE
-	var reach := r * HAZE_OUTER
-	_world.draw_texture_rect(_haze_ring,
-		Rect2(at - Vector2(reach, reach), Vector2(reach, reach) * 2.0), false,
-		Color(FOOD_TINT, HAZE_PEAK * strength))
-
-
 ## A meal, held where it was long enough that the interior flood has something
 ## to be checked against.
 ##
-## **In the gene's hue, and this is not the scent haze.** The haze is gene-blind
-## because it is the drawn form of something point of view genuinely cannot
-## resolve. The instant of swallowing is the opposite case: §2.2 makes the
-## interior flood the gene's colour, which is `perception.md`'s one licensed
-## exception, and this ring is the only thing that flood can be checked
+## **In the gene's hue.** The instant of swallowing is a fact both views know:
+## §2.2 makes the interior flood the gene's colour, which is `perception.md`'s one
+## licensed exception, and this ring is the only thing that flood can be checked
 ## against. Drawing it green while the membrane floods amber would leave the
 ## one breach in the rule unverifiable by the view that exists to verify.
 func _draw_meals(a: float) -> void:
@@ -2206,11 +2071,10 @@ func _draw_peer(a: float) -> void:
 ## gape, their wound, the nucleus doubling from r32 -- with `is_self` false, so
 ## the red toothed bow shows whenever their gape exceeds your radius, and
 ## `untinted` true, so the body stays SELF_TINT: no cell the water makes is.
-## The scent haze on the same curve as anything you could swallow. The person
-## marks stay as shipped -- halo, trail, edge mark -- and carry presence.
+## The person marks stay as shipped -- halo, trail, edge mark -- and carry presence.
 ##
 ## **A ghost out of the water** (§0.3): body, halo and edge mark at 0.34, no
-## threat bow, no haze and no new trail points, because nothing can reach it.
+## threat bow and no new trail points, because nothing can reach it.
 func _draw_friend(a: float) -> void:
 	var at: Vector2 = _peer["at"]
 	var r := float(_peer["radius"])
@@ -2224,9 +2088,6 @@ func _draw_friend(a: float) -> void:
 		var k := 1.0 - float(i) / float(HALO_STEPS)
 		_world.draw_circle(at, r * (1.05 + 1.75 * k),
 			Color(SELF_TINT, 0.013 * (1.0 - k) * 0.6 * presence * a), true, -1.0, true)
-	if not ghost:
-		_draw_scent_ring(at, r, smoothstep(FoodField.EDIBLE_FADE_OUT,
-			FoodField.EDIBLE_FADE_IN, r / maxf(_cell.gape(), 0.001)) * alpha * a)
 	# The viewer's radius decides the threat bow; a ghost's mouth can reach
 	# nobody, so it is measured against a radius nothing exceeds.
 	Cilia.draw_cell(_world, at, float(_peer["heading"]), r, _peer["tiers"],
@@ -2241,8 +2102,8 @@ func _draw_friend(a: float) -> void:
 ## view is solid and every one of them is a measurement -- a threshold, a cull
 ## boundary, a shock front -- and this is the opposite of a measurement. A solid
 ## circle here would be read as a boundary something is inside, which is the
-## same mistake `_draw_scent` was written to avoid one function up; a broken one
-## cannot be read as a boundary at all.
+## mistake a ringed scent would have made; a broken one cannot be read as a
+## boundary at all.
 ##
 ## A fixed number of dashes rather than a fixed dash length, so it stays one
 ## object as it grows instead of turning into a dotted line.

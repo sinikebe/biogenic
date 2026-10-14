@@ -579,10 +579,10 @@ drawn, with nothing in front of it.
 - whether, in full vision, the glow is noticed at all beside the food that view
   already shows.
 
-**Left as it is, and put to the owner:** full vision's scent haze round every
-edible body (`vision.gd`'s `_draw_scent`). It is drawn whether or not you have a
-nose. It is full vision's mark of *what your mouth can take*, not the nose's
-sense.
+**Full vision's scent haze is gone too** (the owner, 2026-10-14, answering the
+table: *"remove it"*). It was a green bloom round every edible cell, floc and
+friend, drawn whether or not you had a nose: full vision's mark of *what your
+mouth can take*. Smell now shows on the nose and nowhere else, in either view.
 
 ---
 
