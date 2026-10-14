@@ -285,9 +285,21 @@ func _write_state() -> void:
 	_panes.set_division(_read_division())
 	# How slack the body was: the body's half of hunger, as the run drew it.
 	_panes.set_slack(_frame[RecorderNode.AT_SLACK])
+	# How brightly the nose glowed, on the nose the restored genome wears.
+	_panes.set_lit(_lit_nose(_frame[RecorderNode.AT_SMELL]))
 	# The same question the run asks of its genome, asked of the one restored.
 	_panes.set_eye(Run.eye_of(_genome, _eye_gene, _eye_flare.value()))
 	_panes.push_block(_frame, RecorderNode.AT_MEMBRANE)
+
+
+## **The nose, lit as the run lit it** (docs/design/three-senses.md §2.6):
+## cilia.gd's `lit` for the organ the restored genome smells with, at
+## [param glow]. Empty for no glow, or no nose.
+func _lit_nose(glow: float) -> Dictionary:
+	if glow <= 0.0 or _genome == null:
+		return {}
+	var nose := Catalogue.worn_provider(_genome.tiers(), &"smell_range")
+	return {} if nose == &"" else {"glow": {nose: glow}}
 
 
 ## **The friend, where the recording has them** (shared-pond.md §5, Phase 3):

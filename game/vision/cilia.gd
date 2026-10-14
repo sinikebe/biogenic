@@ -480,6 +480,34 @@ const PITTED_STEPS := 120
 ## One shared, read-only dictionary, as [constant NO_EYE] is.
 const NO_DOSE := {}
 
+# --- A sense shown on its own organ (docs/design/three-senses.md §2.6) -------
+# The owner, 2026-10-14: *"the effect of the sense must be a glowing smell organ
+# when pointing at food. No hud or other effect on screen that would merge with
+# other senses."* So a sense on a channel the membrane does not draw lights its
+# own organ, and nothing else: the organ is drawn again over itself, its pigment
+# solid, and a haze in its own hue stands round it. Its family's colour and its
+# place on the body say which sense it is, which is what keeps it from merging
+# with anything. The nose today; the mechanic names no sense.
+
+## **No organ lit**: what every body but the player's passes to [method draw_cell].
+const NO_LIT := {}
+## At full glow, the organ is drawn over itself at this much of its own ink.
+const GLOW_INK := 1.4
+## The haze round a lit organ: centred this far out along its arc's middle, as a
+## share of r -- just past the skin, among its bristles -- in [constant GLOW_RINGS]
+## discs, the smallest [constant GLOW_HALO] of r across the radius and each
+## [constant GLOW_SPREAD] of that wider than the last, at most
+## [constant GLOW_HAZE] of ink in the middle. Judged off renders at both shapes,
+## in both views.
+const GLOW_SEAT := 1.08
+const GLOW_RINGS := 4
+const GLOW_HALO := 0.22
+const GLOW_SPREAD := 0.55
+const GLOW_HAZE := 0.16
+## The haze's hue, this far from the organ's own towards white at full glow:
+## light, not more pigment.
+const GLOW_WHITE := 0.12
+
 # --- Tier is magnitude, not a badge (§4.3) ----------------------------------
 ## Longer, denser, brighter. Countable without counting.
 const TIER_LEN: Array[float] = [0.0, 1.00, 1.22, 1.46]
@@ -679,6 +707,13 @@ static func body_tint(tiers: Dictionary, is_self: bool) -> Color:
 ## seeps in from the skin; and the three flares, `"fangs"`, `"guard"` and
 ## `"granules"`, 0..1, as its toxins fire. Phase 1 draws harm; the other two
 ## kinds are laid out for the strains that will deliver them.
+##
+## [param lit] is **which organs light up with what they sense**
+## (docs/design/three-senses.md §2.6): `{"glow": {gene: 0..1}}`, and a `"fade"`
+## the glow is drawn at where the figure has a licence to be louder than itself
+## (soma.gd's FADE_LIT), or [constant NO_LIT]. Passed only for the player's own
+## body, as [param eye] is: what a nose smells is each player's own, and not on
+## the wire.
 static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 		r: float, tiers: Dictionary, gape: float, viewer_radius: float,
 		is_self: bool, clock: float, fade: float = 1.0, steer: float = 0.0,
@@ -686,7 +721,7 @@ static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 		order: Array = [], wound: float = 0.0, double: float = 0.0,
 		pinch: float = 0.0, shed: float = 0.0, untinted: bool = false,
 		eye: Dictionary = NO_EYE, tail: Vector2 = NO_TAIL,
-		slack: float = 0.0, dose: Dictionary = NO_DOSE) -> void:
+		slack: float = 0.0, dose: Dictionary = NO_DOSE, lit: Dictionary = NO_LIT) -> void:
 	if fade <= 0.0 or r <= 0.0:
 		return
 	var fwd := Vector2(sin(heading), -cos(heading))
@@ -713,7 +748,7 @@ static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 	# decides which of them draws it.
 	var layout := order if not order.is_empty() else default_order(tiers)
 	_draw_fringe(canvas, at, fwd, stb, r, tiers, clock, fade, steer, unit, layout,
-		eye, tail, dose)
+		eye, tail, dose, lit)
 	var mouth := Catalogue.worn_provider(tiers, &"gape")
 	draw_gape(canvas, at, fwd, stb, r, gape, mouth, int(tiers.get(mouth, 0)),
 		not is_self and gape > viewer_radius, fade, unit)
@@ -1148,17 +1183,19 @@ static func default_order(tiers: Dictionary) -> Array:
 ## stern, in the order they always drew -- then every other organ on its own slot's
 ## arc, a bite-riding organ's barbs on the side it guards, and an inside form's
 ## granules round the whole body. [param layout] is resolved: the body's own order,
-## or [method default_order]'s.
+## or [method default_order]'s. An organ [param lit] names glows.
 static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		stb: Vector2, r: float, tiers: Dictionary, clock: float, fade: float,
 		steer: float, unit: float, layout: Array,
 		eye: Dictionary = NO_EYE, tail: Vector2 = NO_TAIL,
-		dose: Dictionary = NO_DOSE) -> void:
+		dose: Dictionary = NO_DOSE, lit: Dictionary = NO_LIT) -> void:
 	if tiers.is_empty():
 		return
 	var sk := _body_skin
 	_on_body(sk, at, fwd, stb, r, unit)
 	sk.steer = steer
+	var glows: Dictionary = lit.get("glow", NO_LIT)
+	var glow_fade := float(lit.get("fade", fade))
 	# **The home organs, found by the body plan and not by their name**: each on its
 	# home slot's arc, in the plan's order -- the nose, the flank, the stern -- which
 	# is the order the mat, the oars and the lash always drew in.
@@ -1167,7 +1204,8 @@ static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		var copies := int(tiers.get(home, 0))
 		if copies > 0:
 			_draw_worn(canvas, sk, home, copies, _home_arc(home, layout), clock, fade,
-				eye if StringName(eye.get("gene", &"")) == home else NO_EYE, tail, 0.0)
+				eye if StringName(eye.get("gene", &"")) == home else NO_EYE, tail, 0.0,
+				float(glows.get(home, 0.0)), glow_fade)
 	# **The slot is the arc.** Walked by slot rather than by dictionary order, so
 	# a gene the player placed in the rear-left diagonal is drawn -- and aimed --
 	# in the rear-left diagonal.
@@ -1188,7 +1226,8 @@ static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 				continue
 			flare = float(dose.get("guard", 0.0))
 		_draw_worn(canvas, sk, gene, copies, arc_for_slot(slot), clock, fade,
-			eye if StringName(eye.get("gene", &"")) == gene else NO_EYE, tail, flare)
+			eye if StringName(eye.get("gene", &"")) == gene else NO_EYE, tail, flare,
+			float(glows.get(gene, 0.0)), glow_fade)
 	# **What is inside has no arc**: its beads are granules under the whole skin,
 	# and nothing at any one place.
 	for gene: StringName in tiers:
@@ -1203,9 +1242,11 @@ static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 ## brightens the organ as a level arrives; [param flare] is a bite-riding organ's
 ## barbs firing, 0..1. **A tail is drawn on its own clock** where the body has one
 ## ([param tail], the player's): its wave stops when it is held still.
+## [param glow] is the organ lit by what it senses, 0..1, drawn at [param glow_fade]
+## ([method _draw_glow]).
 static func _draw_worn(canvas: CanvasItem, sk: Stretch, gene: StringName, copies: int,
 		arc: Vector2, clock: float, fade: float, eye: Dictionary, tail: Vector2,
-		flare: float) -> void:
+		flare: float, glow: float = 0.0, glow_fade: float = 0.0) -> void:
 	var look := _look_of(gene)
 	sk.a0 = arc.x
 	sk.a1 = arc.y
@@ -1229,6 +1270,29 @@ static func _draw_worn(canvas: CanvasItem, sk: Stretch, gene: StringName, copies
 	_paint(canvas, d, look, hue(gene), _kind_alpha(look) * _tier(TIER_ALPHA, copies) * lit
 		* fade * (1.0 + TOXIN_FLARE_INK * sk.lit), _kind_width(look) * sk.px, sk, eye, own,
 		fade, false)
+	if glow > 0.0 and glow_fade > 0.0:
+		_draw_glow(canvas, d, sk, look, hue(gene), _kind_alpha(look)
+			* _tier(TIER_ALPHA, copies), _kind_width(look) * sk.px, own, glow, glow_fade)
+
+
+## **An organ lit by what it senses** (docs/design/three-senses.md §2.6), over the
+## organ [param d] just drew: a haze in its [param tone], paler towards white the
+## brighter it is, round the middle of its arc just past the skin, then the organ
+## again over itself at [param ink] times [constant GLOW_INK], its pigment solid as
+## a level's flare draws it. [param glow] 0..1 is how lit, at [param fade].
+static func _draw_glow(canvas: CanvasItem, d: Drawn, sk: Stretch, look: Dictionary,
+		tone: Color, ink: float, width: float, clock: float, glow: float,
+		fade: float) -> void:
+	var g := clampf(glow, 0.0, 1.0)
+	var light := tone.lerp(Color.WHITE, GLOW_WHITE * g)
+	var mid := _surface(sk.at, sk.fwd, sk.stb, sk.r * GLOW_SEAT,
+		deg_to_rad((sk.a0 + sk.a1) * 0.5))
+	for k in GLOW_RINGS:
+		var q := float(k) / float(GLOW_RINGS)
+		canvas.draw_circle(mid, sk.r * GLOW_HALO * (1.0 + GLOW_SPREAD * float(k)),
+			Color(light, GLOW_HAZE * (1.0 - q) * g * fade), true, -1.0, true)
+	_paint(canvas, d, look, light, ink * GLOW_INK * g * fade, width, sk, {"flare": g},
+		clock, g * fade, false)
 
 
 ## **The arc a home organ is drawn on**: its home slot's in the body plan --

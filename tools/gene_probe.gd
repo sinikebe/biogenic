@@ -2505,15 +2505,17 @@ func _colours() -> void:
 		+ " organ's hue%s") % [copies, "" if wrong.is_empty() else "; not: %s" % ", ".join(wrong)],
 		wrong.is_empty())
 
-	# 11: every sense drives a channel the membrane has a lobe for.
+	# 11: every sense drives a channel the membrane knows: a lobe of its own, or
+	# its organ lit on the body (SignalBus.ON_ORGAN, the nose; three-senses.md §2.6).
 	var lobeless: Array[String] = []
 	for key: StringName in Catalogue.live():
 		var channel := Catalogue.channel_of(key)
 		if (channel != &"" or Catalogue.has_tag(key, Catalogue.SENSE)) \
 				and not SignalBus.CHANNEL_LOBES.has(channel):
 			lobeless.append("%s on %s" % [key, channel if channel != &"" else &"(none)"])
-	_check(("11. every sense names a channel the membrane has a lobe for -- %s; a new channel"
-		+ " is code, a lobe of its own%s") % [str(SignalBus.CHANNEL_LOBES),
+	_check(("11. every sense names a channel the membrane knows, a lobe or %d for its organ lit"
+		+ " on the body -- %s; a new channel is code, a lobe of its own or its organ lit%s")
+		% [SignalBus.ON_ORGAN, str(SignalBus.CHANNEL_LOBES),
 			"" if lobeless.is_empty() else ": not %s" % ", ".join(lobeless)],
 		lobeless.is_empty())
 

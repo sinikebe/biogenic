@@ -1647,18 +1647,13 @@ func _process(delta: float) -> void:
 	_food.ping_tier = _cell.ping_tier()
 	# **`taste_level`, not `concentration`.** The first is what this nose picks
 	# up and the second is what the water is like, and only the organ reaches
-	# the membrane: the beat stopped reading the water on 2026-09-29. A cell
-	# with no chemocyte hands over a flat zero and gets no green band at all --
-	# which is the whole change, and is enforced again inside the bus.
-	#
-	# **The bearing is the organ's own arc and comes from this file, not from
-	# the field.** Nothing about the water reaches the membrane through this
-	# channel any more: the same number was written into `smell_bearing` above,
-	# and all it does downstream is tell the shader which side of the ring is
-	# the bright one. It is the same value every frame of a run unless the
-	# player moves the gene. three-senses.md §2.2.
-	_bus.taste(_food.smell_bearing, _food.taste_level)
+	# the bus: the beat stopped reading the water on 2026-09-29. A cell with no
+	# chemocyte hands over a flat zero and its nose never glows -- which is
+	# enforced again inside the bus. The level is already weighted about the
+	# nose's own arc, `smell_bearing` above, so it is brightest pointed at food.
+	_bus.taste(_food.taste_level)
 	_bus.dread(_food.dread_level)
+	_light_nose()
 	# **What body this membrane is attached to** (§2.1). One post a frame, beside
 	# the beat, and it is what makes a tier change something point of view can
 	# feel: the thrust bloom, the turn shear and the ingest flood are the same
@@ -1752,6 +1747,19 @@ func _settle_slack() -> void:
 	_soma.slack = _slack
 	_vision.slack = _slack
 	_figure_body.queue_redraw()
+
+
+## **The nose glows with what it smells** (docs/design/three-senses.md §2.6), on
+## the body in both views and nowhere else: the organ that provides `smell_range`,
+## lit by the bus's `smell_glow()` -- the level along its arc, through the
+## membrane's curve and dimmed by dread. The membrane draws nothing for it. Found
+## by its stat, never by its name, so a second nose glows the same way.
+func _light_nose() -> void:
+	var nose := _cell.provider(&"smell_range")
+	var glow := _bus.smell_glow() if nose != &"" else 0.0
+	var lit := {} if glow <= 0.0 else {"glow": {nose: glow}}
+	_soma.lit = lit
+	_vision.lit = lit
 
 
 ## **Where this cell's beams look, and the arc each one crossed this frame.**
@@ -2299,7 +2307,9 @@ func _step_split(delta: float) -> void:
 ## no longer swimming in anything.
 func _hush() -> void:
 	_bus.dread(0.0)
-	_bus.taste(0.0, 0.0)
+	_bus.taste(0.0)
+	_soma.lit = {}
+	_vision.lit = {}
 	_bus.light(0.0, 0.0)
 	_bus.beam(0.0, 0.0)
 	_bus.ping_out(0.0, 0.0)
@@ -2725,6 +2735,8 @@ func _forget_doses() -> void:
 	_dose_meal = Vector3.ZERO
 	_soma.dose = {}
 	_vision.dose = {}
+	_soma.lit = {}
+	_vision.lit = {}
 
 
 ## A mouth closed on a body it could not swallow -- yours on something too big,

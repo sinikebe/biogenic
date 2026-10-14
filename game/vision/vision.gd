@@ -354,8 +354,9 @@ const IMPACT_TINT := Color(0.90, 1.0, 0.97)
 const MATTER_TINT := Color(0.46, 0.72, 0.62)
 ## The water's own structure, and the cull boundary drawn in it.
 const WATER_TINT := Color(0.10, 0.62, 0.52)
-## Food, in exactly the green the taste lobe uses, so "the green on my rim" and
-## "the green thing out there" are visibly one substance.
+## Food, in exactly the green the nose's band was drawn in until it moved onto
+## the nose itself (three-senses.md §2.6): the colour of the substance, and the
+## scent haze's.
 const FOOD_TINT := Color(0.35, 0.88, 0.42)
 ## The colour of the thing that can eat you. Full vision only, never on the
 ## membrane -- which is the whole point of it. It no longer belongs to a species:
@@ -408,6 +409,20 @@ var slack := 0.0
 ## `dose` (dna-slots-ux.md §4, §5). Every other body's loads are read off the
 ## field, because every body's are drawn. Empty carries nothing.
 var dose := {}
+## **Which of the player's organs glow with what they sense**, written once a
+## frame by the run; same contract as soma.gd's, and cilia.gd's `lit`
+## (three-senses.md §2.6): the nose, brighter the more food it smells. Drawn on
+## the player's own cell, at [constant FADE_LIT] of the body's fade. Empty lights
+## nothing.
+var lit := {}
+## **The glow's share of the body's fade.** This world is drawn additively
+## (vision.tscn's material), so an organ painted again over itself at the body's
+## full fade sums its violet to white and the glow stops saying which organ it
+## is. At this share it is the same organ, lighter, inside a haze of its own
+## colour, and dim against lit still reads on a phone-shaped frame, where the
+## world is zoomed out and the organ is a few pixels. Judged off renders at both
+## shapes.
+const FADE_LIT := 0.65
 
 ## How far apart the two of them are seated, in world units. Rendered at 1:1
 ## with 160 between them, two r28 bodies read -- so no camera zoom, which would
@@ -1372,8 +1387,8 @@ const CULL_MARGIN := 32.0
 ## stop being true of their own.
 ##
 ## What this file still owns is the **scent haze**, because the haze is not a
-## property of the cell -- it is the drawn form of the scent field the
-## membrane's green band is reading, and it is therefore a property of the
+## property of the cell -- it is the drawn form of the scent field the nose
+## is reading, and it is therefore a property of the
 ## relationship between that cell and this one.
 ##
 ## Only bodies that can reach the frame are drawn: see [constant CULL_REACH].
@@ -1474,7 +1489,7 @@ func _dose_felt(felt: Vector3) -> Dictionary:
 ##
 ## **The bloom weighs a body by the size its mouth measures** (ocean.md §14.1),
 ## `pellicle` counted, through the same curve the taste field does -- so it says
-## what the membrane's green band says, and never more.
+## what the nose smells, and never more.
 func _draw_drop_cells(a: float, middle: Vector2, half: float) -> void:
 	var bodies := _food_node.bodies()
 	var gape := _cell.gape()
@@ -1560,8 +1575,8 @@ func _draw_floc(at: Vector2, r: float, settle: float, id: int, a: float) -> void
 ##
 ## **Nothing about what it means has changed, and nothing may.** It is still
 ## `FOOD_TINT` on every edible cell whatever gene it carries, still weighted by
-## exactly `food.gd`'s taste curve, so it still says precisely what the
-## membrane's green band says and never more. What changed is that it is now a
+## exactly `food.gd`'s taste curve, so it still says precisely what the nose
+## smells and never more. What changed is that it is now a
 ## bloom that hugs the body -- brightest at the rim, gone by three radii --
 ## instead of a wash spread so thin it fell under the water's own texture.
 ## Hugging the body is also what keeps it from being mistaken for that texture:
@@ -1989,13 +2004,23 @@ func _draw_cell(a: float) -> void:
 		r, true, _clock, ca, _cell.steer, beat, 0.0, 1.0 / ZOOM,
 		_genome_node.body_layout() if _genome_node != null else [], _cell.wound,
 		float(division.get("double", 0.0)), float(division.get("pinch", 0.0)),
-		0.0, false, eye, _tail, slack, dose)
+		0.0, false, eye, _tail, slack, dose, _lit(ca))
 	_draw_held_sample(p, r, beat, ca)
 
 	_draw_heading(p, fwd, stb, r, ca)
 	# Held, the cell is going nowhere, and a plume would be the last one it had.
 	if not _held:
 		_draw_velocity(p, r, ca)
+
+
+## The run's [member lit] at [constant FADE_LIT] of the body's [param fade], or
+## nothing.
+func _lit(fade: float) -> Dictionary:
+	if lit.is_empty():
+		return Cilia.NO_LIT
+	var out := lit.duplicate()
+	out["fade"] = FADE_LIT * fade
+	return out
 
 
 ## The two of them, at world scale and at their own brightness. Both are

@@ -2,8 +2,8 @@ extends Node
 ## **The two panes**: what you felt on the left, what was actually there on the
 ## right, side by side, drawn by the two shipped views over one body.
 ##
-## The value of a replay is precisely the gap between them -- the green band
-## pointing one way and the food sitting the other -- so this file is the whole
+## The value of a replay is precisely the gap between them -- the nose glowing
+## at one meal and the hunter sitting astern of it -- so this file is the whole
 ## feature and the transport bolted underneath it is not. It is built and
 ## photographed on its own before anything records anything, because it is the
 ## only part of docs/design/replay.md that can fail for reasons a document
@@ -424,6 +424,16 @@ func set_slack(slack: float) -> void:
 		_vision.slack = slack
 
 
+## **Which organs glowed with what they sensed** (three-senses.md §2.6): the
+## nose, lit on the figure in both panes. Same contract as the run's: empty
+## lights nothing.
+func set_lit(lit: Dictionary) -> void:
+	if _soma != null:
+		_soma.lit = lit
+	if _vision != null:
+		_vision.lit = lit
+
+
 ## **What the body carried**, felt (docs/design/dna-slots-ux.md §6): the stain
 ## on the figure in both panes, from the recorded loads. The seep and the
 ## flares are the run's moments and are not recorded; the loads are.
@@ -448,6 +458,7 @@ func _process(_delta: float) -> void:
 		set_division(_run_soma.division)
 		set_eye(_run_soma.eye)
 		set_slack(_run_soma.slack)
+		set_lit(_run_soma.lit)
 		# What the body carries, as a real replay draws it: the felt loads alone,
 		# since the seep and the flares are the run's moments and not recorded.
 		set_dose((_run_soma.dose as Dictionary).get("felt", Vector3.ZERO))

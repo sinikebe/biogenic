@@ -434,7 +434,7 @@ const SCENT_WINDOW := 250.0    ## smooth the outer cutoff so it cannot pop
 ## where "a direction first exists at all", which was already only half true and
 ## is now false in both halves: three-senses.md §2 took the direction out of
 ## smell entirely, and the bus's TASTE_FLOOR this was fitted against moved from
-## 0.06 to 0.02 in the same change. The number is left where it is because what
+## 0.06 to 0.02 in the same change (and went with the band, §2.6). The number is left where it is because what
 ## it does today is draw one ring in full vision and that ring is unchanged;
 ## renaming it would touch vision.gd and two design documents for no difference
 ## a player could see.
@@ -460,9 +460,10 @@ const BEARING_RANGE := 680.0
 ## working* rather than as *you are facing the wrong way*. Dimming is
 ## information; darkness is a bug report. three-senses.md §2.3.
 ##
-## Mirrored, deliberately, by signal_bus.gd's SMELL_RING_FLOOR -- that file
-## draws this curve on the skin and may not preload this one. The comment there
-## says what breaks if the two drift.
+## **The band is gone** (§2.6, 2026-10-14): the nose glows on the body instead,
+## and the glow starts at the bus's GLOW_FROM, well above this floor -- an unlit
+## nose is the organ drawn as ever, with nothing in front of it, so its darkness
+## is information too. This number is the simulation's and is unchanged.
 const SMELL_BEHIND := 0.22
 ## How much of everything-but-the-loudest reaches the readout, and it is
 ## **1.0: every source counts, in full**.
