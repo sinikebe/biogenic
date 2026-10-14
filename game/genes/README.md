@@ -423,8 +423,8 @@ the drop's floor keeps of it from the class (`rarity_of`, `water_weight`, `drift
   brings its word, under the context `rarity`, and its French; the gene probe fails a
   class with no word.
 - **The probe's printout goes in the pull request**: the gene probe's `NOTE the water
-  by class` line -- how many varieties of each class, each one's drifters in a
-  newborn's, a sighted and a fully sighted player's drop, the senses' share of the draw
+  by class` line -- how many varieties of each class, each one's drifters in the drop
+  (one composition since `docs/design/water-evolves.md`), the senses' share of the draw
   and the floor's expected share of the drifters. The probe fails once the floor's load
   passes its budget, saying so: past about 160 genes the drop cannot keep them all at
   their counts, and the answer is places, a design, not a retuning.

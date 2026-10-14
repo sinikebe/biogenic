@@ -328,16 +328,16 @@ static func wants_drifter(living: int, drifters: int, share: float) -> bool:
 
 
 ## **The food's count** (lineage.md §5): the drifters the spawner keeps, their
-## [param share] of [method target] -- 457 at a newborn's composition and 354 at
-## a sighted player's -- **whatever the hunters number**. Drifters never divide,
+## [param share] of [method target] -- 457 at food.gd's DRIFTER_SHARE, the one
+## share the water keeps (water-evolves.md §2) -- **whatever the hunters number**. Drifters never divide,
 ## so the spawner makes every one.
 static func food_count(share: float) -> float:
 	return share * float(target())
 
 
 ## **The hunters' floor** (lineage.md §2.2, §5): today's count -- what pack 1's
-## spawner kept, `(1 - share) * target()`, 96.4 at a newborn's composition and
-## 200.5 at a sighted player's -- times [param keep], [constant SPAWN_SHARE] in
+## spawner kept, `(1 - share) * target()`, 96.4 at food.gd's DRIFTER_SHARE --
+## times [param keep], [constant SPAWN_SHARE] in
 ## the game. Under it the spawner makes a peer; over it births decide.
 static func hunter_floor(share: float, keep := SPAWN_SHARE) -> float:
 	return (1.0 - share) * float(target()) * keep
@@ -413,9 +413,9 @@ static func next_turn(turn: int, players: int) -> int:
 # --- What a new body is made of (§5.8) ----------------------------------------------
 
 ## **A peer's body plan**: a born cell's -- a mouth, a `cirrus` and a
-## `flagellum` -- at tiers drawn as today, before anything else is drawn into
-## the slots its radius has. A cell made to live, where today's peers are a
-## mouth and whatever the dice give.
+## `flagellum`. What the water makes from nothing is exactly this and the gift
+## (water-evolves.md §1); [method give_back] never takes one of these for the
+## gene it gives back.
 static func peer_plan() -> Array[StringName]:
 	var plan: Array[StringName] = []
 	for gene: StringName in Catalogue.born():

@@ -334,11 +334,18 @@ jobs:
         # the 116 membrane lines are the only lines that differ out of 69,471,
         # the same hash under all three schemes.
         #
+        # **Re-pinned when the water stopped reading senses**
+        # (docs/design/water-evolves.md), from 5e30e177...: the water changed on
+        # purpose. Everything with a mouth it makes from nothing is a newborn, in
+        # one composition whoever is in it, and a new drop's founders are given
+        # the toxin, so the drop differs from its first fill. 70,197 lines, from
+        # 69,471, the same hash under all three schemes.
+        #
         # Each run prints about ten megabytes, so it goes to a file rather than
         # a variable. About twenty seconds a scheme.
         run: |
           set -uo pipefail
-          pinned="5e30e17764a6d66f0d0e5c5ead1392bdfd4745f824d44e5f97101bb6869f2aa9"
+          pinned="c5d5a00293bcd43b3547603413f7e47baeb6056fa42521b574cf27a0b56e37c0"
           log=$(mktemp)
           fail=0
           for scheme in 0 1 2; do

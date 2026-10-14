@@ -153,10 +153,6 @@ const Families := preload("res://game/genes/families.gd")
 const Kinds := preload("res://game/genes/kinds.gd")
 ## **The ladder a gene's `water.rarity` names a row of** (docs/design/gene-rarity.md §2).
 const Rarity := preload("res://game/genes/rarity.gd")
-## **The water's three compositions** (gene-rarity.md §5, §11.3 item 5): how sighted the
-## player a drop is made for is -- a newborn's, a sighted one's, a fully sighted one's --
-## each setting how many drifters stand in it, `Drop.food_count` of the share it calls for.
-const SIGHTED: Array[float] = [0.2, 0.6, 1.0]
 ## **The fields a gene's `water` holds** (gene.gd): its class, whether the water makes
 ## it, and its places. A field outside them is read by nothing -- `weight`, which the
 ## draws read until gene-rarity.md's phase 7-2, above all -- and would only mislead.
@@ -798,10 +794,12 @@ func _rarity() -> void:
 	var loads := _floor_loads(_pool_weights())
 	print("[gene-probe] NOTE the water by class (gene-rarity.md §5, §11.3): %s" % _arithmetic())
 	var over := _over_budget(loads)
-	var crowd := _floor_loads(_crowd_weights(170))
-	_check(("the floor's load is under its budget, one drifter in %d, at every composition --"
-		+ " its expected share of the drifters %s in a newborn's, a sighted and a fully"
-		+ " sighted player's drop%s; and a crowd of 170 rare organs more, by the ladder's own"
+	# 300, not 170, since the water keeps one composition: 170 rare organs more were found
+	# only where a fully sighted player's drop stood 250 drifters, and in the 457 every
+	# drop stands now they cost 9.0 %; 300 cost 27.4 % (water-evolves.md §5).
+	var crowd := _floor_loads(_crowd_weights(300))
+	_check(("the floor's load is under its budget, one drifter in %d -- its expected share"
+		+ " of the drifters %s in the drop%s; and a crowd of 300 rare organs more, by the ladder's own"
 		+ " arithmetic, would cost %s and is found") % [Drop.GENE_FLOOR_GAP, _percents(loads),
 		"" if not over else " -- " + CROWDED, _percents(crowd)],
 		not over and _over_budget(crowd))
@@ -1145,14 +1143,15 @@ static func _crowd_weights(rares: int) -> Array:
 	return out
 
 
-## **How many drifters stand in a drop made for a player this [param sighted]**:
-## `Drop.food_count` of the share the water calls for (food.gd's `_drifter_share`).
-static func _drifters_standing(sighted: float) -> float:
-	return Drop.food_count(lerpf(FoodField.BLIND_DRIFTER_SHARE, FoodField.DRIFTER_SHARE, sighted))
+## **How many drifters stand in a drop**: `Drop.food_count` of the one share the water
+## keeps, food.gd's `DRIFTER_SHARE` (docs/design/water-evolves.md §2). It had three
+## compositions, by how sighted the player was, until it stopped reading anyone's senses.
+static func _drifters_standing() -> float:
+	return Drop.food_count(FoodField.DRIFTER_SHARE)
 
 
-## **The floor's expected share of the drifters made**, at each of [constant SIGHTED]
-## (gene-rarity.md §5.3): a variety short of its count gets a drifter, which lives as
+## **The floor's expected share of the drifters made**, in the one composition the water
+## keeps (gene-rarity.md §5.3): a variety short of its count gets a drifter, which lives as
 ## long as any, so the floor keeps about as many standing as the draw leaves its
 ## varieties short -- `Σ E[(floor − X)⁺]`, X a Poisson count of mean `D × share` -- and
 ## its share is that over D, the drifters standing. [param rows] are `[weight, floor]`.
@@ -1160,14 +1159,12 @@ static func _floor_loads(rows: Array) -> Array[float]:
 	var total := 0.0
 	for row: Array in rows:
 		total += float(row[0])
-	var out: Array[float] = []
-	for sighted: float in SIGHTED:
-		var standing := _drifters_standing(sighted)
-		var kept := 0.0
-		for row: Array in rows:
-			var mean := standing * float(row[0]) / maxf(total, 1e-9)
-			kept += _short_of(int(row[1]), mean)
-		out.append(kept / maxf(standing, 1e-9))
+	var standing := _drifters_standing()
+	var kept := 0.0
+	for row: Array in rows:
+		var mean := standing * float(row[0]) / maxf(total, 1e-9)
+		kept += _short_of(int(row[1]), mean)
+	var out: Array[float] = [kept / maxf(standing, 1e-9)]
 	return out
 
 
@@ -1190,7 +1187,7 @@ static func _over_budget(loads: Array[float]) -> bool:
 	return false
 
 
-## [param loads] as percentages, a newborn's first.
+## [param loads] as percentages.
 static func _percents(loads: Array[float]) -> String:
 	var said := PackedStringArray()
 	for share: float in loads:
@@ -1199,17 +1196,14 @@ static func _percents(loads: Array[float]) -> String:
 
 
 ## **The water's arithmetic, in words** (gene-rarity.md §11.3 item 5): for each class,
-## how many varieties of the drifters' pool are of it and each one's expected drifters
-## at the three compositions; the senses' share of the draw; and the floor's expected
+## how many varieties of the drifters' pool are of it and each one's expected drifters; the senses' share of the draw; and the floor's expected
 ## share of the drifters. A pull request that adds genes shows what they cost, here.
 static func _arithmetic() -> String:
 	var pool := _drifters_pool()
 	var total := 0.0
 	for key: StringName in pool:
 		total += Catalogue.water_weight(key)
-	var standing: Array[float] = []
-	for sighted: float in SIGHTED:
-		standing.append(_drifters_standing(sighted))
+	var standing: Array[float] = [_drifters_standing()]
 	var classes := PackedStringArray()
 	for name: StringName in Rarity.classes():
 		var least := INF
@@ -1236,8 +1230,7 @@ static func _arithmetic() -> String:
 	var counts := PackedStringArray()
 	for d: float in standing:
 		counts.append("%.0f" % d)
-	return ("%s -- in a drop of %s drifters (a newborn's / a sighted / a fully sighted"
-		+ " player's); the senses %.1f %% of the draw; the floor's expected share of the"
+	return ("%s -- in a drop of %s drifters; the senses %.1f %% of the draw; the floor's expected share of the"
 		+ " drifters %s, by the weights the water draws by") % ["; ".join(classes),
 		" / ".join(counts), 100.0 * senses / maxf(total, 1e-9),
 		_percents(_floor_loads(_pool_weights()))]
@@ -1448,24 +1441,15 @@ func _out_of_pool() -> void:
 		and after == [true, true])
 
 
-## **The senses by channel, and the gift by two tags** (docs/design/gene-rarity.md §3.4,
-## §3.5, §11.3): a second nose of the probe's own -- a sense on the smell channel, and
-## no gift -- filed beside today's four. A body wearing the nose at two and the second
-## at three sees three tiers, not five; today's four at any copies, their sum. One
-## wearing only the second nose needs no gift, from the water (`Drop.give_sense`) or at
+## **The gift by two tags** (docs/design/gene-rarity.md §3.4, §11.3): a second nose of
+## the probe's own -- a sense on the smell channel, and no gift -- filed beside today's
+## four. (The senses by channel, which the water read to make itself gentler or worse,
+## went with that rule: water-evolves.md.) A body wearing only the second nose needs no gift, from the water (`Drop.give_sense`) or at
 ## five seconds (`NormalMode.free_sense`), and draws no number for it; a blind one is
 ## given one of the gift tag's, never it, at any pick -- the water's in the order it
 ## always drew them. Draws no number, and leaves the catalogue as it was.
 func _senses_and_gift() -> void:
 	var before := Array(Catalogue.keys())
-	var smell := Catalogue.first_on(Catalogue.SMELL)
-	var four := {}
-	var sum := 0
-	var tier := 1
-	for sense: StringName in Catalogue.tagged(Catalogue.SENSE):
-		four[sense] = tier
-		sum += tier
-		tier = tier % Genome.TIER_MAX + 1
 	var nose := Gene.new()
 	nose.organ = &"probenose"
 	nose.order = 980
@@ -1473,9 +1457,6 @@ func _senses_and_gift() -> void:
 	nose.channel = Catalogue.SMELL
 	nose.water = {"rarity": Rarity.classes()[Rarity.LADDER.size() - 1]}
 	Catalogue.register(nose)
-	var sees := [FoodField.sense_tiers({smell: 2, &"probenose": 3}),
-		FoodField.sense_tiers({&"probenose": 3}), FoodField.sense_tiers(four),
-		FoodField.sense_tiers(Catalogue.born())]
 	var rolled := [0]
 	var roll := func() -> int:
 		rolled[0] += 1
@@ -1496,15 +1477,13 @@ func _senses_and_gift() -> void:
 		Array(Drop.water_gifts()) == Array(Catalogue.tagged(Catalogue.SENSE)).filter(
 			func(key: StringName) -> bool: return Catalogue.has_tag(key, Catalogue.GIFT))]
 	Catalogue.forget(&"probenose")
-	_check(("the senses by channel: %s at two and a second nose at three see %s tiers, the"
-		+ " second alone %s, today's four at %s their sum %s, a born cell %s; and the gift by"
-		+ " two tags -- a body wearing only the second nose is given none by the water (%s)"
-		+ " or at five seconds (%s), drawing %d numbers, and the blind are given %s by the"
-		+ " water and %s at five seconds over eight picks, never it -- %d senses, %d gifts,"
-		+ " the water's in the senses' order (%s)") % [smell, sees[0], sees[1],
-		str(four.values()), sees[2], sees[3], str(not needs[0]), str(needs[1] == &""),
-		needs[2], str(water.keys()), str(newborn.keys()), lists[0], lists[1], str(lists[2])],
-		sees == [3.0, 3.0, float(sum), 0.0] and needs == [false, &"", 0]
+	_check(("the gift by two tags -- a body wearing only a second nose is given none by the"
+		+ " water (%s) or at five seconds (%s), drawing %d numbers, and the blind are given %s"
+		+ " by the water and %s at five seconds over eight picks, never it -- %d senses, %d"
+		+ " gifts, the water's in the senses' order (%s)") % [str(not needs[0]),
+		str(needs[1] == &""), needs[2], str(water.keys()), str(newborn.keys()), lists[0],
+		lists[1], str(lists[2])],
+		needs == [false, &"", 0]
 		and water.size() == lists[1] and not water.has(&"probenose")
 		and newborn.size() == lists[1] and not newborn.has(&"probenose")
 		and not newborn.has(&"") and lists[0] == lists[1] + 1 and lists[2]
@@ -2576,7 +2555,7 @@ func _plan() -> void:
 	# newborn's, the born radius and the divide -- by the shipped rows' rule.
 	var radii: Array[float] = [FoodField.DRIFTER_MIN, FoodField.DRIFTER_MAX,
 		CellBody.BASE_RADIUS, CellBody.daughter_radius(CellBody.DIVIDE_RADIUS),
-		CellBody.DIVIDE_RADIUS, FoodField.ARRIVAL_RADIUS_MAX]
+		CellBody.DIVIDE_RADIUS]
 	for step in 12001:
 		radii.append(float(step) * 0.005)
 	for row: Dictionary in BodyPlan.rows():
@@ -3691,23 +3670,15 @@ func _variant_of_shipped() -> void:
 		+ " it unworn, what it offers one with the plain tail at every copy count -- %s's parts"
 		+ " %s, waiting at one copy %s, carried %s -- counting parts by organ, as the body's"
 		+ " rules do") % [plain, organ, str(page[1]), str(page[2]), str(page[3])], page[0])
-	# **A peer's born organs are its born keys** (§15.6): the organ's other variants stay
-	# in its pool -- unless the organ holds one variant to a body.
-	var single: Gene = (Catalogue.gene(plain).get_script() as GDScript).new()
-	single.one_variant = true
-	single.variants = tail.variants
-	Catalogue.register(single)
-	var peers_single := _peers_wearing(&"probeswift", plain)
-	Catalogue.forget(organ)
 	_check(("and one measure of a part owner's level: a plain %s at one copy beside the faster"
 		+ " one at three works at %d for its rules, at %d for the hand's hold, which can hold it"
 		+ " (%s), and at %d in the water, where a rest holds it (%s)") % [plain, measured[0],
 		measured[1], str(measured[2]), measured[3], str(measured[4])],
 		measured == [3, 3, true, 3, true])
-	_check(("and a peer's born organs are its born keys, the organ's other variants left in its"
-		+ " pool: of 400 peers made at r40, %d draw the faster %s beside the one they were born"
-		+ " with, and %d once the organ holds one variant a body") % [peers, plain, peers_single],
-		peers > 0 and peers_single == 0 and Array(Catalogue.keys()) == before)
+	_check(("and what the water makes from nothing is a newborn (water-evolves.md §1): of 400"
+		+ " bodies it made while the faster %s was in the catalogue, %d wear it -- a variant"
+		+ " reaches the water through a family that ate it, never through an arrival")
+		% [plain, peers], peers == 0 and Array(Catalogue.keys()) == before)
 	_strain_of_shipped()
 
 
@@ -3766,15 +3737,16 @@ static func _owe(field: Object, genes: Array) -> void:
 	queue.call(&"restore", genes, genes, int(queue.get(&"since")))
 
 
-## **How many of 400 peers made at r40 wear [param variant] beside [param plain]**:
-## the drop's own peer, `food.gd`'s `_draw_living`, on a seeded stream.
+## **How many of 400 bodies the water makes from nothing wear [param variant]**, with or
+## without [param plain]: `food.gd`'s `_newborn`, on a seeded stream. None, whatever the
+## catalogue holds: a newborn is the born body and the gift (water-evolves.md §1).
 static func _peers_wearing(variant: StringName, plain: StringName) -> int:
 	var field: Node = FoodField.new()
 	seed(17)
 	var wearing := 0
 	for i in 400:
-		var peer: Dictionary = field.call(&"_draw_living", CellBody.DIVIDE_RADIUS, 1.0)
-		if peer.has(variant) and peer.has(plain):
+		var peer: Dictionary = field.call(&"_newborn")
+		if peer.has(variant) or (peer.has(plain) and peer.size() > Catalogue.born().size() + 1):
 			wearing += 1
 	field.free()
 	return wearing

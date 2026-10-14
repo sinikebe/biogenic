@@ -48,10 +48,9 @@ const INSIDE := &"inside"
 ## catalogue's `tagged()` and `has_tag()`. A tag on an organ is on every variant
 ## and form of it.
 ##
-## - `sense`: it answers *where is something*. The water reads how much a player
-##   sees -- the best tier worn on each [member channel] these drive, summed -- to
-##   decide how much of it can hurt them (`food.gd`'s `_sensed`), and **whether a
-##   body needs the gift** is whether it wears any of these: a newborn, a peer or a
+## - `sense`: it answers *where is something*. **Whether a body needs the gift** is
+##   whether it wears any of these (the water stopped reading how much a player sees
+##   on 2026-10-14: docs/design/water-evolves.md): a newborn, a peer or a
 ##   water daughter wearing none is given one (`normal_mode.gd`, `drop.gd`).
 ## - `gift`: **what the gift is** (docs/design/gene-rarity.md §3.4): the free sense
 ##   given to a body that wears none is drawn from these, flat -- a newborn's at five

@@ -5102,9 +5102,9 @@ class WatchedFood extends "res://game/normal/food.gd":
 
 	# **The drop's doors** (ocean.md §10.2): a body made into a person's slot,
 	# or one leaving it as water, is the same thing happening to a person.
-	func _spawn(at: Vector2, drifter: bool, sensed: float, fill := false,
-			body_radius := 0.0, tiers := {}, mine := -1.0) -> int:
-		var index: int = super._spawn(at, drifter, sensed, fill, body_radius, tiers, mine)
+	func _spawn(at: Vector2, drifter: bool, fill := false, body_radius := 0.0,
+			tiers := {}) -> int:
+		var index: int = super._spawn(at, drifter, fill, body_radius, tiers)
 		if _pond and _is_person_slot(index):
 			touched_person += 1
 		return index

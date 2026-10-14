@@ -312,42 +312,30 @@ const FIRED_POISON := 2
 # a culled cell. These are the three numbers to move if the water feels wrong,
 # in this order; §9.6 leaves all of them open to play-testing.
 
-## Share of arrivals drawn absolutely rather than relative to the player, for a
-## cell that can see what is coming. [method _drifter_share] is what the seeder
-## actually asks; a blind one gets [constant BLIND_DRIFTER_SHARE].
-const DRIFTER_SHARE := 0.45
+## **The share of what the water makes from nothing that is drifters**
+## (docs/design/water-evolves.md §2): one number, whoever is in the water and
+## whatever they sense. The rest are newborns ([method _seed_peer]), and how
+## dangerous the water is comes of what their families become.
+##
+## 0.826 is the share a run's first water was made at before the water stopped
+## reading anyone's senses: a newborn with its free sense, 0.92 lerped a fifth of
+## the way to 0.45. So a new drop opens with the food and the mouths it always
+## opened with -- 457 drifters and a floor of 96 others -- and only what those
+## mouths are has changed. A starting value: the food and the floor are what it
+## moves.
+const DRIFTER_SHARE := 0.826
 ## The Phase 4 food band, unchanged. Drifters have **no cytostome**, so their
 ## gape tops out at 12.2 and they eat nothing, including each other. They are
 ## edible at every player radius and at every cytostome tier, which is what
 ## makes "there is always a way back from a bad run" a fact rather than a hope.
 const DRIFTER_MIN := 13.0
 const DRIFTER_MAX := 21.0
-## Everything else is the player's own radius, give or take this much. These are
-## what keep pace, and they are where danger and the mutual band live.
-const PEER_SPREAD := 0.34
 
-## **The ceiling is on the gape, not on the body.** A seeded cell takes its
-## radius from the draw and then has its cytostome tier reduced until its mouth
-## fits under this.
-##
-## **It stops meaning "at r40 nothing can eat you" and starts meaning "the water
-## never seeds a mouth that can end you in one contact"** (edibility.md §4).
-## That claim is still true and still a real bound on the worst arrival. What is
-## gone is the safe harbour: anything with a mouth can take you apart given time
-## and position, so there is no radius at which the water cannot kill you -- and
-## therefore no won state. lifecycle.md §2 rebuilds the arc on capacity instead.
-##
-## Capping the gape also shapes the population for free: a radius-40 arrival can
-## carry at most cytostome 1, while a radius-28 one can carry cytostome 3. Big
-## bodies get small mouths and small bodies get big mouths.
-##
-## **§9.8 is binding: this is a property of THIS water, not of the species.** It
-## lives on the field that seeds the water, so a second environment writes its
-## own seeder with its own ceiling and nothing here has to change. Do not lift it
-## into cell.gd or into genome.gd, where it would become a rule about what a cell
-## can ever be.
-const ARRIVAL_GAPE_MAX := 40.0
-const ARRIVAL_RADIUS_MAX := 40.0
+## **No arrival ceiling any more** (docs/design/water-evolves.md §1): the water
+## made peers of any radius up to 40 with any mouth that fitted under 40, and
+## `ARRIVAL_GAPE_MAX` and `ARRIVAL_RADIUS_MAX` were that ceiling. What it makes
+## from nothing now is a newborn, at [constant CellBody.BASE_RADIUS], so the
+## widest mouth it can make is a newborn's: 21.3. Anything wider was grown.
 
 # **What a seeded cell is made of.** §3.4: a genome is fixed when it is seeded
 # and full vision draws it, so informed foraging is possible -- a roll on eating
@@ -360,53 +348,16 @@ const ARRIVAL_RADIUS_MAX := 40.0
 # gene name still answers for one it has never heard of, so an old map that
 # names one loads and draws rather than crashing.
 
-## How likely each tier is in the peer band, weighted so most cells are
-## mediocre and a few are terrifying. Index 0 is unused: every peer has at least
-## tier 1 of whatever it carries.
-##
-## **A divergence, flagged.** §9.6 leaves "the cytostome weights inside the peer
-## band" open and §1.3 reads as though the genes' weights cover it -- but a
-## weight is per *gene*, not per *tier*, and says nothing about how good a
-## mouth an arrival gets. This is the missing distribution, invented here. It is
-## the number that sets how much of the water can eat you (about a fifth of it
-## at r26), so it is the first thing to move if the water feels wrong, ahead of
-## DRIFTER_SHARE and PEER_SPREAD.
-const TIER_WEIGHTS: Array[float] = [0.0, 3.0, 2.0, 1.0]
 
-# --- What a cell that cannot see meets ---------------------------------------
-# The owner: *"When blind, we have to make stronger enemies very rare. It must
-# be mostly defenceless food."*
-#
-# **Keyed on the player's own senses, never on the view.** "One simulation, two
-# views" has been load-bearing since Phase 3 -- the two views differ only in
-# what is drawn, and full vision exists to catch the membrane lying. A water
-# that were gentler in point of view would destroy that. Keyed on the genome
-# instead it reads identically in both views, because it depends on what the
-# body is and not on which camera is pointed at it.
-#
-# It is also fair in a way a difficulty slider is not: **the danger you face is
-# always danger you could have seen coming.** And it makes a slot spent on a
-# sense open up a richer world rather than merely reveal the same one.
-#
-# No new lever. A drifter has no mouth and a body with none bites for a hard
-# zero, so a drifter is *literally* defenceless food; the two numbers that decide
-# how much of the water is one are the two §9.6 already named.
-#
-# **What counts as sight** is the genes tagged `sense` (the catalogue's
-# `tagged()`): the ones that answer *where is something*, which the run's free
-# sense is drawn from too. Nothing else counts: the ones left out sharpen or
-# steady what these find.
-
-## Summed sensory tiers at which the water is the shipped one. Five is a real
-## investment -- two organs, one of them grown -- and not the free tier-1 sense
-## every run is handed at five seconds, which lands this at 0.2.
-const SENSE_FULL := 5.0
-## Blind: nine bodies in ten have no mouth at all, and the rare peer that does
-## has the poorest one. Neither is a rule -- both are lerped toward the numbers
-## above by [method _sensed], so a cell growing its first eye watches the water
-## get worse continuously rather than in a step.
-const BLIND_DRIFTER_SHARE := 0.92
-const BLIND_TIER_WEIGHTS: Array[float] = [0.0, 8.0, 1.0, 0.0]
+# --- The water does not read anyone's senses (docs/design/water-evolves.md) ---
+# Until 2026-10-14 it did: a blind cell met water nine parts in ten mouthless,
+# its rare peers with the poorest mouths, and every tier of sight a player grew
+# made the water worse. The owner retired it: *"The only thing that should say
+# if the water contains danger is evolution. The water evolves. Cells does not
+# appear from nothing already strong. They must be the result of evolution
+# process."* So what the water makes from nothing is the same for everyone --
+# drifters, and newborns -- and every mouth that can end you was grown by a
+# family that ate, divided and changed.
 
 ## Smaller than you, passive, does not flee: a cell that is not hunting anything
 ## drifts exactly as Phase 4's food did. Slow enough that it is never a chase and
@@ -3394,9 +3345,9 @@ func _give_way(theirs: float, mine: float) -> float:
 ## What one cell gains by eating another: a unit of radius, and whatever the
 ## prey was most made of, by exactly the rules the player's genome obeys.
 ##
-## Note that this is **not** clamped to ARRIVAL_GAPE_MAX. The ceiling is a
-## property of what the water *seeds* (§1.3/§9.8); a cell that has been feeding
-## is allowed past it, which is §1.2's "the longest-lived cells become the most
+## Note that this is **not** clamped to a newborn's mouth. What the water
+## makes from nothing is a newborn (water-evolves.md §1); a cell that has been
+## feeding is allowed past it, which is §1.2's "the longest-lived cells become the most
 ## dangerous without anyone authoring a difficulty curve". The bound on it is
 ## that nothing outside CULL is simulated at all.
 ##
@@ -5267,8 +5218,8 @@ func place_sister(at: Vector2, heading: float, body_radius: float,
 	# carrying [param brain], the list her cell ran (automation.md §6.3), or the
 	# founders' for null.
 	if _drop != null:
-		var index := _spawn(_drop.meniscus.contain(at, body_radius), false, _sensed(),
-			false, body_radius, tiers)
+		var index := _spawn(_drop.meniscus.contain(at, body_radius), false, false,
+			body_radius, tiers)
 		_cells[index].heading = heading
 		_cells[index].brain = brain
 		_born_of(_cells[index], dna, mother)
@@ -6138,18 +6089,13 @@ func _seed(index: int) -> void:
 	# claim -- there is always something edible at every radius and at every
 	# cytostome tier, so there is always a way back from a bad run.
 	#
-	# **It has to hold at both ends of the sensory scale**, and it does, because
-	# it is downstream of the share rather than part of it: the counter is the
-	# same test whether the coin is 0.45 or 0.92.
-	#
 	# At setup this makes cell 0 a drifter, because nothing else is seeded yet,
 	# and cell 0 is the authored first arrival. The opening is therefore always
 	# something the player can eat, which is the right way round.
-	var sensed := _sensed()
-	if randf() < _drifter_share(sensed) or not _other_drifter(index):
+	if randf() < DRIFTER_SHARE or not _other_drifter(index):
 		_seed_drifter(b)
 	else:
-		_seed_peer(b, _cell.radius if _cell != null else CellBody.BASE_RADIUS, sensed)
+		_seed_peer(b)
 
 	# **The opening, and the only thing left that is authored.** Nothing that
 	# could swallow the player begins the run already inside the range dread is
@@ -6238,11 +6184,10 @@ func _seed_for(index: int, anchor: int, drifter: bool = false) -> void:
 	b.tuned = anchor
 	_stamp += 1
 	_seeded_for[anchor] = _stamp
-	var sensed := _anchor_sensed(anchor)
-	if drifter or randf() < _drifter_share(sensed) or not _disc_drifter(index, origin):
+	if drifter or randf() < DRIFTER_SHARE or not _disc_drifter(index, origin):
 		_seed_drifter(b)
 	else:
-		_seed_peer(b, _anchor_radius(anchor), sensed)
+		_seed_peer(b)
 	b.pos = _clear_point(origin, angle, distance)
 	b.aim = b.pos
 	b.flee_from = b.pos
@@ -6306,23 +6251,10 @@ func _anchor_pos(anchor: int) -> Vector2:
 		else _cell.position
 
 
-func _anchor_radius(anchor: int) -> float:
-	return _cells[_anchor_slot(anchor)].radius if anchor >= Anchor.PERSON \
-		else _cell.radius
-
-
 ## The slot of the person anchor [param anchor] is: [enum Anchor]'s `PERSON`
 ## is [constant PERSON_SLOT], and a dedicated host's second guest the next.
 static func _anchor_slot(anchor: int) -> int:
 	return PERSON_SLOT + anchor - Anchor.PERSON
-
-
-## [method _sensed], for either player: the person's is read off the tiers they
-## wear, by the same function, exactly as this cell's is read off its genome.
-func _anchor_sensed(anchor: int) -> float:
-	if anchor < Anchor.PERSON:
-		return _sensed()
-	return clampf(sense_tiers(_cells[_anchor_slot(anchor)].genome) / SENSE_FULL, 0.0, 1.0)
 
 
 ## **The daughter you did not take, left in the water as an ordinary body.**
@@ -6364,7 +6296,7 @@ func put_sister(bearing: float, distance: float, body_radius: float,
 			place_sister(at, _angle_of(side, 0.0), body_radius, tiers, dna, mother, brain)
 			return
 		at = _drop.meniscus.contain(at, body_radius)
-		var index := _spawn(at, false, _sensed(), false, body_radius, tiers)
+		var index := _spawn(at, false, false, body_radius, tiers)
 		_cells[index].heading = _angle_of(side, _cells[index].heading)
 		_cells[index].brain = brain
 		_born_of(_cells[index], dna, mother)
@@ -6438,47 +6370,25 @@ func _seed_drifter(b: Body) -> void:
 	b.genome = {gene: 1}
 
 
-## A body in the peer band round a player of radius [param mine], whose senses
-## read [param sensed] (see [method _sensed]).
-func _seed_peer(b: Body, mine: float, sensed: float) -> void:
+## **A newborn, as everything with a mouth the water makes from nothing is**
+## (docs/design/water-evolves.md §1): the body a run's first cell is born with --
+## [method Catalogue.born], the mouth, the cirrus and the tail at one copy each --
+## at [constant CellBody.BASE_RADIUS], and the gift a newborn is given, one sense
+## at one copy ([method Drop.give_sense]). Nothing about whoever is in the water
+## shapes it. Every mouth bigger than this, every tail faster and every sense
+## sharper was grown by a family: eaten into its DNA, passed on and changed at
+## a division.
+func _seed_peer(b: Body) -> void:
 	b.drifter = false
-	# The floor of the drifter band is a guard, not a rule: the player only ever
-	# grows, so in practice this clamp is the ceiling doing the work.
-	b.radius = clampf(mine * (1.0 + randf_range(-PEER_SPREAD, PEER_SPREAD)),
-		DRIFTER_MIN, ARRIVAL_RADIUS_MAX)
-	b.genome = _draw_genome(b.radius, sensed)
+	b.radius = CellBody.BASE_RADIUS
+	b.genome = _newborn()
 
 
-## A real genome: a mouth, then as many other organs as the body has slots for.
-## Every cell in the water is full to its own capacity, which is what makes
-## §1's "the starting cell is already full" a property of cells rather than a
-## special case for the player.
-func _draw_genome(body_radius: float, sensed: float) -> Dictionary:
-	if _drop != null:
-		return _draw_living(body_radius, sensed)
-	# The mouth: what provides a gape.
-	var mouth := Catalogue.first_provider(&"gape")
-	var tiers := {mouth: _draw_tier(sensed)}
-	var capacity := CellBody.slots_for(body_radius)
-	var pool: Array[StringName] = Catalogue.drifters().duplicate()
-	# **Room is by place** (docs/design/dna-slots.md §9): the toxin is drawn as
-	# one gene and a coin puts it inside or out, and poison takes no arc, so the
-	# loop fills the outside to its capacity as it always did.
-	while Genome.count_outside(tiers) < capacity and not pool.is_empty():
-		var gene := _draw_gene(pool)
-		# A pool with nothing left that weighs anything draws nothing: stop, and
-		# never write an empty key. The gene probe holds every variety of the
-		# pool above 0, so no shipped catalogue gets here.
-		if gene == &"":
-			break
-		_erase_organ(pool, gene)
-		var tier := _draw_tier(sensed)
-		tiers[_place_toxin(gene)] = tier
-	# The ceiling, applied where §1.3 puts it: on the mouth, by taking tiers off
-	# until it fits. A radius-40 arrival comes out at cytostome 1; a radius-28
-	# one can keep cytostome 3.
-	while tiers[mouth] > 0 and CellBody.gape_of(tiers, body_radius) > ARRIVAL_GAPE_MAX:
-		tiers[mouth] = int(tiers[mouth]) - 1
+## [method _seed_peer]'s genome: the born body and the gift.
+func _newborn() -> Dictionary:
+	var tiers := Catalogue.born().duplicate()
+	if Drop.give_sense(tiers, Catalogue.tagged(Catalogue.SENSE), Drop.water_gifts(), randi()):
+		_stat(&"sense_given")
 	return tiers
 
 
@@ -6516,102 +6426,6 @@ static func _draw_gene(pool: Array[StringName]) -> StringName:
 			break
 		roll -= weight
 	return drawn
-
-
-## **[param gene]'s organ, out of [param pool]**: every variety of it, so one body's
-## draws never take the same organ twice -- it counts as one gene wherever the water
-## counts genes (dna-slots.md §8.3). Every key filed under the organ, and a name no
-## gene goes by as itself, as [method Catalogue.organ_of] answers for one: the pool
-## keeps its order.
-static func _erase_organ(pool: Array[StringName], gene: StringName) -> void:
-	var organ := Catalogue.organ_of(gene)
-	for key: StringName in Catalogue.keys_of_organ(organ):
-		while pool.has(key):
-			pool.erase(key)
-	if not Catalogue.known(organ):
-		while pool.has(organ):
-			pool.erase(organ)
-
-
-## **[param gene]'s variety, out of [param pool]**, in every form: what a body that
-## wears it already may not draw again. The organ's other varieties stay, and the
-## pool keeps its order. One organ of one variety today, so this takes out what
-## [method _erase_organ] takes out.
-static func _erase_variety(pool: Array[StringName], gene: StringName) -> void:
-	for key: StringName in Catalogue.forms_of(gene):
-		while pool.has(key):
-			pool.erase(key)
-
-
-func _draw_tier(sensed: float) -> int:
-	var total := 0.0
-	for tier in TIER_WEIGHTS.size():
-		total += _tier_weight(tier, sensed)
-	var roll := randf() * maxf(total, 0.001)
-	for tier in TIER_WEIGHTS.size():
-		roll -= _tier_weight(tier, sensed)
-		if roll <= 0.0:
-			return tier
-	return 1
-
-
-# ---------------------------------------------------------------------------
-# How much of the water can hurt you, as one readable function of what you can
-# see. See the block on what counts as sight: keyed on the player's own organs, never on
-# which view is drawing them.
-# ---------------------------------------------------------------------------
-
-## **How much this cell can see coming**, 0 for blind and 1 for the water as
-## shipped. Its sensing tiers ([method sense_tiers]) over [constant SENSE_FULL],
-## which is the least invented mapping available: every tier of every sense moves
-## it, and none of them moves it in a step.
-func _sensed() -> float:
-	# A tool's water made for a player of that much sight (the drop only).
-	if _drop != null and sensed_override >= 0.0:
-		return sensed_override
-	if _cell == null:
-		return 1.0
-	return clampf(sense_tiers(_cell.worn()) / SENSE_FULL, 0.0, 1.0)
-
-
-## **How many tiers of sight a body wearing [param tiers] has** (docs/design/
-## gene-rarity.md §3.5): **by channel, not by gene** -- for each channel a sense
-## drives (`light`, `beam`, `ping`, `smell`), the best tier worn among the genes
-## tagged `sense` on it, and those summed. Today each channel has one sense, so it
-## is the four senses' tiers summed, as it always was. A second nose is still the
-## smell channel, as a second provider of a stat combines by its row rather than
-## adding up, so variants of a sense never move it; a new channel is code, and raises
-## the most a body can sum, while [constant SENSE_FULL] stays two organs, one grown.
-## A sense on no channel, which the gene probe fails, counts as one of its own.
-static func sense_tiers(tiers: Dictionary) -> float:
-	var best := {}
-	for gene: StringName in Catalogue.tagged(Catalogue.SENSE):
-		var tier := Genome.tier_of(tiers, gene)
-		if tier <= 0:
-			continue
-		var channel := Catalogue.channel_of(gene)
-		var on: StringName = channel if channel != &"" else gene
-		best[on] = maxi(int(best.get(on, 0)), tier)
-	var sum := 0
-	for on: StringName in best:
-		sum += int(best[on])
-	return float(sum)
-
-
-## Share of arrivals that are drifters -- no cytostome, no bite, edible at every
-## radius. A blind cell's water is nearly all of them.
-##
-## [param sensed] is the player the water is being made for: [method _sensed]
-## for this cell, and the same sum over the person's tiers in a pond.
-func _drifter_share(sensed: float) -> float:
-	return lerpf(BLIND_DRIFTER_SHARE, DRIFTER_SHARE, sensed)
-
-
-## How likely one cytostome tier is inside the peer band. The rare peer a blind
-## cell meets carries the poorest mouth in the game.
-func _tier_weight(tier: int, sensed: float) -> float:
-	var i := clampi(tier, 0, TIER_WEIGHTS.size() - 1)
-	return lerpf(BLIND_TIER_WEIGHTS[i], TIER_WEIGHTS[i], sensed)
 
 
 # ---------------------------------------------------------------------------
@@ -6821,8 +6635,6 @@ var lod := true
 var half_rate := true
 ## §4.4: a tank that cannot move is not stepped -- which changes no number.
 var skip_still := true
-## A water made for a player this sighted, 0..1; negative, the player's own.
-var sensed_override := -1.0
 ## Where a run starts: `quiet` (§8.1), `centre`, or `edge` -- [member edge_gap]
 ## inside the rim, facing it -- for the renders.
 var start_mode := &"quiet"
@@ -6929,6 +6741,13 @@ var _drifter_pool: Array[StringName] = []
 ## was short of at its last count, first come first served, those still due, and its
 ## budget -- `drop.gd` decides what it counts and what each goes on.
 var _gene_floor: FloorQueue = Drop.gene_floor()
+## **How many more carriers each gene only a peer brings back is owed** since the
+## floor's last count (water-evolves.md §1): its class's count less the carriers
+## that count found. The gene stays due until the peers it was owed are made, so
+## when both carriers of the toxin die within one count, two newborns carry it
+## back before the next. Since the water makes nothing armed, the floor is the
+## toxin's only way back that no family earned, and one a count lost it.
+var _peer_owed := {}
 var _eco_clock := 0.0
 var _gene_clock := 0.0
 var _floor_clock := 0.0
@@ -6949,10 +6768,12 @@ var _seen := PackedInt32Array()
 var _person_near: Array[PackedInt32Array] = [PackedInt32Array(), PackedInt32Array()]
 ## Where every player with a body is, this frame: the anchors of the LOD.
 var _anchors_now := PackedVector2Array()
-## **Whom the water is made for** (§10.3): `[radius, sensed]` for each player
-## it was last made for, in turn -- the players while anyone is in it, and kept
-## with the drop, so an empty room keeps the water its visitors had. Empty is a
-## newborn's.
+## **Whom the water is made for** (§10.3): `[radius, 0]` for each player it was
+## last made for, in turn -- the players while anyone is in it, and kept with the
+## drop. **Only how many there are is read now**: whose turn the next body is
+## placed round. What the water makes no longer follows anyone's radius or sight
+## (water-evolves.md §1, §2); the pairs keep their shape so a save written before
+## that still loads, and the second column, once their sight, is 0.
 var _made_for := PackedFloat64Array()
 ## Whose turn the next body is made for, among them (§10.2).
 var _turn := 0
@@ -7003,16 +6824,15 @@ var _dart_ids := PackedInt32Array()
 func setup_drop(cell: CellBody) -> void:
 	_cell = cell
 	_reset_drop()
-	_made_for = PackedFloat64Array([_cell.radius, _sensed()])
+	_made_for = PackedFloat64Array([_cell.radius, 0.0])
 	# A drop being made for the first time is a drop that was already there:
-	# every body drawn by the share the player's senses call for, its tank at
+	# drifters and newborns by the one share (water-evolves.md §2), every tank at
 	# any level up to FIRST_HUNGER_MAX (§5.8), and some flocs already settled.
-	var sensed := _sensed()
-	var share := _drifter_share(sensed)
 	for k in Drop.target():
-		_spawn(_drop.uniform_point(Drop.FILL_INSET), randf() < share, sensed, true)
+		_spawn(_drop.uniform_point(Drop.FILL_INSET), randf() < DRIFTER_SHARE, true)
 	for k in Drop.FIRST_FLOCS:
 		_spawn_floc(_drop.uniform_point(Drop.SNOW_INSET), Drop.floc_radius(), true)
+	_arm_the_founders()
 	_count_genes()
 	_shift_drop(_cell.position - _start_point())
 	if age_first > 0.0:
@@ -7130,12 +6950,11 @@ func _make_room(cell: CellBody) -> void:
 	_cell = cell
 	_reset_drop()
 	_made_for = PackedFloat64Array([CellBody.BASE_RADIUS, 0.0])
-	var share := _drifter_share(0.0)
 	for k in Drop.target():
-		_spawn(_drop.uniform_point(Drop.FILL_INSET), randf() < share, 0.0, true, 0.0, {},
-			CellBody.BASE_RADIUS)
+		_spawn(_drop.uniform_point(Drop.FILL_INSET), randf() < DRIFTER_SHARE, true)
 	for k in Drop.FIRST_FLOCS:
 		_spawn_floc(_drop.uniform_point(Drop.SNOW_INSET), Drop.floc_radius(), true)
+	_arm_the_founders()
 	_count_genes()
 	died_to = -1
 
@@ -7180,6 +6999,7 @@ func _reset_drop() -> void:
 	drop_seed = numbers.randi()
 	_drifter_pool = Drop.drifter_genes(Catalogue.drifters())
 	_gene_floor = Drop.gene_floor()
+	_peer_owed.clear()
 
 
 ## **Where every player with a body is this frame** -- this cell, while it is an
@@ -7299,7 +7119,7 @@ func _arrive() -> void:
 	died_to = -1
 	var at := _drop.meniscus.contain(_cell.position + Vector2(0.0, -FIRST_DISTANCE),
 		DRIFTER_MAX)
-	_first_index = _spawn(at, true, _sensed())
+	_first_index = _spawn(at, true)
 	_first_serial = _cells[_first_index].serial
 	_first_pending = true
 	_first_hunt = grace
@@ -7585,12 +7405,12 @@ func drop_state() -> Dictionary:
 func _made_for_now() -> PackedFloat64Array:
 	var tunes := PackedFloat64Array()
 	if anchored and _cell != null:
-		tunes.append_array([_cell.radius, _sensed()])
+		tunes.append_array([_cell.radius, 0.0])
 	if _pond and not _mirror:
 		for k in _guests:
 			var pb := _cells[PERSON_SLOT + k]
 			if pb.person != null:
-				tunes.append_array([pb.radius, _anchor_sensed(Anchor.PERSON + k)])
+				tunes.append_array([pb.radius, 0.0])
 	if tunes.is_empty():
 		tunes = _made_for.duplicate()
 	if tunes.size() < 2:
@@ -7792,6 +7612,7 @@ func load_drop(cell: CellBody, state: Dictionary) -> Dictionary:
 	# a file from before them found what it is still to give short at its last count,
 	# in the pool's order, and its budget is full.
 	_gene_floor = Drop.gene_floor()
+	_peer_owed.clear()
 	if state.has("gene_short"):
 		var due: Array = []
 		for gene: String in state["gene_short"]:
@@ -9646,7 +9467,7 @@ func _ecology(dt: float) -> void:
 		facing.append(_cell.heading)
 		reaches.append(maxf(maxf(smell_range, ping_range), beam_range))
 		wet.append(in_water)
-		tunes.append_array([_cell.radius, _sensed()])
+		tunes.append_array([_cell.radius, 0.0])
 	if _pond and not _mirror:
 		for k in _guests:
 			var pb := _cells[PERSON_SLOT + k]
@@ -9656,7 +9477,7 @@ func _ecology(dt: float) -> void:
 			facing.append(pb.heading)
 			reaches.append(_person_senses(pb))
 			wet.append(pb.seeded)
-			tunes.append_array([pb.radius, _anchor_sensed(Anchor.PERSON + k)])
+			tunes.append_array([pb.radius, 0.0])
 	if not tunes.is_empty():
 		_made_for = tunes
 	elif _made_for.size() < 2:
@@ -9695,7 +9516,7 @@ func _ecology(dt: float) -> void:
 				continue
 			_floor_clock = Drop.DRIFTER_FLOOR_GAP
 			if _spawn_ahead(players[k], facing[k], hide + randf_range(
-					Drop.DRIFTER_FLOOR_NEAR, Drop.DRIFTER_FLOOR_FAR), tunes[2 * k + 1]) >= 0:
+					Drop.DRIFTER_FLOOR_NEAR, Drop.DRIFTER_FLOOR_FAR)) >= 0:
 				_stat(&"drifter_floor")
 			break
 	# **The snow** (§7.2): flakes fall everywhere at one rate, and each stays
@@ -9715,11 +9536,11 @@ func _ecology(dt: float) -> void:
 			_stat(&"snow_kept")
 
 
-## **One body, made where it cannot be seen** (§6.3, §6.4), **for the player
-## whose turn it is** (§10.2): a drifter if the standing drop is short of the
-## share that player's sight calls for, a peer if not, drawn for their radius and
-## sight; placed at the thinnest of drop.gd's candidates, every one of them out
-## of every player's hide reach for its kind. [param players] are where they are
+## **One body, made where it cannot be seen** (§6.3, §6.4), **round the player
+## whose turn it is** (§10.2): a drifter if the standing drop is short of
+## [constant DRIFTER_SHARE], a newborn if not (water-evolves.md §1); placed at the
+## thinnest of drop.gd's candidates, every one of them out of every player's hide
+## reach for its kind. [param players] are where they are
 ## and [param reaches] how far each one's senses reach; with nobody there, it is
 ## made for the players [member _made_for] keeps, in turn, anywhere. -1 if there
 ## was nowhere to put it.
@@ -9738,20 +9559,17 @@ func _ecology(dt: float) -> void:
 func _make_one(players: PackedVector2Array, reaches: PackedFloat32Array) -> int:
 	var turns := maxi(_made_for.size() / 2, 1)
 	var turn := posmod(_turn, turns)
-	var mine := _made_for[2 * turn]
-	var sensed := _made_for[2 * turn + 1]
 	var drifter := false
 	var venom := false
 	if births:
-		var share := _made_share()
 		venom = _peer_short() != &""
 		if not venom:
-			drifter = float(_drifters) < Drop.food_count(share)
-			if not drifter \
-					and float(_living - _drifters) >= Drop.hunter_floor(share, floor_share):
+			drifter = float(_drifters) < Drop.food_count(DRIFTER_SHARE)
+			if not drifter and float(_living - _drifters) \
+					>= Drop.hunter_floor(DRIFTER_SHARE, floor_share):
 				return NOTHING_SHORT
 	else:
-		drifter = Drop.wants_drifter(_living, _drifters, _drifter_share(sensed))
+		drifter = Drop.wants_drifter(_living, _drifters, DRIFTER_SHARE)
 	_turn = Drop.next_turn(turn, turns)
 	var hides := PackedFloat32Array()
 	for k in players.size():
@@ -9761,7 +9579,7 @@ func _make_one(players: PackedVector2Array, reaches: PackedFloat32Array) -> int:
 	var pick := Replenish.thinnest(candidates, _thinness)
 	if pick < 0:
 		return -1
-	var index := _spawn(candidates[pick], drifter, sensed, false, 0.0, {}, mine)
+	var index := _spawn(candidates[pick], drifter)
 	if births:
 		_stat(&"made_for_food" if drifter else (&"made_for_venom" if venom
 			else &"made_for_floor"))
@@ -9773,22 +9591,11 @@ func _make_one(players: PackedVector2Array, reaches: PackedFloat32Array) -> int:
 ## up by the spawner's tau over [member floor_tau] -- so the one debt pays it
 ## back that much sooner -- and one more while the toxin is short.
 func _shortfall() -> float:
-	var share := _made_share()
-	var food := maxf(Drop.food_count(share) - float(_drifters), 0.0)
-	var hunters := maxf(Drop.hunter_floor(share, floor_share) - float(_living - _drifters),
-		0.0)
+	var food := maxf(Drop.food_count(DRIFTER_SHARE) - float(_drifters), 0.0)
+	var hunters := maxf(Drop.hunter_floor(DRIFTER_SHARE, floor_share)
+		- float(_living - _drifters), 0.0)
 	return food + hunters * _drop.spawner.tau / maxf(floor_tau, 1e-3) \
 		+ (1.0 if _peer_short() != &"" else 0.0)
-
-
-## **The drifter share of the water the spawner keeps**: the share each player
-## it is made for calls for, averaged over them -- one player's own, alone.
-func _made_share() -> float:
-	var turns := maxi(_made_for.size() / 2, 1)
-	var sum := 0.0
-	for k in turns:
-		sum += _drifter_share(_made_for[2 * k + 1] if 2 * k + 1 < _made_for.size() else 0.0)
-	return sum / float(turns)
 
 
 ## **The gene the drop is down to its last carriers of that only a peer brings
@@ -9808,27 +9615,26 @@ func _peer_short() -> StringName:
 
 ## A drifter [param reach] from a player at [param from], ahead of its
 ## [param heading] where the drop allows.
-func _spawn_ahead(from: Vector2, heading: float, reach: float, sensed: float) -> int:
+func _spawn_ahead(from: Vector2, heading: float, reach: float) -> int:
 	for attempt in AHEAD_TRIES:
 		var spread := AHEAD_SPREAD + AHEAD_WIDEN * float(attempt)
 		var at := from + _forward(heading + randf_range(-1.0, 1.0) * spread) * reach
 		if _drop.meniscus.inside(at, Drop.SPAWN_INSET):
-			return _spawn(at, true, sensed)
+			return _spawn(at, true)
 	return -1
 
 
 ## **The one door every new body comes in by** (§12) -- the spawner, the first
 ## fill, the floors, a sister, the first drifter -- so a birth, in pack 2, is a
-## spawn with a parent. A drifter, or a peer made to live for a player of
-## [param sensed] (§5.8) and of radius [param mine] -- this cell's, unless
-## given; or, given [param body_radius] and [param tiers], that body: a sister,
-## or one a tool poses. Fed, unless it is part of a drop's first [param fill].
+## spawn with a parent. A drifter, or a newborn ([method _seed_peer];
+## water-evolves.md §1); or, given [param body_radius] and [param tiers], that
+## body: a sister, a daughter, or one a tool poses. Fed, unless it is part of a drop's first [param fill].
 ## **Every one a founder** (lineage.md §4): a new id, generation 1, its own
 ## lineage and its DNA equal to its body, with no grace -- what the water makes
 ## was already there. A sister is made a daughter after ([method _born_of]).
 ## Returns its slot.
-func _spawn(at: Vector2, drifter: bool, sensed: float, fill := false,
-		body_radius := 0.0, tiers := {}, mine := -1.0) -> int:
+func _spawn(at: Vector2, drifter: bool, fill := false, body_radius := 0.0,
+		tiers := {}) -> int:
 	var index := _free_slot_drop()
 	var b := _cells[index]
 	_renew(b)
@@ -9860,9 +9666,7 @@ func _spawn(at: Vector2, drifter: bool, sensed: float, fill := false,
 	elif drifter:
 		_seed_drifter(b)
 	else:
-		if mine <= 0.0:
-			mine = _cell.radius if _cell != null else CellBody.BASE_RADIUS
-		_seed_peer(b, mine, sensed)
+		_seed_peer(b)
 		_stat(&"peers_made")
 		_give_back_by_peer(b)
 	# Expressed whole, as a run's first cell is: after the toxin, which is worn.
@@ -9976,7 +9780,7 @@ func _divide(i: int, b: Body) -> PackedInt32Array:
 				if body.has(gene) and not dna.has(gene):
 					dna[gene] = int(body[gene])
 			_stat(&"born_gifted")
-		var j := _spawn(_drop.meniscus.contain(points[k], r), false, 0.0, false, r, body)
+		var j := _spawn(_drop.meniscus.contain(points[k], r), false, false, r, body)
 		var d := _cells[j]
 		d.heading = heading
 		d.dna = dna
@@ -10052,49 +9856,6 @@ func _free_slot_drop() -> int:
 	return _cells.size() - 1
 
 
-## **What a peer is made of in the drop** (§5.8): a born cell's body plan -- a
-## mouth, a `cirrus` and a `flagellum`, at tiers drawn as today -- then the rest
-## drawn as today up to the slots its radius has, the ceiling on what the water
-## makes kept on the mouth, and a sense given in a bonus slot to a peer that
-## drew none, as the player's newborn is given one.
-##
-## **Its born organs are the born keys** (gene-catalogue.md §15.6), and each takes
-## only its own variety out of the pool: the organ's other variants stay in it, so a
-## peer may draw a faster tail beside the tail it was born with -- unless the organ
-## holds one variant to a body, which takes the whole organ out, as any draw does.
-func _draw_living(body_radius: float, sensed: float) -> Dictionary:
-	var tiers := {}
-	for gene: StringName in Drop.peer_plan():
-		tiers[gene] = _draw_tier(sensed)
-	var capacity := CellBody.slots_for(body_radius)
-	var pool: Array[StringName] = Catalogue.drifters().duplicate()
-	for gene: StringName in tiers:
-		if Catalogue.one_variant(Catalogue.organ_of(gene)):
-			_erase_organ(pool, gene)
-		else:
-			_erase_variety(pool, gene)
-	# The toxin drawn as one gene, its place by a coin, and poison taking no arc
-	# ([method _place_toxin]): a peer's draw differs from before only on a peer
-	# that drew the toxin.
-	while Genome.count_outside(tiers) < capacity and not pool.is_empty():
-		var gene := _draw_gene(pool)
-		# A pool with nothing left that weighs anything draws nothing: stop, and
-		# never write an empty key. The gene probe holds every variety of the
-		# pool above 0, so no shipped catalogue gets here.
-		if gene == &"":
-			break
-		_erase_organ(pool, gene)
-		var tier := _draw_tier(sensed)
-		tiers[_place_toxin(gene)] = tier
-	var mouth := Catalogue.worn_provider(tiers, &"gape")
-	while mouth != &"" and int(tiers[mouth]) > 0 \
-			and CellBody.gape_of(tiers, body_radius) > ARRIVAL_GAPE_MAX:
-		tiers[mouth] = int(tiers[mouth]) - 1
-	if Drop.give_sense(tiers, Catalogue.tagged(Catalogue.SENSE), Drop.water_gifts(), randi()):
-		_stat(&"sense_given")
-	return tiers
-
-
 ## **A gene back through a peer** (§6.4, docs/design/dna-slots.md §9;
 ## gene-catalogue.md §6.4): a drop down to its last carriers of a gene tagged
 ## `floor_by_peers` -- the toxin's, in either form -- gives the next peer that
@@ -10105,7 +9866,11 @@ func _give_back_by_peer(b: Body) -> void:
 	var gene := _peer_short()
 	if gene == &"" or not Drop.takes_back(b.genome, gene):
 		return
-	_gene_floor.due.erase(gene)
+	# Owed until its count is met ([member _peer_owed]); one, for a due gene no
+	# count of this run's owed -- a kept drop's queue, put back.
+	_peer_owed[gene] = int(_peer_owed.get(gene, 1)) - 1
+	if int(_peer_owed[gene]) <= 0:
+		_gene_floor.due.erase(gene)
 	Drop.give_back(b.genome, gene, CellBody.slots_for(b.radius),
 		Catalogue.tagged(Catalogue.SENSE), randi(), randi() % 2 == 0)
 	b.derive()
@@ -10119,7 +9884,39 @@ func _give_back_by_peer(b: Body) -> void:
 ## form counts as its variety** (docs/design/dna-slots.md §9): a venom and a poison
 ## are two carriers of one toxin, which is the gene the floor keeps.
 func _count_genes() -> void:
-	Drop.count_floor(_gene_floor, _carriers())
+	var carriers := _carriers()
+	Drop.count_floor(_gene_floor, carriers)
+	_peer_owed.clear()
+	for gene: Variant in _gene_floor.due:
+		if Catalogue.has_tag(gene, Catalogue.FLOOR_BY_PEERS):
+			_peer_owed[gene] = maxi(Catalogue.floor_of(gene) - int(carriers.get(gene, 0)), 1)
+
+
+## **A new drop's founders carry what only a peer brings back** (water-evolves.md
+## §1): newborns never carry the toxin, so a drop made of them would open without it
+## and lose it until the floor caught up. So before the floor's first count, each
+## variety tagged `floor_by_peers` is given to as many of the first fill's newborns
+## as its class keeps, each as the floor gives it to a peer (`Drop.give_back`): the
+## drop opens with every gene the floor keeps, as a drop of armed arrivals did.
+func _arm_the_founders() -> void:
+	var have := _carriers()
+	for gene: StringName in Catalogue.drifters():
+		if not Catalogue.has_tag(gene, Catalogue.FLOOR_BY_PEERS):
+			continue
+		var owed := Catalogue.floor_of(gene) - int(have.get(gene, 0))
+		for b in _cells:
+			if owed <= 0:
+				break
+			if not b.seeded or b.inert or b.drifter or b.person != null \
+					or not Drop.takes_back(b.genome, gene):
+				continue
+			Drop.give_back(b.genome, gene, CellBody.slots_for(b.radius),
+				Catalogue.tagged(Catalogue.SENSE), randi(), randi() % 2 == 0)
+			b.dna = b.genome.duplicate()
+			b.derive()
+			_refresh_body(b)
+			_stat(&"founders_armed")
+			owed -= 1
 
 
 ## **The living carriers of each variety**, as the floor counts them: every body's
@@ -10301,7 +10098,7 @@ func refresh(index: int) -> void:
 func pose_body(at: Vector2, body_radius: float, tiers: Dictionary) -> int:
 	if _drop == null:
 		return -1
-	return _spawn(at, false, _sensed(), false, body_radius, tiers)
+	return _spawn(at, false, false, body_radius, tiers)
 
 
 ## **A body for a tool in slot [param index]**, which a probe names: whatever
@@ -10322,7 +10119,7 @@ func pose_at(index: int, at: Vector2, body_radius: float, tiers: Dictionary) -> 
 		if was >= 0:
 			_free.remove_at(was)
 		_free.append(index)
-	return _spawn(at, false, _sensed(), false, body_radius, tiers)
+	return _spawn(at, false, false, body_radius, tiers)
 
 
 ## **A body a tool takes out of the drop** -- gone, as a floc eaten is: no cause,
