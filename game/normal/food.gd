@@ -6741,6 +6741,13 @@ var _drifter_pool: Array[StringName] = []
 ## was short of at its last count, first come first served, those still due, and its
 ## budget -- `drop.gd` decides what it counts and what each goes on.
 var _gene_floor: FloorQueue = Drop.gene_floor()
+## **How many more carriers each gene only a peer brings back is owed** since the
+## floor's last count (water-evolves.md §1): its class's count less the carriers
+## that count found. The gene stays due until the peers it was owed are made, so
+## when both carriers of the toxin die within one count, two newborns carry it
+## back before the next. Since the water makes nothing armed, the floor is the
+## toxin's only way back that no family earned, and one a count lost it.
+var _peer_owed := {}
 var _eco_clock := 0.0
 var _gene_clock := 0.0
 var _floor_clock := 0.0
@@ -6825,6 +6832,7 @@ func setup_drop(cell: CellBody) -> void:
 		_spawn(_drop.uniform_point(Drop.FILL_INSET), randf() < DRIFTER_SHARE, true)
 	for k in Drop.FIRST_FLOCS:
 		_spawn_floc(_drop.uniform_point(Drop.SNOW_INSET), Drop.floc_radius(), true)
+	_arm_the_founders()
 	_count_genes()
 	_shift_drop(_cell.position - _start_point())
 	if age_first > 0.0:
@@ -6946,6 +6954,7 @@ func _make_room(cell: CellBody) -> void:
 		_spawn(_drop.uniform_point(Drop.FILL_INSET), randf() < DRIFTER_SHARE, true)
 	for k in Drop.FIRST_FLOCS:
 		_spawn_floc(_drop.uniform_point(Drop.SNOW_INSET), Drop.floc_radius(), true)
+	_arm_the_founders()
 	_count_genes()
 	died_to = -1
 
@@ -6990,6 +6999,7 @@ func _reset_drop() -> void:
 	drop_seed = numbers.randi()
 	_drifter_pool = Drop.drifter_genes(Catalogue.drifters())
 	_gene_floor = Drop.gene_floor()
+	_peer_owed.clear()
 
 
 ## **Where every player with a body is this frame** -- this cell, while it is an
@@ -7602,6 +7612,7 @@ func load_drop(cell: CellBody, state: Dictionary) -> Dictionary:
 	# a file from before them found what it is still to give short at its last count,
 	# in the pool's order, and its budget is full.
 	_gene_floor = Drop.gene_floor()
+	_peer_owed.clear()
 	if state.has("gene_short"):
 		var due: Array = []
 		for gene: String in state["gene_short"]:
@@ -9855,7 +9866,11 @@ func _give_back_by_peer(b: Body) -> void:
 	var gene := _peer_short()
 	if gene == &"" or not Drop.takes_back(b.genome, gene):
 		return
-	_gene_floor.due.erase(gene)
+	# Owed until its count is met ([member _peer_owed]); one, for a due gene no
+	# count of this run's owed -- a kept drop's queue, put back.
+	_peer_owed[gene] = int(_peer_owed.get(gene, 1)) - 1
+	if int(_peer_owed[gene]) <= 0:
+		_gene_floor.due.erase(gene)
 	Drop.give_back(b.genome, gene, CellBody.slots_for(b.radius),
 		Catalogue.tagged(Catalogue.SENSE), randi(), randi() % 2 == 0)
 	b.derive()
@@ -9869,7 +9884,39 @@ func _give_back_by_peer(b: Body) -> void:
 ## form counts as its variety** (docs/design/dna-slots.md §9): a venom and a poison
 ## are two carriers of one toxin, which is the gene the floor keeps.
 func _count_genes() -> void:
-	Drop.count_floor(_gene_floor, _carriers())
+	var carriers := _carriers()
+	Drop.count_floor(_gene_floor, carriers)
+	_peer_owed.clear()
+	for gene: Variant in _gene_floor.due:
+		if Catalogue.has_tag(gene, Catalogue.FLOOR_BY_PEERS):
+			_peer_owed[gene] = maxi(Catalogue.floor_of(gene) - int(carriers.get(gene, 0)), 1)
+
+
+## **A new drop's founders carry what only a peer brings back** (water-evolves.md
+## §1): newborns never carry the toxin, so a drop made of them would open without it
+## and lose it until the floor caught up. So before the floor's first count, each
+## variety tagged `floor_by_peers` is given to as many of the first fill's newborns
+## as its class keeps, each as the floor gives it to a peer (`Drop.give_back`): the
+## drop opens with every gene the floor keeps, as a drop of armed arrivals did.
+func _arm_the_founders() -> void:
+	var have := _carriers()
+	for gene: StringName in Catalogue.drifters():
+		if not Catalogue.has_tag(gene, Catalogue.FLOOR_BY_PEERS):
+			continue
+		var owed := Catalogue.floor_of(gene) - int(have.get(gene, 0))
+		for b in _cells:
+			if owed <= 0:
+				break
+			if not b.seeded or b.inert or b.drifter or b.person != null \
+					or not Drop.takes_back(b.genome, gene):
+				continue
+			Drop.give_back(b.genome, gene, CellBody.slots_for(b.radius),
+				Catalogue.tagged(Catalogue.SENSE), randi(), randi() % 2 == 0)
+			b.dna = b.genome.duplicate()
+			b.derive()
+			_refresh_body(b)
+			_stat(&"founders_armed")
+			owed -= 1
 
 
 ## **The living carriers of each variety**, as the floor counts them: every body's

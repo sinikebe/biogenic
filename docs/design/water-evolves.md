@@ -65,10 +65,25 @@ grows, and at 40 it divides.
 - **The arrival ceiling.** `ARRIVAL_GAPE_MAX` capped the mouth an arrival could
   carry at 40, and `ARRIVAL_RADIUS_MAX` capped its radius.
 
-**The venom floor keeps its place.** When the drop is down to its last carriers of
-the toxin, the spawner's next newborn carries one copy of it, in a bonus slot
-(`ocean.md` §6.4). That keeps a gene from being lost, and it is not strength: a
-newborn with venom still has a newborn's mouth.
+**The venom floor keeps its place, and works harder.** No drifter may carry the
+toxin, and now no arrival is born with it, so the gene floor is the only way it
+comes back that no family earned (`ocean.md` §6.4). When the drop is down to its
+last carriers, the spawner's next newborn carries one copy, in a bonus slot. That
+keeps a gene from being lost, and it is not strength: a newborn with venom still
+has a newborn's mouth.
+
+The first build lost the toxin twice in a five-minute drop, and the drop probe's
+check 6 caught it. Under the old water the dice had armed about 29 of 293
+hunters; now 1 to 4 of about 95 carry it, and two things changed to match:
+
+- **A new drop's founders carry it.** Right after the first fill, before the
+  floor's first count, each variety the floor keeps through a peer is given to as
+  many newborns as its class keeps (`_arm_the_founders`). Before that, every new
+  drop opened with none.
+- **The floor gives it back up to its count.** It still queues one such variety a
+  count (`Drop.count_floor`), but that variety stays due until the peers it is
+  owed are made (`_peer_owed`). When both carriers die within one count, two
+  newborns carry it back before the next. Before, one did, and it was still short.
 
 **Drifters are as they were**: mouthless, 13–21 µm, each carrying one gene, with
 the gene floor bringing back any gene the drop is short of.
