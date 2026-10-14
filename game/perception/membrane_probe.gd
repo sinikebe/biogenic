@@ -5,7 +5,7 @@ extends Node
 ##
 ##   godot --path . --rendering-driver opengl3 res://tools/shot.tscn -- \
 ##       --scene=res://game/perception/membrane_probe.tscn \
-##       --state=nutrient_near --out=/tmp/near.png --wait=3
+##       --state=contact --out=/tmp/contact.png --wait=3
 ##
 ## With no --state it cycles every state, DWELL seconds each. Every state is
 ## held by re-posting the sensation each frame, so a screenshot taken at any
@@ -16,7 +16,7 @@ extends Node
 ## signal underneath it.
 
 const STATES: PackedStringArray = [
-	"rest", "beat", "turn", "nutrient_far", "nutrient_near",
+	"rest", "beat", "turn",
 	"wake", "contact", "dread", "dread_wake", "ingest",
 ]
 
@@ -25,10 +25,9 @@ const DWELL := 2.5
 ## Off the front and to starboard, so a bearing is obviously a bearing.
 const TEST_BEARING := deg_to_rad(40.0)
 
-## Concentrations for the two taste states: wide and barely there, versus deep
-## inside the field.
-const FAR_CONCENTRATION := 0.30
-const NEAR_CONCENTRATION := 1.0
+## The two taste states, `nutrient_far` and `nutrient_near`, went on 2026-10-14:
+## the membrane draws nothing for smell any more, which glows on the nose instead
+## (docs/design/three-senses.md §2.6). Photograph it with tools/drive.tscn.
 
 const MembraneLayer := preload("res://game/perception/membrane.gd")
 
@@ -87,10 +86,6 @@ func _hold(state: String) -> void:
 			_bus.pulse_now()
 		"turn":
 			_bus.shear(1.0)
-		"nutrient_far":
-			_bus.taste(TEST_BEARING, FAR_CONCENTRATION)
-		"nutrient_near":
-			_bus.taste(TEST_BEARING, NEAR_CONCENTRATION)
 		"wake", "dread_wake":
 			_bus.shove(TEST_BEARING, 0.95)
 		"contact":

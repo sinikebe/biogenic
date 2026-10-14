@@ -202,6 +202,11 @@ const AT_KILLER := AT_PING_RANGE + 9
 ## did -- the membrane's fall rides in its block, and this is the body's half.
 ## A quantity, so it lerps.
 const AT_SLACK := AT_PING_RANGE + 10
+## **How brightly the nose glowed** (docs/design/three-senses.md §2.6): the glow
+## the run handed both views, so the replay lights the nose exactly as the run
+## did -- the membrane draws nothing for it, so it is not in the block. Which
+## organ is the nose is the restored genome's to say. A quantity, so it lerps.
+const AT_SMELL := AT_PING_RANGE + 11
 ## **The other player, as a body** (shared-pond.md §5, Phase 3): in a pond, the
 ## friend in the field's person slot, `food.gd`'s PERSON_SLOT on every client --
 ## where they are, which way they face, how big, their wound and their loads,
@@ -211,7 +216,7 @@ const AT_SLACK := AT_PING_RANGE + 10
 ## silence fades their halo, trail and edge mark (shared-pond-ux.md §0.2, §0.3).
 ## **A radius of 0 is nobody** -- no pond, a friend dead or gone, or single
 ## player, which writes nothing else here. What they wear is a PERSON delta.
-const AT_PERSON := AT_PING_RANGE + 11
+const AT_PERSON := AT_PING_RANGE + 12
 const PERSON_FLOATS := 8
 ## Where in the person's block: their loads packed as a body's are, and stepped
 ## the same; in the water, 1 or 0, stepped; and the silence, which lerps.
@@ -468,6 +473,7 @@ func capture(delta: float) -> void:
 	# Nobody, until the seal says who. See AT_KILLER.
 	_ring[at + AT_KILLER] = -1.0
 	_ring[at + AT_SLACK] = _soma.slack if _soma != null else 0.0
+	_ring[at + AT_SMELL] = _glow_of(_soma.lit) if _soma != null else 0.0
 	_ring[at + AT_DELTA] = delta
 	_capture_division(at)
 
@@ -595,6 +601,16 @@ func _capture_bodies(at: int) -> void:
 		_ring[i + BODY_LOADS] = FoodField.pack_loads(b.loads) \
 			if FoodField.Doses.any(b.loads) else 0.0
 		i += BODY_FLOATS
+
+
+## The brightest glow in a `lit` (cilia.gd's), 0 for none: one nose today, and
+## the replay's genome says which organ it lights.
+static func _glow_of(lit: Dictionary) -> float:
+	var most := 0.0
+	var glows: Dictionary = lit.get("glow", {})
+	for gene: StringName in glows:
+		most = maxf(most, float(glows[gene]))
+	return most
 
 
 ## **The friend, as the world view draws them** (see [constant AT_PERSON]): the

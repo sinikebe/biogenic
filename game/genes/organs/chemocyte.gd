@@ -1,8 +1,10 @@
 extends "res://game/genes/gene.gd"
 ## `chemocyte`: **the nose**. How far a cell's chemoreceptors reach. The scent
 ## field itself is the water's -- what the water is doing is not a function of
-## who is sniffing it -- but only sources inside this radius reach the taste lobe,
-## so a poor nose smells what is near and a good one smells the whole field.
+## who is sniffing it -- but only sources inside this radius reach the nose, so a
+## poor nose smells what is near and a good one smells the whole field. **What it
+## smells shows on the organ alone**: it glows, brighter the more food lies along
+## its arc, and nothing else on screen says it (three-senses.md §2.6).
 ##
 ## No class_name, for the reason signal_bus.gd gives. Preload it by path.
 

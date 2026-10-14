@@ -72,6 +72,14 @@ const FADE_PENDING := 0.68
 ## loses to a hunter's lobe at 110 units (145). Only the marks: the body, its
 ## organs and its venom are drawn at [constant FADE] as ever.
 const FADE_DOSE := 0.68
+## **A sense shown on its own organ is the figure's third licence**
+## (three-senses.md §2.6): the nose's glow is drawn at this fade and not at the
+## figure's [constant FADE], because it is the whole of what the nose says in
+## point of view -- the membrane draws nothing for it -- and a sense that loses
+## to the outline it sits on says nothing at all. The organ itself, unlit, stays
+## at [constant FADE] with the rest of the body. Judged off renders at both
+## shapes, beside the beam's lobe and dread's.
+const FADE_LIT := 0.85
 
 ## The nucleus takes the beat, so the figure breathes on the same heart the
 ## contour does rather than on a clock of its own.
@@ -86,6 +94,13 @@ var slack := 0.0
 ## flares -- or empty. This layer adds the marks' own fade, [constant
 ## FADE_DOSE]; vision.gd is handed the same dictionary and draws it at the body's.
 var dose := {}
+## **Which organs glow with what they sense**, written once a frame by the run:
+## cilia.gd's `lit`, `{"glow": {gene: 0..1}}` -- the nose, brighter the more food
+## it smells along its arc -- or empty. This layer adds the glow's own fade,
+## [constant FADE_LIT]; vision.gd is handed the same dictionary and draws it at
+## the body's. What this nose smells is a fact about this body's own receptors,
+## and no position of anything, so it is inside the licence.
+var lit := {}
 
 ## **The division**, written once a frame by the run. Empty is an ordinary body.
 ## `double` and `pinch` are the mother becoming two; `bodies` is present only
@@ -210,7 +225,7 @@ func _draw_figure() -> void:
 		_cell.gape() * SCALE, r, true, _clock, FADE, _cell.steer,
 		clampf(beat, 0.0, 1.0), 0.0, 1.0, order, _cell.wound,
 		float(division.get("double", 0.0)), float(division.get("pinch", 0.0)),
-		0.0, false, eye, _tail, slack, _dosed())
+		0.0, false, eye, _tail, slack, _dosed(), _lit())
 	# **What is loose in you, and where it could go.** Both are facts about this
 	# body and about nothing in the water, so both are inside the line this
 	# figure stands on. It is the only place point of view says a gene is
@@ -228,6 +243,15 @@ func _dosed() -> Dictionary:
 		return Cilia.NO_DOSE
 	var out := dose.duplicate()
 	out["fade"] = FADE_DOSE
+	return out
+
+
+## The run's [member lit] with this figure's licence on it, or nothing.
+func _lit() -> Dictionary:
+	if lit.is_empty():
+		return Cilia.NO_LIT
+	var out := lit.duplicate()
+	out["fade"] = FADE_LIT
 	return out
 
 

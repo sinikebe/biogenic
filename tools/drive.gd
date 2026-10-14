@@ -3047,20 +3047,17 @@ func _membrane_text() -> String:
 	if lobes.size() < 3 or organs.size() < 4:
 		return "membrane: unavailable"
 	var me: Vector4 = lobes[0]
-	var taste: Vector4 = lobes[1]
 	var light: Vector4 = lobes[2]
-	# **The nutrient lobe is a ring now and a width cannot describe it.** Its
-	# `z` is under -1, so `acos` is meaningless; what the number means is how
-	# dim the ring's far side is against its near one, which is the shader's own
-	# `smoothstep(z, 1, -1)`. Printed beside the field's raw level, because the
-	# whole of three-senses.md §2 is that those two are one channel.
-	var far := smoothstep(taste.z, 1.0, -1.0) if taste.z < 1.0 else 0.0
+	# **The nose is not on the membrane** (three-senses.md §2.6): it glows on the
+	# body. Printed as the glow both views light it by, beside the field's raw
+	# level, because the whole of three-senses.md §2 is that those two are one
+	# channel.
 	return ("membrane: organs cyt%d cir%d fla%d sti%d  self lobe %.3f at %4.0f deg wide"
-		+ "  taste %.3f ring far/near %.2f from level %.3f (raw %.3f)"
+		+ "  nose glow %.3f from level %.3f (raw %.3f)"
 		+ "  light %.3f at %4.0f deg wide  flood decay %.1fs") % [
 		organs[0], organs[1], organs[2], organs[3],
 		me.w, rad_to_deg(acos(clampf(me.z, -1.0, 1.0))),
-		taste.w, far, _food.taste_level if _food != null else 0.0, _smell_sum(),
+		_bus.smell_glow(), _food.taste_level if _food != null else 0.0, _smell_sum(),
 		light.w, rad_to_deg(acos(clampf(light.z, -1.0, 1.0))),
 		_bus.INGEST_DECAY_BY_TIER[organs[0]]]
 

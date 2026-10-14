@@ -27,6 +27,8 @@ Status: **§1 the `ampulla` and §2 the `chemocyte` are built. §3, the beam fan
 is not.** The owner has answered all three rows of §8: smell ships as a level
 (row 1, option A), `rhabdom` is retired (row 2, option C), and the twenty-beam
 outline is allowed but ships on its own (row 3, option A — **not this build**).
+**§2.2's ring is gone** (2026-10-14): the nose glows on the body instead, and
+the membrane draws nothing for smell. §2.6 is the change.
 §4 says which line of which file is which; read it before treating any of this
 as a description of the game.
 
@@ -515,6 +517,72 @@ case the sense is saying *there is food and no direction is much better*, which
 is true and is also indistinguishable from *my sense is broken*. The honest
 summary is that smell becomes **reliable about how much and slower about
 where**. That was the owner's call in §8 and the answer was ship it.
+
+### 2.6 The nose glows, and the membrane draws nothing for it (2026-10-14)
+
+The owner, in the gene pass:
+
+> Smell : the effect of the sense must be a glowing smell organ when pointing at
+> food. No hud or other effect on screen that would merge with other senses.
+
+So §2.2's ring is gone from the membrane, and what the nose smells is drawn on
+the nose. The sense itself is unchanged: the same level, from the same field,
+weighted about the same arc. Only where it shows has moved.
+
+**What the player sees.** The `chemocyte` on the body, wherever it is worn,
+lights up: drawn again over itself, its pigment solid, a haze of its own violet
+round it. The brighter it is, the more food lies along its arc. Nothing else on
+screen says anything about smell, in either view. Its colour is its family's,
+and its place on the body is its slot's, so it cannot be read as another sense.
+Turning the nose onto food brightens it, and turning away dims it. That is
+§2.5's gradient sweep, read off one organ instead of a ring.
+
+**How it is built** (generic, so a later sense can show the same way):
+
+- `signal_bus.gd`: `taste()` takes the level alone and draws nothing. Its lobe,
+  `LOBE_NUTRIENT`, stays in the shader, idle, so the uniform and the block keep
+  their shape. `smell_glow()` is the glow, 0..1: a smoothstep from `GLOW_FROM`
+  to `TASTE_FULL`, dimmed by dread as the band was. `CHANNEL_LOBES` maps `smell`
+  to `ON_ORGAN`, a channel the membrane knows but draws on its organ. The gene
+  probe's check 11 accepts it.
+- `cilia.gd`: `draw_cell` takes `lit`, `{"glow": {gene: 0..1}, "fade": f}`. An
+  organ it names is lit by `_draw_glow`, at the glow's own fade. Only the
+  player's body passes one: what a nose smells is not on the wire.
+- `normal_mode.gd`'s `_light_nose()` finds the nose by its stat, `smell_range`,
+  reads the bus once a frame and hands both views the same `lit`.
+- `soma.gd` draws it at `FADE_LIT` 0.85, the figure's third licence beside the
+  loose gene's and a dose's. It is the whole of what smell says in point of
+  view, so it may not lose to the faint outline it sits on.
+- `vision.gd` draws it at `FADE_LIT` 0.65 of the body's fade. Full vision's world
+  is drawn additively, and an organ painted over itself at full fade summed its
+  violet to white.
+- The replay records the glow (`recorder.gd`'s `AT_SMELL`) and lights the nose
+  the restored genome wears.
+
+**The curve moved, and why.** The band was built never to go dark while the
+organ had anything to report: its floor was 0.02. A glow on one organ says
+*food is in front of you*, and the field is superposed, so the rest of the water
+always smells a little. Measured on the built code (`tools/drive.gd`, seed 1, a
+two-copy nose on a forward diagonal, one drifter 140 µm off), the level is 0.60
+with the nose on the drifter and 0.41 with it astern. Through the band's curve
+those glowed 0.88 and 0.65, and rendered, the two could not be told apart.
+`GLOW_FROM` 0.30 makes them 0.83 and 0.19, and rendered they are plainly dim
+and lit, in both views and at both shapes. Thin water smells under 0.30, and the
+nose is dark there. That is true: an unlit nose is the organ as it is always
+drawn, with nothing in front of it.
+
+**What to watch when playing.** These are starting values, and the levers are
+`GLOW_FROM`, `TASTE_FULL` and the two `FADE_LIT`s:
+
+- whether a far meal is ever found by the glow, or only a near one;
+- whether the nose sits dark too long in thin water;
+- whether, in full vision, the glow is noticed at all beside the food that view
+  already shows.
+
+**Left as it is, and put to the owner:** full vision's scent haze round every
+edible body (`vision.gd`'s `_draw_scent`). It is drawn whether or not you have a
+nose. It is full vision's mark of *what your mouth can take*, not the nose's
+sense.
 
 ---
 

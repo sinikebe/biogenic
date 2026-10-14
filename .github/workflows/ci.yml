@@ -327,11 +327,18 @@ jobs:
         # cell differs from the first body it seeds. 69,471 lines, from 69,441,
         # the same hash under all three schemes.
         #
+        # **Re-pinned with the glowing nose** (docs/design/three-senses.md §2.6),
+        # from e636a790...: the harness's words changed, not the water. The
+        # membrane line under each trace now prints the nose's glow where it
+        # printed the taste ring, which is gone. Diffed against dev at f8c9fc8,
+        # the 116 membrane lines are the only lines that differ out of 69,471,
+        # the same hash under all three schemes.
+        #
         # Each run prints about ten megabytes, so it goes to a file rather than
         # a variable. About twenty seconds a scheme.
         run: |
           set -uo pipefail
-          pinned="e636a790112cdd1dbbc655eaae4b3b611d2fcec8600036c0f719daa1b5dbb04f"
+          pinned="5e30e17764a6d66f0d0e5c5ead1392bdfd4745f824d44e5f97101bb6869f2aa9"
           log=$(mktemp)
           fail=0
           for scheme in 0 1 2; do

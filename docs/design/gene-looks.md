@@ -368,7 +368,7 @@ channel changes nothing on the membrane:
 | `light` | glow 2 | amber, `LIGHT_COLOR`, light's own | what it reports has a colour | `stigma` |
 | `beam` | glow 3 | the hue of the organ providing `beam_range`: sensing shade 0 | a struck body has no colour, so it is the sense's own | `ocellus` |
 | `ping` | glow 4 and 5 | the hue of the organ providing `ping_range`: sensing shade 2 | the same, a shade apart from the beam as today | `ampulla` |
-| `smell` | glow 1, the ring | food green, `NUTRIENT_COLOR` | it reports food, and full vision's bloom is that green | `chemocyte` |
+| `smell` | **none: `ON_ORGAN`**, the nose itself glows (`three-senses.md` §2.6); glow 1 idle | the organ's own, sensing shade 1 | the owner, 2026-10-14: nothing on screen but the organ, so it never merges with another sense | `chemocyte` |
 | `touch` | glow 0, the bruise envelope held at a level | self teal | it reports your own skin | `palp` |
 | (the cell's own) | glow 0 | teal, or a dose's hue on a dosed bite | thrust, shear, a bite | home organs, doses |
 | (a wake) | pressure 0 | — | dread | — |
@@ -522,7 +522,7 @@ from phase 6:
 
 **Senses**
 
-11. Every sense names a channel that has a lobe (§5.1).
+11. Every sense names a channel that has a lobe, or `ON_ORGAN` (§5.1).
 
 ---
 
@@ -698,7 +698,7 @@ hashes what the cell feels, not its colours); `Wire.RULES`, which no look is par
 | 5 | no variants yet |
 | 6 to 9 | the nearest two families 20.8°; self teal 38.6°, threat red 33.1°, food green 41.3°; the least lightness between two families 0.049 |
 | 10 | 7 copies of a hue, each its source's |
-| 11 | touch, smell, light, beam and ping, each on its lobe |
+| 11 | touch, light, beam and ping, each on its lobe; smell on its organ |
 
 **Each check was seen failing.** Nineteen faults were planted one at a time in a
 scratch copy, and the probe failed every one on the check it was planted for: a family
