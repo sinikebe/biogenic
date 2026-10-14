@@ -616,8 +616,6 @@ extends Node
 ##   --desert=<units>        everything alive within it of the start taken away
 ##   --age=<seconds>         the drop lives alone that long before the cell
 ##                           arrives, then the start is chosen in it
-##   --sensed=<0..1>         the water made for a player this sighted, whatever
-##                           the cell carries
 ##   --hunter-genome=<g:t,...>
 ##                           what --hunt= and --stalk= pose, default
 ##                           cytostome:3,flagellum:2. In the drop the hunter is
@@ -723,6 +721,9 @@ extends Node
 const DEFAULT_SCENE := "res://game/normal/normal_mode.tscn"
 const FoodField := preload("res://game/normal/food.gd")
 const CellBody := preload("res://game/normal/cell.gd")
+## Only for the born body, which every newborn the water makes is
+## (docs/design/water-evolves.md §1): what `--check` quotes a newborn's mouth at.
+const Catalogue := preload("res://game/genes/catalogue.gd")
 ## Every gene's numbers, by stat: what a posed friend or a posed dose is quoted at.
 const Stats := preload("res://game/genes/stats.gd")
 ## For places and forms: the inside slot, and what a gene becomes there.
@@ -3521,7 +3522,7 @@ func _grow_posed() -> void:
 ## then set on the run's field before the run enters the tree.
 func _drop_switch(text: String) -> bool:
 	const FLOATS := {"--edge-gap=": &"edge_gap", "--desert=": &"desert",
-		"--age=": &"age_first", "--sensed=": &"sensed_override", "--absorb=": &"absorb",
+		"--age=": &"age_first", "--absorb=": &"absorb",
 		"--first-delay=": &"grace", "--mutate=": &"mutate", "--floor=": &"floor_share",
 		"--floor-tau=": &"floor_tau", "--newborn-grace=": &"newborn_grace"}
 	# `--drifter-venom=` is read as `--drifter-toxin=` as well: the switch kept its
@@ -4273,8 +4274,8 @@ func _run_seeding_check(rounds: int) -> void:
 	print("[check] drifters %.1f%%  cytostome tiers 0/1/2/3: %d/%d/%d/%d" % [
 		100.0 * float(drifters) / float(maxi(seeds, 1)),
 		tier_counts[0], tier_counts[1], tier_counts[2], tier_counts[3]])
-	print("[check] max radius %.2f  max gape %.2f  (ARRIVAL_GAPE_MAX %.1f)" % [
-		max_radius, max_gape, FoodField.ARRIVAL_GAPE_MAX])
+	print("[check] max radius %.2f  max gape %.2f  (a newborn's %.1f)" % [
+		max_radius, max_gape, CellBody.gape_of(Catalogue.born(), CellBody.BASE_RADIUS)])
 	for bucket: int in [26, 33, 40]:
 		if not buckets.has(bucket):
 			continue

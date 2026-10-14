@@ -1135,6 +1135,10 @@ within 1,500 of that player.
 
 ### 6.4 What
 
+**Superseded on 2026-10-14 by `water-evolves.md`**: the water reads nobody's senses
+or size any more. It keeps one composition, 457 drifters and a floor of 96 others, and
+everything with a mouth it makes from nothing is a newborn. Below is what it did before.
+
 The spawner makes **what is short**:
 
 - **Drifter or peer** by the drifter share your senses call for today
@@ -1567,6 +1571,10 @@ looked kinder than it is: replayed, the same seeds lost 29 of 64, and over 192
 games it loses 40 % against today's 36 % (the first table).
 
 ### 8.4 How difficulty moves
+
+**Superseded on 2026-10-14 by `water-evolves.md`**: the water reads nobody's senses
+or size any more. It keeps one composition, 457 drifters and a floor of 96 others, and
+everything with a mouth it makes from nothing is a newborn. Below is what it did before.
 
 - **What is made is tuned to you**, exactly as today's arrivals are: the drifter
   share your senses call for, peers your size ±34 %, no mouth made past 40. It

@@ -391,6 +391,10 @@ would read (§10).
 
 ## 5. The spawner keeps the food and the floor
 
+**Superseded on 2026-10-14 by `water-evolves.md`**: the water reads nobody's senses
+or size any more. It keeps one composition, 457 drifters and a floor of 96 others, and
+everything with a mouth it makes from nothing is a newborn. Below is what it did before.
+
 **The food is the spawner's, to its own count.** Drifters do not divide, so the
 spawner makes every one: their share of the target, 457 at a newborn's
 composition and 354 at a sighted player's, **whatever the hunters number**.

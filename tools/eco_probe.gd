@@ -5,10 +5,10 @@ extends SceneTree
 ## `--every=` seconds, and the water's own cost a frame over each window.
 ##
 ##   godot --headless --path . -s res://tools/eco_probe.gd -- \
-##       --seed=1 --until=1800 --every=300 --sensed=0.2
+##       --seed=1 --until=1800 --every=300
 ##
-## - `--sensed=<0..1>`: the drop made for a player this sighted -- §5.9's 0.2 is
-##   a newborn's composition and 0.6 a sighted player's. Default 0.2.
+## (`--sensed=` went when the water stopped reading anyone's senses:
+## docs/design/water-evolves.md. Every drop is made the one way.)
 ## - `--empty-room`: nobody at all, not even a ghost to anchor it, so every body
 ##   is on its tick (§10.3); the ghost is otherwise an anchor, so its
 ##   surroundings are stepped every frame and the spawner hides from it.
@@ -17,8 +17,7 @@ extends SceneTree
 ## - `--genes=crowded`: the water of a hundred genes, filed before the drop is made --
 ##   the mixed hundred of docs/design/gene-rarity.md table 5.1 (`tools/rarity_specimens.gd`)
 ##   -- to watch the floor keep them over a long run in its `[rarity]` lines:
-##   `--genes=crowded --sensed=1 --until=1800`, a fully sighted player's drop, the
-##   floor's hardest case (§5.3, §11.3).
+##   `--genes=crowded --until=1800` (§5.3, §11.3).
 ## - the drop's own switches, as `tools/drive.gd` takes them: `--lod=`,
 ##   `--half-rate=`, `--near-first=`, `--skip-still=`, `--own-speed=`,
 ##   `--notice=senses|fixed`, `--flight=none|all`, `--absorb=`,
@@ -77,7 +76,6 @@ var costs := PackedInt32Array()
 
 func _initialize() -> void:
 	var seed_value := 1
-	var sensed := 0.2
 	var empty := false
 	var logged := false
 	var genes := ""
@@ -90,8 +88,6 @@ func _initialize() -> void:
 			every = float(v)
 		elif a.begins_with("--seed="):
 			seed_value = int(v)
-		elif a.begins_with("--sensed="):
-			sensed = float(v)
 		elif a == "--empty-room":
 			empty = true
 		elif a == "--death-log":
@@ -139,7 +135,6 @@ func _initialize() -> void:
 	cell.radius = CellBody.BASE_RADIUS
 	food = LoggedDrop.new()
 	food.log_deaths = logged
-	food.sensed_override = sensed
 	for key: StringName in sets:
 		food.set(key, sets[key])
 	# Stepped by hand below, one fixed frame at a time, and timed.
@@ -148,7 +143,7 @@ func _initialize() -> void:
 	food.setup_drop(cell)
 	food.in_water = false
 	food.anchored = not empty
-	print("[eco] seed %d  sensed %.2f  %s  switches %s%s" % [seed_value, sensed,
+	print("[eco] seed %d  %s  switches %s%s" % [seed_value,
 		"an empty room" if empty else "a ghost player, anchored", sets,
 		"" if filed.is_empty() else "  genes: the mixed hundred, %d varieties in the water's pool"
 		% food.get(&"_drifter_pool").size()])

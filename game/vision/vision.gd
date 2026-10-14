@@ -1179,7 +1179,7 @@ func _on_eaten(nutrition: float, gene: StringName, at: Vector2) -> void:
 	# smallest drifter swallowed by the largest cell. Adding a fourth argument
 	# to a signal three files forward it would cost more than a pixel is worth.
 	var r := clampf(nutrition * _cell.radius,
-		FoodField.DRIFTER_MIN, FoodField.ARRIVAL_RADIUS_MAX)
+		FoodField.DRIFTER_MIN, CellBody.DIVIDE_RADIUS)
 	_meals.append([at, r, 0.0, Cilia.hue(gene) if gene != &"" else FOOD_TINT])
 
 

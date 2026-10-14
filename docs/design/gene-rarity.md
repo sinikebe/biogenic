@@ -425,6 +425,9 @@ reads the `gift` tag: the four. Today both name the same four, so nothing change
 
 ### 3.5 The water's danger as sense genes multiply
 
+**Retired on 2026-10-14** (`water-evolves.md`): the water no longer reads anyone's
+senses, so nothing below is in the game. Kept as the record of what it did.
+
 `_sensed` (`food.gd` :6228) sets how much of the water can hurt you: the four
 senses' tiers summed over `SENSE_FULL` 5, clamped to 1, and the drifters' share and
 the peers' mouths follow it ("What a cell that cannot see meets", `food.gd` :396).
