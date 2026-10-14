@@ -120,10 +120,39 @@ contact.
 So the water's danger is its history. A kept drop and a server room carry their
 families across runs and visits, and a new drop starts over.
 
-**Measured once on the built code**, as the check that the mechanic works rather
-than as a number to tune: the drop alone, seed 1, thirty minutes (`tools/eco_probe.gd
---seed=1 --until=1800 --every=300`), against `dev`'s water on the same seed at a
-newborn's composition. §5 has the census.
+### 3.1 Measured once, to see that it works
+
+This is a check that the mechanic works, not a number to tune. The drop alone, seed
+1, thirty minutes (`tools/eco_probe.gd --seed=1 --until=1800 --every=300`), was run
+on the built code and on `dev`'s water at a newborn's composition, which was the
+gentlest the old rule made.
+
+The census below counts the hunters that could swallow a body of three sizes:
+r26 is a newborn, r34 a grown cell, r40 one about to divide. The last column is
+the hunters' mean mouth copies.
+
+| | now: r26 / r34 / r40 | `dev`: r26 / r34 / r40 | mouth copies, now / `dev` |
+|---|---|---|---|
+| 0 min | **0 / 0 / 0** | 19 / 2 / 0 | 1.00 / 1.14 |
+| 5 min | 36 / 2 / 1 | 35 / 9 / 4 | 1.06 / 1.20 |
+| 15 min | 34 / 8 / 5 | 43 / 12 / 7 | 1.16 / 1.35 |
+| 30 min | 34 / 2 / 2 | 48 / 13 / 11 | 1.07 / 1.39 |
+
+What it says:
+
+- **A new drop opens with nothing that can end you.** Danger to a newborn arrives
+  within minutes, about as fast as it did, and it arrives by **growth**: newborns
+  that eat reach r30 and more, and a born mouth there swallows a newborn.
+- **Danger to a grown cell builds slowly.** Mouths that end a cell at r34 or r40
+  need copies a family has to grow. In thirty minutes the families grew a few,
+  and lost them again.
+- **Hunters turn over fast.** The water made 2,166 newborns in thirty minutes to
+  keep its floor of 96. The families divided 1,082 times, but at thirty minutes
+  the mean generation was 1.7: most hunters are young, and the floor keeps
+  topping the drop up with fresh newborns. That turnover is what keeps the
+  water's evolution slow. `dev`'s numbers show the same turnover (1,312
+  divisions, generation 1.9); the difference is that its arrivals came already
+  armed.
 
 ---
 
@@ -170,10 +199,12 @@ saying they were superseded here.
 - **How long a new drop stays harmless**, and when the first mouth that can
   swallow you shows up. In full vision it shows as a body whose lip bow turns to
   threat.
-- **Whether a session is long enough for the water to grow teeth at all.** If a
-  new drop stays tame through a whole session, the levers are how much food
-  there is (`DRIFTER_SHARE`) and how fast families turn over: the floor
-  (`SPAWN_SHARE`), the mutation and the grace (`lineage.md`).
+- **Whether a grown cell ever meets a real threat.** §3.1 says that within half an
+  hour it mostly does not: few hunters grow mouths that end a cell at r34 or r40,
+  where `dev` had 13 and 11. If the late game feels toothless, the levers are how
+  fast families turn over -- the floor that refills the drop with newborns
+  (`SPAWN_SHARE`), the food (`DRIFTER_SHARE`), the mutation and the grace
+  (`lineage.md`) -- not a return to arrivals made strong.
 - **Whether growing a sense now feels like a pure gain.** It used to make the
   water worse, and now it does not.
 - **A kept drop or a server room** whose families have grown: a newborn arriving
