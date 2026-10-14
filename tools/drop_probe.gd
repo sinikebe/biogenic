@@ -558,7 +558,7 @@ class WatchedDrop extends "res://game/normal/food.gd":
 	## under the floor or for the toxin.
 	func _make_one(players: PackedVector2Array, reaches: PackedFloat32Array) -> int:
 		var hunters := float(_living - _drifters)
-		var over := hunters >= Drop.hunter_floor(_made_share(), floor_share)
+		var over := hunters >= Drop.hunter_floor(DRIFTER_SHARE, floor_share)
 		var venom := _peer_short() != &""
 		var index: int = super._make_one(players, reaches)
 		if births and index >= 0:
@@ -570,9 +570,9 @@ class WatchedDrop extends "res://game/normal/food.gd":
 			made_kinds["nothing"] = int(made_kinds.get("nothing", 0)) + 1
 		return index
 
-	func _spawn(at: Vector2, drifter: bool, sensed: float, fill := false,
-			body_radius := 0.0, tiers := {}, mine := -1.0) -> int:
-		var index: int = super._spawn(at, drifter, sensed, fill, body_radius, tiers, mine)
+	func _spawn(at: Vector2, drifter: bool, fill := false, body_radius := 0.0,
+			tiers := {}) -> int:
+		var index: int = super._spawn(at, drifter, fill, body_radius, tiers)
 		last_spawned = index
 		var b: Body = _cells[index]
 		# **Every body comes in on the founders' rules** (check 5): a daughter is
@@ -1742,17 +1742,17 @@ func _tank() -> void:
 ## **A born ghost player and the drop made round it**, stepped by hand one fixed
 ## frame at a time: out of the water until a check puts it in, still, and with
 ## everything alive within [param desert] of it taken away, so bodies can be
-## posed in the clear. [param sensed] makes the drop for a player that sighted.
-## [param rules] false is pack 2's hand-written hunter (behaviour.md §12.3 check 1),
-## and [param tails] false pack 3's water, where a tail beats only while a swim
-## rule fires (automation.md §5.4) -- set before the water is made, as a tool sets it.
-func _water(desert := 0.0, sensed := -1.0, rules := true, tails := true) -> Array:
+## posed in the clear. Whoever is in it, the water is the same one: it reads
+## nobody's senses (water-evolves.md). [param rules] false is pack 2's
+## hand-written hunter (behaviour.md §12.3 check 1), and [param tails] false pack
+## 3's water, where a tail beats only while a swim rule fires (automation.md
+## §5.4) -- set before the water is made, as a tool sets it.
+func _water(desert := 0.0, rules := true, tails := true) -> Array:
 	var cell := CellBody.new()
 	cell.radius = CellBody.BASE_RADIUS
 	var field := WatchedDrop.new()
 	field.process_mode = Node.PROCESS_MODE_DISABLED
 	field.desert = desert
-	field.sensed_override = sensed
 	field.rules = rules
 	field.tails_beat = tails
 	add_child(field)
@@ -1846,12 +1846,17 @@ func _spawns() -> void:
 		for p: Vector2 in at:
 			reaches.append(field.ping_range)
 		for k in 2000:
-			# Made for a player who sees everything and for one who sees
-			# nothing, in turn: the two drifter shares, 0.45 and 0.92.
-			field.set("_made_for", PackedFloat64Array([cell.radius, 1.0 if k % 2 == 0
-				else 0.0]))
+			# **Both kinds, in turn.** The share is one number now, whoever the
+			# water is made for (water-evolves.md §2), and every body made here
+			# is taken away again, so the standing drop alone would ask for one
+			# kind every time: the spawner reads it as holding no drifter and
+			# then as nothing but drifters, in turn, and the true count is put
+			# back once the body is gone.
+			var standing := int(field.get("_drifters"))
+			field.set("_drifters", 0 if k % 2 == 0 else int(field.get("_living")))
 			var index := field._make_one(at, reaches)
 			if index < 0:
+				field.set("_drifters", standing)
 				continue
 			made[round] += 1
 			var b: Object = (field.get("_cells") as Array)[index]
@@ -1863,6 +1868,7 @@ func _spawns() -> void:
 			if not field.basin().inside(b.get("pos"), Drop.SPAWN_INSET):
 				outside += 1
 			field._drop_lose(index, 0)
+			field.set("_drifters", standing)
 	cell.velocity = Vector2(30.0, -40.0)
 	field.in_water = true
 	field._process(1.0 / 60.0)
@@ -1971,11 +1977,11 @@ func _containment() -> void:
 ## its budget, and a rare variety's runs are held only from then on.
 const SETTLED_WITHIN := 30
 
-## **Five minutes of a drop made for a fully sighted player** (§14.3), with a
-## still ghost player in it, watched from inside:
+## **Five minutes of a drop** (§14.3), with a still ghost player in it, watched
+## from inside:
 ##
 ## - 5, growth: no body over DIVIDE_RADIUS, and none *made* with a mouth wider
-##   than ARRIVAL_GAPE_MAX -- a grown one may have it (row 5);
+##   than a newborn's, 21.3 (water-evolves.md §1) -- a grown one may have it (row 5);
 ## - 6, the floors (docs/design/gene-rarity.md §11.3): every common and uncommon
 ##   variety carried at every count -- a form as its variety -- and one found short
 ##   back at its class's count by the next; the floor caught up with the first fill,
@@ -2002,7 +2008,7 @@ const SETTLED_WITHIN := 30
 func _five_minutes() -> void:
 	# Seed 1, so its lines are check tail 1's to pin (automation.md §18.3).
 	seed(1)
-	var water := _water(0.0, 1.0)
+	var water := _water()
 	var field: WatchedDrop = water[0]
 	var cell: CellBody = water[1]
 	var biggest := 0.0
@@ -2032,13 +2038,15 @@ func _five_minutes() -> void:
 			living += 1
 			if b.get("drifter") and (b.get("genome") as Dictionary).has(&"veneneux"):
 				venomous += 1
-	_check(("5. growth: five minutes of a drop made for a sighted player, the biggest body"
-		+ " r%.2f (DIVIDE_RADIUS %.0f; %d looks at one there, %d ticks at forty), and of %d"
-		+ " bodies made the widest mouth %.2f (ARRIVAL_GAPE_MAX %.0f)") % [biggest,
-		CellBody.DIVIDE_RADIUS, at_forty, field.at_forty, field.made, field.made_gape,
-		FoodField.ARRIVAL_GAPE_MAX],
+	# What the water makes from nothing is a newborn (water-evolves.md §1): no
+	# mouth it makes is wider than a born cell's at BASE_RADIUS.
+	var newborn := CellBody.gape_of(Catalogue.born(), CellBody.BASE_RADIUS)
+	_check(("5. growth: five minutes of a drop, the biggest body r%.2f (DIVIDE_RADIUS %.0f;"
+		+ " %d looks at one there, %d ticks at forty), and of %d bodies made the widest"
+		+ " mouth %.2f, at most a newborn's (%.2f)") % [biggest, CellBody.DIVIDE_RADIUS,
+		at_forty, field.at_forty, field.made, field.made_gape, newborn],
 		biggest <= CellBody.DIVIDE_RADIUS + 1e-4 and at_forty + field.at_forty > 0
-		and field.made_gape <= FoodField.ARRIVAL_GAPE_MAX and field.made > 1000)
+		and field.made_gape > 0.0 and field.made_gape <= newborn + 1e-4 and field.made > 1000)
 	var floor_made := int(field.stats.get(&"gene_floor", 0))
 	_check(("6. the floors: at %d gene counts a common or uncommon variety carried by nobody"
 		+ " %d times and one still short at the count after %d; the floor caught up with the"
@@ -2089,23 +2097,23 @@ func _five_minutes() -> void:
 		silent += 1 if n <= 0 else 0
 	var meals := [int(stats.get(&"meals_nose", 0)), int(stats.get(&"meals_radar", 0)),
 		int(stats.get(&"meals_laser", 0))]
-	_check(("9. the founders hunt: in five minutes of a sighted player's drop each of the"
+	_check(("9. the founders hunt: in five minutes of a drop on rules each of the"
 		+ " founders' %d rules fired (%s times, top to bottom), and hunters with a nose, a"
 		+ " radar and a laser ate %d, %d and %d meals") % [Drop.FOUNDERS.size(),
 		"/".join(fired), meals[0], meals[1], meals[2]],
 		fired.size() == 7 and silent == 0 and meals[0] > 0 and meals[1] > 0 and meals[2] > 0)
-	seen["food"] = float(int(field.get("_drifters"))) / Drop.food_count(field._made_share())
-	_lineage_runs.append(_lineage_summary(field, "a fully sighted player's", seen))
+	seen["food"] = float(int(field.get("_drifters"))) / Drop.food_count(FoodField.DRIFTER_SHARE)
+	_lineage_runs.append(_lineage_summary(field, "the rules'", seen))
 	_tail_on_lines = [field.census_line(), field.lineage_line(), field.behaviour_line()]
 	_done(water)
 
 
 # --- Pack 2: the water divides (docs/design/lineage.md §11.3, checks 1 to 6) -----------------
 
-## What each five-minute drop saw of pack 2's rules: a sighted player's
-## ([method _five_minutes]) and a newborn's ([method _lineage]).
+## What each five-minute drop saw of pack 2's rules: the one on rules
+## ([method _five_minutes]) and the one on pack 2's hunter ([method _lineage]).
 var _lineage_runs: Array[Dictionary] = []
-## **[method _lineage]'s two drops**: a census every [constant LOOK_FRAMES] frames at
+## **[method _lineage]'s drop**: a census every [constant LOOK_FRAMES] frames at
 ## sixty a second, [constant LINEAGE_LOOKS] of them -- five minutes -- and lineage 4
 ## holds that every one was taken.
 const LOOK_FRAMES := 600
@@ -2120,7 +2128,7 @@ const LINEAGE_LOOKS := 30
 func _lineage_look(field: WatchedDrop, t: float, seen: Dictionary) -> void:
 	var hunters := float(int(field.get("_living")) - int(field.get("_drifters")))
 	if t > 60.0 + 1e-3:
-		var ratio := hunters / Drop.hunter_floor(field._made_share())
+		var ratio := hunters / Drop.hunter_floor(FoodField.DRIFTER_SHARE)
 		if ratio < float(seen.get("floor", INF)):
 			seen["floor"] = ratio
 			seen["floor_at"] = t
@@ -2201,10 +2209,12 @@ static func _keyed(line: String) -> String:
 
 
 ## **The water divides** (lineage.md §11.3, checks 1 to 6): five minutes of a
-## newborn's drop and five of a sighted player's -- the spec's two compositions,
-## 0.2 and 0.6 -- watched from inside as [method _five_minutes] watched a fully
-## sighted player's, and read together: the three for what a division, a roll, a
-## meal and the grace are, the spec's two for the floor and the spawner.
+## drop on pack 2's hunter, watched from inside as [method _five_minutes] watched
+## its drop on rules, and read together: the two for what a division, a roll, a
+## meal and the grace are, the one on pack 2's hunter for the floor and the
+## spawner. **It was two drops, a newborn's and a sighted player's**, the spec's
+## two compositions from one seed; since the water reads nobody's senses
+## (water-evolves.md) they are one drop, run once.
 ##
 ## 1. **A division is the player's**: every body that divided was at forty and
 ##    every one at forty divided on its tick; two daughters at half its area,
@@ -2215,7 +2225,7 @@ static func _keyed(line: String) -> String:
 ##    carries -- one copy worn about 55 % of the time, two 80 %, three always --
 ##    the mouth always, and a sense, at tier 1 if she was given it.
 ## 3. **The floor**: after the first minute, the hunters at 90 % of today's count
-##    or more at every census, at both compositions.
+##    or more at every census.
 ## 4. **The spawner**: no peer while the hunters are at or over the floor but for
 ##    the floor's peer-borne genes (venom's); drifters at 85 % of their count or
 ##    more after five minutes; every common and uncommon variety, venom included,
@@ -2223,33 +2233,31 @@ static func _keyed(line: String) -> String:
 ##    one (docs/design/gene-rarity.md §11.3) -- and with a hundred hunters posed
 ##    over the floor, the food is still made ([method _food_over_floor]).
 ## 5. **The grace**: no run begun at a body in its grace, every `_start_run`
-##    over the three drops checked; daughters are hunted once it is over, and a
+##    over the two drops checked; daughters are hunted once it is over, and a
 ##    mouth one touches in it still eats her.
 ## 6. **A water cell's meal writes its DNA, never its body**: every meal.
 ##
-## **The spec's two run on pack 2's hand-written hunter** (`rules` off), from
-## seed 1, and are **behaviour.md §12.3 check 1** as well: with the rules off it
-## is pack 2 to the byte -- their census and lineage lines at five minutes are
-## [constant DEV_LINES], `dev`'s, and the senses the player and the water share
-## are pinned by [method _membrane]. The sighted player's drop of
-## [method _five_minutes] is on rules, so the division is checked on both.
+## **The drop on pack 2's hand-written hunter** (`rules` off), from seed 1, is
+## **behaviour.md §12.3 check 1** as well: with the rules off it is pack 2 to the
+## byte -- its census and lineage lines at five minutes are [constant DEV_LINES],
+## `dev`'s, and the senses the player and the water share are pinned by
+## [method _membrane]. The drop of [method _five_minutes] is on rules, so the
+## division is checked on both.
 func _lineage() -> void:
 	var lines: Array[String] = []
-	for each: Array in [[1, 0.2, "a newborn's"], [1, 0.6, "a sighted player's"]]:
-		seed(int(each[0]))
-		var water := _water(0.0, float(each[1]), false)
-		var field: WatchedDrop = water[0]
-		var seen := {"composed": true}
-		for f in LINEAGE_LOOKS * LOOK_FRAMES:
-			field._process(1.0 / 60.0)
-			if f % LOOK_FRAMES == LOOK_FRAMES - 1:
-				_lineage_look(field, float(f + 1) / 60.0, seen)
-		seen["food"] = float(int(field.get("_drifters"))) \
-			/ Drop.food_count(field._made_share())
-		_lineage_runs.append(_lineage_summary(field, String(each[2]), seen))
-		lines.append(field.census_line())
-		lines.append(field.lineage_line())
-		_done(water)
+	seed(1)
+	var water := _water(0.0, false)
+	var field: WatchedDrop = water[0]
+	var seen := {"composed": true}
+	for f in LINEAGE_LOOKS * LOOK_FRAMES:
+		field._process(1.0 / 60.0)
+		if f % LOOK_FRAMES == LOOK_FRAMES - 1:
+			_lineage_look(field, float(f + 1) / 60.0, seen)
+	seen["food"] = float(int(field.get("_drifters"))) / Drop.food_count(FoodField.DRIFTER_SHARE)
+	_lineage_runs.append(_lineage_summary(field, "pack 2's hunter's", seen))
+	lines.append(field.census_line())
+	lines.append(field.lineage_line())
+	_done(water)
 	seed(20260930)
 	var differ := 0
 	for k in DEV_LINES.size():
@@ -2258,9 +2266,9 @@ func _lineage() -> void:
 			differ += 1
 			print("[drop-probe] check 1, line %d, this build: %s" % [k + 1, ours])
 			print("[drop-probe] check 1, line %d, dev:        %s" % [k + 1, _keyed(DEV_LINES[k])])
-	_check(("1. with the rules off it is pack 2, the drop: a newborn's drop and a sighted"
-		+ " player's, seed 1, five minutes on pack 2's hunter -- their census and lineage"
-		+ " lines against dev's: %s") % ["the same to the byte" if differ == 0
+	_check(("1. with the rules off it is pack 2, the drop: seed 1, five minutes on pack 2's"
+		+ " hunter -- its census and lineage lines against dev's: %s") % [
+		"the same to the byte" if differ == 0
 		else "%d DIFFER" % differ],
 		differ == 0 and lines.size() == DEV_LINES.size())
 	var posed := _food_over_floor()
@@ -2282,9 +2290,9 @@ func _lineage() -> void:
 		for kind: Variant in run["kinds"]:
 			kinds[kind] = int(kinds.get(kind, 0)) + int(run["kinds"][kind])
 		each.append("%s %d" % [run["name"], int(run["divisions"])])
-	var enough := runs.size() == 3 and composed.size() == 2 \
+	var enough := runs.size() == 2 and composed.size() == 1 \
 		and runs.all(func(run: Dictionary) -> bool: return int(run["divisions"]) >= 50)
-	_check(("lineage 1. a division is the player's: %d divisions in three drops' five minutes"
+	_check(("lineage 1. a division is the player's: %d divisions in two drops' five minutes"
 		+ " (%s), every mother at r40 and every body at forty on its tick divided on it (%d"
 		+ " ticks, %d missed); %d daughters at r%.2f touching across her heading where she"
 		+ " was (%d held in by the rim), fed, in their grace, new ids, her children; one"
@@ -2356,7 +2364,7 @@ func _lineage() -> void:
 		fed and sum.call("peers_over_floor") == 0 and int(made.get("peer", 0)) > 0
 		and int(posed["drifters"]) >= int(posed["taken"]) / 2 and int(posed["peers"]) == 0
 		and float(posed["food"]) >= 0.9)
-	_check(("lineage 5. the grace: %d runs begun over the two drops on pack 2's hunter (the"
+	_check(("lineage 5. the grace: %d runs begun over the drop on pack 2's hunter (the"
 		+ " rules begin none), %d at a body in its grace; %d at daughters once theirs was"
 		+ " over; %d daughters eaten in their grace by a mouth they touched")
 		% [sum.call("runs_begun"), sum.call("graced_runs"),
@@ -2374,15 +2382,15 @@ func _lineage() -> void:
 			run["by_class"]])
 
 
-## **The food whatever the hunters number** (check 4): a newborn's drop, a
-## hundred hunters posed over today's count where nobody is -- resting, fed --
+## **The food whatever the hunters number** (check 4): a drop, a hundred
+## hunters posed over today's count where nobody is -- resting, fed --
 ## and drifters taken out; fifteen seconds later the spawner has made drifters
 ## back toward their count, and no peer.
 func _food_over_floor() -> Dictionary:
-	var water := _water(0.0, 0.2)
+	var water := _water()
 	var field: WatchedDrop = water[0]
 	var cell: CellBody = water[1]
-	var share: float = field._made_share()
+	var share: float = FoodField.DRIFTER_SHARE
 	var over := int(Drop.hunter_floor(share)) + 100 \
 		- (int(field.get("_living")) - int(field.get("_drifters")))
 	var centre: Vector2 = field.basin().get(&"center")
@@ -2412,9 +2420,9 @@ func _food_over_floor() -> Dictionary:
 
 # --- Pack 3's second phase: a change at every division (behaviour.md §6, §12.3) -----------------
 
-## **5. A division** (behaviour.md §6.1, §6.4, §12.3), over the three drops pack
-## 2's checks read: the sighted player's on rules ([method _five_minutes]), whose
-## rules change, and the two on pack 2's hunter ([method _lineage]). **On rules**
+## **5. A division** (behaviour.md §6.1, §6.4, §12.3), over the two drops pack
+## 2's checks read: the one on rules ([method _five_minutes]), whose rules
+## change, and the one on pack 2's hunter ([method _lineage]). **On rules**
 ## every division gives the daughter whose DNA is her mother's that list itself,
 ## and her sister one change of it -- a new list of a kind [method _change_kinds]
 ## reads, a family's own or the founders' -- and the five kinds all come. **On
@@ -2641,8 +2649,8 @@ func _rule_keys(list: RefCounted) -> PackedStringArray:
 
 # --- 8. Determinism -------------------------------------------------------------------------
 
-## **One seed, one drop** (§14.3): forty seconds of a drop made for a sighted
-## player twice from one seed print the same census line to the byte -- the
+## **One seed, one drop** (§14.3): forty seconds of a drop twice from one
+## seed print the same census line to the byte -- the
 ## checksum of every body's place, size and tank included -- and so does the
 ## same seed with the near-first prey search off: nearest wins, so the search
 ## that looks near first finds the same body (§4.2). **And with bodies dividing**
@@ -2653,20 +2661,23 @@ func _rule_keys(list: RefCounted) -> PackedStringArray:
 ## **And 6, with the rules changing** (behaviour.md §12.3): those three runs
 ## change a daughter's rules at every division, and print the same behaviour
 ## line too -- the changes made and the behaviours they left. **With the changes
-## off** (`rule_change`, `--rule-change=0`) the same forty seconds, at a sighted
-## player's composition and a newborn's, are phase 3-1's to the byte: its census
-## and lineage lines, and its behaviour line with nothing changed after it
+## off** (`rule_change`, `--rule-change=0`) the same forty seconds are phase
+## 3-1's to the byte: its census and lineage lines, and its behaviour line with
+## nothing changed after it
 ## ([constant THREE_ONE_LINES]). With them on, the first is not -- a switch that
 ## passed either way would be a switch on nothing. **Phase 3-1's forty seconds
 ## are pack 3's water** (automation.md §5.4), so they run with its tails, which
-## beat only while a swim rule fires: under row 37 every line would move.
+## beat only while a swim rule fires: under row 37 every line would move. **They
+## were run twice**, at a sighted player's composition and a newborn's, from the
+## one seed; since the water reads nobody's senses (water-evolves.md) that is one
+## drop, run once.
 func _determinism() -> void:
 	var lines: Array[String] = []
 	var families: Array[String] = []
 	var behaviours: Array[String] = []
 	for near_first: bool in [true, true, false]:
 		seed(8088)
-		var water := _water(0.0, 0.6)
+		var water := _water()
 		var field: WatchedDrop = water[0]
 		field.near_first = near_first
 		for f in 40 * 60:
@@ -2675,16 +2686,15 @@ func _determinism() -> void:
 		families.append(field.lineage_line())
 		behaviours.append(field.behaviour_line())
 		_done(water)
-	var off: Array[String] = []
-	for sensed: float in [0.6, 0.2]:
-		seed(8088)
-		var water := _water(0.0, sensed, true, false)
-		var field: WatchedDrop = water[0]
-		field.rule_change = false
-		for f in 40 * 60:
-			field._process(1.0 / 60.0)
-		off.append_array([field.census_line(), field.lineage_line(), field.behaviour_line()])
-		_done(water)
+	seed(8088)
+	var pack3 := _water(0.0, true, false)
+	var field3: WatchedDrop = pack3[0]
+	field3.rule_change = false
+	for f in 40 * 60:
+		field3._process(1.0 / 60.0)
+	var off: Array[String] = [field3.census_line(), field3.lineage_line(),
+		field3.behaviour_line()]
+	_done(pack3)
 	seed(20260930)
 	var differ := 0
 	for k in maxi(off.size(), THREE_ONE_LINES.size()):
@@ -2698,24 +2708,23 @@ func _determinism() -> void:
 			print("[drop-probe] check 6, line %d, 3-1:        %s" % [k + 1, theirs])
 	var changed := behaviours[0].get_slice("| rules changed ", 1).get_slice(":", 0)
 	var kinds := behaviours[0].get_slice("| behaviours ", 1).get_slice("  |", 0)
-	_check(("6. determinism: one seed, forty seconds of a sighted player's drop with the rules"
-		+ " changing (%s changes, behaviours %s), twice and with the near-first search off: the"
-		+ " behaviour lines %s; with the changes off, in pack 3's water, a sighted player's and a"
-		+ " newborn's drop are phase 3-1's -- census, lineage and behaviour lines %s -- and with"
-		+ " them on the first is"
+	_check(("6. determinism: one seed, forty seconds of a drop with the rules changing (%s"
+		+ " changes, behaviours %s), twice and with the near-first search off: the behaviour"
+		+ " lines %s; with the changes off, in pack 3's water, the drop is phase 3-1's --"
+		+ " census, lineage and behaviour lines %s -- and with them on the first is"
 		+ " %s") % [changed, kinds, "the same" if behaviours[0] == behaviours[1]
 		and behaviours[0] == behaviours[2] else "DIFFERENT",
 		"the same to the byte" if differ == 0 else "%d DIFFER" % differ,
 		"3-1's -- THE SWITCH DOES NOTHING" if lines[0] == THREE_ONE_LINES[0] else "not 3-1's"],
 		behaviours[0] == behaviours[1] and behaviours[0] == behaviours[2]
-		and changed.is_valid_int() and int(changed) > 0 and differ == 0 and off.size() == 6
+		and changed.is_valid_int() and int(changed) > 0 and differ == 0 and off.size() == 3
 		and lines[0] != THREE_ONE_LINES[0])
 	var sums := PackedStringArray()
 	for line in lines:
 		sums.append(line.get_slice("| sum ", 1))
 	var divided := families[0].get_slice("| ", 2).get_slice(" (", 0)
-	_check(("8. and lineage 7. determinism: one seed, forty seconds of a sighted player's drop"
-		+ " with births, twice and with the near-first search off: census checksums %s, the"
+	_check(("8. and lineage 7. determinism: one seed, forty seconds of a drop with births,"
+		+ " twice and with the near-first search off: census checksums %s, the"
 		+ " census lines %s and the lineage lines %s, with %s") % [", ".join(sums),
 		"the same" if lines[0] == lines[1] and lines[0] == lines[2] else "DIFFERENT",
 		"the same" if families[0] == families[1] and families[0] == families[2]
@@ -3573,7 +3582,7 @@ func _save() -> void:
 ## Every slot, every field §9.2 names and what its genome buys, to the bit by
 ## their bytes; the free slots in their order, and the drop's clocks.
 func _save_bodies() -> void:
-	var water := _water(0.0, 0.6)
+	var water := _water()
 	var field: WatchedDrop = water[0]
 	for f in 20 * 60:
 		field._process(1.0 / 60.0)
@@ -3863,7 +3872,7 @@ func _save_rules() -> void:
 			names.append(name)
 	var by_name := names.duplicate()
 	by_name.sort()
-	var water := _water(0.0, 0.6)
+	var water := _water()
 	var field: WatchedDrop = water[0]
 	for f in 5 * 60:
 		field._process(1.0 / 60.0)
@@ -4003,7 +4012,7 @@ func _lines(body: Object) -> PackedStringArray:
 ## the drop does not keep, echoes that are not whole, a memory that is not one.
 func _save_behaviour() -> void:
 	seed(34)
-	var water := _water(0.0, 0.6)
+	var water := _water()
 	var field: WatchedDrop = water[0]
 	for f in 10 * 60:
 		field._process(1.0 / 60.0)
@@ -4141,7 +4150,6 @@ func _load_into(drop: Dictionary) -> Array:
 	cell.radius = CellBody.BASE_RADIUS
 	var field := WatchedDrop.new()
 	field.process_mode = Node.PROCESS_MODE_DISABLED
-	field.sensed_override = 0.6
 	add_child(field)
 	if not drop.is_empty():
 		field.load_drop(cell, drop)
@@ -5534,7 +5542,7 @@ const LINEAGE_FIELDS: Array[String] = ["id", "parent", "generation", "lineage", 
 ## -- one entry short, a DNA that is not gene names to copies, a grace in 32
 ## bits -- makes the file unreadable, never half-loaded.
 func _save_lineage() -> void:
-	var water := _water(0.0, 0.6)
+	var water := _water()
 	var field: WatchedDrop = water[0]
 	for f in 20 * 60:
 		field._process(1.0 / 60.0)
@@ -5899,8 +5907,8 @@ func _identity() -> void:
 		sums.append(line.get_slice("| sum ", 1))
 	var divided := on.size() == 2 and on[1].begins_with("[lineage]") \
 		and not on[1].contains("divisions 0 ")
-	_check(("lineage 10. the identity gate: with births off, %d census lines -- a newborn's"
-		+ " drop and a sighted player's, 60 s each, and the empty room, 30 s -- with your id"
+	_check(("lineage 10. the identity gate: with births off, %d census lines -- a drop of"
+		+ " seed 1 and one of seed 2, 60 s each, and the empty room, 30 s -- with your id"
 		+ " taken from the drop's count and a sister carrying more than she wears, against"
 		+ " dev's on the same seeds: %s (sums %s); with births on the first is %s (%s)") % [
 		lines.size(), "the same to the byte" if differ == 0 else "%d DIFFER" % differ,
@@ -5910,26 +5918,26 @@ func _identity() -> void:
 		and divided)
 
 
-## **The identity gate's scenario** (lineage 10): a newborn's drop and a sighted
-## player's, each from its own seed, 60 s with a census every 30 s, and the
-## server's empty room from a third, 30 s. Your cell takes its id from the
+## **The identity gate's scenario** (lineage 10): two drops, each from its own
+## seed -- 1 and 2 -- 60 s with a census every 30 s, and the server's empty room
+## from a third, 30 s. Your cell takes its id from the
 ## drop's count first, which moves every id after it, and 30 s in a sister is
 ## left wearing [constant IDENTITY_BODY] and carrying [constant IDENTITY_DNA],
 ## the child of your record. `dev` ran it with neither -- no id taken, and a
 ## sister who was her body and nothing more -- so neither may move a thing.
 ## Every field has [param births] as asked, and pack 2's hand-written hunter,
 ## which is pack 1's and `dev`'s (behaviour.md §12.3 check 1); with [param first]
-## it stops at the first census -- the newborn's at 30 s -- and adds its lineage
-## line after it.
+## it stops at the first census -- seed 1's at 30 s -- and adds its lineage
+## line after it. **They were a newborn's drop and a sighted player's**; the water
+## reads nobody's senses now (water-evolves.md), so only the seeds tell them apart.
 func _identity_lines(births: bool, first := 0) -> Array[String]:
 	var lines: Array[String] = []
-	for each: Array in [[1, 0.2], [2, 0.6]]:
-		seed(int(each[0]))
+	for each: int in [1, 2]:
+		seed(each)
 		var cell := CellBody.new()
 		cell.radius = CellBody.BASE_RADIUS
 		var field := FoodField.new()
 		field.process_mode = Node.PROCESS_MODE_DISABLED
-		field.sensed_override = float(each[1])
 		field.births = births
 		field.rules = false
 		add_child(field)
@@ -6023,7 +6031,6 @@ func _membrane_digest(rules: bool) -> String:
 	cell.radius = CellBody.BASE_RADIUS
 	var field := FoodField.new()
 	field.process_mode = Node.PROCESS_MODE_DISABLED
-	field.sensed_override = 0.6
 	field.grace = 1e6
 	field.rules = rules
 	add_child(field)
@@ -6849,7 +6856,6 @@ func _modular() -> void:
 	var field := TrialDrop.new()
 	field.process_mode = Node.PROCESS_MODE_DISABLED
 	field.desert = 3000.0
-	field.sensed_override = 0.6
 	add_child(field)
 	field.setup_drop(cell)
 	field.in_water = false
@@ -6925,7 +6931,6 @@ func _modular() -> void:
 	cell2.radius = CellBody.BASE_RADIUS
 	var field2 := TrialDrop.new()
 	field2.process_mode = Node.PROCESS_MODE_DISABLED
-	field2.sensed_override = 0.6
 	add_child(field2)
 	if not back.is_empty():
 		field2.load_drop(cell2, back["drop"])
@@ -6943,7 +6948,6 @@ func _modular() -> void:
 	cell3.radius = CellBody.BASE_RADIUS
 	var field3 := WatchedDrop.new()
 	field3.process_mode = Node.PROCESS_MODE_DISABLED
-	field3.sensed_override = 0.6
 	add_child(field3)
 	if not back.is_empty():
 		field3.load_drop(cell3, back["drop"])
@@ -7133,7 +7137,7 @@ func _tail() -> void:
 ## [method _membrane]; the tail does not reach it.)
 func _tail_pack3() -> void:
 	seed(1)
-	var water := _water(0.0, 1.0, true, false)
+	var water := _water(0.0, true, false)
 	var field: WatchedDrop = water[0]
 	for f in 5 * 60 * 60:
 		field._process(1.0 / 60.0)
@@ -7191,7 +7195,6 @@ func _tail_trace(tails: bool) -> String:
 	var genome: Node = cell.genome
 	var field := FoodField.new()
 	field.process_mode = Node.PROCESS_MODE_DISABLED
-	field.sensed_override = 0.6
 	field.set("tails_beat", tails)
 	add_child(field)
 	field.setup_drop(cell)
@@ -7571,7 +7574,7 @@ func _tail_water() -> void:
 	var seen := []
 	for tails: bool in [true, false]:
 		seed(55)
-		var water := _water(3000.0, -1.0, true, tails)
+		var water := _water(3000.0, true, tails)
 		var field: WatchedDrop = water[0]
 		var cell: CellBody = water[1]
 		var cells: Array = field.get("_cells")
@@ -7627,7 +7630,7 @@ func _tail_coming() -> void:
 	var shot := []
 	for each: Array in [[big_one, true], [big_two, true], [big_one, false]]:
 		seed(56)
-		var water := _water(3000.0, -1.0, true, bool(each[1]))
+		var water := _water(3000.0, true, bool(each[1]))
 		var field: WatchedDrop = water[0]
 		var cell: CellBody = water[1]
 		var cells: Array = field.get("_cells")
@@ -10313,7 +10316,7 @@ static func _due(field: Object) -> Array:
 ## `dev` kept it -- its cell's poison at slot 3, a water body's `veneneux`, no
 ## loads anywhere -- opened, converted, and played.
 func _dna_saves() -> void:
-	var water := _water(0.0, 0.6)
+	var water := _water()
 	var field: WatchedDrop = water[0]
 	for f in 10 * 60:
 		field._process(1.0 / 60.0)
@@ -10857,7 +10860,7 @@ func _rarity_crowded() -> void:
 	print("[drop-probe] NOTE rarity 3, the mixed hundred by the gene probe's arithmetic: %s"
 		% GeneProbe.call(&"_arithmetic"))
 	seed(1)
-	var water := _water(0.0, 1.0)
+	var water := _water()
 	var field: WatchedDrop = water[0]
 	for f in 5 * 60 * 60:
 		field._process(1.0 / 60.0)
