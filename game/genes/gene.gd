@@ -237,10 +237,19 @@ var one_variant := false
 ## own, as the dart, the call and the mouth do (§3.3). A part may wait for a
 ## level (automation.md §4.3). Its words are its file's (below).
 ##
-## **An output with `"button": true` is the hand's as well** (docs/design/
-## haptonema.md §4): a body that wears its organ at the part's level has a pad for
-## it under every control scheme and a key, and while either is held the part acts
-## as it does while an instinct claims it. The pad is drawn as the organ's tile.
+## **An output with a `"button"` is the hand's as well** (docs/design/
+## gene-controls.md): a body that wears its organ at the part's level has a control
+## for it on screen and a key, and the control's kind is the part's own -- it says
+## how the gene behaves, so the control says it too:
+##
+## - `&"held"`: a pad, and the part acts while it is held, as it does while an
+##   instinct claims it (the tail's hold, the cling);
+## - `&"tap"`: a pad, and the part fires once on the press (the dash);
+## - `&"lever"`: a slider, pushed up from rest and back down on its own when let
+##   go, and the part acts at that strength while it is held (the push).
+##
+## Each is drawn with the organ's tile. A part with no `"button"` is the
+## instincts' alone.
 var declares := {}
 
 # --- Its words (gene-catalogue.md §8.1) -----------------------------------------------

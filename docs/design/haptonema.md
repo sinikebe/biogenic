@@ -65,6 +65,11 @@ instinct of yours claims it.
 
 ## 4. A gene's button
 
+> **Grown into one control per gene** (`gene-controls.md`, 2026-10-15): a
+> `"button"` now names its kind, `held`, `tap` or `lever`, and the dash, the push and
+> the tail's hold are declared the same way. There are no schemes any more, so
+> "under every scheme" below means always.
+
 **Any output a gene declares can be the hand's as well.** Mark it `"button": true`
 in the organ's `declares` (gene.gd). From then on, a body that wears the organ at
 the part's level gets two things:

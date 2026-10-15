@@ -484,24 +484,40 @@ static func declares() -> Dictionary:
 	return _declares
 
 
-## **The parts a hand may press** (docs/design/haptonema.md §4): every output a
-## gene declares with `"button": true`, as `[part, name, organ, level]` -- its
-## qualified name (`haptonema.cling`), its own name (`cling`), its organ and the
-## level it waits for -- in the order [method declares] holds them.
+## **The parts a hand may work** (docs/design/gene-controls.md): every output a gene
+## declares with a `"button"`, as `[part, name, organ, level, kind]` -- its
+## qualified name (`haptonema.cling`), its own name (`cling`), its organ, the level
+## it waits for and its control's kind, `held`, `tap` or `lever` (gene.gd's
+## `declares`) -- in the order [method declares] holds them.
 static func buttons() -> Array:
 	return _buttons
 
 
 ## **The buttons of a body whose keys work at [param levels]** (key to level, as
 ## [method worn_levels] makes them): each of [method buttons] whose organ it works
-## at the part's level or more, in their order -- a pad each (controls.gd) and a
-## key each (cell.gd's BUTTON_KEYS), in that order.
+## at the part's level or more, in their order -- a control each (controls.gd)
+## and a key each (cell.gd's `_key_of`).
 static func worn_buttons(levels: Dictionary) -> Array:
 	var out := []
 	for one: Array in _buttons:
 		if organ_level(levels, one[2]) >= int(one[3]):
 			out.append(one)
 	return out
+
+
+## **The kinds of control a part's `"button"` may name** (gene.gd's `declares`).
+const BUTTON_KINDS: Array[StringName] = [&"held", &"tap", &"lever"]
+
+
+## **The control kind a part's `"button"` names**: one of [constant BUTTON_KINDS];
+## `&"held"` for `true`, the one kind there was before there were others; `&""`
+## for none, or a kind this build does not know, which the hand then has no
+## control for.
+static func _button_kind(value: Variant) -> StringName:
+	if value is bool:
+		return &"held" if value else &""
+	var kind := StringName(str(value))
+	return kind if BUTTON_KINDS.has(kind) else &""
 
 
 ## **[param levels] -- a key to the level it works at -- by organ**: each organ to
@@ -977,9 +993,10 @@ static func _index() -> void:
 	_buttons = []
 	for organ: StringName in declared:
 		for one: Dictionary in (declared[organ] as Dictionary).get("out", []):
-			if bool(one.get("button", false)):
+			var kind := _button_kind(one.get("button", false))
+			if kind != &"":
 				_buttons.append([StringName("%s.%s" % [organ, one["name"]]),
-					StringName(one["name"]), organ, int(one.get("level", 1))])
+					StringName(one["name"]), organ, int(one.get("level", 1)), kind])
 	_buttons.make_read_only()
 	_first_keys = first_keys
 	_owners_are_keys = owners_are_keys

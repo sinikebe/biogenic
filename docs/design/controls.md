@@ -1,5 +1,12 @@
 # Control schemes
 
+> **Superseded by `gene-controls.md` (2026-10-15).** The owner: *"No more controls
+> without buttons. Add a proper control element for each gene."* There is one
+> layout now and no chooser: `anywhere` and `pads` are gone, and `stick`'s slider
+> is the turn, without the push. What this page says about the geometry, the look,
+> one pointer per control, the lean at a division and the pinch handover still
+> holds; what it says about three schemes and the chooser is history.
+
 The owner, in one sentence:
 
 > "Add more control options. For example, a left right joystick and buttons. We

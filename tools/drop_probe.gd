@@ -2902,7 +2902,6 @@ func _flocs() -> void:
 func _flocs_fed() -> void:
 	var run: Node = load("res://game/normal/normal_mode.tscn").instantiate()
 	run.set("mode", 0)
-	run.set("scheme", 0)
 	run.set("keep", "")
 	run.set("library_at", "")
 	add_child(run)
@@ -3481,7 +3480,6 @@ func _replay_killer() -> void:
 func _replay_run() -> void:
 	var run: Node = load("res://game/normal/normal_mode.tscn").instantiate()
 	run.set("mode", 1)
-	run.set("scheme", 0)
 	run.set("keep", "")
 	run.set("library_at", "")
 	add_child(run)
@@ -3959,7 +3957,6 @@ static func _said(entry: Dictionary) -> String:
 func _kept_run() -> Node:
 	var run: Node = load("res://game/normal/normal_mode.tscn").instantiate()
 	run.set("mode", 0)
-	run.set("scheme", 0)
 	run.set("keep", KEEP)
 	run.set("cells_at", Cells.selected_in(KEEP_CELLS))
 	run.set("library_at", "")
@@ -4665,7 +4662,6 @@ func _drops_said() -> void:
 func _drops_run(keep: String) -> Node:
 	var run: Node = load("res://game/normal/normal_mode.tscn").instantiate()
 	run.set("mode", 0)
-	run.set("scheme", 0)
 	run.set("keep", keep)
 	run.set("cells_at", "")
 	run.set("library_at", "")
@@ -5311,7 +5307,6 @@ func _cells_key() -> void:
 func _cells_flip_run(flip: bool) -> Node:
 	var run: Node = load("res://game/normal/normal_mode.tscn").instantiate()
 	run.set("mode", RunState.Mode.FULL_VISION)
-	run.set("scheme", 0)
 	run.set("keep", Drops.selected_in(CELLS_ROOT))
 	run.set("cells_at", Cells.selected_in(CELLS_ROOT))
 	run.set("library_at", "")
@@ -5390,7 +5385,6 @@ func _cell_run(mode: int, cells := true, library := "") -> Node:
 	DirAccess.make_dir_recursive_absolute(CELLS_ROOT)
 	var run: Node = load("res://game/normal/normal_mode.tscn").instantiate()
 	run.set("mode", mode)
-	run.set("scheme", 0)
 	run.set("keep", Drops.selected_in(CELLS_ROOT))
 	run.set("cells_at", Cells.selected_in(CELLS_ROOT) if cells else "")
 	run.set("library_at", library)
@@ -5760,7 +5754,6 @@ func _save_cell_lineage() -> void:
 func _sister_lineage() -> void:
 	var run: Node = load("res://game/normal/normal_mode.tscn").instantiate()
 	run.set("mode", 0)
-	run.set("scheme", 0)
 	run.set("keep", "")
 	run.set("library_at", "")
 	add_child(run)
@@ -7572,68 +7565,60 @@ func _tail_strokes() -> void:
 		+ " rhythm -- %s" % "; ".join(said), ok)
 
 
-## **2 and 3, drawn** (automation-ux.md §6.1): in a run of the game under each
-## scheme, a born cell's tail of one copy draws no hold pad -- under `anywhere`
-## no control at all -- and a press where it would be is not one; grown two copies,
-## the pad is drawn, under `pads` and `anywhere` three pad widths in and under
-## `stick` in push's place, clear of every other control; held, the tail is held
-## still, and let go it is not. Under `anywhere` a press on it is the pad's, and
-## steers nothing.
+## **2 and 3, drawn** (automation-ux.md §6.1; gene-controls.md): in a run of the
+## game, a born cell's tail of one copy draws no hold pad, and a press where it
+## would be is not one; grown two copies, the pad is drawn -- a held pad, the only
+## pad, so in the right edge's corner, clear of the turn; held, the tail is held
+## still, and let go it is not.
 func _tail_drawn() -> void:
-	var said := PackedStringArray()
-	var ok := true
-	for scheme: int in [0, 1, 2]:
-		var run: Node = load("res://game/normal/normal_mode.tscn").instantiate()
-		run.set("mode", 0)
-		run.set("scheme", scheme)
-		run.set("keep", "")
-		run.set("library_at", "")
-		add_child(run)
-		for f in 30:
-			await get_tree().process_frame
-		var controls: Control = run.get("_controls")
-		var cell: CellBody = run.get("_cell")
-		var genome: Node = run.get("_genome")
-		var hold: int = ControlsNode.HOLD
-		var box: Rect2 = controls.call(&"rect_of", hold)
-		var born: bool = not bool(controls.call(&"_live", hold)) \
-			and int(controls.call(&"hit", box.get_center())) != hold \
-			and (scheme != 0 or not controls.visible)
-		genome.call(&"express", TWO_TAILS, [&"cytostome", &"cirrus", &"flagellum"])
-		for f in 3:
-			await get_tree().process_frame
-		var drawn: bool = bool(controls.call(&"_live", hold)) and controls.visible \
-			and int(controls.call(&"hit", box.get_center())) == hold
-		var inboard := 2.0 if scheme == 1 else 3.0
-		var placed := absf(box.position.x - (controls.size.x - 48.0 - 96.0 * inboard
-			- 24.0 * (inboard - 1.0))) < 0.01 and absf(box.end.y - (controls.size.y - 48.0)) < 0.01
-		var clear := true
-		for id: int in [0, 1, 2, 3, 4]:
-			if bool(controls.call(&"_live", id)) \
-					and (controls.call(&"rect_of", id) as Rect2).intersects(box):
-				clear = false
-		var steered := -2
-		if scheme == 0:
-			cell.call(&"_claim", 0, box.get_center())
-			steered = int(cell.get("_pointer"))
-		else:
-			controls.call(&"press", 0, box.get_center())
-		for f in 3:
-			await get_tree().process_frame
-		var held_now := cell.tail_held()
-		controls.call(&"release", 0)
-		for f in 3:
-			await get_tree().process_frame
-		var let_go := not cell.tail_held()
-		said.append("%s: born %s, two copies %s, placed %s, clear %s, held %s, let go %s%s" % [
-			["anywhere", "stick", "pads"][scheme], str(born), str(drawn), str(placed),
-			str(clear), str(held_now), str(let_go),
-			", steering pointer %d" % steered if scheme == 0 else ""])
-		ok = ok and born and drawn and placed and clear and held_now and let_go \
-			and (scheme != 0 or steered == CellBody.POINTER_NONE)
-		run.queue_free()
+	var run: Node = load("res://game/normal/normal_mode.tscn").instantiate()
+	run.set("mode", 0)
+	run.set("keep", "")
+	run.set("library_at", "")
+	add_child(run)
+	for f in 30:
 		await get_tree().process_frame
-	_check("tail 2 and 3, drawn: the hold pad in a run of the game -- %s" % "; ".join(said), ok)
+	var controls: Control = run.get("_controls")
+	var cell: CellBody = run.get("_cell")
+	var genome: Node = run.get("_genome")
+	var corner := Rect2(controls.size.x - 48.0 - 96.0, controls.size.y - 48.0 - 96.0,
+		96.0, 96.0)
+	var born: bool = _hold_pad(controls) == ControlsNode.NONE \
+		and int(controls.call(&"hit", corner.get_center())) == ControlsNode.NONE
+	genome.call(&"express", TWO_TAILS, [&"cytostome", &"cirrus", &"flagellum"])
+	for f in 3:
+		await get_tree().process_frame
+	var hold := _hold_pad(controls)
+	var box: Rect2 = controls.call(&"rect_of", hold) if hold != ControlsNode.NONE else Rect2()
+	var drawn: bool = hold != ControlsNode.NONE and controls.visible \
+		and StringName(controls.call(&"kind_of", hold)) == ControlsNode.HELD \
+		and int(controls.call(&"hit", box.get_center())) == hold
+	var placed := box.is_equal_approx(corner)
+	var clear := not (controls.call(&"rect_of", ControlsNode.TURN) as Rect2).intersects(box)
+	cell.call(&"_claim", 0, box.get_center())
+	for f in 3:
+		await get_tree().process_frame
+	var held_now := cell.tail_held()
+	controls.call(&"release", 0)
+	for f in 3:
+		await get_tree().process_frame
+	var let_go := not cell.tail_held()
+	run.queue_free()
+	await get_tree().process_frame
+	_check(("tail 2 and 3, drawn: the hold pad in a run of the game -- born %s, two copies"
+		+ " %s, placed %s, clear %s, held %s, let go %s") % [str(born), str(drawn),
+		str(placed), str(clear), str(held_now), str(let_go)],
+		born and drawn and placed and clear and held_now and let_go)
+
+
+## The control of the tail's hold among [param controls]' parts, or
+## [constant ControlsNode.NONE] while there is none.
+static func _hold_pad(controls: Control) -> int:
+	var parts: Array = controls.get("_parts")
+	for k in parts.size():
+		if StringName(parts[k][1]) == &"hold":
+			return ControlsNode.PART + k
+	return ControlsNode.NONE
 
 
 ## **4. The water's tails** (automation.md §5.3, §18.3), under row 37: a posed
@@ -8119,14 +8104,12 @@ func _instincts_no_magic() -> void:
 	seed(20260930)
 
 
-## **A run of the game, for the autopilot's checks**: point of view, under
-## [param scheme], no drop kept and no library -- given [param lines] as one
-## program, on, unless empty -- wearing [param tiers]. Built and stepped by real
-## frames.
-func _ap_run(scheme: int, lines: Array, tiers: Dictionary) -> Node:
+## **A run of the game, for the autopilot's checks**: point of view, no drop kept
+## and no library -- given [param lines] as one program, on, unless empty --
+## wearing [param tiers]. Built and stepped by real frames.
+func _ap_run(lines: Array, tiers: Dictionary) -> Node:
 	var run: Node = load("res://game/normal/normal_mode.tscn").instantiate()
 	run.set("mode", 0)
-	run.set("scheme", scheme)
 	run.set("keep", "")
 	run.set("library_at", "")
 	add_child(run)
@@ -8187,12 +8170,11 @@ func _ap_frames(n: int) -> void:
 ## by the input path a player uses. It engages only by its icon or its key --
 ## frames of nothing, a pause opened and shut, leave it off -- and lets go of what
 ## the hand held. **A new press of each control the hand drives with takes the
-## cell back on that frame**, under each scheme and by every key: a finger on the
-## water and the hold pad under `anywhere`, the stick, the dash pad and the hold
-## under `stick`, every pad under `pads`, and A, D, W, S, Space and the arrows. A
-## key held through the switching-on, or a finger left down, takes nothing back
-## until pressed again; a press on open water under `stick` and `pads` takes
-## nothing back; a press on the icon itself steers nothing and dashes nothing. A
+## cell back on that frame**, by every drawn control and every key: the turn, the
+## push's lever, the dash and the hold (gene-controls.md), and A, D, W, S, Space
+## and the arrows. A key held through the switching-on, or a finger left down,
+## takes nothing back until pressed again; a press on open water takes nothing
+## back; a press on the icon itself steers nothing and dashes nothing. A
 ## death switches it off and a division keeps it, and switching off the last
 ## program on switches it off.
 func _instincts_autopilot() -> void:
@@ -8205,7 +8187,7 @@ func _instincts_autopilot() -> void:
 	var said := PackedStringArray()
 	var ok := true
 	# Engages only by its icon or key; lets go of what the hand held.
-	var run := await _ap_run(2, lines, tiers)
+	var run := await _ap_run(lines, tiers)
 	var cell: CellBody = run.get("_cell")
 	var controls: Control = run.get("_controls")
 	var icon: Control = run.get("_autopilot_icon")
@@ -8216,7 +8198,8 @@ func _instincts_autopilot() -> void:
 	run.call(&"_toggle_pause")
 	await _ap_frames(2)
 	idle = idle and not cell.autopilot
-	var port: Rect2 = controls.call(&"rect_of", ControlsNode.PORT)
+	var port: Rect2 = controls.call(&"rect_of", ControlsNode.TURN)
+	port.size.x *= 0.25
 	_ap_touch(port.get_center(), true)
 	await _ap_frames(2)
 	var holding_before := bool(controls.call(&"steering"))
@@ -8249,50 +8232,44 @@ func _instincts_autopilot() -> void:
 	ok = ok and off_by_key and by_icon
 	run.queue_free()
 	await _ap_frames(2)
-	# A new press of each control, under each scheme, takes the cell back.
-	var controls_of := {0: [-1, ControlsNode.HOLD], 1: [ControlsNode.STICK, ControlsNode.DASH,
-		ControlsNode.HOLD], 2: [ControlsNode.PORT, ControlsNode.STARBOARD, ControlsNode.PUSH,
-		ControlsNode.DASH, ControlsNode.HOLD]}
-	for scheme: int in [0, 1, 2]:
-		run = await _ap_run(scheme, lines, tiers)
-		cell = run.get("_cell")
-		controls = run.get("_controls")
-		var taken := PackedStringArray()
-		var all_taken := true
-		for id: int in controls_of[scheme]:
-			_ap_key(KEY_R, true)
-			_ap_key(KEY_R, false)
-			await _ap_frames(2)
-			var on := cell.autopilot
-			var at := Vector2(640.0, 420.0) if id < 0 \
-				else (controls.call(&"rect_of", id) as Rect2).get_center()
-			_ap_touch(at, true)
-			var back := not cell.autopilot
-			_ap_touch(at, false)
-			await _ap_frames(2)
-			taken.append("%s %s" % ["water" if id < 0 else str(id), "yes" if on and back
-				else "NO"])
-			all_taken = all_taken and on and back
-		# Open water under the drawn schemes takes nothing back.
-		var water_kept := true
-		if scheme != 0:
-			_ap_key(KEY_R, true)
-			_ap_key(KEY_R, false)
-			await _ap_frames(2)
-			_ap_touch(Vector2(640.0, 300.0), true)
-			water_kept = cell.autopilot
-			_ap_touch(Vector2(640.0, 300.0), false)
-			await _ap_frames(2)
-			_ap_key(KEY_R, true)
-			_ap_key(KEY_R, false)
-			await _ap_frames(2)
-		said.append("%s: %s%s" % [["anywhere", "stick", "pads"][scheme], ", ".join(taken),
-			"" if scheme == 0 else ", open water keeps it %s" % str(water_kept)])
-		ok = ok and all_taken and water_kept and not cell.autopilot
-		run.queue_free()
+	# A new press of each control takes the cell back.
+	run = await _ap_run(lines, tiers)
+	cell = run.get("_cell")
+	controls = run.get("_controls")
+	var taken := PackedStringArray()
+	var all_taken := true
+	var parts: Array = controls.get("_parts")
+	for id in parts.size() + ControlsNode.PART:
+		_ap_key(KEY_R, true)
+		_ap_key(KEY_R, false)
 		await _ap_frames(2)
+		var on := cell.autopilot
+		var at := (controls.call(&"rect_of", id) as Rect2).get_center()
+		_ap_touch(at, true)
+		var back := not cell.autopilot
+		_ap_touch(at, false)
+		await _ap_frames(2)
+		var named: String = "turn" if id == ControlsNode.TURN \
+			else String(controls.call(&"name_of", id))
+		taken.append("%s %s" % [named, "yes" if on and back else "NO"])
+		all_taken = all_taken and on and back
+	# Open water takes nothing back.
+	_ap_key(KEY_R, true)
+	_ap_key(KEY_R, false)
+	await _ap_frames(2)
+	_ap_touch(Vector2(640.0, 300.0), true)
+	var water_kept := cell.autopilot
+	_ap_touch(Vector2(640.0, 300.0), false)
+	await _ap_frames(2)
+	_ap_key(KEY_R, true)
+	_ap_key(KEY_R, false)
+	await _ap_frames(2)
+	said.append("%s, open water keeps it %s" % [", ".join(taken), str(water_kept)])
+	ok = ok and all_taken and taken.size() == 4 and water_kept and not cell.autopilot
+	run.queue_free()
+	await _ap_frames(2)
 	# Every key the hand drives with; and one held through the switching-on.
-	run = await _ap_run(0, lines, tiers)
+	run = await _ap_run(lines, tiers)
 	cell = run.get("_cell")
 	var keys := PackedStringArray()
 	var keys_ok := true
@@ -8326,21 +8303,21 @@ func _instincts_autopilot() -> void:
 	var again := not cell.autopilot
 	_ap_key(KEY_A, false)
 	await _ap_frames(2)
-	# A finger left down under `anywhere`: dragged, still on; a new press takes back.
-	_ap_touch(Vector2(500.0, 500.0), true)
+	# A finger left down on the turn: dragged, still on; a new press takes back.
+	_ap_touch(Vector2(100.0, 624.0), true)
 	await _ap_frames(2)
 	_ap_key(KEY_R, true)
 	_ap_key(KEY_R, false)
 	await _ap_frames(4)
-	_ap_drag(Vector2(560.0, 500.0))
+	_ap_drag(Vector2(160.0, 624.0))
 	await _ap_frames(4)
 	var finger := cell.autopilot
-	_ap_touch(Vector2(560.0, 500.0), false)
+	_ap_touch(Vector2(160.0, 624.0), false)
 	await _ap_frames(2)
 	finger = finger and cell.autopilot
-	_ap_touch(Vector2(500.0, 500.0), true)
+	_ap_touch(Vector2(100.0, 624.0), true)
 	finger = finger and not cell.autopilot
-	_ap_touch(Vector2(500.0, 500.0), false)
+	_ap_touch(Vector2(100.0, 624.0), false)
 	await _ap_frames(2)
 	said.append("every key takes it back %s%s; a key held through it %s, pressed again %s;"
 		% [str(keys_ok), "" if keys.is_empty() else " (NOT %s)" % ",".join(keys),
@@ -8368,7 +8345,7 @@ func _instincts_autopilot() -> void:
 	run.queue_free()
 	await _ap_frames(2)
 	# A division keeps it: on through the pinch, the lean and the birth.
-	run = await _ap_run(0, lines, tiers)
+	run = await _ap_run(lines, tiers)
 	cell = run.get("_cell")
 	_ap_key(KEY_R, true)
 	_ap_key(KEY_R, false)
@@ -8976,7 +8953,7 @@ func _instincts_modular() -> void:
 func _instincts_replay() -> void:
 	var tiers := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2, &"axoneme": 1}
 	var lines := ["always -> body.turn-random", "always -> axoneme.push 0.5"]
-	var run := await _ap_run(0, lines, tiers)
+	var run := await _ap_run(lines, tiers)
 	var recorder: Node = run.get("_recorder")
 	_ap_key(KEY_R, true)
 	_ap_key(KEY_R, false)
@@ -9002,7 +8979,7 @@ func _instincts_replay() -> void:
 				taken = taken or (drove and not bool(acts[0]))
 	run.queue_free()
 	await _ap_frames(2)
-	run = await _ap_run(0, [], tiers)
+	run = await _ap_run([], tiers)
 	recorder = run.get("_recorder")
 	await _ap_frames(20)
 	var quiet_rows: int = (recorder.call(&"deltas") as Array).filter(func(row: Array) -> bool:

@@ -252,21 +252,6 @@ horizontal_alignment = 1
 [node name="Toggle" type="Button" parent="Hud/Pause/Center/Columns/Side/Settings/View/Box"]
 text = "north up"
 
-[node name="Feel" type="PanelContainer" parent="Hud/Pause/Center/Columns/Side/Settings"]
-
-[node name="Box" type="VBoxContainer" parent="Hud/Pause/Center/Columns/Side/Settings/Feel"]
-theme_override_constants/separation = 6
-
-[node name="Caption" type="Label" parent="Hud/Pause/Center/Columns/Side/Settings/Feel/Box"]
-mouse_filter = 2
-theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.45)
-theme_override_font_sizes/font_size = 15
-text = "controls"
-horizontal_alignment = 1
-
-[node name="Toggle" type="Button" parent="Hud/Pause/Center/Columns/Side/Settings/Feel/Box"]
-text = "anywhere"
-
 [node name="Resume" type="Button" parent="Hud/Pause/Center/Columns/Side"]
 size_flags_horizontal = 4
 text = "resume"

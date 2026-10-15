@@ -30,11 +30,10 @@ const BodyPlan := preload("res://game/genes/body_plan.gd")
 ## Emitted when an impulse fires, so the membrane can bloom at the front.
 signal impulsed(strength: float)
 ## **A new press of a control the hand drives with**, while the autopilot has the
-## cell (docs/design/automation.md §2.3, row 36): a steer, a push, a dash or the
-## hold, by the scheme's own rules -- a finger on the water under `anywhere`, a
-## drawn control under `stick` and `pads`, a key. The run takes the cell back on
-## it, in the same frame, before the press does what it does. Never for a press
-## that was already down, nor while the hand is silenced.
+## cell (docs/design/automation.md §2.3, row 36): a drawn control (controls.gd) or
+## a key. The run takes the cell back on it, in the same frame, before the press
+## does what it does. Never for a press that was already down, nor while the hand
+## is silenced.
 signal took_back
 ## `myoneme` -- a burst of speed the player asked for, and what it cost. The
 ## cell cannot spend hunger itself: metabolism belongs to the run, so the price
@@ -231,10 +230,6 @@ const PUSH_CHASE_SHARE := 0.5
 ## The dash's cooldown.
 ## The host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const DASH_COOLDOWN := 1.4
-## A press shorter than this, that moved less than this far, is a tap and not a
-## steer. Both halves matter: a thumb that slid is steering.
-const TAP_SECONDS := 0.28
-const TAP_SLOP := 26.0
 
 # --- The toxin: venom outside, poison inside (docs/design/dna-slots.md §6, §7) --
 # **Doses replace both of what `veneneux` did** -- the bite-back share and the
@@ -318,8 +313,6 @@ static func stroke_cost(speed: float) -> float:
 const TURN_COST := 1.3
 
 # --- Input -----------------------------------------------------------------
-## Canvas pixels of drag for a full-rate turn.
-const DRAG_SPAN := 190.0
 ## Below this the player is not really steering, so onboarding stays up.
 const STEER_DEADZONE := 0.12
 
@@ -418,8 +411,7 @@ static func words_of(part: StringName) -> Dictionary:
 		out["explains"] = String(TranslationServer.translate(BODY_EXPLAINS[part]))
 	return out
 
-## Nothing held. Touch indices are >= 0 and the mouse is -1, so -2 is free.
-const POINTER_NONE := -2
+## The mouse, as a pointer index. Touch indices are >= 0.
 const POINTER_MOUSE := -1
 
 var position := Vector2.ZERO
@@ -455,20 +447,11 @@ var _hold := -1
 ## Seconds of rest this body has spent moving since the run last took them
 ## ([method take_effort]).
 var _effort := 0.0
-## When the current press started and where, so a tap can be told from a steer.
-var _pointer_at := 0.0
-var _pointer_from := 0.0
-## -2 nothing held, -1 the mouse, >= 0 the touch index that owns the drag.
-## **One slot, and that is correct for `anywhere` and only for `anywhere`**: a
-## resting palm must not fight the steering thumb when the whole screen is the
-## control. The other two schemes need a finger per control, and that lives in
-## [member controls], keyed by pointer index -- so `port` and `push` can be held
-## at once, and a dash can be fired while the stick is deflected.
-var _pointer := POINTER_NONE
-var _pointer_anchor := 0.0
-var _pointer_x := 0.0
 
-## The drawn controls, or null under `anywhere` and in any scene that has none.
+## **The drawn controls** (controls.gd), or null in any scene that has none: every
+## finger the hand drives with is one of theirs, keyed by pointer index -- so the
+## turn and the push can be held at once, and a dash fired while the turn is
+## deflected. Open water is inert.
 ## **Untyped on purpose.** cilia.gd preloads genome.gd, which preloads this
 ## file, and controls.gd preloads cilia.gd -- so a preload back the other way
 ## would be a cycle GDScript will not resolve.
@@ -483,12 +466,11 @@ var controls: Node = null
 ## cell. False by default, and nothing sets it yet.
 ##
 ## **It silences what the cell does with a pointer, not whether it takes one.**
-## [method _unhandled_input] goes on running, so a finger that goes down on the
-## water while this is true is still claimed -- by the floating stick here, or
-## by a drawn control through `controls.press()` -- and is still held, and
-## steering, the moment it clears. So whoever flips it calls [method release]
-## and `controls.let_go()` at the same moment, both ways round: exactly the
-## pair the pause screen and a lost focus already call.
+## [method _unhandled_input] goes on running, so a finger that goes down on a
+## drawn control while this is true is still claimed through `controls.press()`
+## -- and is still held, and steering, the moment it clears. So whoever flips it
+## calls [method release] and `controls.let_go()` at the same moment, both ways
+## round: exactly the pair the pause screen and a lost focus already call.
 ##
 ## **It silences the hand only** (automation.md §2.4, §13): the autopilot drives
 ## through it, so a pond's open menu lets your programs steer while you edit.
@@ -646,14 +628,14 @@ func _process(delta: float) -> void:
 		if _impulse_timer <= 0.0:
 			_fire_impulse()
 
-	# `axoneme`: thrust you asked for, on top of the involuntary one. Held keys
-	# on desktop, a finger on the screen anywhere on touch -- the same gesture
-	# that steers, because pushing and turning are things you do together and a
-	# second control would cost a pixel of screen the design does not have.
+	# `axoneme`: thrust you asked for, on top of the involuntary one. A held key
+	# on desktop, its lever on screen (docs/design/gene-controls.md) -- a control
+	# of its own, so turning never pushes and pushing never turns.
 	_dash_timer = maxf(_dash_timer - delta, 0.0)
 	var push := stat(&"push_accel")
-	# **A strength, not a yes or no** (automation.md §4.2): the hand's is full, and
-	# an instinct's a half or full, at that share of the thrust and of its price.
+	# **A strength, not a yes or no** (automation.md §4.2): the hand's is as far as
+	# its lever is pushed, its key full, and an instinct's a half or full, at that
+	# share of the thrust and of its price.
 	var strength := _push_strength()
 	if push > 0.0 and strength > 0.0:
 		var thrust := push if strength >= 1.0 else push * strength
@@ -1125,67 +1107,41 @@ func bump(normal: Vector2, restitution: float = 0.55) -> void:
 	position += normal * 2.0
 
 
-## Drops any held drag. Called when the game pauses, so a finger still down when
-## the pause opened does not keep steering afterwards.
+## Drops the steer this body was last told. Called when the game pauses, so a
+## steer held when the pause opened does not keep turning afterwards.
 ##
 ## **The drawn controls are not dropped here**, and that is deliberate: this is
-## also what the pinch of a division calls, and the steering control has to
-## survive it. `controls.let_go()` is the other half, called from the two places
-## that really do mean *every finger stops counting* -- the pause screen opening
-## and the app losing focus.
+## also what the pinch of a division calls, and the turn has to survive it.
+## `controls.let_go()` is the other half, called from the places that really do
+## mean *every finger stops counting* -- the pause screen opening and the app
+## losing focus.
 func release() -> void:
-	_pointer = POINTER_NONE
 	steer = 0.0
 
 
-## Drops the held drag **only if [param index] is the pointer holding it**, and
-## answers whether it was. [method release] lets go of whatever is held, which
-## is right for a pause and wrong for normal_mode.gd's placing gesture
-## (dna-body.md §8): that gesture takes one finger off the steering, and it was
-## measured taking the wrong one -- a second finger held on the body dropped the
-## first finger's steer from +0.42 to 0. This is the one-finger half.
-func release_pointer(index: int) -> bool:
-	if index == POINTER_NONE or _pointer != index:
-		return false
-	release()
-	return true
-
-
 # ---------------------------------------------------------------------------
-# Input. Drag on touch, A/D or the arrows on desktop; both work at once and
-# neither costs a pixel of screen.
+# Input. The drawn controls on touch and with the mouse (controls.gd), the keys
+# on desktop; both work at once. Open water is never a control (docs/design/
+# gene-controls.md).
 # ---------------------------------------------------------------------------
 
 func _unhandled_input(event: InputEvent) -> void:
-	# Touch is read straight, and the mouse only claims the pointer when touch
-	# has not. Godot emulates mouse events from touch by default, so the two
-	# arrive as a pair on Android; this is what stops them fighting. Positions
-	# are absolute rather than relative for the same reason -- a duplicated
-	# event then changes nothing.
+	# Touch is read straight, and the mouse is handed to the controls beside it:
+	# controls.gd's `_one_pointer` is what stops the pair Godot emulates from
+	# every touch fighting. Positions are absolute for the same reason -- a
+	# duplicated event then changes nothing.
 	if event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
 		if touch.pressed:
 			_claim(touch.index, touch.position)
-			return
-		# **`_dropped()` is not a predicate -- it lets the control go.** It has
-		# to run on every release, whoever owned the pointer, and only then does
-		# its answer decide whether this was also the floating stick's gesture.
-		# Written as `not _dropped(i) and _pointer == i` that was correct by
-		# evaluation order alone: reverse the two and a pad is never released at
-		# all, because the cheap-looking test in front would skip the call. The
-		# named local says which of those two lines this is, and this is the
-		# input path every player is on.
-		var released_a_control := _dropped(touch.index)
-		if not released_a_control and _pointer == touch.index:
-			_let_go()
+		elif controls != null:
+			controls.release(touch.index)
 		return
 
 	if event is InputEventScreenDrag:
 		var drag := event as InputEventScreenDrag
-		if _moved(drag.index, drag.position):
-			return
-		if _pointer == drag.index:
-			_pointer_x = drag.position.x
+		if controls != null:
+			controls.move(drag.index, drag.position)
 		return
 
 	if event is InputEventMouseButton:
@@ -1194,11 +1150,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		if click.pressed:
 			_claim(POINTER_MOUSE, click.position)
-			return
-		# The same release, the same reason it is named. See the touch branch.
-		var released_a_control := _dropped(POINTER_MOUSE)
-		if not released_a_control and _pointer == POINTER_MOUSE:
-			_let_go()
+		elif controls != null:
+			controls.release(POINTER_MOUSE)
 		return
 
 	if event is InputEventKey:
@@ -1226,46 +1179,37 @@ func _unhandled_input(event: InputEvent) -> void:
 				break
 		return
 
-	if event is InputEventMouseMotion:
+	if event is InputEventMouseMotion and controls != null:
 		var moved := event as InputEventMouseMotion
-		if _moved(POINTER_MOUSE, moved.position):
-			return
-		if _pointer == POINTER_MOUSE:
-			_pointer_x = moved.position.x
+		controls.move(POINTER_MOUSE, moved.position)
 
 
-## **A press, offered to the drawn controls first.** Under `anywhere` there are
-## none, [method Controls.press] answers `NONE` on every point, and what follows
-## is exactly the floating stick this file has always been. Under `stick` and
-## `pads` a press that misses every control is **nothing at all**: no steer, no
-## thrust, no dash. The water is inert under those schemes, which is the scheme
-## the player chose.
+## **A press, offered to the drawn controls.** One that misses every control is
+## **nothing at all**: no steer, no thrust, no dash. Open water is inert.
 ##
-## The dash fires here, on the press, and never on the release -- a dash that
-## waits for a lift is a dash that arrives after the thing that was chasing you.
+## A tap fires here, on the press, and never on the release -- a dash that waits
+## for a lift is a dash that arrives after the thing that was chasing you.
 ##
-## **And it is the hand, by the scheme's own rule** (automation.md §2.3): a press
-## a drawn control takes, or under `anywhere` a press anywhere on the water --
-## which is also where a dash, a push and the placing of a gene begin. Under
-## `stick` and `pads` open water is inert and takes nothing back. While the
-## autopilot has the cell that press takes it back first, on this frame, and
-## then does what it does.
+## **And a press a control takes is the hand's** (automation.md §2.3): while the
+## autopilot has the cell it takes it back first, on this frame, and then does
+## what it does.
 func _claim(index: int, at: Vector2) -> void:
-	if controls != null:
-		var id: int = controls.press(index, at)
-		if id != controls.NONE or controls.floating():
-			_hand_pressed()
-		if id == controls.DASH:
+	if controls == null:
+		return
+	var id: int = controls.press(index, at)
+	if id == controls.NONE:
+		return
+	_hand_pressed()
+	if controls.kind_of(id) == controls.TAP:
+		_tap(controls.name_of(id))
+
+
+## **A tap of the part named [param part]** -- its pad, or its key: what it does
+## once, on the press. The dash is the one there is.
+func _tap(part: StringName) -> void:
+	match part:
+		&"dash":
 			_dash()
-			return
-		if id != controls.NONE:
-			return
-		if not controls.floating():
-			return
-	else:
-		_hand_pressed()
-	if _pointer == POINTER_NONE:
-		_grab(index, at.x)
 
 
 ## **A new press of the hand's** (row 36): the autopilot, if it has the cell,
@@ -1292,55 +1236,20 @@ func _hand_key(key: InputEventKey) -> bool:
 	return false
 
 
-## True when that pointer belongs to a drawn control, which owns every later
-## event of its gesture. Ownership is decided once, at the press, and keyed by
-## pointer index -- nothing here ever asks what is under a finger now.
-func _moved(index: int, at: Vector2) -> bool:
-	return controls != null and controls.move(index, at)
-
-
-func _dropped(index: int) -> bool:
-	return controls != null and controls.release(index) != controls.NONE
-
-
-func _grab(index: int, x: float) -> void:
-	_pointer = index
-	_pointer_anchor = x
-	_pointer_x = x
-	_pointer_at = float(Time.get_ticks_msec()) * 0.001
-	_pointer_from = x
-
-
-## A press ending. **Short and still is a tap, which is `myoneme`; anything
-## else was a steer.** One gesture carries both, so the dash costs no pixel of
-## screen and no second finger -- and a player with no myoneme just lifts their
-## thumb, exactly as they always have.
-func _let_go() -> void:
-	var held := float(Time.get_ticks_msec()) * 0.001 - _pointer_at
-	var moved := absf(_pointer_x - _pointer_from)
-	release()
-	if held <= TAP_SECONDS and moved <= TAP_SLOP:
-		_dash()
-
-
-## True while the player is asking for thrust: a key down, or a finger on the
-## screen. Deliberately the same gesture that steers -- pushing and turning are
-## things you do at the same time.
-func _pushing() -> bool:
+## **How hard the hand pushes this frame**, 0 .. 1: `W` or `↑` held is full, and
+## the push's lever is as far as it is pushed (controls.gd) -- the push is a
+## strength, so its control is a slider.
+func _pushing() -> float:
 	if steering_off:
-		return false
+		return 0.0
 	if Input.is_action_pressed(&"ui_up") or Input.is_key_pressed(KEY_W):
-		return true
-	if controls != null and not controls.floating():
-		# Touching the stick, under `stick`; the `push` pad, under `pads`.
-		return controls.pushing()
-	return _pointer != POINTER_NONE
+		return 1.0
+	return float(controls.lever(&"push")) if controls != null else 0.0
 
 
 ## **True while the hand holds the tail still** (automation.md §5.2;
 ## automation-ux.md §6): `S` or `↓` held -- the opposite of `W` and `↑`, which
-## push -- or the hold pad, which controls.gd draws under every scheme once the
-## tail can be held. Held, not toggled, as push is: let go and the tail beats on
+## push -- or the hold pad, which controls.gd draws once the tail can be held. Held, not toggled, as push is: let go and the tail beats on
 ## its own clock. Only asked of a tail at [method hold_level] ([method
 ## _process]), so at a level-1 tail the key does nothing. `S` and `↓` are read
 ## the way `W` and `↑` are, and a content pack adds no action for them.
@@ -1353,15 +1262,15 @@ func _holding() -> bool:
 		return false
 	if Input.is_action_pressed(&"ui_down") or Input.is_key_pressed(KEY_S):
 		return true
-	return controls != null and bool(controls.holding())
+	return controls != null and bool(controls.holds(&"hold"))
 
 
 ## **The push's strength this frame**: an instinct's half or full while the
-## autopilot has the cell, otherwise the hand's, which is full or nothing.
+## autopilot has the cell, otherwise the hand's, as far as it pushes.
 func _push_strength() -> float:
 	if _driven():
 		return float(instincts.call(&"push_strength"))
-	return 1.0 if _pushing() else 0.0
+	return _pushing()
 
 
 ## Whether the instincts drive this frame.
@@ -1378,11 +1287,11 @@ func clinging() -> bool:
 	return _cling
 
 
-## **The buttons this body has** (docs/design/haptonema.md §4): each part a gene it
-## wears lets the hand press (`Catalogue.worn_buttons`), `[part, name, organ,
-## level]`, in the catalogue's order -- what controls.gd draws a pad for and
-## [constant BUTTON_KEYS] binds a key to, in that order. Made once a frame, at the
-## top of [method _process].
+## **The controls this body has** (docs/design/gene-controls.md): each part a gene
+## it wears lets the hand work (`Catalogue.worn_buttons`), `[part, name, organ,
+## level, kind]`, in the catalogue's order -- what controls.gd draws a control for,
+## by its kind, and what the keys are found by ([method _key_of]). Made once a
+## frame, at the top of [method _process].
 func buttons() -> Array:
 	return _buttons_now
 
@@ -1394,17 +1303,34 @@ func _worn_buttons() -> Array:
 	return Catalogue.worn_buttons(Catalogue.worn_levels(worn(), genome))
 
 
-## **The keys the buttons take, in order**: the first button a body has is `Q`, the
-## next `F`, then `C` -- letters nothing else in the run reads. Read raw, as `W`
-## and `S` are, since a content pack adds no input action; a fourth button has
-## its pad alone.
+## **The parts whose keys are their own**: the push's `W`, the hold's `S` and the
+## dash's Space, read where each is read ([method _pushing], [method _holding],
+## [method _unhandled_input]) and taken by no other part.
+const OWN_KEYS: Array[StringName] = [&"push", &"hold", &"dash"]
+## **The keys every other part takes, in order**: the first such part a body has
+## is `Q`, the next `F`, then `C` -- letters nothing else in the run reads. Read
+## raw, as `W` and `S` are, since a content pack adds no input action; a fourth
+## has its control alone.
 const BUTTON_KEYS: Array[int] = [KEY_Q, KEY_F, KEY_C]
 
 
-## **Whether the hand holds the button of the part named [param part]** -- `cling`
-## -- by its pad (controls.gd) or its key ([constant BUTTON_KEYS]): what a mechanic
-## the hand can work asks, as the tail's hold asks [method _holding]. False while
-## the hand is silenced, and for a part this body has no button for.
+## **The key the part at [param index] of [param list] takes** ([constant
+## BUTTON_KEYS]), or `KEY_NONE` for one with its own key ([constant OWN_KEYS]) or
+## past the letters.
+static func _key_of(list: Array, index: int) -> Key:
+	var k := 0
+	for i in index:
+		if not OWN_KEYS.has(StringName(list[i][1])):
+			k += 1
+	if OWN_KEYS.has(StringName(list[index][1])) or k >= BUTTON_KEYS.size():
+		return KEY_NONE
+	return BUTTON_KEYS[k] as Key
+
+
+## **Whether the hand holds the part named [param part]** -- `cling` -- by its pad
+## (controls.gd) or its key ([method _key_of]): what a mechanic the hand can work
+## asks, as the tail's hold asks [method _holding]. False while the hand is
+## silenced, and for a part this body has no control for.
 func hand_holds(part: StringName) -> bool:
 	if steering_off:
 		return false
@@ -1412,11 +1338,20 @@ func hand_holds(part: StringName) -> bool:
 	for k in list.size():
 		if StringName(list[k][1]) != part:
 			continue
-		if k < BUTTON_KEYS.size() and Input.is_key_pressed(BUTTON_KEYS[k]):
+		var key := _key_of(list, k)
+		if key != KEY_NONE and Input.is_key_pressed(key):
 			return true
-		if controls != null and bool(controls.button_held(StringName(list[k][0]))):
+		if controls != null and bool(controls.holds(part)):
 			return true
 	return false
+
+
+## **How much of its wait each tap has left**, 0 .. 1 by its own name: what its
+## pad draws recharging (controls.gd). The dash, on its cooldown.
+func cooling() -> Dictionary:
+	if _dash_timer <= 0.0:
+		return {}
+	return {&"dash": _dash_timer / DASH_COOLDOWN}
 
 
 ## **A dash an instinct fires** (automation.md §4.2): the hand's own burst, on its
@@ -1454,10 +1389,6 @@ func _read_steer() -> float:
 		keys += 1.0
 	if keys != 0.0:
 		return keys
-	# **Keys are unchanged under every scheme.** The scheme is a touch choice; a
-	# desktop player who picks `pads` gets the pads *and* the keys.
-	if controls != null and not controls.floating():
-		return controls.steer()
-	if _pointer == POINTER_NONE:
-		return 0.0
-	return clampf((_pointer_x - _pointer_anchor) / DRAG_SPAN, -1.0, 1.0)
+	# **The keys and the drawn turn both steer**, and the keys win: a desktop
+	# player has the controls *and* the keys.
+	return float(controls.steer()) if controls != null else 0.0
