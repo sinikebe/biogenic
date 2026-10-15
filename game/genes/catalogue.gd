@@ -136,7 +136,7 @@ const SHIPPED_ORDERS := {
 ## organ's -- every variant of it has them, under the organ's name, and its rules
 ## read them alike (§6.2; [method declares]).
 const OVERRIDES: Array[String] = ["order", "provides", "numbers", "levels", "water", "tags",
-	"channel", "born", "look"]
+	"channel", "born", "look", "upkeep_share"]
 
 ## An empty list, the answer for a name nothing is filed under.
 static var _none: Array[StringName] = _read_only([] as Array[StringName])
@@ -628,9 +628,22 @@ static func number_for(tiers: Dictionary, stat: StringName, name: StringName,
 ## **What [param key] adds to the metabolic multiplier at [param level] down
 ## [param path]**, by its organ's own price; -1 for a gene with none, which
 ## `genome.gd` charges at the old per-tier rate, by level.
+##
+## **After its [member Gene.upkeep_share]**, as every price of a gene's growth is.
 static func upkeep_at(key: StringName, level: int, path: StringName) -> float:
 	var record := gene(key)
-	return record.upkeep_at(level, path) if record != null else -1.0
+	if record == null:
+		return -1.0
+	var cost := record.upkeep_at(level, path)
+	return cost * record.upkeep_share if cost >= 0.0 else -1.0
+
+
+## **What [param key]'s growth costs, as a share of the usual** (gene.gd's
+## `upkeep_share`): what each copy past the first is multiplied by. 1.0 for a key
+## this build does not know, which pays as every gene used to.
+static func upkeep_share(key: StringName) -> float:
+	var record := gene(key)
+	return record.upkeep_share if record != null else 1.0
 
 
 # --- Numbers (§5) -------------------------------------------------------------------------

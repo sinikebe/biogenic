@@ -85,6 +85,10 @@ func _init() -> void:
 	# **Its look** (gene-looks.md §6): three short plain bristles over its pigment,
 	# the plainest sense.
 	family = SENSING
+	# **A sense that points pays half** for each copy past the first (gene.gd's
+	# `upkeep_share`; docs/design/energy.md §8): the owner, 2026-10-15, so a grown
+	# one takes half the share of the tank a second. A starting value, for play to judge.
+	upkeep_share = 0.5
 	look = {"shape": TUFT, "count": 3, "length": 0.26, "tip": Kinds.TIP_PLAIN}
 
 

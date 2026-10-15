@@ -1,4 +1,4 @@
-[gd_scene load_steps=15 format=3]
+[gd_scene load_steps=16 format=3]
 
 [ext_resource type="Script" path="res://game/normal/normal_mode.gd" id="1_normal"]
 [ext_resource type="PackedScene" path="res://game/perception/membrane.tscn" id="2_membrane"]
@@ -14,6 +14,7 @@
 [ext_resource type="Script" path="res://game/normal/controls.gd" id="12_controls"]
 [ext_resource type="PackedScene" path="res://game/menu/corner.tscn" id="13_corner"]
 [ext_resource type="Script" path="res://game/normal/programs_page.gd" id="14_programs"]
+[ext_resource type="Script" path="res://game/normal/gauge.gd" id="15_gauge"]
 
 [node name="NormalMode" type="Node"]
 process_mode = 3
@@ -157,6 +158,20 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("12_controls")
+
+[node name="Gauges" type="HBoxContainer" parent="Hud"]
+offset_left = 116.0
+offset_top = 48.0
+offset_right = 332.0
+offset_bottom = 104.0
+mouse_filter = 2
+theme_override_constants/separation = 12
+
+[node name="Energy" type="Control" parent="Hud/Gauges"]
+custom_minimum_size = Vector2(216, 56)
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("15_gauge")
 
 [node name="PauseTap" type="Control" parent="Hud"]
 offset_left = 48.0

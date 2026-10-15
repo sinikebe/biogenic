@@ -372,6 +372,13 @@ static func rules_text() -> String:
 	put.call("genome.GENE_ORDER", Catalogue.live())
 	put.call("genome.TIER_MAX", Genome.TIER_MAX)
 	put.call("genome.UPKEEP_PER_TIER", Genome.UPKEEP_PER_TIER)
+	# **And each gene's share of it** (gene.gd's `upkeep_share`), for those that pay
+	# other than all of it: a gene at the usual share writes nothing, so a drop kept
+	# before shares existed reads the same rules for every other gene.
+	for key: StringName in Catalogue.keys():
+		var share := Catalogue.upkeep_share(key)
+		if share != 1.0:
+			put.call("genome.UPKEEP_SHARE." + String(key), share)
 	# One line a provider, sorted by label: a stat's first provider under the
 	# stat's own label, any other after it with its key, so two providers of one
 	# stat are two lines. **Every label a String before anything is sorted**:
