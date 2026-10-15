@@ -57,7 +57,7 @@ const BODY_KEYS: Array[StringName] = [
 const FIELD_KEYS: Array[StringName] = [
 	&"concentration", &"dread_level", &"threat", &"shadow", &"shadow_bearing",
 	&"taste_level", &"touch_level", &"touch_bearing", &"beams", &"pings",
-	&"ping_fronts", &"ping_echoes", &"ping_listen", &"_echoes", &"_pulses",
+	&"ping_listen", &"_echoes",
 	&"_ping_clock", &"_ping_age", &"_dart_clock", &"_bite_clock",
 	&"_first_pending", &"_first_hunt", &"_serial"]
 const CELL_KEYS: Array[StringName] = [&"position", &"heading", &"velocity",

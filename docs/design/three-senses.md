@@ -122,6 +122,11 @@ compensation, and §7.3 shows it is enough.
 
 ### 1.2 Why a hemisphere, and why that is a *mechanic* and not a tax
 
+> **Since 2026-10-15 the hull is a cone** of 45 degrees either side of the organ
+> (`PING_CONE_DEG`), at the owner's word (*"the angle of detection should be
+> lowered"*), and `PING_GRAZE` is gone. ping-as-outline.md §14.2. The argument below
+> is why there is a blind arc at all, and it still holds for the narrower one.
+
 A point source sitting on the surface of a body radiates into exactly half the
 plane; the rest of the directions go into the body. That is not a chosen number,
 it is the geometry of mounting a transducer on a hull — and it is why a

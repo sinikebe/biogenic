@@ -136,25 +136,15 @@ const AT_MEMBRANE := AT_MOTES + MOTES * 2
 ## 24 x (bearing, distance, hit)
 const AT_BEAMS := AT_MEMBRANE + SignalBus.BLOCK_FLOATS
 const BEAM_FLOATS := 3
-## **The ping, out and back.** Two outgoing fronts and four returning echoes,
-## then ping_range, held_remaining, the division's four, the frame's own delta,
-## the beat, the hunter, the killer and the slack.
+## **The tail**: ping_range, held_remaining, the division's four, the frame's own
+## delta, the beat, the hunter, the killer, the slack and the senses' glows.
 ##
-## Two and four, and both numbers were measured rather than chosen. The field
-## can hold eleven fronts and fifty-five echoes at tier 3, and recording all of
-## them would cost 200 floats a frame for a picture that is mostly off screen: a
-## front leaves the frame in under a second against a 1.4 s period, so at most
-## two are ever inside it, and four echoes covers every instant of the tier-3
-## ambiguity pose. `food.gd` sorts the echoes nearest-home first, so the four
-## kept are the four about to land -- which are the ones a viewer is watching.
+## **No wave** (ping-as-outline.md §14): two outgoing fronts and four returning
+## echoes stood here, eighteen floats a frame, until the ping stopped drawing its
+## wave. What an echo shows now is the organ lighting ([constant AT_ECHO]) and the
+## marks it leaves, which the views keep.
 const AT_TAIL := AT_BEAMS + BEAMS * BEAM_FLOATS
-const PING_FRONTS := 2
-const PING_ECHOES := 4
-## `[radius, bearing, halfwidth_deg, level]`.
-const ECHO_FLOATS := 4
-const AT_PING_FRONTS := AT_TAIL
-const AT_PING_ECHOES := AT_TAIL + PING_FRONTS
-const AT_PING_RANGE := AT_PING_ECHOES + PING_ECHOES * ECHO_FLOATS
+const AT_PING_RANGE := AT_TAIL
 const AT_HELD := AT_PING_RANGE + 1
 const AT_DOUBLE := AT_PING_RANGE + 2
 const AT_PINCH := AT_PING_RANGE + 3
@@ -213,6 +203,9 @@ const AT_SMELL := AT_PING_RANGE + 11
 ## **How brightly the eyespot glowed** (three-senses.md §2.7): the same, for the
 ## organ on the light channel, with the shadow it was under.
 const AT_SIGHT := AT_PING_RANGE + 12
+## **How brightly the ping's organ glowed** (ping-as-outline.md §14): lit as each
+## echo landed and fading, the same, for the organ on the ping channel.
+const AT_ECHO := AT_PING_RANGE + 13
 ## **The other player, as a body** (shared-pond.md §5, Phase 3): in a pond, the
 ## friend in the field's person slot, `food.gd`'s PERSON_SLOT on every client --
 ## where they are, which way they face, how big, their wound and their loads,
@@ -222,7 +215,7 @@ const AT_SIGHT := AT_PING_RANGE + 12
 ## silence fades their halo, trail and edge mark (shared-pond-ux.md §0.2, §0.3).
 ## **A radius of 0 is nobody** -- no pond, a friend dead or gone, or single
 ## player, which writes nothing else here. What they wear is a PERSON delta.
-const AT_PERSON := AT_PING_RANGE + 13
+const AT_PERSON := AT_PING_RANGE + 14
 const PERSON_FLOATS := 8
 ## Where in the person's block: their loads packed as a body's are, and stepped
 ## the same; in the water, 1 or 0, stepped; and the silence, which lerps.
@@ -470,7 +463,6 @@ func capture(delta: float) -> void:
 		_ring[beam_at + 2] = hit
 		beam_at += BEAM_FLOATS
 
-	_capture_ping(at)
 	_ring[at + AT_PING_RANGE] = _food.ping_range if _food != null else 0.0
 	_ring[at + AT_HELD] = _genome.held_remaining if _genome != null else 0.0
 	# One integer-valued float, and the only thing in this loop that asks the
@@ -481,6 +473,7 @@ func capture(delta: float) -> void:
 	_ring[at + AT_SLACK] = _soma.slack if _soma != null else 0.0
 	_ring[at + AT_SMELL] = _glow_on(_soma.lit, Catalogue.SMELL) if _soma != null else 0.0
 	_ring[at + AT_SIGHT] = _glow_on(_soma.lit, Catalogue.LIGHT) if _soma != null else 0.0
+	_ring[at + AT_ECHO] = _glow_on(_soma.lit, Catalogue.PING) if _soma != null else 0.0
 	_ring[at + AT_DELTA] = delta
 	_capture_division(at)
 
@@ -692,40 +685,6 @@ func _slot_of(index: int) -> int:
 	if index < 0 or index >= _slot_by_index.size():
 		return -1
 	return _slot_by_index[index]
-
-
-## **The pulse, out and back**, in eighteen floats. A radius per outgoing front
-## and four scalars per returning echo, both already sorted by the field -- the
-## fronts oldest first, so the newest and therefore smallest two are kept; the
-## echoes nearest-home first, so the four about to land are.
-##
-## A radius of -1 is an empty slot, which is the same convention the single
-## `ping_front` used for "nothing in flight". An echo with level 0 is empty and
-## neither view draws it.
-func _capture_ping(at: int) -> void:
-	for i in PING_FRONTS:
-		_ring[at + AT_PING_FRONTS + i] = -1.0
-	for i in PING_ECHOES:
-		var e := at + AT_PING_ECHOES + i * ECHO_FLOATS
-		_ring[e] = -1.0
-		_ring[e + 1] = 0.0
-		_ring[e + 2] = 0.0
-		_ring[e + 3] = 0.0
-	if _food == null:
-		return
-	var fronts: Array = _food.ping_fronts
-	# From the end: the fronts are oldest first and the newest are the ones
-	# still inside the frame.
-	for i in mini(fronts.size(), PING_FRONTS):
-		_ring[at + AT_PING_FRONTS + i] = float(fronts[fronts.size() - 1 - i])
-	var echoes: Array = _food.ping_echoes
-	for i in mini(echoes.size(), PING_ECHOES):
-		var echo: Array = echoes[i]
-		var e := at + AT_PING_ECHOES + i * ECHO_FLOATS
-		_ring[e] = float(echo[0])
-		_ring[e + 1] = float(echo[1])
-		_ring[e + 2] = float(echo[2])
-		_ring[e + 3] = float(echo[3])
 
 
 ## The division, in four floats. `double` and `pinch` are the mother becoming
@@ -1237,14 +1196,6 @@ func sample(i: int, u: float, out: PackedFloat32Array) -> void:
 		out[AT_PERSON + PERSON_LOADS] = _ring[from + AT_PERSON + PERSON_LOADS]
 		out[AT_PERSON + PERSON_WET] = _ring[from + AT_PERSON + PERSON_WET]
 		_hold_jump(out, from, to, AT_PERSON, t)
-	# **The ping's slots are not identities**, which is the same fault the
-	# hunter index has. The field re-sorts its echoes nearest-home every frame
-	# and a return that lands vacates one, so slot 2 in two consecutive frames
-	# is routinely two different bodies -- and lerping between them would slide
-	# one arc across the water to where another one was. A bearing cannot be
-	# lerped through the wrap at +-PI either. Stepped, therefore, whole.
-	for k in range(AT_TAIL, AT_PING_RANGE):
-		out[k] = _ring[from + k]
 
 
 ## A position that jumped is held at the frame it jumped from until the frame it

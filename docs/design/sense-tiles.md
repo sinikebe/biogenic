@@ -18,7 +18,7 @@ the body is (three-senses.md §2.6, §2.7). Under it a thin bar says how much.
 | --- | --- | --- | --- |
 | smell | `chemocyte` | the nose's glow: food along its arc | the level it smells |
 | see | `stigma` | the eyespot's glow: the shadow it is under, brightest facing it | the shadow's strength |
-| ping | `ampulla` | **a flash for each echo** as it comes home, at the echo's strength | how much of the call's round trip it is still listening for |
+| ping | `ampulla` | **a flash for each echo** as it comes home, as the organ on the body lights (ping-as-outline.md §14) | how much of the call's round trip it is still listening for |
 | touch | `palp` | what the palps feel | the same |
 
 **The beam has none.** Its rays already say what they strike, on the screen

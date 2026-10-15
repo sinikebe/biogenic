@@ -115,19 +115,10 @@ const RING_ARC_MIN := 0.22
 const RING_ARC_MAX := 0.95
 const RING_STEPS := 64
 
-# --- The wave (`ampulla`) ---------------------------------------------------
-## Points on each half of the wavefront, matching `returns.gd`'s `WAVE_STEPS`:
-## the two views draw one picture at two scales and the segment count is part
-## of the picture.
-const PING_STEPS := Cilia.WAVE_STEPS
-## Half the angle between two of those points, taken off both ends of the far
-## half so the two arcs do not share a vertex with the near one. A vertex drawn
-## by two draw calls composites twice; measured in point of view, the ring's
-## 257 and 150 summed sRGB above base met in a 407 bead at each seam.
-const PING_SEAM := Cilia.WAVE_SEAM
+# --- The ping (`ampulla`) ---------------------------------------------------
 ## **What the ping placed** (ping-as-outline.md §13), in canvas pixels: a point
 ## the size of a sweep's held hit and as bright, since it is the same kind of
-## claim; an outline a little thicker than the wave, which it outlives.
+## claim; a thin outline.
 const ECHO_FIX_HALO := 9.0
 const ECHO_FIX_HALO_ALPHA := 0.16
 const ECHO_FIX_CORE := 3.4
@@ -1201,7 +1192,7 @@ func mark_meal(nutrition: float, gene: StringName, at: Vector2) -> void:
 
 ## **What the ping placed as an echo landed** (ping-as-outline.md §13), from the
 ## run as it happens and from the replay as it was recorded: a place at two
-## copies, the side of a body the wave reached at three. Held for the mark's own
+## copies, the side of a body the call reached at three. Held for the mark's own
 ## `life`, one call, fading.
 func mark_echo(mark: Dictionary) -> void:
 	if not _active:
@@ -1638,85 +1629,21 @@ func _catch_beam_hits(delta: float) -> void:
 				k, float(beam[0]))
 
 
-## **The `ampulla`.** Each wavefront for the first second of its flight, as a
-## half-ring expanding out of **the organ's own point on the membrane** and
-## fading as it goes -- and each echo for the last second of its way back, as a
-## short arc contracting onto the same point (ping-as-outline.md §13, the owner's
-## rework: the cell sees its call leave and its answers arrive, and nothing in
-## between). Then what two and three copies place of each answer.
-##
-## The same two-register agreement the beam has: point of view gets a run of
-## marks on the contour as each body answers, and here the thing that produced
-## them is on screen -- so "the blips stopped because nothing is within reach"
-## is visible rather than deduced. The bodies the echoes came off need no mark
-## of their own, because full vision draws them already.
-##
-## **This is where the round trip gets checked.** Full vision exists to prove
-## point of view is telling the truth, and the claim to check is that the skin
-## lights at the same instant, at the same bearing, over the same span, that an
-## echo lands on the organ. Both are drawn here off the same four numbers, so a
-## disagreement is visible in one frame rather than inferred.
-##
-## The half is the hull: a source on the skin radiates into the hemisphere it
-## faces and the rest goes into the body. Where the gene has grown enough to
-## hear through a body, the other half is drawn at `ping_through` of the lit
-## one -- which is the same picture point of view gets, in world space instead
-## of at the figure's scale, and it is drawn off the same two numbers.
+## **The `ampulla`.** What two and three copies place of each answer, fading over
+## one call. **No wave is drawn** (ping-as-outline.md §14; the owner, 2026-10-15:
+## *"Remove the waves. They're buggy anyway."*): the call leaves unseen, and each
+## echo is the organ lighting on the body as it lands and the skin's mark -- the
+## same moment, in both views.
 func _draw_ping(a: float) -> void:
-	if _food_node == null:
+	if _food_node == null or _food_node.ping_range <= 0.0:
 		return
-	var reach: float = _food_node.ping_range
-	if reach <= 0.0:
-		return
-	var dir := _ray(_food_node.ping_bearing)
-	var origin := _cell.position + dir * _cell.radius
-	var mid := dir.angle()
-	var tone := Cilia.hue_on(Catalogue.PING)
-	var through := clampf(_food_node.ping_through, 0.0, 1.0)
-	# **All of them, not just the newest** -- but each only for the second it is
-	# seen leaving (ping-as-outline.md §13): past that, where a wave has got to
-	# is nothing the cell could know.
-	for front: float in _food_node.ping_fronts:
-		if front <= 0.0:
-			continue
-		var fade := FoodField.front_seen(front)
-		if fade <= 0.0:
-			continue
-		# Brighter than a threshold ring, because those are measuring
-		# instruments and this is a thing the cell actually did.
-		_world.draw_arc(origin, front, mid - PI * 0.5, mid + PI * 0.5,
-			PING_STEPS, Color(tone, 0.46 * fade * a), 1.8 / ZOOM, true)
-		if through > 0.0:
-			# Inset by half a step at both ends, the same half step
-			# `returns.gd` takes off its own far half and for the same reason:
-			# two arcs meeting at a shared vertex composite that vertex twice,
-			# and the bead it makes is brighter than either half of the ring.
-			_world.draw_arc(origin, front, mid + PI * 0.5 + PING_SEAM,
-				mid + PI * 1.5 - PING_SEAM, PING_STEPS,
-				Color(tone, 0.46 * fade * a * through), 1.8 / ZOOM, true)
-	# The echoes. Brighter and thicker than the front that started them: the
-	# front is the question going out and this is the answer coming back, and
-	# the moment the mechanic becomes legible is the moment one of these lands.
-	# Each only for the last second of its way home (§13), which is the only
-	# part of it the cell hears.
-	for echo: Array in _food_node.ping_echoes:
-		var r: float = float(echo[0])
-		if r <= 0.0:
-			continue
-		var level := clampf(float(echo[3]), 0.0, 1.0) * FoodField.echo_seen(r)
-		if level <= 0.0:
-			continue
-		var span := deg_to_rad(clampf(float(echo[2]), 1.0, 180.0))
-		var at := float(echo[1]) - PI * 0.5
-		_world.draw_arc(origin, r, at - span, at + span, PING_STEPS,
-			Color(tone, 0.80 * level * a), 2.6 / ZOOM, true)
-	_draw_echo_marks(a, tone)
+	_draw_echo_marks(a, Cilia.hue_on(Catalogue.PING))
 
 
-## **What the ping placed** (ping-as-outline.md §13), where the wave met it and
+## **What the ping placed** (ping-as-outline.md §13), where the call met it and
 ## fading over one call: a plain point at two copies, the same for a meal, a
 ## hunter or the rim, because nothing in an echo says which; at three, the side
-## of the body the wave reached, drawn through the points the field worked out
+## of the body the call reached, drawn through the points the field worked out
 ## on its rim.
 func _draw_echo_marks(a: float, tone: Color) -> void:
 	for held: Array in _echo_marks:

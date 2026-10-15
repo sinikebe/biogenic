@@ -358,11 +358,18 @@ jobs:
         # and the dash put back as they were, this branch printed 49611ed8... to
         # the byte. 68,616 lines, from 70,074.
         #
+        # **Re-pinned when the ping lost its waves and narrowed**
+        # (docs/design/ping-as-outline.md §14), from f7e09406...: a call hears 45
+        # degrees either side of the way its organ faces, where it heard the whole
+        # half circle, so the water's hunters with a ping hear fewer bodies. With
+        # the half circle put back, this branch printed f7e09406... to the byte, so
+        # taking the waves out moved nothing. 68,435 lines, from 68,616.
+        #
         # The run prints about ten megabytes, so it goes to a file rather than a
         # variable. About twenty seconds.
         run: |
           set -uo pipefail
-          pinned="f7e09406046218552f196205798201a09752380a6b6cb9f27b35ba707c495f80"
+          pinned="0c666c1109ed869288514b8a5f6f43e043c1164805098e2d5d863822a4af9aad"
           log=$(mktemp)
           fail=0
           echo "--- seed 1, sixty seconds, R pressed at 20 s"

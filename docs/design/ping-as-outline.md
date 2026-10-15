@@ -39,6 +39,11 @@ and each echo for the last second of its way home; two copies place a point wher
 answer came off, three draw the side of the body the wave reached; and nothing passes
 a body. Where §13 and an earlier section disagree, §13 is what is built.
 
+**Reworked again on 2026-10-15 (§14).** No wave is drawn or simulated at all: each
+echo's delay is worked out at the call from how far the body is, and when it lands
+the organ lights. The call hears in a cone of 45 degrees either side of the organ,
+not the whole half circle. Where §14 and anything earlier disagree, §14 is built.
+
 ---
 
 ## 0. The rule this spec does not break, and the one it corrects
@@ -1165,3 +1170,131 @@ Seen and left as built:
 - **The rim's stretch in point of view is faint** when it is near the top of the
   screen, where the view fades everything toward the membrane's edge, the wave
   included.
+
+## 14. The owner's second rework, 2026-10-15: no wave at all
+
+> "Let's change how sonar works again. Remove the waves. They're buggy anyway. The
+> sonar will emit a sound, then the organ will light up as the screen does when a
+> reflection comes back. But we don't need to simulate the wave. We just measure
+> distances between the organ and objects and calculate the echo latency. But the
+> angle of detection should be lowered"
+> — the owner
+
+**This section replaces §6.2, §6.3 and the "call" and "answer" drawing of §13.1.**
+What §13.1 places at two and three copies is unchanged.
+
+### 14.1 The call
+
+At the call the field measures every body in the organ's cone: how far its near
+edge is, and so how long the echo takes to come home, `2d / PING_SPEED`, and how
+loud it is when it does. That was already how a return was worked out
+(`_cast_ping`, `_call_of`); the fronts and the echoes walking home were drawn on top
+of it and fed nothing back. So taking them out changes no number the water runs on,
+and the proof is in §14.4.
+
+Nothing travels between the call and the echo. `ping_fronts`, `ping_echoes`,
+`_pulses`, `front_seen()`, `echo_seen()` and `PING_SEEN_OUT`, `_BACK` and `_RISE`
+are gone, and so is every wave and echo arc in both views and the replay. What is
+left of an echo before it lands is its countdown in `_echoes`.
+
+**When an echo lands**, all at once:
+
+- **the organ lights on the body**, in both views and in the replay, the way the
+  nose lights near food and the eyespot under a shadow (three-senses.md §2.6, §2.7).
+  It lights at least `ECHO_GLOW_FLOOR` (0.4), and a louder echo more, up to full at
+  an echo of 1. The light falls to nothing over `ECHO_GLOW_FALL` (0.6 s), and the
+  next echo lights it again. Both are in `normal_mode.gd`. An echo off a body 300
+  units ahead is about 0.4 loud, and lights the organ about two thirds. Without the
+  floor it lit it four tenths, which in full vision was hard to tell from unlit;
+- **its tile flashes** at the same light (sense-tiles.md);
+- **the membrane's lobe** lands at the echo's bearing in point of view, as before;
+- at two copies **a point** is placed where it came off, and at three **the side of
+  the body the call reached** (§13.1).
+
+The hum still breathes once a call, so the wait between call and echoes still reads
+as listening.
+
+**The sound.** The game has no audio yet: nothing in it plays a sound, so the call
+is silent for now. When sound comes, the call is `FoodField.pulsed` and each echo is
+the bus's `ping`, the two moments it would hook to.
+
+### 14.2 The cone
+
+`PING_CONE_DEG` is **45**: the call hears 45 degrees either side of the way its
+organ faces, a quarter of the circle. It was the whole half circle the organ faces,
+90 either side. `PING_CONE_EDGE_DEG` (8) is its soft edge, so a body drifting across
+the edge fades rather than popping: heard fully inside 37 degrees, silent past 53.
+The half circle's edge was 13.9 degrees either side; a narrower cone gets a narrower
+edge, so its middle stays wide. `PING_GRAZE` is gone with the half circle.
+
+The cone points where the organ points, which is its slot's arc. An `ampulla` worn on
+a flank listens to that side. A body that is not in front of the organ is not heard,
+and the player turns to aim the call, which is the counter they already had for the
+blind arc astern.
+
+The water's callers hear by the same `_call_of`, so a water hunter with a ping hears
+in a cone too. That changes what the water does, so the seeded pins move (§14.4). It
+is not a rule the referee copies, so neither `Wire.RULES` nor `Wire.PROTOCOL` moves,
+and the net probe passes as it stands.
+
+### 14.3 As built
+
+- **`food.gd`**: `PING_CONE_DEG` and `PING_CONE_EDGE_DEG`, read through
+  `_cone_cos()`, in place of `PING_GRAZE`. `_step_pings` counts each echo down and
+  lands it. The fronts and the in-flight echoes are gone, with their clocks.
+- **`normal_mode.gd`**: `_post_pings(delta)` lights `_echo_glow` and flashes the tile.
+  `_light_organs()` now runs after it, and lights the organ that provides
+  `ping_range` with the nose and the eyespot.
+- **`vision.gd` and `returns.gd`**: the wave, the echo arcs and their constants are
+  gone; the marks of §13.1 and the pointers stay. `cilia.gd` loses `WAVE_STEPS` and
+  `WAVE_SEAM`.
+- **The replay**: `recorder.gd` no longer keeps the fronts and echoes (the frame is
+  seventeen floats shorter), and keeps the ping organ's light in `AT_ECHO` beside the
+  nose's and the eyespot's. `replay.gd` lights the organ from it.
+- **`tools/`**: `drive.gd`'s `--pings=` prints the echoes due, each one's seconds to
+  go and loudness. The field lists in `drive.gd`, `field_diff.gd` and
+  `drop_probe.gd`'s `MEMBRANE` drop the three fields that are gone.
+
+### 14.4 Pins moved, and the proof
+
+- **`ci.yml` check 8**: `0c666c11...`, 68,435 lines, where it was `f7e09406...`,
+  68,616.
+- **`drop_probe`**: `THREE_ONE_LINES`, `PACK3_LINES`, `TAIL_LINES`, `DEV_MEMBRANE`,
+  `PACK3_TRACE` and `TAIL_TRACE`, from the check's own output, each with a note.
+- **Only the cone moved them.** On a copy of this branch with the half circle put
+  back (`smoothstep(-0.24, 0.24, ...)`, as `PING_GRAZE` was) and everything else
+  kept, check 8 printed `f7e09406...`, 68,616 lines, to the byte, and the drop probe's
+  census, lineage and behaviour lines were the old pins to the byte.
+- **The three digests that read `MEMBRANE` move twice**: the cone, and a shorter
+  list, since three of the fields they hashed no longer exist. So `dev` itself, at
+  56bfe46, was run through the shorter list. It printed `44d381088b303418` for the
+  membrane and `59216500612c5669` and `03aae15dfd6d7d93` for the two traces, exactly
+  what the half-circle copy of this branch printed. Every sense left on the list
+  is `dev`'s until the cone.
+
+### 14.5 Rendered
+
+At 1280x720 and 2400x1080, in both views, a one-copy ping with a body posed 300
+units dead ahead and one 300 units to the side:
+
+- 1.6 s in, before anything is home, the organ is its plain look, and no wave is
+  drawn anywhere;
+- at the echo, at 2.17 s, which is 540 units out and back at 250, the organ is lit
+  violet with whitened bristles. In point of view the membrane's lobe sits ahead,
+  and the tile is lit;
+- the body to the side is never heard (`--pings=` lists no echo from it);
+- at two copies a point sits where the body ahead was, and at three copies, the
+  side of it the call reached.
+
+### 14.6 What to watch
+
+Starting values, for play to judge:
+
+- **Is a quarter circle right?** Too narrow and the ping finds nothing unless aimed;
+  too wide and turning to aim stops mattering. `PING_CONE_DEG`, and its edge
+  `PING_CONE_EDGE_DEG`.
+- **Does the organ's light read as an echo coming home**, beside the membrane's
+  lobe? `ECHO_GLOW_FLOOR` sets how lit a faint echo is, `ECHO_GLOW_FALL` how long it
+  stays lit, and `cilia.gd`'s `GLOW_*` how a lit organ looks.
+- **Is the call too quiet with nothing drawn as it leaves?** The hum is what says
+  the organ is listening. The sound, when the game has one, is the other answer.
