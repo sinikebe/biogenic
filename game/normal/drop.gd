@@ -212,8 +212,9 @@ const START_PUSH := 100.0
 ## that a body knows only what its own senses report. In plain words: *rest for
 ## five seconds after eating, and while less than a third hungry. Otherwise turn
 ## toward an echo of something smaller than my mouth; otherwise toward whatever
-## my laser touches; otherwise, when the smell of food fades, turn at random.
-## Swim, and push at half strength.* A rule for an organ a founder lacks is
+## my laser touches -- aiming ahead of it by 3, the aim every chaser had before it
+## was the instinct's (cell.gd's LEADS); otherwise, when the smell of food fades,
+## turn at random. Swim, and push at half strength.* A rule for an organ a founder lacks is
 ## passed over, and waits, inherited, for a daughter who grows the organ.
 ##
 ## `HUNT_AT` and `REST_MEAL`, today's constants, are the 0.3 and the 5 here:
@@ -223,8 +224,8 @@ const START_PUSH := 100.0
 const FOUNDERS: Array[String] = [
 	"metabolism.fed below 5 -> body.rest",
 	"metabolism.hunger below 0.3 -> body.rest",
-	"ampulla.echo size below mouth -> body.turn-toward",
-	"ocellus.beam -> body.turn-toward",
+	"ampulla.echo size below mouth -> body.turn-toward 3",
+	"ocellus.beam -> body.turn-toward 3",
 	"chemocyte.smell level falling -> body.turn-random",
 	"always -> body.swim",
 	"always -> axoneme.push 0.5",

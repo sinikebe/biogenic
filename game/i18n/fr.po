@@ -1333,8 +1333,8 @@ msgstr "chaque bond coûte {} s"
 #. line takes 540 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
-msgid "a dart at a hunter within {} µm, {} either side"
-msgstr "un dard contre un prédateur à moins de {} µm, {} de chaque côté"
+msgid "a sting takes {} of a body your size, {} either side"
+msgstr "un dard retire {} d'un corps de ta taille, {} de chaque côté"
 
 #. The thicker-skin gene (`pellicle`, shown as `armor`). "To a mouth you are
 #. {} × your size" means a hunting mouth must be that much wider than the cell
@@ -2645,8 +2645,8 @@ msgstr "appuyez pour un bond de vitesse, payé en faim"
 #. entry: trichocyst
 #. Room: at most 440 px in 15 px type; the English takes 290 px.
 #: game/normal/normal_mode.gd
-msgid "a dart at whatever closes in on that side"
-msgstr "un dard contre tout ce qui approche de ce côté"
+msgid "stings whatever touches that side, on its own"
+msgstr "pique tout ce qui touche ce côté, de lui-même"
 
 #. What a gene does, in one line shown after the gene's scientific name and a
 #. middle dot: "cytostome · a wider mouth swallows bigger things whole".
@@ -3195,7 +3195,7 @@ msgstr "coup"
 #. Room: at most 112 px in 15 px type; the English takes 88 px.
 #: game/normal/cell.gd
 msgid "turn toward"
-msgstr "tourne vers"
+msgstr "va vers"
 
 #. The name of a sense or an action on a small chip of the player's
 #. "instincts" (rules the player writes: "when <a sense reports something> ->
@@ -3254,8 +3254,8 @@ msgstr ""
 #. entry: body.turn-toward
 #. Room: at most 856 px in 15 px type; the English takes 353 px.
 #: game/normal/cell.gd
-msgid "turn toward · steer for where the sense says it is."
-msgstr "tourne vers · se diriger là où le sens dit que c'est."
+msgid "turn toward · steer for where the sense says it is: at it, or ahead of where it is going, near or far."
+msgstr "va vers · se diriger là où le sens dit que c'est : dessus, ou devant là où ça va, près ou loin."
 
 #. Explains one sense, action or value of the player's "instincts", on one
 #. line under them: its name (the same word as on its chip), a middle dot,
@@ -4041,6 +4041,22 @@ msgstr "moitié"
 #: game/normal/program_words.gd
 msgid "full"
 msgstr "à fond"
+
+#: game/normal/program_words.gd
+msgid "at it"
+msgstr "sur"
+
+#: game/normal/program_words.gd
+msgid "near"
+msgstr "près"
+
+#: game/normal/program_words.gd
+msgid "ahead"
+msgstr "avant"
+
+#: game/normal/program_words.gd
+msgid "far"
+msgstr "loin"
 
 #. A program's name inside a sentence, in your language's quotation marks:
 #. “flee” (French « fuite »). %s is the name the player gave it.

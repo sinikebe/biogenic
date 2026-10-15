@@ -58,9 +58,10 @@ extends Node
 ## they had it doing to the bit, loads a pack-2 file on the founders' rules
 ## resting on, keeps a name it does not know, and a room on rules goes on as one
 ## that never stopped; 9, in five minutes every founders' rule fires and a nose,
-## a radar and a laser each feed a hunter; 10, the wake and both darts answer a
+## a radar and a laser each feed a hunter; 10, the wake answers a
 ## mouth swimming at you within 35° that could take you, and neither one passing
-## nor one too small, and a dart stuns for 5 s. The checks that read pack 2's
+## nor one too small; and the sting wounds what touches the side it guards, you
+## included, and never past STING_MOST. The checks that read pack 2's
 ## hunter -- its runs, its searches, the grace no run begins at -- read it on the
 ## reference drop, and the other five-minute drop is on rules.
 ## **And pack 3's second phase** (behaviour.md §12.3, phase 3-2), the rules
@@ -153,8 +154,8 @@ extends Node
 ## nose that reaches as far as yours, an eyespot read that is not worn, a memory
 ## the load forgets, a pack-2 file whose hunters stop resting, a list index the
 ## file does not check, a laser that never reports, "coming for you" with no cone
-## or no mouth to take you with, a stun a second short, a stunned body that reads
-## its rules, and a dart forgotten before it is felt. And its second phase's: a
+## or no mouth to take you with, and three of the dart's stun, which became a
+## touching sting (docs/design/sting.md). And its second phase's: a
 ## nudge that steps past the end of its ladder, a replace that can draw the part
 ## it replaces, a swap of two equal rules, a copy with no room, a list dropped to
 ## nothing, two tests on one value, a turn on an input with no bearing, a test
@@ -2779,10 +2780,16 @@ func _determinism() -> void:
 ## count found missing. The two drops these were, a sighted player's and a newborn's
 ## from the one seed, were the same drop twice, and are one: three lines, not six.
 ## Nothing else moved: the rules two builds agree on are as they were.
+## **Re-recorded when the sting became a touch and the chase's aim an instinct**
+## (docs/design/sting.md), from the check's own output, because the water changed on
+## purpose: a `trichocyst` no longer fires from a distance and stuns a body coming for
+## its own -- it wounds whatever touches the side it guards -- and a "turn toward"
+## carries its aim, which a division may nudge. Nothing else moved; the rules two
+## builds agree on moved with the sting (`Wire.RULES`).
 const THREE_ONE_LINES: Array[String] = [
-	"[census] t 40  living 551 (drifters 457, hunters 94)  flocs 73  | hunters at r40 0, mean r 30.0, hunger 0.46  | could swallow r26/r34/r40 29/0/0  dread 0.49/0.01/0.00  genes 17  | spawned 691  died: swallowed 101 chewed 0 starved 40 (r40 0) poisoned 0  | grazed by the water 2, by drifters 1, dissolved 0, snow kept 6, remains 40  | runs 0 at you 0 misses 0 darts 2 dashes 0  floors: gene 0+0 drifter 0  | sum 3472685543",
-	"[lineage] t 40  hunters 94, born 1  generation mean 1.01 max 2  families 94 (largest 1)  dna apart 38  | cruise 56.4 notice 724 mouth 1.01 upkeep 1.00 genes worn 4.02 carried 4.30  tails 93 sighted 94 at r40 0  | divisions 1 (trade 1 drift 0 faithfully 0), daughters 2: tailless 1, given a sense 0  | the spawner's peers 43 (for the floor 43, for venom 0), drifters 93, left to births 0  | worn cytostome 1.01 cirrus 1.00 flagellum 0.99 stigma 0.22 ocellus 0.29 chemocyte 0.18 ampulla 0.33 axoneme 0.00 palp 0.00 myoneme 0.00 trichocyst 0.00 pellicle 0.00 veneneux 0.00 plastid 0.00 vacuole 0.00 crista 0.00 toxicyst 0.02 haptonema 0.00  | commonest 30x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 26x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 20x cytostome:1,cirrus:1,flagellum:1,stigma:1",
-	"[behaviour] t 40  hunters 94: on the founders' rules 94, other lists 0  | founders' rules fired 3382/7174/319/190/1313/17694/0  | meals of hunters with a nose 16, radar 39, laser 29  | water darts 2, stuns 2, your wakes 0  | now holding a heading 30, resting 39, swimming 55, pushing 0, stunned 0, echoes in flight 74",
+	"[census] t 40  living 550 (drifters 454, hunters 96)  flocs 75  | hunters at r40 0, mean r 29.9, hunger 0.48  | could swallow r26/r34/r40 28/0/0  dread 0.41/0.01/0.00  genes 17  | spawned 689  died: swallowed 98 chewed 0 starved 42 (r40 0) poisoned 0  | grazed by the water 3, by drifters 0, dissolved 0, snow kept 6, remains 42  | runs 0 at you 0 misses 0 stings 2 dashes 0  floors: gene 0+1 drifter 0  | sum 3935602870",
+	"[lineage] t 40  hunters 96, born 2  generation mean 1.02 max 2  families 95 (largest 2)  dna apart 34  | cruise 56.4 notice 723 mouth 1.00 upkeep 1.00 genes worn 4.03 carried 4.30  tails 95 sighted 96 at r40 0  | divisions 1 (trade 0 drift 1 faithfully 0), daughters 2: tailless 1, given a sense 0  | the spawner's peers 44 (for the floor 43, for venom 1), drifters 90, left to births 0  | worn cytostome 1.00 cirrus 1.00 flagellum 0.99 stigma 0.23 ocellus 0.27 chemocyte 0.21 ampulla 0.31 axoneme 0.00 palp 0.00 myoneme 0.00 trichocyst 0.00 pellicle 0.00 veneneux 0.00 plastid 0.02 vacuole 0.00 crista 0.02 toxicyst 0.02 haptonema 0.00  | commonest 29x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 26x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 21x cytostome:1,cirrus:1,flagellum:1,stigma:1",
+	"[behaviour] t 40  hunters 96: on the founders' rules 96, other lists 0  | founders' rules fired 3470/7105/338/154/1254/17773/0  | meals of hunters with a nose 18, radar 39, laser 29  | stings 2, stuns 0, your wakes 0  | now holding a heading 27, resting 38, swimming 56, pushing 0, stunned 0, echoes in flight 57",
 ]
 ## What phase 3-2's behaviour line adds after phase 3-1's, for a water whose
 ## rules never changed: one behaviour, every hunter on it, no change made.
@@ -2933,8 +2940,9 @@ func _flocs_fed() -> void:
 ## otherwise fit (row 5); the toxin's swallow (row 12, as docs/design/dna-slots.md
 ## §7.1 has it now) -- whatever swallows a poisonous player eats it and takes the
 ## swallow's dose, told before the death; a player that swallows a poisonous cell
-## eats it and takes its dose; a water cell's dart breaks a run at it; and the
-## taste field and the bloom weigh a body by the size its mouth measures.
+## eats it and takes its dose; a water cell's sting wounds what touches the side it
+## guards, and nothing on its other side; and the taste field and the bloom weigh a
+## body by the size its mouth measures.
 func _one_body() -> void:
 	var water := _water(3000.0)
 	var field: WatchedDrop = water[0]
@@ -3021,19 +3029,20 @@ func _one_body() -> void:
 		and float((cells[armoured] as Object).get("wound")) > 0.0
 	field._mouth_on_drop(mouth, mb, bare, cells[bare], gape)
 	var taken: bool = not (cells[bare] as Object).get("seeded")
-	# The dart: a hunter stalking a cell whose `trichocyst` looks at it, in range.
+	# The sting: a cell whose `trichocyst` guards the side a body touches, and one
+	# touching its other side (docs/design/sting.md).
 	var prey := _pose(field, p + Vector2(900.0, -900.0), 26.0,
 		{&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"trichocyst": 1}, 0.0)
 	var pb: Object = cells[prey]
 	var arc := float(pb.get("heading")) + float(pb.get("dart_bearing"))
-	var stalker := _pose(field, (pb.get("pos") as Vector2)
-		+ Vector2(sin(arc), -cos(arc)) * 100.0, 30.0, big, 0.0)
-	var sb: Object = cells[stalker]
-	field._start_run(sb, prey, int(pb.get("serial")))
-	sb.set("orienting", false)
-	field._step_stalk(stalker, sb, 1.0 / 60.0)
-	var darted := [int(sb.get("state")) == FoodField.State.DRIFT,
-		is_equal_approx(float(sb.get("calm")), FoodField.REST_MISS),
+	var side := Vector2(sin(arc), -cos(arc)) * (26.0 + 30.0 + 1.0)
+	var toucher := _pose(field, (pb.get("pos") as Vector2) + side, 30.0, big, 0.0)
+	var other_side := _pose(field, (pb.get("pos") as Vector2) - side, 30.0, big, 0.0)
+	field._sting_from(prey, pb.get("pos"), 26.0, arc, null)
+	var want := Doses.felt(Stats.at(&"dart_wound", 1), 30.0, CellBody.DOSE_SIZE)
+	var darted := [is_equal_approx(float((cells[toucher] as Object).get("wound")), want),
+		float((cells[toucher] as Object).get("hit")) > 0.0,
+		float((cells[other_side] as Object).get("wound")) == 0.0,
 		float(pb.get("dart_clock")) > 0.0]
 	# The taste and the bloom, by the size the mouth measures: an r18 body 300
 	# ahead, bare and then with a thick skin that puts it past a born gape.
@@ -3071,12 +3080,13 @@ func _one_body() -> void:
 		and venom_in[0] and venom_in[1] == 1 and venom_in[2] == 2 and venom_in[3]
 		and is_equal_approx(venom_in[4], Stats.at(&"swallow_stacks", 3)) and venom_in[5])
 	_check(("%s11. armour, %s's: an r24 body with a tier-3 skin is chewed by a mouth of %.1f"
-		+ " (%s), the same body bare is swallowed (%s); a water cell's dart breaks a run"
-		+ " at it (%s); the taste %.3f bare and %.3f armoured, the bloom %.2f and %.2f")
+		+ " (%s), the same body bare is swallowed (%s); a water cell's sting wounds what"
+		+ " touches its side, felt as a hit, and not what touches its other side, then waits"
+		+ " (%s); the taste %.3f bare and %.3f armoured, the bloom %.2f and %.2f")
 		% ["" if armour != &"" else ("no live organ provides armour, which row 5 poses"
 			+ " a body with -- "), armour, gape, str(kept), str(taken), str(darted),
 		tasted[0], tasted[1], bloom[0], bloom[1]],
-		kept and taken and darted == [true, true, true] and tasted[0] > 0.05
+		kept and taken and darted == [true, true, true, true] and tasted[0] > 0.05
 		and tasted[1] == 0.0 and bloom[0] == 1.0 and bloom[1] == 0.0)
 	_done(water)
 
@@ -5868,12 +5878,18 @@ const IDENTITY_DNA := {&"cytostome": 2, &"cirrus": 1, &"flagellum": 1, &"chemocy
 ## peers as a count found missing. The two drops are seeds 1 and 2, no longer a
 ## newborn's and a sighted player's. Nothing else moved: the rules two builds agree on
 ## are as they were.
+## **Re-recorded when the sting became a touch and the chase's aim an instinct**
+## (docs/design/sting.md), from the check's own output, because the water changed on
+## purpose: a `trichocyst` no longer fires from a distance and stuns a body coming for
+## its own -- it wounds whatever touches the side it guards -- and a "turn toward"
+## carries its aim, which a division may nudge. Nothing else moved; the rules two
+## builds agree on moved with the sting (`Wire.RULES`).
 const IDENTITY_LINES: Array[String] = [
-	"[census] t 30  living 527 (drifters 434, hunters 93)  flocs 30  | hunters at r40 0, mean r 31.4, hunger 0.46  | could swallow r26/r34/r40 43/0/0  dread 0.51/0.01/0.00  genes 17  | spawned 659  died: swallowed 126 chewed 0 starved 6 (r40 0) poisoned 0  | grazed by the water 7, by drifters 0, dissolved 0, snow kept 1, remains 6  | runs 204 at you 0 misses 67 darts 1 dashes 0  floors: gene 0+1 drifter 0  | sum 2870484816",
-	"[census] t 60  living 533 (drifters 440, hunters 93)  flocs 43  | hunters at r40 36, mean r 35.2, hunger 0.51  | could swallow r26/r34/r40 66/9/8  dread 1.16/0.28/0.08  genes 17  | spawned 820  died: swallowed 263 chewed 1 starved 23 (r40 0) poisoned 0  | grazed by the water 13, by drifters 0, dissolved 0, snow kept 3, remains 23  | runs 466 at you 0 misses 199 darts 4 dashes 17  floors: gene 0+1 drifter 0  | sum 514453439",
-	"[census] t 30  living 520 (drifters 419, hunters 101)  flocs 39  | hunters at r40 0, mean r 31.8, hunger 0.44  | could swallow r26/r34/r40 54/1/0  dread 0.70/0.02/0.00  genes 17  | spawned 678  died: swallowed 147 chewed 2 starved 9 (r40 0) poisoned 0  | grazed by the water 3, by drifters 0, dissolved 0, snow kept 3, remains 9  | runs 276 at you 0 misses 110 darts 1 dashes 0  floors: gene 0+0 drifter 0  | sum 3407013129",
-	"[census] t 60  living 527 (drifters 435, hunters 92)  flocs 53  | hunters at r40 49, mean r 36.9, hunger 0.45  | could swallow r26/r34/r40 76/6/5  dread 1.62/0.31/0.05  genes 17  | spawned 865  died: swallowed 306 chewed 2 starved 30 (r40 0) poisoned 0  | grazed by the water 11, by drifters 0, dissolved 0, snow kept 4, remains 30  | runs 571 at you 0 misses 248 darts 4 dashes 16  floors: gene 0+0 drifter 0  | sum 1925332400",
-	"[census] t 30  living 527 (drifters 417, hunters 110)  flocs 31  | hunters at r40 1, mean r 31.5, hunger 0.48  | could swallow r26/r34/r40 45/0/0  dread 0.64/0.01/0.00  genes 17  | spawned 685  died: swallowed 152 chewed 0 starved 6 (r40 0) poisoned 0  | grazed by the water 6, by drifters 1, dissolved 0, snow kept 2, remains 6  | runs 279 at you 0 misses 103 darts 2 dashes 0  floors: gene 0+0 drifter 0  | sum 1486733441",
+	"[census] t 30  living 531 (drifters 437, hunters 94)  flocs 31  | hunters at r40 0, mean r 31.2, hunger 0.48  | could swallow r26/r34/r40 38/0/0  dread 0.47/0.00/0.00  genes 18  | spawned 658  died: swallowed 121 chewed 0 starved 6 (r40 0) poisoned 0  | grazed by the water 7, by drifters 0, dissolved 0, snow kept 2, remains 6  | runs 199 at you 0 misses 57 stings 4 dashes 0  floors: gene 0+1 drifter 0  | sum 2009651156",
+	"[census] t 60  living 530 (drifters 437, hunters 93)  flocs 37  | hunters at r40 32, mean r 35.9, hunger 0.51  | could swallow r26/r34/r40 73/4/4  dread 1.20/0.19/0.04  genes 18  | spawned 826  died: swallowed 276 chewed 0 starved 20 (r40 0) poisoned 0  | grazed by the water 16, by drifters 0, dissolved 0, snow kept 3, remains 20  | runs 447 at you 0 misses 156 stings 6 dashes 18  floors: gene 0+1 drifter 0  | sum 3154798650",
+	"[census] t 30  living 520 (drifters 416, hunters 104)  flocs 37  | hunters at r40 0, mean r 31.9, hunger 0.43  | could swallow r26/r34/r40 53/1/1  dread 0.73/0.02/0.01  genes 17  | spawned 682  died: swallowed 154 chewed 1 starved 7 (r40 0) poisoned 0  | grazed by the water 2, by drifters 0, dissolved 0, snow kept 2, remains 7  | runs 274 at you 0 misses 110 stings 1 dashes 0  floors: gene 0+0 drifter 0  | sum 4101171362",
+	"[census] t 60  living 521 (drifters 430, hunters 91)  flocs 51  | hunters at r40 44, mean r 36.6, hunger 0.45  | could swallow r26/r34/r40 76/4/3  dread 1.44/0.21/0.04  genes 17  | spawned 866  died: swallowed 312 chewed 3 starved 30 (r40 0) poisoned 0  | grazed by the water 11, by drifters 0, dissolved 0, snow kept 2, remains 30  | runs 570 at you 0 misses 242 stings 3 dashes 23  floors: gene 0+1 drifter 0  | sum 643445809",
+	"[census] t 30  living 525 (drifters 415, hunters 110)  flocs 28  | hunters at r40 2, mean r 31.7, hunger 0.48  | could swallow r26/r34/r40 51/1/1  dread 0.72/0.05/0.02  genes 17  | spawned 687  died: swallowed 157 chewed 0 starved 5 (r40 0) poisoned 0  | grazed by the water 6, by drifters 2, dissolved 0, snow kept 1, remains 5  | runs 275 at you 0 misses 92 stings 1 dashes 0  floors: gene 0+0 drifter 0  | sum 1651638916",
 ]
 
 
@@ -5914,9 +5930,15 @@ const IDENTITY_LINES: Array[String] = [
 ## count found missing. The two drops these were, a newborn's and a sighted player's
 ## from seed 1, were the same drop twice, and are one: two lines, not four. Nothing else
 ## moved: the rules two builds agree on are as they were.
+## **Re-recorded when the sting became a touch and the chase's aim an instinct**
+## (docs/design/sting.md), from the check's own output, because the water changed on
+## purpose: a `trichocyst` no longer fires from a distance and stuns a body coming for
+## its own -- it wounds whatever touches the side it guards -- and a "turn toward"
+## carries its aim, which a division may nudge. Nothing else moved; the rules two
+## builds agree on moved with the sting (`Wire.RULES`).
 const DEV_LINES: Array[String] = [
-	"[census] t 300  living 558 (drifters 420, hunters 138)  flocs 49  | hunters at r40 1, mean r 31.5, hunger 0.48  | could swallow r26/r34/r40 83/18/6  dread 1.19/0.30/0.11  genes 18  | spawned 2132  died: swallowed 1764 chewed 70 starved 209 (r40 0) poisoned 6  | grazed by the water 153, by drifters 2, dissolved 52, snow kept 11, remains 215  | runs 3229 at you 0 misses 1440 darts 33 dashes 355  floors: gene 0+2 drifter 0  | sum 3956062586",
-	"[lineage] t 300  hunters 138, born 138  generation mean 7.37 max 12  families 35 (largest 17)  dna apart 108  | cruise 107.1 notice 1374 mouth 1.29 upkeep 2.05 genes worn 6.15 carried 7.33  tails 108 sighted 138 at r40 1  | divisions 475 (trade 233 drift 242 faithfully 0), daughters 950: tailless 276, given a sense 131  | the spawner's peers 19 (for the floor 17, for venom 2), drifters 1558, left to births 0  | worn cytostome 1.29 cirrus 1.86 flagellum 2.01 stigma 0.31 ocellus 0.78 chemocyte 1.08 ampulla 1.09 axoneme 0.74 palp 0.16 myoneme 0.30 trichocyst 0.37 pellicle 0.49 veneneux 0.04 plastid 0.26 vacuole 0.46 crista 0.53 toxicyst 0.22 haptonema 0.80  | commonest 2x cytostome:1,cirrus:3,flagellum:3,chemocyte:3,ampulla:3,axoneme:2 ; 1x cytostome:1,chemocyte:2,ampulla:3,axoneme:3,myoneme:1,vacuole:2,crista:3,toxicyst:3,haptonema:3 ; 1x cytostome:1,cirrus:1,ampulla:1,pellicle:2,haptonema:3",
+	"[census] t 300  living 538 (drifters 434, hunters 104)  flocs 57  | hunters at r40 1, mean r 32.0, hunger 0.56  | could swallow r26/r34/r40 71/24/14  dread 0.99/0.42/0.22  genes 18  | spawned 2145  died: swallowed 1785 chewed 72 starved 231 (r40 0) poisoned 4  | grazed by the water 186, by drifters 1, dissolved 35, snow kept 14, remains 235  | runs 3417 at you 0 misses 1545 stings 101 dashes 506  floors: gene 0+3 drifter 0  | sum 2269474896",
+	"[lineage] t 300  hunters 104, born 104  generation mean 7.68 max 14  families 33 (largest 8)  dna apart 91  | cruise 87.9 notice 1174 mouth 1.47 upkeep 2.10 genes worn 6.13 carried 7.52  tails 74 sighted 104 at r40 1  | divisions 485 (trade 223 drift 262 faithfully 0), daughters 970: tailless 284, given a sense 152  | the spawner's peers 20 (for the floor 17, for venom 3), drifters 1570, left to births 0  | worn cytostome 1.47 cirrus 1.71 flagellum 1.82 stigma 0.38 ocellus 1.15 chemocyte 0.95 ampulla 0.58 axoneme 0.20 palp 0.40 myoneme 0.54 trichocyst 0.44 pellicle 0.83 veneneux 0.06 plastid 0.53 vacuole 0.50 crista 0.26 toxicyst 0.13 haptonema 0.62  | commonest 2x cytostome:1,cirrus:3,flagellum:3,ocellus:1,myoneme:3 ; 1x cytostome:1,chemocyte:1,ampulla:3,palp:2,trichocyst:2,vacuole:2 ; 1x cytostome:1,chemocyte:2,ampulla:1,vacuole:2,crista:1",
 ]
 
 
@@ -6048,7 +6070,10 @@ const MEMBRANE: Array[String] = ["concentration", "taste_level", "shadow", "shad
 ## check's own output: the senses' arithmetic is the same, and the water they read is
 ## not -- every body it makes from nothing with a mouth is a newborn, at one share, and
 ## a new drop's founders carry the toxin as the floor keeps it.
-const DEV_MEMBRANE := "9e612cb69708e154c6392d1501f3eacc31c09d0dcdb9f8f381bc23e2dfe201f2"
+## **Re-recorded when the sting became a touch** (sting.md), from the check's own
+## output: the senses' arithmetic is the same, and the water they read is not -- a
+## sting wounds what touches it, and nothing is stunned from a distance any more.
+const DEV_MEMBRANE := "6127c1e040440ce965573640b73b8e176b72b580765aab3828c0ea0b6a4a9fd2"
 
 
 ## **1. With the rules off it is pack 2, the membrane** (behaviour.md §12.3):
@@ -6400,7 +6425,7 @@ func _no_magic() -> void:
 			["beam_range", 5000.0], ["beam_bearings", PackedFloat32Array([1.5, 2.0, 2.5])],
 			["beam_fan_mid", 2.0], ["beam_fan_half", 1.0], ["ping_range", 5000.0],
 			["ping_bearing", 3.0], ["ping_through", 0.9], ["ping_tier", 3],
-			["touch_range", 2000.0], ["dart_range", 300.0]]:
+			["touch_range", 2000.0], ["dart_wound", 0.5]]:
 		field.set(value[0], value[1])
 	var after := _readings(field, w)
 	var same := var_to_bytes(before) == var_to_bytes(after)
@@ -6436,12 +6461,15 @@ func _readings(field: WatchedDrop, i: int) -> Array:
 ## clear, each alone with you and swimming on the founders' rules. A mouth that
 ## could swallow you, swimming at you within 35°, is felt as a wake; one swimming
 ## past at 60°, and one too small to take you swimming straight at you, are not.
-## Your dart -- ready, in range, facing it -- fires at the first and at neither of
-## the others, and a `trichocyst` in the water fires at a mouth coming for its
-## body and at neither of the others. **A dart stuns**: the body rests with its
-## rules unread for DART_STUN seconds, to a frame -- and on the first tick it
-## reads them again it feels the dart as a `hit` at its bearing, which its rule
-## turns it away from.
+##
+## **And the sting** (docs/design/sting.md), a touch weapon. Your sting, ready on
+## your starboard side, stings a body touching that side in the water's own frame --
+## wounded by its felt share, and told to you as a sting gone off -- and neither one
+## 200 off that side nor one touching your port side; the body stung feels it as a
+## `hit` at its bearing,
+## which its rule turns it away from. A `trichocyst` in the water stings you when you
+## touch the side it guards: you are wounded and feel it. And a sting never takes a
+## body past STING_MOST.
 func _coming_for_you() -> void:
 	seed(33)
 	var water := _water(3000.0)
@@ -6453,8 +6481,10 @@ func _coming_for_you() -> void:
 	field.in_water = true
 	var wakes: Array = []
 	var darts: Array = []
+	var bites: Array = []
 	field.waked.connect(func(bearing: float, _strength: float) -> void: wakes.append(bearing))
 	field.darted.connect(func(bearing: float) -> void: darts.append(bearing))
+	field.bitten.connect(func(bearing: float, _level: float) -> void: bites.append(bearing))
 	var big := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 1}
 	var small := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
 	var cases := [[15.0, big, 38.0], [60.0, big, 38.0], [0.0, small, 20.0]]
@@ -6470,78 +6500,65 @@ func _coming_for_you() -> void:
 			field._process(1.0 / 60.0)
 		felt.append(wakes.size())
 		field.take_out(k)
-	# Your dart, ready and facing ahead, 200 ahead of you: the first is darted --
-	# and is on a list that turns away from a hit -- and watched through its stun.
-	field.dart_range = Stats.at(&"dart_range", 3)
-	field.dart_bearing = 0.0
+	# Your sting, ready on your starboard side, clear of your mouth: a body touching that
+	# side, one 200 off it and one touching your port side, one frame each of the
+	# water's own. The first is on a list that turns away from a hit.
+	field.dart_wound = Stats.at(&"dart_wound", 3)
+	field.dart_bearing = PI * 0.5
 	field.dart_cooldown = Stats.at(&"dart_cooldown", 3)
+	var touching := cell.radius + 20.0 + 1.0
+	var spots := [Vector2(touching, 0.0), Vector2(200.0, 0.0), Vector2(-touching, 0.0)]
+	var want := Doses.felt(Stats.at(&"dart_wound", 3), 20.0, CellBody.DOSE_SIZE)
 	var yours := []
-	var stunned_for := 0.0
-	var reads_stunned := 0
 	var turned := false
-	for c in cases.size():
-		var one: Array = cases[c]
+	for c in spots.size():
 		field.set("_dart_clock", 0.0)
-		var at := p + Vector2(0.0, -200.0)
-		var k := _pose(field, at, float(one[2]), one[1], _facing(at, p) + deg_to_rad(float(one[0])),
-			0.6)
+		var at: Vector2 = p + spots[c]
+		var k := _pose(field, at, 20.0, small, _facing(at, p) + PI, 0.6)
 		var kb: Object = cells[k]
 		kb.set("brain", null if c > 0 else _list(["body.hit -> body.turn-away", "always -> body.swim"]))
 		darts.clear()
-		for f in 30:
-			field._process(1.0 / 60.0)
-			if c == 0 and not darts.is_empty():
-				break
-		yours.append(darts.size())
+		field._process(1.0 / 60.0)
+		yours.append([darts.size(), is_equal_approx(float(kb.get("wound")), want)])
 		if c == 0 and darts.size() == 1:
-			var stun_at := float(field.get("_t"))
 			var from := float(kb.get("hit_from"))
-			field.log_reads = true
-			field.reads.clear()
-			while float(kb.get("stun")) > 0.0 and float(field.get("_t")) < stun_at + 10.0:
-				field._process(1.0 / 60.0)
-			stunned_for = float(field.get("_t")) - stun_at
-			for read: Array in field.reads:
-				reads_stunned += 1 if int(read[0]) == k else 0
 			for f in Drop.LOD_EVERY + 1:
 				field._process(1.0 / 60.0)
-			field.log_reads = false
 			turned = bool(kb.get("holding")) and absf(angle_difference(float(kb.get("steer")),
 				from + PI)) < 1e-6
 		field.take_out(k)
-	# A trichocyst in the water, resting, out of your wake's reach, its dart's arc
-	# on each in turn, 200 off -- toward the drop's middle from you, so that it and
-	# what comes at it are in the water wherever the run starts. A run starts where the
-	# water round it is quietest, at least START_INSET from the rim, so a fixed bearing
-	# could put them past it, and the rim would pull them in.
-	var centre: Vector2 = field.basin().get(&"center")
-	var inward := (centre - p).normalized() if centre.distance_to(p) > 1.0 else Vector2.RIGHT
-	var d_at := p + inward * 1600.0
-	var defender := _pose(field, d_at, 30.0, {&"cytostome": 1, &"trichocyst": 3}, 0.4, 0.6)
+	field.dart_wound = 0.0
+	# A trichocyst in the water, its sting's arc on you, touching you: you are stung.
+	var d_at := p + Vector2(0.0, -(cell.radius + 30.0 + 1.0))
+	var defender := _pose(field, d_at, 30.0, {&"cytostome": 1, &"trichocyst": 3}, 0.0, 0.6)
 	var db: Object = cells[defender]
+	db.set("heading", wrapf(_facing(d_at, p) - float(db.get("dart_bearing")), -PI, PI))
 	var arc := float(db.get("heading")) + float(db.get("dart_bearing"))
-	var theirs := []
-	for one: Array in cases:
-		db.set("dart_clock", 0.0)
-		var at := d_at + Vector2(sin(arc), -cos(arc)) * 200.0
-		var k := _pose(field, at, float(one[2]), one[1],
-			_facing(at, d_at) + deg_to_rad(float(one[0])), 0.6)
-		(cells[k] as Object).set("brain", null)
-		for f in 30:
-			field._process(1.0 / 60.0)
-		theirs.append([float(db.get("dart_clock")) > 0.0,
-			float((cells[k] as Object).get("stun")) > 0.0])
-		field.take_out(k)
+	var before := cell.wound
+	bites.clear()
+	field._sting_from(defender, d_at, 30.0, arc, null)
+	var on_you := [is_equal_approx(cell.wound - before,
+			Doses.felt(Stats.at(&"dart_wound", 3), cell.radius, CellBody.DOSE_SIZE)),
+		bites.size() == 1, float(db.get("dart_clock")) > 0.0]
+	# And never past the most: a body nearly through is stung to STING_MOST and no more.
+	db.set("dart_clock", 0.0)
+	cell.wound = 0.0
+	var worn := _pose(field, d_at + Vector2(sin(arc), -cos(arc)) * 61.0, 30.0, small, 0.0, 0.6)
+	field.in_water = false
+	(cells[worn] as Object).set("wound", CellBody.STING_MOST - 0.01)
+	field._sting_from(defender, d_at, 30.0, arc, null)
+	var most := float((cells[worn] as Object).get("wound"))
+	field.in_water = true
 	_check(("10. coming for you: wakes from a mouth swimming at you 15 deg off %d, past at 60"
-		+ " deg %d, too small to take you %d; your dart at them %s; a trichocyst in the water at"
-		+ " them %s (fired, stunned); the dart's stun %.3f s (DART_STUN %.0f), %d reads while"
-		+ " stunned, and on its first tick after it turned away from the dart: %s") % [
-		felt[0], felt[1], felt[2], str(yours), str(theirs), stunned_for, CellBody.dart_stun({}),
-		reads_stunned, str(turned)],
-		felt[0] >= 1 and felt[1] == 0 and felt[2] == 0 and yours == [1, 0, 0]
-		and theirs == [[true, true], [false, false], [false, false]]
-		and absf(stunned_for - CellBody.dart_stun({})) <= 1.5 / 60.0 and reads_stunned == 0
-		and turned)
+		+ " deg %d, too small to take you %d; your sting at a body touching its side, one 200"
+		+ " off it and one touching your other side (gone off, wounded by %.4f) %s, the one stung"
+		+ " turned away from it on its next tick: %s; a trichocyst in the water touching you"
+		+ " (wounded, felt, waiting) %s; a body nearly through stung to %.3f (STING_MOST %.2f)")
+		% [felt[0], felt[1], felt[2], want, str(yours), str(turned), str(on_you), most,
+		CellBody.STING_MOST],
+		felt[0] >= 1 and felt[1] == 0 and felt[2] == 0
+		and yours == [[1, true], [0, false], [0, false]] and turned
+		and on_you == [true, true, true] and is_equal_approx(most, CellBody.STING_MOST))
 	_done(water)
 	seed(20260930)
 
@@ -6847,8 +6864,11 @@ const TRIAL := {&"trial": {
 }}
 ## Its rules, as a body carries them: flash at a strong glow, turn toward it,
 ## swim.
+## A "turn toward" names its aim (docs/design/sting.md §2): a line without one reads
+## as the founders' 3 and is written back with it, so the list is written as it
+## comes back.
 const TRIAL_RULES: Array[String] = ["trial.glow level above 0.5 -> trial.flash",
-	"trial.glow -> body.turn-toward", "always -> body.swim"]
+	"trial.glow -> body.turn-toward 3", "always -> body.swim"]
 ## Where its glow comes from: a light this far round from north, at any distance.
 const TRIAL_LIGHT := 1.0
 
@@ -7081,10 +7101,16 @@ func _modular() -> void:
 ## fully sighted player's drop: `--sensed=` is gone, and `eco_probe.gd --seed=1
 ## --until=300` makes the same one. Nothing else moved: the rules two builds agree on
 ## are as they were.
+## **Re-recorded when the sting became a touch and the chase's aim an instinct**
+## (docs/design/sting.md), from the check's own output, because the water changed on
+## purpose: a `trichocyst` no longer fires from a distance and stuns a body coming for
+## its own -- it wounds whatever touches the side it guards -- and a "turn toward"
+## carries its aim, which a division may nudge. Nothing else moved; the rules two
+## builds agree on moved with the sting (`Wire.RULES`).
 const PACK3_LINES: Array[String] = [
-	"[census] t 300  living 550 (drifters 456, hunters 94)  flocs 131  | hunters at r40 0, mean r 29.3, hunger 0.51  | could swallow r26/r34/r40 27/4/2  dread 0.52/0.14/0.09  genes 18  | spawned 1591  died: swallowed 740 chewed 4 starved 399 (r40 0) poisoned 0  | grazed by the water 133, by drifters 1, dissolved 174, snow kept 10, remains 399  | runs 0 at you 0 misses 0 darts 18 dashes 0  floors: gene 0+6 drifter 0  | sum 1694490047",
-	"[lineage] t 300  hunters 94, born 25  generation mean 1.39 max 6  families 85 (largest 3)  dna apart 42  | cruise 56.9 notice 709 mouth 1.12 upkeep 1.06 genes worn 4.17 carried 4.73  tails 84 sighted 94 at r40 0  | divisions 102 (trade 40 drift 62 faithfully 0), daughters 204: tailless 72, given a sense 59  | the spawner's peers 367 (for the floor 361, for venom 6), drifters 669, left to births 0  | worn cytostome 1.12 cirrus 1.00 flagellum 0.98 stigma 0.33 ocellus 0.24 chemocyte 0.20 ampulla 0.34 axoneme 0.00 palp 0.04 myoneme 0.09 trichocyst 0.01 pellicle 0.05 veneneux 0.02 plastid 0.02 vacuole 0.05 crista 0.05 toxicyst 0.01 haptonema 0.01  | commonest 21x cytostome:1,cirrus:1,flagellum:1,stigma:1 ; 16x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 15x cytostome:1,cirrus:1,flagellum:1,chemocyte:1",
-	"[behaviour] t 300  hunters 94: on the founders' rules 82, other lists 12  | founders' rules fired 23624/43476/2257/1836/9471/111125/601  | meals of hunters with a nose 159, radar 283, laser 308  | water darts 18, stuns 18, your wakes 0  | now holding a heading 27, resting 41, swimming 52, pushing 0, stunned 0, echoes in flight 67  | behaviours 13, unchanged 87.2 %  | rules changed 102: nudge 50, replace 18, swap 19, copy 4, drop 11",
+	"[census] t 300  living 551 (drifters 457, hunters 94)  flocs 131  | hunters at r40 0, mean r 30.2, hunger 0.57  | could swallow r26/r34/r40 37/1/1  dread 0.49/0.03/0.01  genes 18  | spawned 1618  died: swallowed 795 chewed 8 starved 377 (r40 0) poisoned 0  | grazed by the water 138, by drifters 4, dissolved 143, snow kept 9, remains 377  | runs 0 at you 0 misses 0 stings 36 dashes 34  floors: gene 0+8 drifter 0  | sum 4248904738",
+	"[lineage] t 300  hunters 94, born 34  generation mean 1.57 max 6  families 79 (largest 2)  dna apart 57  | cruise 59.5 notice 907 mouth 1.06 upkeep 1.10 genes worn 4.24 carried 5.06  tails 79 sighted 94 at r40 0  | divisions 113 (trade 50 drift 63 faithfully 0), daughters 226: tailless 93, given a sense 68  | the spawner's peers 321 (for the floor 313, for venom 8), drifters 742, left to births 0  | worn cytostome 1.06 cirrus 0.95 flagellum 0.96 stigma 0.15 ocellus 0.34 chemocyte 0.35 ampulla 0.49 axoneme 0.10 palp 0.01 myoneme 0.07 trichocyst 0.01 pellicle 0.00 veneneux 0.03 plastid 0.04 vacuole 0.13 crista 0.09 toxicyst 0.01 haptonema 0.14  | commonest 22x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 14x cytostome:1,cirrus:1,flagellum:1,chemocyte:1 ; 14x cytostome:1,cirrus:1,flagellum:1,ocellus:1",
+	"[behaviour] t 300  hunters 94: on the founders' rules 72, other lists 22  | founders' rules fired 24530/40977/2469/1618/10431/109195/1882  | meals of hunters with a nose 192, radar 329, laser 323  | stings 36, stuns 0, your wakes 0  | now holding a heading 40, resting 38, swimming 56, pushing 4, stunned 0, echoes in flight 80  | behaviours 19, unchanged 76.6 %  | rules changed 113: nudge 57, replace 21, swap 9, copy 12, drop 14",
 ]
 ## **The same five minutes in the game's water** (row 37), pinned as
 ## [constant DEV_LINES] pins pack 2's: [method _five_minutes]' drop, seed 1, as
@@ -7129,10 +7155,16 @@ const PACK3_LINES: Array[String] = [
 ## toxin, which no newborn carries, is given to as many of a new drop's founders as the
 ## floor keeps, and back by as many peers as a count found missing. Nothing else moved:
 ## the rules two builds agree on are as they were.
+## **Re-recorded when the sting became a touch and the chase's aim an instinct**
+## (docs/design/sting.md), from the check's own output, because the water changed on
+## purpose: a `trichocyst` no longer fires from a distance and stuns a body coming for
+## its own -- it wounds whatever touches the side it guards -- and a "turn toward"
+## carries its aim, which a division may nudge. Nothing else moved; the rules two
+## builds agree on moved with the sting (`Wire.RULES`).
 const TAIL_LINES: Array[String] = [
-	"[census] t 300  living 549 (drifters 454, hunters 95)  flocs 123  | hunters at r40 1, mean r 30.6, hunger 0.60  | could swallow r26/r34/r40 38/6/4  dread 0.57/0.18/0.10  genes 18  | spawned 1757  died: swallowed 915 chewed 2 starved 433 (r40 0) poisoned 0  | grazed by the water 196, by drifters 5, dissolved 150, snow kept 11, remains 433  | runs 0 at you 0 misses 0 darts 18 dashes 24  floors: gene 0+5 drifter 0  | sum 2548732496",
-	"[lineage] t 300  hunters 95, born 39  generation mean 1.83 max 7  families 79 (largest 3)  dna apart 58  | cruise 61.9 notice 832 mouth 1.15 upkeep 1.13 genes worn 4.36 carried 5.31  tails 86 sighted 95 at r40 1  | divisions 142 (trade 62 drift 80 faithfully 0), daughters 284: tailless 98, given a sense 77  | the spawner's peers 362 (for the floor 357, for venom 5), drifters 840, left to births 0  | worn cytostome 1.15 cirrus 1.03 flagellum 1.13 stigma 0.15 ocellus 0.41 chemocyte 0.22 ampulla 0.39 axoneme 0.03 palp 0.04 myoneme 0.07 trichocyst 0.03 pellicle 0.08 veneneux 0.01 plastid 0.13 vacuole 0.05 crista 0.11 toxicyst 0.01 haptonema 0.12  | commonest 19x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 19x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 11x cytostome:1,cirrus:1,flagellum:1,chemocyte:1",
-	"[behaviour] t 300  hunters 95: on the founders' rules 71, other lists 24  | founders' rules fired 26451/28626/2539/2221/8598/114637/942  | meals of hunters with a nose 189, radar 420, laser 420  | water darts 18, stuns 18, your wakes 0  | now holding a heading 47, resting 26, swimming 89, pushing 1, stunned 0, echoes in flight 71  | behaviours 22, unchanged 74.7 %  | rules changed 142: nudge 81, replace 24, swap 12, copy 12, drop 13",
+	"[census] t 300  living 547 (drifters 455, hunters 92)  flocs 133  | hunters at r40 0, mean r 29.8, hunger 0.56  | could swallow r26/r34/r40 31/6/4  dread 0.39/0.14/0.08  genes 18  | spawned 1789  died: swallowed 958 chewed 5 starved 430 (r40 0) poisoned 1  | grazed by the water 181, by drifters 1, dissolved 155, snow kept 9, remains 431  | runs 0 at you 0 misses 0 stings 36 dashes 5  floors: gene 0+6 drifter 0  | sum 3382125560",
+	"[lineage] t 300  hunters 92, born 37  generation mean 1.71 max 9  families 75 (largest 4)  dna apart 47  | cruise 60.2 notice 747 mouth 1.17 upkeep 1.11 genes worn 4.32 carried 5.28  tails 77 sighted 92 at r40 0  | divisions 152 (trade 64 drift 88 faithfully 0), daughters 304: tailless 116, given a sense 70  | the spawner's peers 373 (for the floor 367, for venom 6), drifters 861, left to births 0  | worn cytostome 1.17 cirrus 0.99 flagellum 1.00 stigma 0.28 ocellus 0.35 chemocyte 0.28 ampulla 0.29 axoneme 0.05 palp 0.03 myoneme 0.05 trichocyst 0.07 pellicle 0.10 veneneux 0.01 plastid 0.08 vacuole 0.03 crista 0.12 toxicyst 0.02 haptonema 0.08  | commonest 16x cytostome:1,cirrus:1,flagellum:1,chemocyte:1 ; 15x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 13x cytostome:1,cirrus:1,flagellum:1,stigma:1",
+	"[behaviour] t 300  hunters 92: on the founders' rules 70, other lists 22  | founders' rules fired 26873/28970/2318/1894/9847/112357/1737  | meals of hunters with a nose 240, radar 414, laser 430  | stings 36, stuns 0, your wakes 0  | now holding a heading 39, resting 37, swimming 86, pushing 2, stunned 0, echoes in flight 44  | behaviours 20, unchanged 76.1 %  | rules changed 152: nudge 76, replace 38, swap 14, copy 11, drop 13",
 ]
 ## **The player's seeded trace** ([method _tail_trace]): forty seconds of a cell
 ## stepped by its own drive, wearing a tail of two copies that nobody holds,
@@ -7163,8 +7195,11 @@ const TAIL_LINES: Array[String] = [
 ## check's own output: the senses' arithmetic is the same, and the water they read is
 ## not -- every body it makes from nothing with a mouth is a newborn, at one share, and
 ## a new drop's founders carry the toxin as the floor keeps it.
-const PACK3_TRACE := "678bebcf3b52046ccecc399377963d2f9459b77a50de13001e6f3fd7faaaba97"
-const TAIL_TRACE := "ff1d99d2e9b3542099079e9c082d1c1ecbc2584a736975ee75e9efb1d2d45e2b"
+## **Re-recorded when the sting became a touch** (sting.md), from the check's own
+## output: the senses' arithmetic is the same, and the water they read is not -- a
+## sting wounds what touches it, and nothing is stunned from a distance any more.
+const PACK3_TRACE := "56319d464b1322a7ed978e933e9884057380a7a6aab339151730b1eb68deb7fc"
+const TAIL_TRACE := "3941c34172899b9a4564020cd097a56ef2a54a945e56c0162c29636cc793f083"
 ## A tail of two copies, the level a tail can be held still at, on a born body.
 const TWO_TAILS := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2}
 const ONE_TAIL := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
@@ -7649,7 +7684,7 @@ func _tail_water() -> void:
 			cells[i].set("ate_at", float(field.get("_t")))
 		for i: int in [stun_one, stun_two]:
 			cells[i].set("brain", _list(["always -> body.swim"]))
-			field._stun(cells[i], p, CellBody.dart_stun({}))
+			field._stun(cells[i], p, 5.0)
 		seen.append(_tail_watch(field, [one, two, drifter, stun_one, stun_two], 2 * 60))
 		_done(water)
 	seed(20260930)
@@ -7680,14 +7715,14 @@ func _tail_water() -> void:
 
 ## **5. Coming for you** (automation.md §5.3, §18.3): a hunter whose mouth could take
 ## you, 15 degrees off a line at you, on the founders' rules and just fed, so it
-## rests: **with one copy its tail swims it at you**, and your wake and your dart
-## answer it; **with two it holds still**, and neither does. In pack 3's water the
-## one-copy hunter at rest raises neither.
+## rests: **with one copy its tail swims it at you**, and your wake answers it;
+## **with two it holds still**, and it does not. In pack 3's water the one-copy
+## hunter at rest raises none. (Your dart answered it too, until the dart became a
+## sting that answers only a touch: docs/design/sting.md.)
 func _tail_coming() -> void:
 	var big_one := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 1}
 	var big_two := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 2}
 	var felt := []
-	var shot := []
 	for each: Array in [[big_one, true], [big_two, true], [big_one, false]]:
 		seed(56)
 		var water := _water(3000.0, true, bool(each[1]))
@@ -7698,9 +7733,7 @@ func _tail_coming() -> void:
 		cell.heading = 0.0
 		field.in_water = true
 		var wakes := [0]
-		var darts := [0]
 		field.waked.connect(func(_bearing: float, _strength: float) -> void: wakes[0] += 1)
-		field.darted.connect(func(_bearing: float) -> void: darts[0] += 1)
 		# Each watched from its first tick, once its rules have it resting: a body
 		# just made has claimed nothing yet, and under row 37 its tail beats.
 		var at := p + Vector2(0.0, -500.0)
@@ -7714,29 +7747,12 @@ func _tail_coming() -> void:
 			field._process(1.0 / 60.0)
 		felt.append(wakes[0])
 		field.take_out(k)
-		field.dart_range = Stats.at(&"dart_range", 3)
-		field.dart_bearing = 0.0
-		field.dart_cooldown = Stats.at(&"dart_cooldown", 3)
-		field.set("_dart_clock", 999.0)
-		at = p + Vector2(0.0, -200.0)
-		k = _pose(field, at, 38.0, each[0], _facing(at, p) + deg_to_rad(15.0), 0.6)
-		cells[k].set("brain", null)
-		cells[k].set("ate_at", float(field.get("_t")))
-		for f in Drop.LOD_EVERY + 1:
-			field._process(1.0 / 60.0)
-		field.set("_dart_clock", 0.0)
-		darts[0] = 0
-		for f in 30:
-			field._process(1.0 / 60.0)
-		shot.append([darts[0], float(cells[k].get("stun")) > 0.0])
 		_done(water)
 	seed(20260930)
 	_check(("tail 5. coming for you: a resting hunter that could take you, 15 deg off a line at"
-		+ " you -- with one copy of its tail, wakes %d and your dart %s; with two, wakes %d and"
-		+ " your dart %s; in pack 3's water, one copy at rest, wakes %d and your dart %s")
-		% [felt[0], str(shot[0]), felt[1], str(shot[1]), felt[2], str(shot[2])],
-		felt[0] >= 1 and shot[0] == [1, true] and felt[1] == 0 and shot[1] == [0, false]
-		and felt[2] == 0 and shot[2] == [0, false])
+		+ " you -- with one copy of its tail, wakes %d; with two, wakes %d; in pack 3's water,"
+		+ " one copy at rest, wakes %d") % [felt[0], felt[1], felt[2]],
+		felt[0] >= 1 and felt[1] == 0 and felt[2] == 0)
 
 
 ## **A gene this probe declares, with a part at level 3** (automation.md §4.3,

@@ -1582,13 +1582,13 @@ func _process(delta: float) -> void:
 	# What the water has to be told about this body before it answers. All
 	# scalars about the cell's own anatomy; the field turns them into bearings.
 	_food.touch_range = _cell.stat(&"touch_range")
-	_food.dart_range = _cell.stat(&"dart_range")
+	_food.dart_wound = _cell.stat(&"dart_wound")
 	_food.dart_cooldown = _cell.stat(&"dart_cooldown")
-	# **The dart looks along the arc it is worn on**, exactly as the beam does
+	# **The sting guards the arc it is worn on**, as the beam looks along its own,
 	# and resolved in the same place for the same reason: this file has both the
-	# genome and cilia.gd's arc table. A rear dart answers a flank, which is what
-	# makes `trichocyst` a placement decision instead of a radius.
-	_food.dart_bearing = _slot_bearing_of(_cell.provider(&"dart_range"))
+	# genome and cilia.gd's arc table. A rear sting answers a flank, which is what
+	# makes `trichocyst` a placement decision (docs/design/sting.md).
+	_food.dart_bearing = _slot_bearing_of(_cell.provider(&"dart_wound"))
 	# **What this cell's toxins do, and where** (docs/design/dna-slots.md §7.1):
 	# its venom on its bite or its sting on the side it guards, read off the
 	# arc each is worn on, and its poison for whatever bites or swallows it.
@@ -2606,9 +2606,9 @@ func _on_dashed(cost: float) -> void:
 	_metabolism.spend(cost * MetabolismNode.HUNGER_SECONDS)
 
 
-## `trichocyst`. The dart went off; something that was committed to you is not
-## any more. Felt as a shove at its bearing -- it is a thing that happened out
-## there, at a direction, which is exactly what a shove says.
+## `trichocyst`. Your sting went off into whatever touched you on its side
+## (docs/design/sting.md). Felt as a shove at its bearing -- it is a thing that
+## happened there, at a direction, which is exactly what a shove says.
 func _on_darted(bearing: float) -> void:
 	_bus.shove(bearing, 0.7)
 

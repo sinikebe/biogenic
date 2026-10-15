@@ -255,9 +255,9 @@ and dash (`food.gd`). These are the triggers, declared by what owns them:
 | `dash` | `myoneme` | a burst forward, on its cooldown, paying for it | dash | the organ worn |
 | `push` at half or full | `axoneme` | the axoneme's thrust while the rule holds, paying for it | push | the organ worn |
 
-**What stays automatic, and why.** The `trichocyst` dart fires on its own, as
-the player's always has ("the design has no second control to spend":
-`food.gd`). The ping calls on its own clock, the round trip, and the beam is
+**What stays automatic, and why.** The `trichocyst` stings on its own whatever
+touches the side it guards: since 2026-10-15 it is a contact weapon, the body's
+and not a behaviour (`sting.md`). The ping calls on its own clock, the round trip, and the beam is
 always on. The mouth swallows or bites whatever it touches (row 15). These act
 the same for the player and the water, so they declare no output. The `cirrus`
 and the `flagellum` declare nothing either: every body turns and swims (their
@@ -366,9 +366,15 @@ clears it. So an echo that rings for half a second still turns the body all the
 way round, toward where the echo came from.
 
 **Leading by the bearing's drift.** When a turn toward an input finds that the
-input also reported last tick, it aims ahead of the bearing by three times how
-far the bearing drifted since. Three is the textbook navigation constant, and a
-starting value. A target whose bearing holds steady is on a collision course,
+input also reported last tick, it aims ahead of the bearing by the rule's own
+multiple of how far the bearing drifted since. **The multiple is the instinct's,
+not the code's** (the owner, 2026-10-15: *"the cells behavior must be dictated by
+its inherited and evolved instincts, not hard coded elements"*): `body.turn-toward`
+takes an option on `cell.gd`'s ladder `LEADS`, 0 / 1.5 / 3 / 4.5 -- said "at it",
+"near", "ahead" and "far" -- and a division may nudge it one rung, as it nudges a
+push's strength (§6.2). The founders aim at 3, the textbook navigation constant
+every chaser used before it was theirs, and a line written before there was an
+option reads as 3 (`LEAD_DEFAULT`). Starting values. A target whose bearing holds steady is on a collision course,
 which is how a pursuer intercepts without knowing where its prey is. A bearing
 that jumps by more than 30° (`LEAD_JUMP`) belongs to a new target and is aimed at
 straight. Leading works only for senses that report a bearing every tick: the
@@ -394,13 +400,14 @@ for you**: one that is swimming, has you within 35° of its heading (half today'
 `LOCK_CONE_DEG`), and has a mouth that could swallow or chew you
 (`_worth_committing_to`, today's test for starting a run). That last condition
 is the same knowledge your dread has. Like dread, it is your membrane and your
-organs reading the water, never an input to a rule (§14). The player is never
-darted, as today.
+organs reading the water, never an input to a rule (§14).
 
-**A dart stuns.** Today a dart breaks off a run at its body, and the hunter
-rests for 5 s (`REST_MISS`). With no run to break, a dart now stuns what it
-hits: the body rests for 5 s with its rules unread, and feels the dart as a
-`hit` at its bearing. That is the effect today's darts have.
+**A dart stunned; the sting wounds.** Built, the `trichocyst` fired at a body
+coming for its own from up to 260 µm and stunned it for 5 s with its rules
+unread. **Since 2026-10-15 it is a sting** (`sting.md`): it fires on its own at
+whatever touches the side it guards, and wounds it, with no stun and no judgement
+of what is coming. The stunned state stays, for a dose that paralyses, and nothing
+delivers one yet.
 
 **The grace protects nothing on rules** (row 25, answered). Today no run begins
 at a body in its grace: the player for `FIRST_DELAY` after a birth or a return,

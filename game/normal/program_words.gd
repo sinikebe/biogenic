@@ -143,10 +143,17 @@ const UNITS := {
 	&"distance": "%s µm",
 	&"bearing": "%s°",
 }
+## **What an action's options are called**, by the part's own name, in its
+## ladder's order (its declaration's `options`): the push's strength, and how far
+## ahead a turn toward something aims.
+##
 ## TRANSLATORS: How hard a "push" instinct pushes: at "half" its strength or
-## "full". Lowercase, one short word.
+## "full". And how far ahead a "turn toward" instinct aims at something that is
+## moving: straight "at it", "near" (a little ahead), "ahead", or "far" ahead of
+## where it is now. Lowercase, one short word each.
 ## ROOM: 60 px at 14 px
-const OPTION_SAYS := ["half", "full"]
+const OPTION_SAYS := {&"push": ["half", "full"], &"turn-toward": ["at it", "near", "ahead",
+	"far"]}
 ## TRANSLATORS: A program's name inside a sentence, in your language's quotation
 ## marks: “flee” (French « fuite »). %s is the name the player gave it.
 ## ROOM: 230 px at 14 px with program 99
@@ -247,18 +254,41 @@ static func compare_text(kind: StringName, test: int) -> String:
 	return String(TranslationServer.translate(COMPARES[known][clampi(test, 0, 3)]))
 
 
-## **An action as its chip says it**: its word, and a push's strength after a
-## middle dot -- `push · half`.
+## **An action as its chip says it**: its word, and its option after a middle dot
+## -- `push · half`, `turn toward · ahead`.
 static func action_text(rule: Rulebook.Rule) -> String:
 	var said := says(rule.output)
 	if not is_nan(rule.option):
-		said += " · " + option_text(rule.option)
+		said += " · " + option_text(rule.output, rule.option)
 	return said
 
 
-## A push's strength: half, or full.
-static func option_text(option: float) -> String:
-	return String(TranslationServer.translate(OPTION_SAYS[0 if option < 0.75 else 1]))
+## **[param output]'s option [param option] in words**: the word at its place on
+## the part's ladder ([constant OPTION_SAYS]), or the number itself for a part
+## with no words.
+static func option_text(output: StringName, option: float) -> String:
+	var part := Rulebook.part_of(output)
+	var ladder := options_of(output)
+	var at := -1
+	for k in ladder.size():
+		if at < 0 or absf(float(ladder[k]) - option) < absf(float(ladder[at]) - option):
+			at = k
+	if at < 0 or at >= (OPTION_SAYS.get(part, []) as Array).size():
+		return Rulebook.number(option)
+	return String(TranslationServer.translate((OPTION_SAYS[part] as Array)[at]))
+
+
+## **The options [param output] takes**, from the table that declares it: the
+## body's own (cell.gd's DECLARES) or its gene's.
+static func options_of(output: StringName) -> Array:
+	var owner := StringName(String(output).get_slice(".", 0))
+	var tables: Dictionary = CellBody.DECLARES if CellBody.DECLARES.has(owner) \
+		else GenomeNode.Catalogue.declares()
+	var part := Rulebook.part_of(output)
+	for one: Dictionary in (tables.get(owner, {}) as Dictionary).get("out", []):
+		if StringName(one["name"]) == part:
+			return one.get("options", [])
+	return []
 
 
 ## **One instinct in words**, as a row reads (automation-ux.md §7.3): its sense,

@@ -1181,7 +1181,7 @@ static func chip_widths(font: Font) -> Vector2:
 		widest_out = maxf(widest_out, _text_w(font, said, 15))
 		for option: float in decl.options:
 			widest_out = maxf(widest_out, _text_w(font,
-				said + " · " + ProgramWords.option_text(option), 15))
+				said + " · " + ProgramWords.option_text(output, option), 15))
 	return Vector2(ceilf(widest_in + GLYPH_W + 2.0 * CHIP_PAD),
 		ceilf(widest_out + GLYPH_W + 2.0 * CHIP_PAD))
 
@@ -2935,10 +2935,13 @@ func _kind_of(value: StringName) -> StringName:
 	return &""
 
 
-## **An action picked**: with its first option, for one that takes one.
+## **An action picked**: with its declared default option -- a turn toward's aim,
+## the one every chaser had -- or else its first, for one that takes one.
 func _pick_output(output: StringName) -> void:
 	var decl := _vocab.outputs.get(output) as Rulebook.OutputDecl
-	var option := float(decl.options[0]) if decl != null and not decl.options.is_empty() else NAN
+	var option := NAN
+	if decl != null and not decl.options.is_empty():
+		option = decl.default if decl.options.has(decl.default) else float(decl.options[0])
 	var lines := _lines_of(_program)
 	if _row >= lines.size():
 		_draft["output"] = output
@@ -3440,13 +3443,18 @@ func _choices_inspector(input: StringName, output: StringName, outputs: bool,
 		cell.mouse_entered.connect(_hover_explain.bind(part))
 		cell.mouse_exited.connect(_set_hover.bind([]))
 		grid.add_child(cell)
-	# **`push` offers its strength** under the grid when it is the current choice.
+	# **An action with options offers them** under the grid when it is the current
+	# choice -- `push` its strength, `turn toward` its aim (sting.md §2) -- on one row
+	# as wide as the grid above, each as wide as that row shares out: two are a grid
+	# cell each, and a ladder of four still leaves room for `remove`.
 	if outputs and out_decl != null and not out_decl.options.is_empty() and rule != null:
 		var row := HBoxContainer.new()
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_theme_constant_override("separation", 8)
+		var n := out_decl.options.size()
+		var each := floorf((CELL_W * 2.0 + 8.0 - 8.0 * float(n - 1)) / float(n))
 		for option: float in out_decl.options:
-			var cell := _word_cell(ProgramWords.option_text(option), CELL_W,
+			var cell := _word_cell(ProgramWords.option_text(out_decl.name, option), each,
 				is_equal_approx(option, rule.option), "option_%s" % Rulebook.number(option))
 			cell.pressed.connect(_set_option.bind(option))
 			row.add_child(cell)

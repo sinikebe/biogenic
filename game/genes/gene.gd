@@ -150,7 +150,7 @@ var provides := {}
 
 ## **Its own numbers**, by name, that are no table by tier: what its mechanic
 ## asks of the organ wearing it, through the catalogue's `number()` -- the tail's
-## level that can be held still, the dart's stun, the beam's costs.
+## level that can be held still, the beam's costs.
 var numbers := {}
 
 ## **How it earns levels** (docs/design/beam-levels.md), for an organ that does:
@@ -234,7 +234,7 @@ var one_variant := false
 ## **What it gives a body's rules** (docs/design/behaviour.md §3), in the shape
 ## `rulebook.gd`'s vocabulary reads: `{"in": [...], "out": [...]}`, the inputs it
 ## senses and the outputs it triggers. Empty for an organ that only acts on its
-## own, as the dart, the call and the mouth do (§3.3). A part may wait for a
+## own, as the sting, the call and the mouth do (§3.3). A part may wait for a
 ## level (automation.md §4.3). Its words are its file's (below).
 ##
 ## **An output with a `"button"` is the hand's as well** (docs/design/

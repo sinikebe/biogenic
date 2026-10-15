@@ -161,6 +161,10 @@ class OutputDecl:
 	var claims := 0
 	var needs := &""
 	var options: Array[float] = []
+	## **The option a line that names none takes**, NAN where there is none: an
+	## output that took no option once and takes one now reads the lines written
+	## before as they meant, rather than leaving them inert.
+	var default := NAN
 	## The level its owner must work at, and the number of that owner-and-level's
 	## bit, as an input's ([member InputDecl.level]).
 	var level := 1
@@ -260,7 +264,7 @@ static var _always: Array = [[]]
 ## **A vocabulary from declaration tables** (§3.1): each table maps an owner's
 ## name -- a gene, or a part every body has -- to `{"in": [...], "out": [...]}`,
 ## each input `{"name", "bearing", "values": {value: kind}, "level"?}` and each
-## output `{"name", "claims", "needs"?, "options"?, "level"?}`. A later table's
+## output `{"name", "claims", "needs"?, "options"?, "default"?, "level"?}`. A later table's
 ## owner of the same name adds to the earlier's. Triggers are numbered as they
 ## are first claimed.
 ##
@@ -303,6 +307,7 @@ static func vocabulary(tables: Array) -> Vocabulary:
 				output.needs = StringName(one.get("needs", &""))
 				for option: Variant in one.get("options", []):
 					output.options.append(float(option))
+				output.default = float(one.get("default", NAN))
 				output.level = maxi(int(one.get("level", 1)), 1)
 				bits = _level_bit(vocab, named, output.level, bits)
 				output.bit = _bit_of(vocab, named, output.level)
@@ -549,6 +554,8 @@ static func rule_from(line: String, vocab: Vocabulary) -> Rule:
 		if rest != 0:
 			rule.inert = true
 			return rule
+	elif rest == 0 and output.options.has(output.default):
+		rule.option = output.default
 	else:
 		if rest != 1 or not String(words[arrow + 2]).is_valid_float() \
 				or not output.options.has(String(words[arrow + 2]).to_float()):

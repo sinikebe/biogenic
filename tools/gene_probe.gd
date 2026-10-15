@@ -51,7 +51,7 @@ extends Node
 ## drawing its other variants, one measure of an organ's level for its rules and its
 ## tail's hold, one variant a body wherever a body comes to carry one, a group of stats
 ## taken from one provider, a person's order written before its genome, and a mechanic
-## with a place taking every number from the one organ it acts from -- two darts, two
+## with a place taking every number from the one organ it acts from -- two stings, two
 ## radars, by your cell, the water, a person, the referee and the rules (§5.2); and the
 ## rulebook numbering owners past one word of bits (§13). And -- a number, not a
 ## failure (§8.3) -- the gene words with no French; and how many gene names are
@@ -133,7 +133,7 @@ const SHIPPED_LISTS := {
 ## fails here first -- so every organ that provides one of a group provides all of it:
 ## a stroke is its speed and its two gaps; a turn its rate and how fast it answers; a
 ## beam its reach, its rays and their fan; a call its reach, its period and how much
-## of it passes a body; a dash its burst and its price; a dart its reach and its rest.
+## of it passes a body; a dash its burst and its price; a sting its wound and its rest.
 ## An organ that gave one alone would be read at the others' values with no provider
 ## -- a call every 0 s, which the referee divides by, or a tail's speed beating at the
 ## gaps of no tail. And a body wearing two providers takes a whole group from one.
@@ -143,7 +143,7 @@ const TOGETHER: Array = [
 	[&"beam_range", &"beam_count", &"beam_fan_deg"],
 	[&"ping_range", &"ping_period", &"ping_through"],
 	[&"dash_speed", &"dash_cost"],
-	[&"dart_range", &"dart_cooldown"],
+	[&"dart_wound", &"dart_cooldown"],
 	[&"grip", &"tether"],
 ]
 
@@ -1790,7 +1790,7 @@ func _unwired(field: Node, own: RefCounted, parts: Array[StringName]) -> Array[S
 
 ## Every organ a mechanic finds by its stat answers what that mechanic asks of
 ## it: every stat of the group it reads together (stats.gd's `groups`), the tail
-## its hold level, the dart its stun, the beam its shape, its price and its
+## its hold level, the beam its shape, its price and its
 ## levels. Then an organ that calls with no period is registered, to show this
 ## fails on one -- and that the referee holds it to a rate all the same.
 func _mechanics() -> void:
@@ -1821,8 +1821,8 @@ func _mechanics() -> void:
 		elif Catalogue.upkeep_at(key, 2, &"") < 0.0:
 			missing.append("%s's price per level" % key)
 	_check(("every organ a mechanic finds by its stat answers it: all of the %d groups of"
-		% Stats.groups().size() + " stats it reads together, the tail its hold level, the dart its"
-		+ " stun, the beam its shape, xp cap and price, every levelled gene its levels%s")
+		% Stats.groups().size() + " stats it reads together, the tail its hold level, the beam"
+		+ " its shape, xp cap and price, every levelled gene its levels%s")
 		% ("" if missing.is_empty() else ": not " + ", ".join(missing)),
 		missing.is_empty() and not Catalogue.levelled().is_empty())
 	var mouth := Catalogue.first_provider(&"gape")
@@ -1859,9 +1859,6 @@ func _unanswered() -> Array[String]:
 	for key: StringName in Catalogue.providers(&"impulse_speed"):
 		if Catalogue.number(key, &"hold_level") == null:
 			missing.append("%s's hold_level" % key)
-	for key: StringName in Catalogue.providers(&"dart_range"):
-		if Catalogue.number(key, &"stun") == null:
-			missing.append("%s's stun" % key)
 	for key: StringName in Catalogue.providers(&"beam_range"):
 		if not Catalogue.gene(key).has_method(&"shape_at"):
 			missing.append("%s's shape_at" % key)
@@ -3867,44 +3864,50 @@ func _strain_of_shipped() -> void:
 
 
 ## **A person's order is written before its genome** (gene-catalogue.md §15.6): with a
-## second dart -- one entry in the dart's own file, its stun its own -- a person who
+## second sting -- one entry in the sting's own file, its wound its own -- a person who
 ## wears both and moves them round is read under the order they wear them in now, by a
-## replay's field and by a pond's: the dart that fires first in slot order is the one
-## whose stun its body has. Both ways round, so neither dart passes by being first in
+## replay's field and by a pond's: the sting that fires first in slot order is the one
+## whose wound its body has. Both ways round, so neither sting passes by being first in
 ## the catalogue's order.
 func _person_order() -> void:
 	var before := Array(Catalogue.keys())
-	var dart := Catalogue.first_provider(&"dart_range")
+	var dart := Catalogue.first_provider(&"dart_wound")
 	var organ: Gene = (Catalogue.gene(dart).get_script() as GDScript).new()
-	organ.variants = [{"variant": &"probestun", "order": 950, "numbers": {&"stun": 9.0},
+	var deep: Array = Catalogue.table(dart, &"dart_wound").duplicate()
+	for k in range(1, deep.size()):
+		deep[k] = 0.3
+	organ.variants = [{"variant": &"probewound", "order": 950,
+		"provides": {&"dart_wound": deep,
+			&"dart_cooldown": Catalogue.table(dart, &"dart_cooldown").duplicate()},
 		"look": {"accent": Kinds.MARK_BAR}}]
 	Catalogue.register(organ)
 	var body := Catalogue.born().duplicate()
 	body[dart] = 1
-	body[&"probestun"] = 1
-	var first: Array = Array(Catalogue.born_order()) + [dart, &"probestun"]
-	var second: Array = Array(Catalogue.born_order()) + [&"probestun", dart]
+	body[&"probewound"] = 1
+	var first: Array = Array(Catalogue.born_order()) + [dart, &"probewound"]
+	var second: Array = Array(Catalogue.born_order()) + [&"probewound", dart]
 	var cell: Node = CellBody.new()
 	var field: Node = FoodField.new()
 	field.call(&"open_replay", cell, 0)
 	field.call(&"open_replay_person")
 	var cells: Array = field.get(&"_cells")
-	var stuns := []
+	var wounds := []
 	for orders: Array in [[first, second], [second, first]]:
 		field.call(&"restore_person_genome", body, orders[0])
 		field.call(&"restore_person_genome", body, orders[1])
-		stuns.append(float((cells[FoodField.PERSON_SLOT] as Object).get(&"stat_dart_stun")))
+		wounds.append(float((cells[FoodField.PERSON_SLOT] as Object).get(&"stat_dart_wound")))
 		field.call(&"set_person_genome", body, orders[0])
 		field.call(&"set_person_genome", body, orders[1])
-		stuns.append(float((cells[FoodField.PERSON_SLOT] as Object).get(&"stat_dart_stun")))
-	var own := float(Catalogue.number(dart, &"stun"))
+		wounds.append(float((cells[FoodField.PERSON_SLOT] as Object).get(&"stat_dart_wound")))
+	var own := Stats.value(dart, &"dart_wound", 1)
 	field.free()
 	cell.free()
 	Catalogue.forget(Catalogue.organ_of(dart))
-	_check(("and a person's order is written before its genome: wearing a second dart beside"
-		+ " %s and moving them round, its stun is the dart first in slot order now -- %s, by"
-		+ " a replay's field and a pond's, each way round") % [dart, str(stuns)],
-		stuns == [9.0, 9.0, own, own] and own != 9.0 and Array(Catalogue.keys()) == before)
+	_check(("and a person's order is written before its genome: wearing a second sting beside"
+		+ " %s and moving them round, its wound is the sting first in slot order now -- %s, by"
+		+ " a replay's field and a pond's, each way round") % [dart, str(wounds)],
+		wounds == [0.3, 0.3, own, own] and not is_equal_approx(own, 0.3)
+		and Array(Catalogue.keys()) == before)
 
 
 ## **A seated mechanic is one organ's** (§5.2, §15.6; stats.gd's `SEATED`): a body
@@ -3913,9 +3916,9 @@ func _person_order() -> void:
 ## takes every number from it, never another organ's beside it. Each way round, so
 ## neither passes by being first in the catalogue's order or best on its reach:
 ##
-## - **two darts**, read by the stats (`Stats.seated`), by your cell, by a water cell
-##   and by a person: the reach, the rest, the stun and the copies of the dart that
-##   fires ([method _seated_darts]);
+## - **two stings**, read by the stats (`Stats.seated`), by your cell, by a water cell
+##   and by a person: the wound, the rest and the copies of the sting that fires
+##   ([method _seated_darts]);
 ## - **two radars**, read by your cell, by a water cell's eye and by the referee a host
 ##   judges your calls by: the reach, the period, the pass and the copies of the one
 ##   that calls ([method _seated_radars]);
@@ -3931,28 +3934,28 @@ func _seated_one_organ() -> void:
 
 func _seated_darts(shipped: String) -> void:
 	var before := Array(Catalogue.keys())
-	var dart := Catalogue.first_provider(&"dart_range")
+	var dart := Catalogue.first_provider(&"dart_wound")
 	var organ: Gene = (Catalogue.gene(dart).get_script() as GDScript).new()
-	var reach: Array = Catalogue.table(dart, &"dart_range").duplicate()
+	var deep: Array = Catalogue.table(dart, &"dart_wound").duplicate()
 	var rest: Array = Catalogue.table(dart, &"dart_cooldown").duplicate()
-	for k in range(1, reach.size()):
-		reach[k] = float(reach[k]) * 1.5
+	for k in range(1, deep.size()):
+		deep[k] = float(deep[k]) * 1.5
 		rest[k] = float(rest[k]) + 1.0
-	organ.variants = [{"variant": &"probefar", "order": 960, "numbers": {&"stun": 9.0},
+	organ.variants = [{"variant": &"probedeep", "order": 960,
 		"look": {"accent": Kinds.MARK_BAR},
-		"provides": {&"dart_range": reach, &"dart_cooldown": rest}}]
+		"provides": {&"dart_wound": deep, &"dart_cooldown": rest}}]
 	Catalogue.register(organ)
 	var text := Rules.text()
 	var dna := Catalogue.born().duplicate()
 	dna[dart] = 2
-	dna[&"probefar"] = 1
-	var orders := [Array(Catalogue.born_order()) + [dart, &"probefar"],
-		Array(Catalogue.born_order()) + [&"probefar", dart]]
-	# What the dart first in slot order gives, each way round: its reach, its rest, its
-	# stun and its copies -- the shipped dart at two, the far one at one.
-	var wanted := [[Stats.value(dart, &"dart_range", 2), Stats.value(dart, &"dart_cooldown", 2),
-			float(Catalogue.number(dart, &"stun")), 2],
-		[float(reach[1]), float(rest[1]), 9.0, 1]]
+	dna[&"probedeep"] = 1
+	var orders := [Array(Catalogue.born_order()) + [dart, &"probedeep"],
+		Array(Catalogue.born_order()) + [&"probedeep", dart]]
+	# What the sting first in slot order gives, each way round: its wound, its rest and
+	# its copies -- the shipped sting at two, the deep one at one.
+	var wanted := [[Stats.value(dart, &"dart_wound", 2), Stats.value(dart, &"dart_cooldown", 2),
+			2],
+		[float(deep[1]), float(rest[1]), 1]]
 	var cell: Node = CellBody.new()
 	var field: Node = FoodField.new()
 	field.call(&"open_replay", cell, 0)
@@ -3962,9 +3965,9 @@ func _seated_darts(shipped: String) -> void:
 	var got := []
 	for k in 2:
 		var order: Array = orders[k]
-		var read := [[Stats.seated(order, dna, &"dart_range"),
-			Stats.seated(order, dna, &"dart_cooldown"), CellBody.dart_stun(dna, order),
-			Stats.seated_tier(order, dna, &"dart_range")]]
+		var read := [[Stats.seated(order, dna, &"dart_wound"),
+			Stats.seated(order, dna, &"dart_cooldown"),
+			Stats.seated_tier(order, dna, &"dart_wound")]]
 		# Your cell, its genome expressed in that order.
 		var yours: Node = CellBody.new()
 		yours.radius = CellBody.DIVIDE_RADIUS
@@ -3972,36 +3975,35 @@ func _seated_darts(shipped: String) -> void:
 		genome.setup(yours)
 		genome.express(dna, order)
 		yours.genome = genome
-		read.append([yours.stat(&"dart_range"), yours.stat(&"dart_cooldown"),
-			CellBody.dart_stun(yours.worn(), yours.seats()), yours.tier_for(&"dart_range")])
+		read.append([yours.stat(&"dart_wound"), yours.stat(&"dart_cooldown"),
+			yours.tier_for(&"dart_wound")])
 		genome.free()
 		yours.free()
 		# A water cell wearing it in that order, and a person, as a pond writes one.
 		var water := FoodField.Body.new()
 		water.order = order
 		water.genome = dna.duplicate()
-		read.append([water.stat_dart_range, water.stat_dart_cooldown, water.stat_dart_stun,
-			water.stat_dart_tier])
+		read.append([water.stat_dart_wound, water.stat_dart_cooldown, water.stat_dart_tier])
 		field.call(&"set_person_genome", dna, order)
 		var p: Object = person.get(&"person")
-		read.append([float(p.get(&"dart_range")), float(p.get(&"dart_cooldown")),
-			float(person.get(&"stat_dart_stun")), int(person.get(&"stat_dart_tier"))])
+		read.append([float(p.get(&"dart_wound")), float(p.get(&"dart_cooldown")),
+			int(person.get(&"stat_dart_tier"))])
 		got.append(read)
 	field.free()
 	cell.free()
 	Catalogue.forget(Catalogue.organ_of(dart))
-	var mixed := _mixed(got, wanted, ["the shipped dart first", "the far one first"],
+	var mixed := _mixed(got, wanted, ["the shipped sting first", "the deep one first"],
 		["the stats", "your cell", "a water cell", "a person"])
 	var stray := _seats_in(shipped)
 	if not stray.is_empty():
 		mixed.append("with one organ to each, the shipped rules name seats all the same: "
 			+ ", ".join(PackedStringArray(stray)))
-	var seats := _seat_lines(text, [&"dart_range", &"dart_cooldown"], &"dart_range")
-	_check(("and a mechanic with a place is one organ's: wearing two darts, %s and a far one"
-		+ " with a longer reach, a longer rest and a stun of its own, the stats, your cell,"
-		+ " a water cell and a person each take the reach, the rest, the stun and the copies"
-		+ " of the dart first in slot order, each way round -- %s and %s; and the rules name"
-		+ " the dart's seat once two organs dart (%s), and no seat while one does%s") % [dart,
+	var seats := _seat_lines(text, [&"dart_wound", &"dart_cooldown"], &"dart_wound")
+	_check(("and a mechanic with a place is one organ's: wearing two stings, %s and a deep one"
+		+ " with a deeper wound and a longer rest, the stats, your cell, a water cell and a"
+		+ " person each take the wound, the rest and the copies of the sting first in slot"
+		+ " order, each way round -- %s and %s; and the rules name the sting's seat once two"
+		+ " organs sting (%s), and no seat while one does%s") % [dart,
 		str(wanted[0]), str(wanted[1]), seats, "" if mixed.is_empty() else ": "
 		+ "; ".join(PackedStringArray(mixed))],
 		mixed.is_empty() and wanted[0] != wanted[1] and seats == "both"

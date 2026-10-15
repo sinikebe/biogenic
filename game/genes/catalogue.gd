@@ -603,10 +603,9 @@ static func number(key: StringName, name: StringName) -> Variant:
 
 ## **The number [param name] of the organ a body wearing [param tiers] provides
 ## [param stat] with** -- or of the first that provides it, for a body that wears
-## none: the tail's hold level, the dart's stun. The mechanic asks the organ it
-## acts through, and never names it: [method worn_provider]'s, or, given the
-## body's [param layout] -- a mechanic with a place, the dart's --
-## [method seated_provider]'s. [param otherwise] when nothing provides the stat any
+## none: the tail's hold level. The mechanic asks the organ it acts through, and
+## never names it: [method worn_provider]'s, or, given the body's [param layout] --
+## a mechanic with a place -- [method seated_provider]'s. [param otherwise] when nothing provides the stat any
 ## more -- every organ that did retired (§4.4) -- or the organ has no such number.
 static func number_for(tiers: Dictionary, stat: StringName, name: StringName,
 		otherwise: Variant = null, layout: Array = []) -> Variant:

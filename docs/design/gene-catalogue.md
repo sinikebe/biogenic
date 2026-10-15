@@ -307,6 +307,9 @@ The tables are:
 `HOLD_LEVEL`, the beam's fork, paths and experience, and `DART_STUN` stay with their
 organs as the organ's own numbers.
 
+> **Since `sting.md` (2026-10-15)** the dart is a sting that wounds what touches it:
+> `dart_range` is `dart_wound`, and `DART_STUN` is gone, with `cell.gd`'s `dart_stun`.
+
 **Tables a mechanic indexes by an organ's tier stay with the mechanic**:
 
 - in `food.gd`, `PING_RETURNS_BY_TIER`, `PING_WIDTH_FLOOR` and `PING_WIDTH_GAIN`;
@@ -359,7 +362,8 @@ mechanic, when an organ needs it.
 eyes casts from the one in the lower slot. Slot order no longer needs the layout at
 every read, because each of these is read once a body -- the cell's by
 `body_version`, a water body's when its genome is written. `stats.gd`'s `SEATED` names the stats whose
-mechanic has a place: `beam_range`, `ping_range`, `dart_range` and `smell_range`.
+mechanic has a place: `beam_range`, `ping_range`, `dart_range` (now `dart_wound`,
+`sting.md`) and `smell_range`.
 Everything such a mechanic reads off its organ is that organ's: its arc, its tier, its
 level and path, its fork, its experience cap, its dart's stun. The mouth, the tail's
 level and hold and the dash have no place to act from, and act from the first in the

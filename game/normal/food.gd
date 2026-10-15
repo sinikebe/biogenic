@@ -119,7 +119,7 @@ signal dosed(bearing: float, kind: int, stacks: float, meal: bool)
 ## FIRED_POISON], its poison was taken by a biter or a swallower. For the view's
 ## flare and nothing else.
 signal toxin_fired(how: int)
-## `trichocyst`: the dart went off and something hunting you broke away.
+## `trichocyst`: your sting went off into what touched you, at that bearing.
 signal darted(bearing: float)
 ## **The `ampulla` just fired.** Not a sensation and not for the membrane: a
 ## pulse in the water is an event in the world, and this is the only moment the
@@ -1045,7 +1045,7 @@ class Body:
 	## begins to dissolve.
 	var settle := 1.0
 	var life := 0.0
-	## `trichocyst`: seconds until its dart can fire again. `myoneme`: the burst
+	## `trichocyst`: seconds until its sting can fire again. `myoneme`: the burst
 	## left from its last dash, and the seconds until the next one.
 	var dart_clock := 0.0
 	var dash_v := 0.0
@@ -1167,8 +1167,8 @@ class Body:
 	## (docs/design/gene-catalogue.md §15, as built 1a) and never on a tick: its
 	## mouth's gape, as a multiple of its radius, and its bite; its armour; its
 	## turn; its tail's realised speed ([method CellBody.speed_of]) and the level
-	## that tail can be held still from; its dart -- tier, reach, cooldown and
-	## stun -- and its dash -- tier, burst and price. **Every body has them** -- a
+	## that tail can be held still from; its sting -- tier, wound and cooldown --
+	## and its dash -- tier, burst and price. **Every body has them** -- a
 	## person's, a floc's, a replay's and today's water's -- which [member tail]
 	## and the rest above, made only by [method _refresh_body], are not.
 	var stat_gape := 0.0
@@ -1178,9 +1178,8 @@ class Body:
 	var stat_speed := 0.0
 	var stat_hold := 0
 	var stat_dart_tier := 0
-	var stat_dart_range := 0.0
+	var stat_dart_wound := 0.0
 	var stat_dart_cooldown := 0.0
-	var stat_dart_stun := 0.0
 	var stat_dash_tier := 0
 	var stat_dash_speed := 0.0
 	var stat_dash_cost := 0.0
@@ -1200,15 +1199,13 @@ class Body:
 		stat_turn = Stats.of(g, &"turn_rate")
 		stat_speed = CellBody.speed_of(g)
 		stat_hold = CellBody.hold_level(g)
-		# The dart that fires does all of it -- its arc, its reach, its rest and its
-		# stun -- the first in slot order, where it wears several (stats.gd's
-		# `seated`; gene-catalogue.md §5.2).
+		# The sting that fires does all of it -- its arc, its wound and its rest --
+		# the first in slot order, where it wears several (stats.gd's `seated`;
+		# gene-catalogue.md §5.2).
 		var layout: Array = seats() if Stats.seats_decide(g) else []
-		stat_dart_tier = Stats.seated_tier(layout, g, &"dart_range")
-		stat_dart_range = Stats.seated(layout, g, &"dart_range")
+		stat_dart_tier = Stats.seated_tier(layout, g, &"dart_wound")
+		stat_dart_wound = Stats.seated(layout, g, &"dart_wound")
 		stat_dart_cooldown = Stats.seated(layout, g, &"dart_cooldown")
-		stat_dart_stun = CellBody.dart_stun(g, layout) if stat_dart_tier > 0 \
-			else CellBody.dart_stun(g)
 		stat_dash_tier = Stats.tier(g, &"dash_speed")
 		stat_dash_speed = Stats.of(g, &"dash_speed")
 		stat_dash_cost = Stats.of(g, &"dash_cost")
@@ -1244,8 +1241,8 @@ class Person:
 	var swim_speed := 0.0
 	## Its body as a mouth measures it: `pellicle`'s multiple on its radius.
 	var armour := 1.0
-	## `trichocyst`: reach, cooldown and the arc the organ is worn on.
-	var dart_range := 0.0
+	## `trichocyst`: its wound, its cooldown and the arc the organ is worn on.
+	var dart_wound := 0.0
 	var dart_cooldown := 0.0
 	var dart_bearing := 0.0
 	var dart_clock := 0.0
@@ -1524,16 +1521,16 @@ var player_hit_from := 0.0
 var touch_range := 0.0
 var touch_level := 0.0
 var touch_bearing := 0.0
-## `trichocyst`. How close something hunting you gets before the dart fires, and
-## how long until there is another one. The clock lives here because the
-## encounter lives here.
-var dart_range := 0.0
+## `trichocyst`. What this cell's sting takes out of what touches it, and how long
+## until there is another one. The clock lives here because the encounter lives
+## here.
+var dart_wound := 0.0
 var dart_cooldown := 0.0
-## **Which way the dart looks**: the body-relative bearing of the arc the gene
+## **Which way the sting guards**: the body-relative bearing of the arc the gene
 ## is worn on, written once a frame by the run exactly as [member beam_bearings]
-## is. The organ answers only inside [constant CellBody.DART_ARC_DEG] of it, so
-## a dart in a rear slot is the answer to being flanked and placement becomes a
-## defensive decision. Meaningless while [member dart_range] is 0.
+## is. The organ stings only what touches inside [constant CellBody.DART_ARC_DEG]
+## of it, so a sting in a rear slot is the answer to being flanked and placement
+## becomes a defensive decision. Meaningless while [member dart_wound] is 0.
 var dart_bearing := 0.0
 ## **What this cell's toxins deliver** -- its venom, where it is worn, and its
 ## poison -- as [method toxins_of] reads them off its worn body, written once a
@@ -1782,7 +1779,7 @@ func _step_body(index: int, delta: float) -> void:
 	if _drop == null and _dose_step(index, b, delta):
 		return
 	b.bite = maxf(b.bite - delta, 0.0)
-	# In the drop the dart and the dash reload too, as the player's do: every
+	# In the drop the sting and the dash reload too, as the player's do: every
 	# body defends and lunges with its own organs there (§5.7).
 	if _drop != null:
 		b.dart_clock = maxf(b.dart_clock - delta, 0.0)
@@ -1950,12 +1947,10 @@ func _step_stalk(index: int, b: Body, delta: float) -> void:
 
 	var offset := _target_pos(b) - b.pos
 	var d := offset.length()
-	# **In the drop a run is made by a body** (§5.4, §5.7): a water cell's own
-	# dart can break it, and it turns onto what it found at its own cirrus's
-	# rate before it begins -- today's hunter snapped its nose round.
+	# **In the drop a run is made by a body** (§5.4, §5.7): it turns onto what it
+	# found at its own cirrus's rate before it begins -- today's hunter snapped
+	# its nose round.
 	if _drop != null:
-		if _darted_off(b, d):
-			return
 		if b.orienting and _orient(b, offset, delta):
 			return
 	_step_aim(b, d, offset, delta)
@@ -1978,34 +1973,12 @@ func _step_stalk(index: int, b: Body, delta: float) -> void:
 		_felt_hunting(b, d, delta, hunted)
 
 
-## **What a hunt does to the player it is aimed at**: the dart, and the wake.
-## One rule with two callers (shared-pond.md §1.2) -- [param p] null is the
-## cell on this device, told through the shipped signals; a person is told the
-## same things through [signal person_touched], with their own organ, their
-## own arc and their own clock.
+## **What a hunt does to the player it is aimed at**: the wake. One rule with two
+## callers (shared-pond.md §1.2) -- [param p] null is the cell on this device,
+## told through the shipped signals; a person is told the same through
+## [signal person_touched]. Today's water has no sting: the sting is a touch
+## weapon of the drop's contacts (docs/design/sting.md).
 func _felt_hunting(b: Body, d: float, delta: float, p: Person) -> void:
-	# **`trichocyst`. It came inside dart range, on the arc the organ is on, and
-	# it is leaving.** Automatic rather than a button: the design has no second
-	# control to spend and the whole of the gene is the cooldown -- one run
-	# broken off, then a long wait, so it buys an escape and never safety.
-	#
-	# **The arc is the point, and it is the one fix §2 calls required.** A dart
-	# that fired at whatever was near was a defence with no position, on a rule
-	# that is now entirely about position. The same wiring the `ocellus` already
-	# has: the slot is the arc, the arc is the bearing, and the run posts it.
-	var reach := dart_range if p == null else p.dart_range
-	var clock := _dart_clock if p == null else p.dart_clock
-	if reach > 0.0 and d < reach and clock <= 0.0:
-		var facing := dart_bearing if p == null else p.dart_bearing
-		var off := absf(angle_difference(facing, _bearing_for(p, b.pos)))
-		if off <= deg_to_rad(CellBody.DART_ARC_DEG) * 0.5:
-			if p == null:
-				_dart_clock = dart_cooldown
-			else:
-				p.dart_clock = p.dart_cooldown
-			_tell(p, Contact.DARTED, b.pos, 0.0, By.WATER, &"")
-			_break_off(b)
-			return
 	b.stroke -= delta
 	if b.stroke > 0.0:
 		return
@@ -5110,10 +5083,10 @@ func _derive_person(pb: Body) -> void:
 	var tiers := pb.genome
 	p.swim_speed = CellBody.swim_speed_of(tiers)
 	p.armour = Stats.of(tiers, &"armor")
-	# The dart that fires, all of it (stats.gd's `seated`): the first in their order.
-	p.dart_range = Stats.seated(pb.order, tiers, &"dart_range")
+	# The sting that fires, all of it (stats.gd's `seated`): the first in their order.
+	p.dart_wound = Stats.seated(pb.order, tiers, &"dart_wound")
 	p.dart_cooldown = Stats.seated(pb.order, tiers, &"dart_cooldown")
-	var slot := _seat_of(pb.order, tiers, &"dart_range")
+	var slot := _seat_of(pb.order, tiers, &"dart_wound")
 	p.dart_bearing = Cilia.slot_bearing(slot) if slot >= 0 else 0.0
 	# Their toxins are read off their body and its worn order where a bite asks
 	# for them ([method _toxins_at]), as every body's are: a venom on a side
@@ -7863,6 +7836,7 @@ func _process_drop(delta: float) -> void:
 			_guests_meet()
 	_contacts_drop()
 	_separate_drop()
+	_stings_drop()
 	if in_water:
 		_contain_player(false)
 	_eco_clock += delta
@@ -8127,7 +8101,7 @@ func _refresh_body(b: Body) -> void:
 	b.see_big = SHADOW_RANGE if Catalogue.worn_on(g, Catalogue.LIGHT) != &"" else 0.0
 	b.dart_bearing = 0.0
 	if b.dart_tier > 0:
-		b.dart_bearing = Cilia.slot_bearing(_seat_of(Cilia.default_order(g), g, &"dart_range"))
+		b.dart_bearing = Cilia.slot_bearing(_seat_of(Cilia.default_order(g), g, &"dart_wound"))
 	_widest_now = maxf(_widest_now, b.radius)
 
 
@@ -8302,27 +8276,6 @@ func _orient(b: Body, offset: Vector2, delta: float) -> bool:
 	return true
 
 
-## **`trichocyst` defends every body** (§5.7): a run at a water cell breaks as a
-## run at the player does -- inside the dart's range, on the arc it is worn on,
-## and then its cooldown. Returns whether this run was broken.
-func _darted_off(b: Body, d: float) -> bool:
-	if b.target < 0:
-		return false
-	var prey := _target_body(b)
-	if prey == null or prey.person != null or prey.inert:
-		return false
-	if prey.stat_dart_tier <= 0 or prey.dart_clock > 0.0 or d >= prey.stat_dart_range:
-		return false
-	var from := _angle_of(b.pos - prey.pos, prey.heading)
-	if absf(angle_difference(prey.heading + prey.dart_bearing, from)) \
-			> deg_to_rad(CellBody.DART_ARC_DEG) * 0.5:
-		return false
-	prey.dart_clock = prey.stat_dart_cooldown
-	_stat(&"water_darts")
-	_break_off(b)
-	return true
-
-
 ## **A lunge is a `myoneme` dash** (row 14): the player's own burst, at its price
 ## and on its cooldown -- or nothing, for a body without one.
 func _dash(b: Body) -> void:
@@ -8356,10 +8309,6 @@ func _shore_turn(b: Body, delta: float) -> void:
 # to the function that reads it for a body or performs it, the body's triggers,
 # and what the water reads off a body coming for someone.
 
-## **Leading** (§4.2, §6.5): a turn toward an input that also reported last
-## tick aims ahead of its bearing by this many times how far the bearing
-## drifted since -- the textbook navigation constant, a starting value.
-const LEAD := 3.0
 ## **A bearing that jumps belongs to a new target** and is aimed at straight
 ## (§4.2): a drift wider than this, in radians, between one tick and the next.
 ## Not in the spec's table: a starting value, 30 degrees.
@@ -8795,10 +8744,18 @@ func _call_now(i: int, b: Body) -> void:
 # --- The outputs (§3.3): the triggers a body has --------------------------------
 
 ## `body.turn-toward`: the heading it steers for becomes the report's bearing --
-## led, when the input also reported last tick, by three times how far that
-## bearing drifted since: constant-bearing pursuit (§4.2).
-func _turn_toward(_i: int, b: Body, _k: int, report: Array, before: Variant, _tick: int) -> void:
+## led, when the input also reported last tick, by the rule's own multiple of how
+## far that bearing drifted since (cell.gd's LEADS; three for the founders):
+## constant-bearing pursuit (§4.2), at an aim the family evolves.
+func _turn_toward(_i: int, b: Body, k: int, report: Array, before: Variant, _tick: int) -> void:
 	var toward := float(report[report.size() - 1])
+	# **Leading** (§4.2, §6.5): a turn toward an input that also reported last tick
+	# aims ahead of its bearing by the rule's own multiple of how far the bearing
+	# drifted since (cell.gd's LEADS) -- the instinct's, so a family's aim evolves.
+	var list: Rulebook.Behaviour = b.brain if b.brain != null else founders()
+	var by: float = list.rules[k].option if k >= 0 and k < list.rules.size() else NAN
+	if is_nan(by):
+		by = CellBody.LEAD_DEFAULT
 	var lead := 0.0
 	if before != null:
 		var nearest := INF
@@ -8807,7 +8764,7 @@ func _turn_toward(_i: int, b: Body, _k: int, report: Array, before: Variant, _ti
 			if absf(drift) < absf(nearest):
 				nearest = drift
 		if absf(nearest) <= LEAD_JUMP:
-			lead = LEAD * nearest
+			lead = by * nearest
 	b.steer = wrapf(toward + lead, -PI, PI)
 	b.holding = true
 
@@ -8887,9 +8844,8 @@ func _step_ruled(index: int, b: Body, delta: float) -> void:
 		_decide_by_rules(index, b)
 	_move_ruled(b, delta)
 	# Each asked only of a body it can concern, here rather than inside: these
-	# run on every step of every body.
-	if b.dart_tier > 0 and b.dart_clock <= 0.0 and not b.inert:
-		_darts_of(index, b)
+	# run on every step of every body. A sting is no step's: it is a contact
+	# ([method _stings_drop]).
 	if b.drifter:
 		return
 	if b.eye != null and b.eye.ping_range > 0.0 and _t >= b.call_at:
@@ -9082,21 +9038,6 @@ func _felt_coming(b: Body, delta: float) -> void:
 				found = true
 	if not found:
 		return
-	var reach := dart_range if to == null else to.dart_range
-	var clock := _dart_clock if to == null else to.dart_clock
-	if reach > 0.0 and d < reach and clock <= 0.0:
-		var facing := dart_bearing if to == null else to.dart_bearing
-		if absf(angle_difference(facing, _bearing_for(to, b.pos))) \
-				<= deg_to_rad(CellBody.DART_ARC_DEG) * 0.5:
-			if to == null:
-				_dart_clock = dart_cooldown
-			else:
-				to.dart_clock = to.dart_cooldown
-			_tell(to, Contact.DARTED, b.pos, 0.0, By.WATER, &"")
-			_stun(b, _cell.position if to == null else _cells[to.slot].pos,
-				CellBody.dart_stun(_cell.worn(), _cell.seats()) if to == null
-					else CellBody.dart_stun(_cells[to.slot].genome, _cells[to.slot].seats()))
-			return
 	b.stroke -= delta
 	if b.stroke > 0.0:
 		return
@@ -9108,45 +9049,11 @@ func _felt_coming(b: Body, delta: float) -> void:
 		By.WATER, &"")
 
 
-## **`trichocyst` defends every body** (§4.3): its dart goes off on its own at
-## the nearest cell coming for it -- inside its range and on the arc it is worn
-## on, once a cooldown -- and stuns it. Never at a player, as today: a player's
-## dart is the player's own ([method _felt_coming]).
-##
-## Asked by [method _step_ruled] only of a body that wears one, whose dart is
-## ready and which is no floc.
-func _darts_of(index: int, b: Body) -> void:
-	var reach := b.stat_dart_range
-	_dart_ids.resize(0)
-	_drop.grid.query(b.pos, reach + Drop.GRID_SLACK, _dart_ids)
-	var size := _swallow_r(b)
-	var best := -1
-	var best_d := reach
-	for j: int in _dart_ids:
-		if j == index:
-			continue
-		var a := _cells[j]
-		if not a.seeded or a.inert or a.drifter or a.person != null:
-			continue
-		var d := a.pos.distance_to(b.pos)
-		if d >= best_d or not _coming_for(a, b.pos, size, b.wound):
-			continue
-		if absf(angle_difference(b.heading + b.dart_bearing, _angle_of(a.pos - b.pos,
-				b.heading))) > deg_to_rad(CellBody.DART_ARC_DEG) * 0.5:
-			continue
-		best = j
-		best_d = d
-	if best < 0:
-		return
-	b.dart_clock = b.stat_dart_cooldown
-	_stun(_cells[best], b.pos, b.stat_dart_stun)
-	_stat(&"water_darts")
-
-
-## **A dart stuns what it hits** (§4.3): it rests for [param seconds] -- the
-## dart's own stun ([method CellBody.dart_stun]) -- with its rules unread -- no
-## heading held, no stroke, no push -- and feels the dart as a `hit` at its
-## bearing, on the first tick it reads its rules again.
+## **A stun** (§4.3): [param b] rests for [param seconds] with its rules unread --
+## no heading held, no stroke, no push -- and feels it as a `hit` at its bearing,
+## on the first tick it reads its rules again. **Nothing stuns today**: the dart
+## that did is a sting now, which wounds (docs/design/sting.md). The state stays
+## for the dose that paralyses (doses.gd's kinds), which nothing delivers yet.
 func _stun(b: Body, from: Vector2, seconds: float) -> void:
 	b.stun = maxf(b.stun, seconds)
 	b.holding = false
@@ -9335,6 +9242,121 @@ func _separate_drop() -> void:
 			b.pos = m.contain(b.pos + normal * (overlap * share * PUSH_SHARE), b.radius)
 			other.pos = m.contain(other.pos - normal * (overlap * (1.0 - share) * PUSH_SHARE),
 				other.radius)
+
+
+## **The sting** (docs/design/sting.md): a contact weapon. Every body whose sting
+## is ready stings what touches it on the arc it wears it on -- a water cell, a
+## drifter, this cell or the other player, whichever is nearest -- and so does each
+## player's own. Asked after the bodies are pushed apart, so what touches is what
+## the frame left touching; and only here, in the water's own frame, so a host
+## stings for its guests and a mirror never does. The bodies stepped this frame,
+## as a mouth closes on its tick.
+func _stings_drop() -> void:
+	for i: int in _stepped:
+		var b := _cells[i]
+		if b.seeded and not b.inert and b.person == null and b.stat_dart_tier > 0 \
+				and b.dart_clock <= 0.0:
+			_sting_from(i, b.pos, b.radius, b.heading + b.dart_bearing, null)
+	if in_water and dart_wound > 0.0 and _dart_clock <= 0.0:
+		_sting_from(TARGET_PLAYER, _cell.position, _cell.radius,
+			_cell.heading + dart_bearing, null)
+	if _pond:
+		for k in _guests:
+			var pb := _cells[PERSON_SLOT + k]
+			var p := pb.person
+			if p != null and pb.seeded and p.in_water and p.dart_wound > 0.0 \
+					and p.dart_clock <= 0.0:
+				_sting_from(PERSON_SLOT + k, pb.pos, pb.radius, pb.heading + p.dart_bearing,
+					p)
+
+
+## **One ready sting, at [param at]** on a body of [param radius], guarding the
+## world bearing [param facing]: it stings the nearest thing touching it inside
+## [constant CellBody.DART_ARC_DEG] of that bearing, and then waits its cooldown.
+## [param from] is the stinger's slot -- [constant TARGET_PLAYER] for this cell,
+## a person's slot for [param p], who is told it went off as the dart's DARTED.
+func _sting_from(from: int, at: Vector2, radius: float, facing: float, p: Person) -> void:
+	var half := deg_to_rad(CellBody.DART_ARC_DEG) * 0.5
+	var best := -1
+	var best_gap := CellBody.STING_TOUCH
+	var best_at := Vector2.ZERO
+	_dart_ids.resize(0)
+	_drop.grid.query(at, radius + _widest_now + CellBody.STING_TOUCH + Drop.GRID_SLACK,
+		_dart_ids)
+	for j: int in _dart_ids:
+		if j == from or _is_person_slot(j):
+			continue
+		var o := _cells[j]
+		if not o.seeded or o.inert:
+			continue
+		var gap := o.pos.distance_to(at) - o.radius - radius
+		if gap <= best_gap and _on_arc(facing, at, o.pos, half):
+			best = j
+			best_gap = gap
+			best_at = o.pos
+	# **And the players**, whom the water's grid does not hold: this cell, and each
+	# person but the stinger.
+	if in_water and from != TARGET_PLAYER:
+		var gap := _cell.position.distance_to(at) - _cell.radius - radius
+		if gap <= best_gap and _on_arc(facing, at, _cell.position, half):
+			best = TARGET_PLAYER
+			best_gap = gap
+			best_at = _cell.position
+	if _pond:
+		for k in _guests:
+			var slot := PERSON_SLOT + k
+			var pb := _cells[slot]
+			if slot == from or pb.person == null or not pb.seeded or not pb.person.in_water:
+				continue
+			var gap := pb.pos.distance_to(at) - pb.radius - radius
+			if gap <= best_gap and _on_arc(facing, at, pb.pos, half):
+				best = slot
+				best_gap = gap
+				best_at = pb.pos
+	if best == -1:
+		return
+	var wound := 0.0
+	if from == TARGET_PLAYER:
+		_dart_clock = dart_cooldown
+		wound = dart_wound
+	elif p != null:
+		p.dart_clock = p.dart_cooldown
+		wound = p.dart_wound
+	else:
+		_cells[from].dart_clock = _cells[from].stat_dart_cooldown
+		wound = _cells[from].stat_dart_wound
+	_stung(best, at, wound, By.WATER if from >= 0 and not _is_person_slot(from) else By.FRIEND)
+	# A player feels their own sting go off, at the bearing it went.
+	if from == TARGET_PLAYER or p != null:
+		_tell(p, Contact.DARTED, best_at, 0.0, By.WATER, &"")
+	_stat(&"stings")
+
+
+## Whether [param point] lies within [param half] radians of the world bearing
+## [param facing], seen from [param at].
+func _on_arc(facing: float, at: Vector2, point: Vector2, half: float) -> bool:
+	return absf(angle_difference(facing, _angle_of(point - at, facing))) <= half
+
+
+## **A sting lands on [param target]** -- a slot, [constant TARGET_PLAYER] for
+## this cell -- from [param at]: the stinger's [param wound], felt on a body of
+## its size as a dose's stack is (doses.gd's `felt`), and never past
+## [constant CellBody.STING_MOST]. It is felt as a hit at its bearing, as a bite
+## is: a water cell's rules read it, and a player feels it on the membrane.
+func _stung(target: int, at: Vector2, wound: float, by: int) -> void:
+	var b: Body = null if target == TARGET_PLAYER else _cells[target]
+	var r := _cell.radius if b == null else b.radius
+	var felt := Doses.felt(wound, r, CellBody.DOSE_SIZE)
+	var level := _felt(felt) * BITE_FELT_SHARE
+	if b == null:
+		_cell.wound = maxf(_cell.wound, minf(_cell.wound + felt, CellBody.STING_MOST))
+		_tell(null, Contact.BITTEN, at, level, by, &"")
+		return
+	b.wound = maxf(b.wound, minf(b.wound + felt, CellBody.STING_MOST))
+	if b.person != null:
+		_tell(b.person, Contact.BITTEN, at, level, by, &"")
+	else:
+		_feel_hit(b, at, _felt(felt))
 
 
 ## **The player is held and knocked** (§3.1): a centre past the rim is put
@@ -10184,7 +10206,7 @@ func census_line() -> String:
 		+ " at r40 %d, mean r %.1f, hunger %.2f  | could swallow r26/r34/r40 %d/%d/%d"
 		+ "  dread %.2f/%.2f/%.2f  genes %d  | spawned %d  died: swallowed %d chewed %d"
 		+ " starved %d (r40 %d) poisoned %d  | grazed by the water %d, by drifters %d,"
-		+ " dissolved %d, snow kept %d, remains %d  | runs %d at you %d misses %d darts %d"
+		+ " dissolved %d, snow kept %d, remains %d  | runs %d at you %d misses %d stings %d"
 		+ " dashes %d  floors: gene %d+%d drifter %d  | sum %d") % [
 		_t, drifters + hunters, drifters, hunters, flocs, big,
 		radius_sum / maxf(hunters, 1), hunger_sum / maxf(hunters, 1),
@@ -10192,7 +10214,7 @@ func census_line() -> String:
 		_n(&"spawned"), _n(&"died_swallowed"), _n(&"died_chewed"), _n(&"died_starved"),
 		_n(&"died_starved_r40"), _n(&"died_poisoned"), _n(&"water_grazed"),
 		_n(&"drifter_grazed"), _n(&"flocs_dissolved"), _n(&"snow_kept"), _n(&"remains"),
-		_n(&"runs"), _n(&"runs_at_player"), _n(&"misses"), _n(&"water_darts"),
+		_n(&"runs"), _n(&"runs_at_player"), _n(&"misses"), _n(&"stings"),
 		_n(&"water_dashes"), _n(&"gene_floor"), _n(&"gene_floor_peer"), _n(&"drifter_floor"),
 		hash(sums)]
 
@@ -10389,7 +10411,7 @@ func behaviour_counts() -> Array:
 ## the lineage line, for `tools/eco_probe.gd` and `tools/drive.gd`: its hunters,
 ## how many of them are on the founders' rules and how many lists the rest
 ## carry; how often each of the founders' rules has fired; the meals of hunters
-## wearing a nose, a radar and a laser; the darts the water fired, the stuns and
+## wearing a nose, a radar and a laser; the stings that landed, the stuns and
 ## your wakes; and what its hunters are doing now. With [member rules] off,
 ## that it runs pack 2's hunter. Asking moves nothing.
 ##
@@ -10442,11 +10464,11 @@ func behaviour_line() -> String:
 		each.append("%s %d" % [kind, made])
 	return ("[behaviour] t %.0f  hunters %d: on the founders' rules %d, other lists %d"
 		+ "  | founders' rules fired %s  | meals of hunters with a nose %d, radar %d,"
-		+ " laser %d  | water darts %d, stuns %d, your wakes %d  | now holding a heading"
+		+ " laser %d  | stings %d, stuns %d, your wakes %d  | now holding a heading"
 		+ " %d, resting %d, swimming %d, pushing %d, stunned %d, echoes in flight %d"
 		+ "  | behaviours %d, unchanged %s  | rules changed %d: %s") % [
 		_t, n, on_founders, lists.size(), "/".join(fired), _n(&"meals_nose"),
-		_n(&"meals_radar"), _n(&"meals_laser"), _n(&"water_darts"), _n(&"stuns"),
+		_n(&"meals_radar"), _n(&"meals_laser"), _n(&"stings"), _n(&"stuns"),
 		_n(&"wakes"), holding, resting, swimming, pushing, stunned, echoes,
 		int(kinds[0]) if kinds.size() == 2 else 0,
 		"%.1f %%" % float(kinds[1]) if kinds.size() == 2 else "-", changed, ", ".join(each)]
