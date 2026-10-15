@@ -1,7 +1,13 @@
 extends "res://game/genes/gene.gd"
-## `trichocyst`: **the dart**. It goes off on its own at what comes for its body,
-## on the arc it is worn on -- **a dart in a rear slot is the answer to being
-## flanked**, so placing it is a defensive decision (`cell.gd`'s DART_ARC_DEG).
+## `trichocyst`: **the sting**, a contact weapon. A real trichocyst is a spindle
+## under the skin that fires its thread when something touches it, and so does
+## this one: **whatever touches the body on the arc it is worn on is wounded**,
+## food, friend or hunter, whether the cell wants it or not, and then it waits out
+## its cooldown (the owner, 2026-10-15: "Sting is a contact weapon. It hurts,
+## whether you want it or not"). No instinct and no button fires it: a sting is
+## the body's, not a behaviour. **A sting in a rear slot is the answer to being
+## flanked**, so placing it is still a defensive decision (`cell.gd`'s
+## DART_ARC_DEG). The code still calls the organ's discharge its dart.
 ##
 ## No class_name, for the reason signal_bus.gd gives. Preload it by path.
 
@@ -9,18 +15,21 @@ extends "res://game/genes/gene.gd"
 ## [method lines] says this organ's numbers with.
 const Readout := preload("res://game/mechanics/readout.gd")
 const U := Readout.Unit
+## How a wound is felt on a body of another size (game/mechanics/doses.gd, which
+## preloads nothing).
+const Doses := preload("res://game/mechanics/doses.gd")
 
-## **How close a cell hunting you gets before the dart goes off, and how long
-## before there is another one**, by tier.
+## **The wound a sting gives**, by tier, as a share of a body the size of a born
+## cell -- felt on any other body as `wound x (DOSE_SIZE / r)^2`, as a dose's
+## stack is (doses.gd's `felt`), so a big body shrugs off what tears a small one.
+## About one born mouth's head-on bite (0.07) at one copy, a little over two at
+## three: a sting is a bite you did not have to aim. It never finishes a body
+## (cell.gd's STING_MOST). Starting values; balance waits for players.
 ## The host decides every contact by these: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
-const DART_RANGE_BY_TIER: Array[float] = [0.0, 130.0, 190.0, 260.0]
+const DART_WOUND_BY_TIER: Array[float] = [0.0, 0.08, 0.12, 0.16]
+## **How long before it can sting again**, by tier: the spindle is spent, and a
+## new one has to grow. Kept from the dart it was.
 const DART_COOLDOWN_BY_TIER: Array[float] = [0.0, 26.0, 18.0, 11.0]
-## **What a dart does to what it hits** (docs/design/behaviour.md §4.3): it rests
-## this long with its rules unread, and feels the dart as a `hit` at its
-## bearing. Today's darts broke off a run and left the hunter resting for the
-## same five seconds; with no run to break, the dart stuns. A starting value.
-## The host decides every contact by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
-const DART_STUN := 5.0
 
 
 # --- Its words (gene.gd; gene-catalogue.md §8.1) -------------------------------------
@@ -44,14 +53,13 @@ const WORDS := {&"trichocyst": "sting"}
 ## English. "That side" is the side of the body where the gene's slot is. The
 ## `entry` line says which gene.
 ## ROOM: 440 px at 15 px
-const EXPLAINS := {&"trichocyst": "a dart at whatever closes in on that side"}
+const EXPLAINS := {&"trichocyst": "stings whatever touches that side, on its own"}
 
 
 func _init() -> void:
 	organ = &"trichocyst"
 	order = 10
-	provides = {&"dart_range": DART_RANGE_BY_TIER, &"dart_cooldown": DART_COOLDOWN_BY_TIER}
-	numbers = {&"stun": DART_STUN}
+	provides = {&"dart_wound": DART_WOUND_BY_TIER, &"dart_cooldown": DART_COOLDOWN_BY_TIER}
 	water = {"rarity": &"uncommon", "drifter": true}
 	# **Its look** (gene-looks.md §6): spear-headed spines, darts -- a trichocyst's
 	# real spindles -- in defending's orange.
@@ -59,17 +67,19 @@ func _init() -> void:
 	look = {"shape": SPINES, "shade": 2, "length": 0.32, "tip": Kinds.TIP_SPEAR}
 
 
-## **Its numbers on the pause screen** (gene.gd's `lines`): how far its dart reaches,
-## how wide, and how often.
+## **Its numbers on the pause screen** (gene.gd's `lines`): what its sting takes out
+## of a body your size, how wide it guards, and how often.
 func lines(t: int, _level: int, _path: StringName, ctx: Dictionary, _slot: int,
 		wear: Dictionary) -> Array:
 	var cell: Variant = ctx["cell"]
-	# TRANSLATORS: The dart gene (`trichocyst`, shown as `sting`): it fires a dart
-	# at a hunter that closes in on that side of the body. "{} either side" is
-	# the angle, in degrees, to each side of straight ahead that it covers.
-	return [[Readout.item("a dart at a hunter within {} µm, {} either side",
-			[stat_at(&"dart_range", t), cell.DART_ARC_DEG * 0.5],
-			[U.DISTANCE, U.ANGLE]),
+	var wound := stat_at(&"dart_wound", t) * Doses.felt(1.0,
+		float(ctx.get("radius", cell.BASE_RADIUS)), cell.DOSE_SIZE)
+	# TRANSLATORS: The sting gene (`trichocyst`, shown as `sting`): whatever touches
+	# that side of the body is stung. "takes {} of a body your size" is the wound,
+	# a percentage; "{} either side" is the angle, in degrees, to each side of the
+	# middle of that side that it covers.
+	return [[Readout.item("a sting takes {} of a body your size, {} either side",
+			[wound, cell.DART_ARC_DEG * 0.5], [U.SHARE, U.ANGLE]),
 		Readout.item("again after {} s", [stat_at(&"dart_cooldown", t)],
 			[U.TIME])],
 		[wear]]

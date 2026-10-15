@@ -96,11 +96,11 @@ const ROWS := {
 	# Touch.
 	&"touch_range": {"none": 0.0, "better": HIGHER, "combine": BEST, "unit": "µm",
 		"judged": false, "contact": false, "group": &""},
-	# The dart.
-	&"dart_range": {"none": 0.0, "better": HIGHER, "combine": BEST, "unit": "µm",
-		"judged": false, "contact": true, "group": &"dart_range"},
+	# The sting: a wound to whatever touches its arc, then a wait.
+	&"dart_wound": {"none": 0.0, "better": HIGHER, "combine": BEST, "unit": "of a body",
+		"judged": false, "contact": true, "group": &"dart_wound"},
 	&"dart_cooldown": {"none": 0.0, "better": LOWER, "combine": BEST, "unit": "s",
-		"judged": false, "contact": true, "group": &"dart_range"},
+		"judged": false, "contact": true, "group": &"dart_wound"},
 	# The toxin: venom outside, poison inside (docs/design/dna-slots.md §6).
 	&"venom_stacks": {"none": 0.0, "better": HIGHER, "combine": BEST, "unit": "stacks",
 		"judged": false, "contact": true, "group": &""},
@@ -115,14 +115,14 @@ const ROWS := {
 }
 
 ## **The stats whose mechanic acts from a place** (gene-catalogue.md §5.2): the
-## beam leaves from where its provider is worn, the ping calls from there, the dart
-## looks along that arc, and the nose's level is weighted about it. Where a body
+## beam leaves from where its provider is worn, the ping calls from there, the sting
+## guards that arc, and the nose's level is weighted about it. Where a body
 ## wears several providers of one, the mechanic acts from the first in slot order
 ## (catalogue.gd's `seated_provider`), and **every number it uses is that organ's,
 ## never another's beside it**: its arc, its level, its tier, its own numbers, and its
 ## stats -- the seated one and every other of its group -- which a mechanic reads
-## through [method seated]. A body with two darts fires the first one's arc, reach,
-## rest and stun, never its arc with the other's reach; a body with two radars calls
+## through [method seated]. A body with two stings stings with the first one's arc,
+## wound and rest, never its arc with the other's wound; a body with two radars calls
 ## with the first one's reach and period, and the referee a host judges its calls by
 ## reads them so, from the slots the guest said (referee.gd's `worn_order`). Where two
 ## organs provide a judged or contact stat of one, the rules two builds agree on name
@@ -131,7 +131,7 @@ const ROWS := {
 ## organ] says which -- and reads its stats through [method of]. **A bound is not a
 ## mechanic**: the referee's cap on a call's reach and the spawner's hide reach round a
 ## person read [method top] and [method of] -- the most any organ gives, whichever acts.
-const SEATED: Array[StringName] = [&"beam_range", &"ping_range", &"dart_range",
+const SEATED: Array[StringName] = [&"beam_range", &"ping_range", &"dart_wound",
 	&"smell_range"]
 
 ## **Each stat's providers beside their tables, `[key, table, ...]`**: the
@@ -190,7 +190,7 @@ static func of(tiers: Dictionary, stat: StringName) -> float:
 ## first the stat its provider is chosen by. A call is its reach, its period and how
 ## much of it passes a body; a stroke its speed and its two gaps; a turn its rate and
 ## how fast it answers; a beam its reach, its rays and their fan; a dash its burst
-## and its price; a dart its reach and its rest. **A group is one provider's**: a body
+## and its price; a sting its wound and its rest. **A group is one provider's**: a body
 ## wearing two providers takes every stat of a group from the one that is best on its
 ## first stat, and never mixes them stat by stat -- two tails swim at the faster one's
 ## speed with the faster one's gaps, not the other's shorter gap. So every organ that
@@ -269,7 +269,7 @@ static func organ(layout: Array, tiers: Dictionary, stat: StringName) -> StringN
 
 ## **The stat of [constant SEATED] whose organ [param stat]'s mechanic acts from**:
 ## [param stat] itself, or the first stat of its group where that one is seated -- a
-## dart's rest acts from the dart that fires -- and `&""` for a stat whose mechanic
+## sting's rest acts from the sting that fires -- and `&""` for a stat whose mechanic
 ## acts from no place.
 static func seat_of(stat: StringName) -> StringName:
 	if SEATED.has(stat):

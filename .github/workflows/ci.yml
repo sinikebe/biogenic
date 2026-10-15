@@ -343,11 +343,19 @@ jobs:
         # the toxin, so the drop differs from its first fill. 70,197 lines, from
         # 69,471, the same hash under all three schemes.
         #
+        # **Re-pinned when the sting became a touch and the chase's aim an
+        # instinct** (docs/design/sting.md), from c5d5a002...: the water changed
+        # on purpose. Diffed against dev at 0b64b12, the traces part at 1.03 s,
+        # where dev's dart stunned a body coming for a trichocyst from a distance
+        # and that body now swims on; with the ranged dart taken out of dev too, and
+        # the stings left out here, the two agree to 37.2 s, the first daughter
+        # whose division nudged a "turn toward"'s aim. 70,074 lines, from 70,197.
+        #
         # The run prints about ten megabytes, so it goes to a file rather than a
         # variable. About twenty seconds.
         run: |
           set -uo pipefail
-          pinned="c5d5a00293bcd43b3547603413f7e47baeb6056fa42521b574cf27a0b56e37c0"
+          pinned="49611ed8a51f961f4c34d11f452bb3acc5380ac2cdfc9587e4bafdac44461e28"
           log=$(mktemp)
           fail=0
           echo "--- seed 1, sixty seconds, R pressed at 20 s"

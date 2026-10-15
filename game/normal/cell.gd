@@ -95,13 +95,22 @@ const BITE_GAP := 0.85
 const FLANK_AHEAD := 1.00
 const FLANK_ASTERN := 2.10
 
-## How far off the arc it is worn on a `trichocyst` can answer. The dart used to
-## be a scalar range and fired at whatever was near, which under a positional
-## rule is a defence with no position: **a dart in a rear slot is the answer to
-## being flanked**, and placement becomes a defensive decision rather than only
-## an offensive one. §2.
+## How far round the arc it is worn on a `trichocyst` stings what touches it
+## (docs/design/sting.md). **A sting in a rear slot is the answer to being
+## flanked**, and placement is a defensive decision rather than only an offensive
+## one. §2.
 ## The host decides every contact by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const DART_ARC_DEG := 110.0
+## **What touching is, to a sting**: two skins within this many µm of each other.
+## Solid bodies are pushed apart every frame, so two that meet sit at touching or
+## a hair either side of it; this is that hair.
+## The host decides every contact by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
+const STING_TOUCH := 2.0
+## **A sting never finishes a body**: it wounds to at most this, and a bite or a
+## dose does the rest. A sting is a defence, not a way to kill -- and a body killed
+## by one would need a cause of death nothing else has. A starting value.
+## The host decides every contact by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
+const STING_MOST := 0.95
 
 ## 0 is whole and 1 is a body that has come apart. There is no bar for this
 ## anywhere: point of view feels each bite as a `hit` at the bearing it came
@@ -193,6 +202,17 @@ static func daughter_radius(mother_radius: float = DIVIDE_RADIUS) -> float:
 ## about twice that settles with a few degrees of overshoot. Radians, a starting
 ## value (§15). Not a table: a host's referee judges the motion, never this.
 const HOLD_BAND := 1.3
+## **How far ahead "turn toward" aims** (docs/design/behaviour.md §4.2): the
+## rule's own option, a multiple of how far the bearing drifted since the tick
+## before -- 0 aims straight at what it turns to, and 3 is the textbook navigation
+## constant every chaser used before it was the instinct's (the owner,
+## 2026-10-15: the cells' behaviour is their inherited and evolved instincts', not
+## the code's). A step along this ladder is the small change a division may make
+## to a rule (rulebook.gd's `nudge`). Starting values.
+const LEADS: Array[float] = [0.0, 1.5, 3.0, 4.5]
+## **The aim of a "turn toward" written before it had one** -- a kept library's,
+## a kept drop's, the founders' as they were -- read as the 3 every chaser used.
+const LEAD_DEFAULT := 3.0
 ## Mean of the per-impulse strength roll below, for [method speed_of].
 const IMPULSE_MEAN := 0.85
 ## Net speed over path speed. One impulse of v0 decaying at DRAG contributes
@@ -215,7 +235,7 @@ const DRAG := 0.74
 # Every table that was here is its organ's own now (game/genes/organs/), and is
 # read as a stat: the beam's reach, rays and fan, the nose's and the ping's
 # ranges, the push, the dash, the armour, the tank, the burn, the light, touch,
-# the dart and the toxin's stacks. The beam's fork and prices are the beam's,
+# the sting and the toxin's stacks. The beam's fork and prices are the beam's,
 # and the levels any gene earns are its file's `levels`. What stays here is what
 # the mechanics themselves need.
 
@@ -255,7 +275,7 @@ const DOSE_TAU_BY_KIND: Array[float] = [6.0, 4.0, 8.0]
 ## `6 x ln 5 = 9.7 s`, so a light dose stops a body mending for about ten.
 const DOSE_GONE := 0.2
 ## **How far round its slot's bearing a venom on a side or the stern stings** a
-## mouth that bites there: the dart's own arc, so the two weapons that guard a side
+## mouth that bites there: the sting's own arc, so the two weapons that guard a side
 ## reach as far round it.
 const VENOM_ARC_DEG := 110.0
 ## **Whether a venom on a side or the stern stings at all.** False makes it inert
@@ -318,7 +338,7 @@ const STEER_DEADZONE := 0.12
 
 # --- What the body gives a body's rules (docs/design/behaviour.md §3) ----------
 ## **The body's own parts**, in the shape of `genome.gd`'s DECLARES: what every
-## body has whatever its genes. It feels a `hit` -- a bite or a dart landing on
+## body has whatever its genes. It feels a `hit` -- a bite or a sting landing on
 ## its membrane, at a bearing and a strength, as the player feels one -- and it
 ## has the triggers every body has (§3.3): it turns toward or away from what a
 ## sense reports, which needs a bearing, or turns at random; it swims, on its
@@ -335,7 +355,8 @@ const DECLARES := {
 	&"body": {
 		"in": [{"name": &"hit", "bearing": true, "values": {&"strength": &"level"}}],
 		"out": [
-			{"name": &"turn-toward", "claims": [&"steering"], "needs": &"bearing"},
+			{"name": &"turn-toward", "claims": [&"steering"], "needs": &"bearing",
+				"options": LEADS, "default": LEAD_DEFAULT},
 			{"name": &"turn-away", "claims": [&"steering"], "needs": &"bearing"},
 			{"name": &"turn-random", "claims": [&"steering"]},
 			{"name": &"swim", "claims": [&"swimming"]},
@@ -386,7 +407,8 @@ const BODY_VALUES := {
 ## ROOM: 856 px at 15 px
 const BODY_EXPLAINS := {
 	&"body.hit": "hit · a bite landing on you: where it came from, and how hard.",
-	&"body.turn-toward": "turn toward · steer for where the sense says it is.",
+	&"body.turn-toward": "turn toward · steer for where the sense says it is: at it, or ahead"
+		+ " of where it is going, near or far.",
 	&"body.turn-away": "turn away · steer away from where the sense says it is.",
 	&"body.turn-random": "tumble · a quarter to a half turn, to a random side.",
 	&"body.swim": "swim · keep your tail beating, so nothing below holds it still.",
@@ -924,15 +946,6 @@ static func hold_level(tiers: Dictionary) -> int:
 ## **The hold level with no organ that beats at all**, every one retired
 ## (gene-catalogue.md §4.4): one no tail reaches, so nothing is ever held.
 const HOLD_NEVER := 1 << 16
-
-
-## **How long a dart stuns what it hits**, in seconds: the dart's own number
-## (`trichocyst.gd`'s DART_STUN), of the dart [param tiers] wears -- the one that
-## fires, the first in slot order of [param layout] where it wears several
-## (gene-catalogue.md §5.2) -- or of the first organ that darts, for a body that
-## wears none. 0 once no organ darts.
-static func dart_stun(tiers: Dictionary, layout: Array = []) -> float:
-	return float(Catalogue.number_for(tiers, &"dart_range", &"stun", 0.0, layout))
 
 
 ## **Whether the tail is held still**, as this body's last step had it: what both

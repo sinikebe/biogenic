@@ -665,9 +665,10 @@ msgstr ""
 
 #. The burst-of-speed gene (`myoneme`, shown as `dash`): a tap gives a short
 #. burst. "Again after {} s" is the wait before the next one.
-#. The dart gene (`trichocyst`, shown as `sting`): it fires a dart at a hunter
-#. that closes in on that side of the body. "{} either side" is the angle, in
-#. degrees, to each side of straight ahead that it covers.
+#. The sting gene (`trichocyst`, shown as `sting`): whatever touches that side
+#. of the body is stung. "takes {} of a body your size" is the wound, a
+#. percentage; "{} either side" is the angle, in degrees, to each side of the
+#. middle of that side that it covers.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
 #. joined with a middle dot into a line of at most 650 px; the longest English
@@ -1362,21 +1363,22 @@ msgstr ""
 #. the English. "That side" is the side of the body where the gene's slot is.
 #. The `entry` line says which gene.
 #. entry: trichocyst
-#. Room: at most 440 px in 15 px type; the English takes 290 px.
+#. Room: at most 440 px in 15 px type; the English takes 327 px.
 #: game/genes/organs/trichocyst.gd
-msgid "a dart at whatever closes in on that side"
+msgid "stings whatever touches that side, on its own"
 msgstr ""
 
-#. The dart gene (`trichocyst`, shown as `sting`): it fires a dart at a hunter
-#. that closes in on that side of the body. "{} either side" is the angle, in
-#. degrees, to each side of straight ahead that it covers.
+#. The sting gene (`trichocyst`, shown as `sting`): whatever touches that side
+#. of the body is stung. "takes {} of a body your size" is the wound, a
+#. percentage; "{} either side" is the angle, in degrees, to each side of the
+#. middle of that side that it covers.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
 #. joined with a middle dot into a line of at most 650 px; the longest English
 #. line takes 550 px.
 #: game/genes/organs/trichocyst.gd
 #, python-brace-format
-msgid "a dart at a hunter within {} µm, {} either side"
+msgid "a sting takes {} of a body your size, {} either side"
 msgstr ""
 
 #. A gene's name as the player reads it on a chip beside three small dots: one
@@ -2601,9 +2603,9 @@ msgstr ""
 #. DNA, which is what lets the tail be held still; "below" means the instincts
 #. lower in the list.
 #. entry: body.turn-toward
-#. Room: at most 856 px in 15 px type; the English takes 353 px.
+#. Room: at most 856 px in 15 px type; the English takes 688 px.
 #: game/normal/cell.gd
-msgid "turn toward · steer for where the sense says it is."
+msgid "turn toward · steer for where the sense says it is: at it, or ahead of where it is going, near or far."
 msgstr ""
 
 #. Explains one sense, action or value of the player's "instincts", on one
@@ -4415,18 +4417,64 @@ msgstr ""
 msgid "%s°"
 msgstr ""
 
-#. How hard a "push" instinct pushes: at "half" its strength or "full".
-#. Lowercase, one short word.
+#. How hard a "push" instinct pushes: at "half" its strength or "full". And
+#. how far ahead a "turn toward" instinct aims at something that is moving:
+#. straight "at it", "near" (a little ahead), "ahead", or "far" ahead of where
+#. it is now. Lowercase, one short word each.
+#. entry: push
 #. Room: at most 60 px in 14 px type; the English takes 26 px.
 #: game/normal/program_words.gd
 msgid "half"
 msgstr ""
 
-#. How hard a "push" instinct pushes: at "half" its strength or "full".
-#. Lowercase, one short word.
+#. How hard a "push" instinct pushes: at "half" its strength or "full". And
+#. how far ahead a "turn toward" instinct aims at something that is moving:
+#. straight "at it", "near" (a little ahead), "ahead", or "far" ahead of where
+#. it is now. Lowercase, one short word each.
+#. entry: push
 #. Room: at most 60 px in 14 px type; the English takes 22 px.
 #: game/normal/program_words.gd
 msgid "full"
+msgstr ""
+
+#. How hard a "push" instinct pushes: at "half" its strength or "full". And
+#. how far ahead a "turn toward" instinct aims at something that is moving:
+#. straight "at it", "near" (a little ahead), "ahead", or "far" ahead of where
+#. it is now. Lowercase, one short word each.
+#. entry: turn-toward
+#. Room: at most 60 px in 14 px type; the English takes 27 px.
+#: game/normal/program_words.gd
+msgid "at it"
+msgstr ""
+
+#. How hard a "push" instinct pushes: at "half" its strength or "full". And
+#. how far ahead a "turn toward" instinct aims at something that is moving:
+#. straight "at it", "near" (a little ahead), "ahead", or "far" ahead of where
+#. it is now. Lowercase, one short word each.
+#. entry: turn-toward
+#. Room: at most 60 px in 14 px type; the English takes 32 px.
+#: game/normal/program_words.gd
+msgid "near"
+msgstr ""
+
+#. How hard a "push" instinct pushes: at "half" its strength or "full". And
+#. how far ahead a "turn toward" instinct aims at something that is moving:
+#. straight "at it", "near" (a little ahead), "ahead", or "far" ahead of where
+#. it is now. Lowercase, one short word each.
+#. entry: turn-toward
+#. Room: at most 60 px in 14 px type; the English takes 42 px.
+#: game/normal/program_words.gd
+msgid "ahead"
+msgstr ""
+
+#. How hard a "push" instinct pushes: at "half" its strength or "full". And
+#. how far ahead a "turn toward" instinct aims at something that is moving:
+#. straight "at it", "near" (a little ahead), "ahead", or "far" ahead of where
+#. it is now. Lowercase, one short word each.
+#. entry: turn-toward
+#. Room: at most 60 px in 14 px type; the English takes 20 px.
+#: game/normal/program_words.gd
+msgid "far"
 msgstr ""
 
 #. The words on the chip under the settings gear that turns the pause screen's

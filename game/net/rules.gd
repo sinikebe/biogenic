@@ -54,8 +54,8 @@ extends RefCounted
 ## 2. the run's numbers the referee judges a guest by that no organ provides, under
 ##    the names they have where they are defined;
 ## 3. the contact rules no table holds: the bite's gap and flank, `bite_damage`, the
-##    doses' constants, and the dart's arc and stun, by sample where a rule is a
-##    function;
+##    doses' constants, and the sting's arc, touch and limit, by sample where a rule
+##    is a function;
 ## 4. the referee's own limits ([constant REFEREE_LIMITS]);
 ## 5. the body plan's fingerprint (body_plan.gd), so builds on other plans -- other
 ##    slot counts, other arcs -- refuse each other too.
@@ -236,14 +236,12 @@ static func text() -> String:
 	put.call("cell.DOSE_GONE", CellBody.DOSE_GONE)
 	put.call("cell.DOSE_SIZE", CellBody.DOSE_SIZE)
 	put.call("doses.felt(2,r30)", Doses.felt(2.0, 30.0, CellBody.DOSE_SIZE))
-	# **The dart** (behaviour.md §4.3): the host fires a guest's dart at a cell coming
-	# for it, on the arc its organ is worn on, and stuns what it hits for the organ's
-	# own number -- read at one copy of each organ that darts, as the tables are.
+	# **The sting** (docs/design/sting.md): the host stings whatever touches a body
+	# on the arc its organ is worn on, a guest's included -- how far round, what
+	# counts as touching, and the most a sting can wound.
 	put.call("cell.DART_ARC_DEG", CellBody.DART_ARC_DEG)
-	var darts := Catalogue.providers(&"dart_range")
-	for k in darts.size():
-		put.call("cell.dart_stun" + ("" if k == 0 else "." + String(darts[k])),
-			CellBody.dart_stun({darts[k]: 1}))
+	put.call("cell.STING_TOUCH", CellBody.STING_TOUCH)
+	put.call("cell.STING_MOST", CellBody.STING_MOST)
 	# 4. The referee's own limits.
 	var referee: Dictionary = (Referee as Script).get_script_constant_map()
 	for name: String in REFEREE_LIMITS:
