@@ -252,6 +252,22 @@ var one_variant := false
 ## instincts' alone.
 var declares := {}
 
+## **Its own slots** (docs/design/gene-sockets.md §2): one dictionary per slot, in
+## the order its view draws them, each with
+##
+## - `"takes"`, the organs that fit it, by organ name (`Array[StringName]`): every
+##   strain of an organ fits, and a gene of forms rides as its outside form;
+## - `"gives"`, what the gene in it gives this one: stat to a table by the rider's
+##   copies, index 0 being no rider, as [member provides] reads. The host's mechanic
+##   reads it by name and knows no rider (the catalogue's `rider_stat`).
+##
+## **A rider changes its host and nothing else** (§4): it provides nothing to the
+## body, has no control and no instinct. Its line is the file's `SOCKET_EXPLAINS`,
+## keyed `host.taken`. Empty for a gene with no slots. **The organ's own**, as
+## [member declares] is: a variant keeps its organ's slots. The host's referee and
+## every contact read it: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
+var sockets: Array = []
+
 # --- Its words (gene-catalogue.md §8.1) -----------------------------------------------
 #
 # **An organ's words are constants of its own file**, each a table keyed by the

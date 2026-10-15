@@ -459,13 +459,15 @@ func _apply_deltas() -> void:
 					# `ampulla`'s wave both drawn on an arc nothing was ever
 					# worn on. docs/design/replay.md §4.1.
 					_genome.express(state["dna"], state["order"],
-						state["body"], state["worn"])
+						state["body"], state["worn"], null, state.get("riders"),
+						state.get("body_riders"))
 					_genome.restore_levels(state.get("levels", {}))
 					_genome.bonus_slots = int(state["bonus"])
 					_genome.held_sample = state["sample"]
 			RecorderNode.Delta.BODY:
 				if _food != null:
-					_food.restore_genome(int(row[2]), row[3])
+					_food.restore_genome(int(row[2]), row[3],
+						row[5] if row.size() > 5 else {})
 			RecorderNode.Delta.DAUGHTERS:
 				_daughters = row[3]
 			RecorderNode.Delta.RIM:

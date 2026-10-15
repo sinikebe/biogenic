@@ -23,6 +23,8 @@ const Doses := preload("res://game/mechanics/doses.gd")
 ## game/normal, so there is no cycle.
 const Catalogue := preload("res://game/genes/catalogue.gd")
 const Stats := preload("res://game/genes/stats.gd")
+## The genes in genes' own slots (docs/design/gene-sockets.md).
+const Riders := preload("res://game/genes/riders.gd")
 ## **The body plan** (docs/design/gene-catalogue.md §10): every slot, and how many a
 ## radius earns. It preloads nothing.
 const BodyPlan := preload("res://game/genes/body_plan.gd")
@@ -662,7 +664,7 @@ func _process(delta: float) -> void:
 	if push > 0.0 and strength > 0.0:
 		var thrust := push if strength >= 1.0 else push * strength
 		velocity += forward() * thrust * delta
-		_effort += thrust * delta * STROKE_COST
+		_effort += thrust * delta * STROKE_COST * slot_gift(&"push_accel", &"effort", 1.0)
 
 	velocity *= exp(-DRAG * delta)
 	position += velocity * delta
@@ -674,7 +676,8 @@ func _fire_impulse() -> void:
 	var strength := randf_range(0.7, 1.0)
 	var aim := heading + randf_range(-IMPULSE_SPREAD, IMPULSE_SPREAD)
 	velocity += Vector2(sin(aim), -cos(aim)) * impulse_speed() * strength
-	_effort += impulse_speed() * strength * STROKE_COST
+	_effort += impulse_speed() * strength * STROKE_COST \
+		* slot_gift(&"impulse_speed", &"effort", 1.0)
 	impulsed.emit(strength)
 
 
@@ -719,6 +722,22 @@ func stat(which: StringName) -> float:
 		var tiers := worn()
 		known = Stats.seated(seats() if Stats.seats_decide(tiers) else [], tiers, which)
 		bought[which] = known
+	return known
+
+
+## **What the slots of the organ this body provides [param provided] with give it**
+## by [param stat] (docs/design/gene-sockets.md): the price its own slot takes off
+## the tail's strokes, the push, the dash. [param none] for an organ it does not
+## wear, or whose slots give nothing by that name. Read once a body, as [method stat]
+## is: the riders are the genome's body's, fixed at birth with it.
+func slot_gift(provided: StringName, stat: StringName, none: float) -> float:
+	var bought := _bought_now()
+	var key := StringName("%s>%s" % [provided, stat])
+	var known: Variant = bought.get(key)
+	if known == null:
+		var riders: Dictionary = genome.body_riders() if genome != null else {}
+		known = Riders.through(riders, worn(), provided, stat, none)
+		bought[key] = known
 	return known
 
 
@@ -1388,7 +1407,7 @@ func _dash_now() -> void:
 		return
 	_dash_timer = DASH_COOLDOWN
 	velocity += forward() * speed
-	dashed.emit(stat(&"dash_cost"))
+	dashed.emit(stat(&"dash_cost") * slot_gift(&"dash_speed", &"effort", 1.0))
 	impulsed.emit(1.0)
 
 

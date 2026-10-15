@@ -43,6 +43,16 @@ const WORDS := {&"axoneme": "push"}
 ## `entry` line says which gene.
 ## ROOM: 440 px at 15 px
 const EXPLAINS := {&"axoneme": "holding on pushes you, instead of only steering"}
+## **The line of each of its own slots** (docs/design/gene-sockets.md §2), keyed
+## `host.taken`: what the gene in it does to this one, after the slot's word.
+##
+## TRANSLATORS: What a gene placed in one of another gene's own slots does to that
+## gene, in one line shown after the placed gene's word and a middle dot: "venom ·
+## every sting leaves it too". "It" is the placed gene. Lowercase, plain words, no
+## numbers, no longer than the English: it shares the explanation's line. The
+## `entry` line says which gene's slot, then which gene it takes.
+## ROOM: 440 px at 15 px
+const SOCKET_EXPLAINS := {&"axoneme.crista": "your push costs less hunger"}
 ## **What its action is called** on an instinct's chip (automation.md §13.1).
 ##
 ## TRANSLATORS: The name of an action the player's cell can be told to do by one
@@ -89,6 +99,9 @@ func _init() -> void:
 	family = MOVING
 	look = {"shape": LASH, "shade": 2, "count": 1, "length": 0.50, "wave": 0.22,
 		"waves": 2.1}
+	# **Its own slot** (gene-sockets.md §3 row 10): a crista in it, and the push
+	# costs less -- as the tail's slot does.
+	sockets = [{"takes": [&"crista"], "gives": {&"effort": [1.0, 0.70, 0.55, 0.40]}}]
 
 
 ## **Its numbers on the pause screen** (gene.gd's `lines`): how much holding on adds,

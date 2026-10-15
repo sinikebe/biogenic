@@ -93,6 +93,16 @@ const NO_EYE := {}
 ## invisible organ would be a body the player cannot read, which is worse than a body
 ## with an organ in no colour of its own.
 const UNKNOWN_TINT := Color(0.78, 0.84, 0.82)
+## **A rider's bead** (docs/design/gene-sockets.md §5.3): 9 % of the radius across
+## at the least 2.4 px, seated 78 % of the way out to the skin on its host's arc,
+## on a dark rim so it reads over the body's own tint, two of them 2.6 beads apart.
+const RIDER_BEAD := 0.09
+const RIDER_BEAD_MIN := 2.4
+const RIDER_SEAT := 0.78
+const RIDER_PITCH := 2.6
+const RIDER_RIM := 1.45
+const RIDER_ALPHA := 0.95
+const RIDER_BACK := Color(0.02, 0.06, 0.05, 0.85)
 ## That plain tuft: the tuft kind's defaults over a pigment, resolved once.
 static var UNKNOWN_LOOK: Dictionary = _frozen(Kinds.resolved({"shape": Kinds.TUFT}))
 
@@ -721,7 +731,8 @@ static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 		order: Array = [], wound: float = 0.0, double: float = 0.0,
 		pinch: float = 0.0, shed: float = 0.0, untinted: bool = false,
 		eye: Dictionary = NO_EYE, tail: Vector2 = NO_TAIL,
-		slack: float = 0.0, dose: Dictionary = NO_DOSE, lit: Dictionary = NO_LIT) -> void:
+		slack: float = 0.0, dose: Dictionary = NO_DOSE, lit: Dictionary = NO_LIT,
+		riders: Dictionary = {}) -> void:
 	if fade <= 0.0 or r <= 0.0:
 		return
 	var fwd := Vector2(sin(heading), -cos(heading))
@@ -749,6 +760,8 @@ static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 	var layout := order if not order.is_empty() else default_order(tiers)
 	_draw_fringe(canvas, at, fwd, stb, r, tiers, clock, fade, steer, unit, layout,
 		eye, tail, dose, lit)
+	if not riders.is_empty():
+		_draw_riders(canvas, at, fwd, stb, r, layout, riders, fade, unit)
 	var mouth := Catalogue.worn_provider(tiers, &"gape")
 	draw_gape(canvas, at, fwd, stb, r, gape, mouth, int(tiers.get(mouth, 0)),
 		not is_self and gape > viewer_radius, fade, unit)
@@ -766,6 +779,34 @@ static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 		if tier > 0 and (worn < 0 or Genome.is_front(worn)):
 			_draw_fangs(canvas, at, fwd, stb, r, gape, gene, tier, fade, unit,
 				float(dose.get("fangs", 0.0)))
+
+
+## **What rides in a body's genes' own slots** (docs/design/gene-sockets.md §5.3):
+## a bead a rider, in its hue, just inside the skin at the arc its host is worn on
+## -- a sting carrying venom can be seen before it is touched. [param riders] are
+## the body's, host to slots (riders.gd); a host worn on no outside arc draws its
+## beads at the nose, as a toxin worn nowhere rides on the bite. Two riders on one
+## host sit side by side along the skin.
+static func _draw_riders(canvas: CanvasItem, at: Vector2, fwd: Vector2, stb: Vector2,
+		r: float, layout: Array, riders: Dictionary, fade: float, unit: float) -> void:
+	var bead := maxf(r * RIDER_BEAD, RIDER_BEAD_MIN * unit)
+	for host: Variant in riders:
+		var slot := layout.find(host)
+		var bearing := slot_bearing(slot) if slot >= 0 and not Genome.is_inside(slot) \
+			else 0.0
+		var out := fwd * cos(bearing) + stb * sin(bearing)
+		var along := out.orthogonal()
+		var held: Array = []
+		for one: Variant in riders[host]:
+			if one is Array and StringName(one[0]) != &"":
+				held.append(StringName(one[0]))
+		for k in held.size():
+			var spread := (float(k) - float(held.size() - 1) * 0.5) * bead * RIDER_PITCH
+			var seat := at + out * r * RIDER_SEAT + along * spread
+			canvas.draw_circle(seat, bead * RIDER_RIM, Color(RIDER_BACK, RIDER_BACK.a * fade),
+				true, -1.0, true)
+			canvas.draw_circle(seat, bead, Color(hue(held[k]), RIDER_ALPHA * fade), true, -1.0,
+				true)
 
 
 ## **The hue a load of [param kind] is drawn in**: the hue of the organ that

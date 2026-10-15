@@ -54,6 +54,16 @@ const WORDS := {&"trichocyst": "sting"}
 ## `entry` line says which gene.
 ## ROOM: 440 px at 15 px
 const EXPLAINS := {&"trichocyst": "stings whatever touches that side, on its own"}
+## **The line of each of its own slots** (docs/design/gene-sockets.md §2), keyed
+## `host.taken`: what the gene in it does to this one, after the slot's word.
+##
+## TRANSLATORS: What a gene placed in one of another gene's own slots does to that
+## gene, in one line shown after the placed gene's word and a middle dot: "venom ·
+## every sting leaves it too". "It" is the placed gene. Lowercase, plain words, no
+## numbers, no longer than the English: it shares the explanation's line. The
+## `entry` line says which gene's slot, then which gene it takes.
+## ROOM: 440 px at 15 px
+const SOCKET_EXPLAINS := {&"trichocyst.toxin": "every sting leaves it too"}
 
 
 func _init() -> void:
@@ -65,6 +75,11 @@ func _init() -> void:
 	# real spindles -- in defending's orange.
 	family = DEFENDING
 	look = {"shape": SPINES, "shade": 2, "length": 0.32, "tip": Kinds.TIP_SPEAR}
+	# **Its own slot** (gene-sockets.md §3 row 1): a toxin in it, and every sting
+	# leaves the toxin's dose as well -- the venom a bite at the front leaves at the
+	# same copies (toxin.gd's VENOM_STACKS_BY_TIER): a sting is a bite you did not
+	# have to aim. Starting values; balance waits for players.
+	sockets = [{"takes": [&"toxin"], "gives": {&"sting_dose": [0.0, 1.0, 2.0, 3.0]}}]
 
 
 ## **Its numbers on the pause screen** (gene.gd's `lines`): what its sting takes out

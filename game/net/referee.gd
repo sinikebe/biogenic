@@ -39,6 +39,9 @@ const CellBody := preload("res://game/normal/cell.gd")
 ## Neither preloads anything of game/net, so there is no cycle.
 const Catalogue := preload("res://game/genes/catalogue.gd")
 const Stats := preload("res://game/genes/stats.gd")
+## What a guest wears in its genes' own slots, and what is wrong with it
+## (docs/design/gene-sockets.md §6). It preloads only the catalogue.
+const Riders := preload("res://game/genes/riders.gd")
 const FoodField := preload("res://game/normal/food.gd")
 ## The rim's arithmetic (ocean.md §10.5): a guest's body is held inside the
 ## host's drop as everything in it is.
@@ -325,6 +328,9 @@ var worn: Dictionary = {}
 ## call's reach and period are its first radar's in them, as its own run reads them
 ## (stats.gd's `seated`) -- never the best of two.
 var worn_order: Array = []
+## **What [member worn] wears in its genes' own slots** (gene-sockets.md §6), as the
+## guest said them at its new body: fixed for a life.
+var worn_riders: Dictionary = {}
 var _arrival_worn: Dictionary = {}
 var _gift_used := false
 var _stale_until := -INF
@@ -557,7 +563,7 @@ func arrive(now: float, at: Vector2, radius: float) -> Array:
 ## one change a worn body ever makes -- at tier 1, once a body.
 ## Whatever the tiers, every slot must name a gene it wears, once.
 func judge_person(now: float, new_body: bool, tiers: Dictionary, order: Array,
-		present: bool) -> Array:
+		present: bool, riders: Dictionary = {}) -> Array:
 	judged["person"] = int(judged["person"]) + 1
 	if bodies.take(1.0, now) < 1.0:
 		_foul(BODY, WEIGHT_BODY_RATE, "body: more than %d said at once, then %d a second"
@@ -566,6 +572,12 @@ func judge_person(now: float, new_body: bool, tiers: Dictionary, order: Array,
 	if not _order_fits(tiers, order):
 		_foul(BODY, WEIGHT_BODY, "body: its slots name a gene it does not wear, or one"
 			+ " twice", now)
+		return []
+	# **Its genes' own slots, as its slots are** (gene-sockets.md §6): each host worn,
+	# each slot one the host has, each rider one the slot takes, at 1 to 3 copies.
+	var problem := Riders.problem(riders, tiers)
+	if not problem.is_empty():
+		_foul(BODY, WEIGHT_BODY, "body: " + problem, now)
 		return []
 	var fouled := false
 	if new_body:
@@ -576,6 +588,7 @@ func judge_person(now: float, new_body: bool, tiers: Dictionary, order: Array,
 			_reach_before_until = now + SHOUT_PAST
 			worn = tiers.duplicate()
 			worn_order = order.duplicate()
+			worn_riders = Riders.copy(riders)
 			_arrival_worn = worn.duplicate()
 			_gift_used = false
 			_new_shout_rate(now)
@@ -591,6 +604,13 @@ func judge_person(now: float, new_body: bool, tiers: Dictionary, order: Array,
 		_foul(BODY, WEIGHT_BODY, "body: a new one out of turn -- taken as the one it"
 			+ " has", now)
 		fouled = true
+	# **Its riders are fixed for a life**, as what it wears is: only a new body
+	# changes them, and no gift is one.
+	if not Riders.same(riders, worn_riders):
+		if not fouled:
+			_foul(BODY, WEIGHT_BODY, "body: its genes' own slots changed -- kept the old"
+				+ " ones", now)
+		return []
 	if tiers == worn:
 		_reseat(now, order)
 		if _stale(now) and tiers == _arrival_worn:

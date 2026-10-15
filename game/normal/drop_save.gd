@@ -318,7 +318,8 @@ const BEHAVIOURS_VERSION := 1
 ## made of, its layout, the body that expressed, and the mutation that made her
 ## -- empty for the faithful one. **And, since the body plan, `plan`**: the slot
 ## ids her layout is kept under (gene-catalogue.md §10.3), checked when it is
-## there, as the genome's is ([method bad_cell]).
+## there, as the genome's is ([method bad_cell]). **And `riders`**, her DNA's
+## (gene-sockets.md §7), absent from a file kept before them.
 const DAUGHTER := {
 	"tiers": TYPE_DICTIONARY,
 	"order": TYPE_PACKED_STRING_ARRAY,
@@ -682,7 +683,35 @@ static func _bad_bodies(drop: Dictionary) -> String:
 		bad = _bad_behaviour(drop, bodies, n)
 	if bad.is_empty():
 		bad = _bad_doses(bodies, n)
+	if bad.is_empty():
+		bad = _bad_riders(bodies, n)
 	return bad
+
+
+## **What `drop.bodies` may also hold** (docs/design/gene-sockets.md §7): every
+## body's riders, the worn and the DNA's, each riders as a file keeps them -- empty
+## for none, which is most of the water. A file without them has none anywhere.
+const RIDERS := {
+	"riders": TYPE_ARRAY,
+	"dna_riders": TYPE_ARRAY,
+}
+
+
+## The riders' columns, when they are there: each an array, one entry a body, and
+## every entry riders by name ([method is_riders]).
+static func _bad_riders(bodies: Dictionary, n: int) -> String:
+	for key: String in RIDERS:
+		if not bodies.has(key):
+			continue
+		if typeof(bodies[key]) != int(RIDERS[key]):
+			return "drop.bodies.%s is the wrong type" % key
+		if (bodies[key] as Array).size() != n:
+			return "drop.bodies.%s has %d entries for %d bodies" % [key,
+				(bodies[key] as Array).size(), n]
+		for one: Variant in bodies[key]:
+			if not is_riders(one):
+				return "a body's %s is not hosts to their slots" % key
+	return ""
 
 
 ## What the toxin's doses added, when it is there: each column the type it says,
@@ -853,7 +882,8 @@ static func bad_cell(cell: Dictionary, at := "cell.") -> String:
 	for one: Variant in pair:
 		if not one is Dictionary or not misfit(one, DAUGHTER).is_empty() \
 				or not _is_genes(one["tiers"]) or not _is_genes(one["body"]) \
-				or (one.has("plan") and not BodyPlan.is_stamp(one["plan"])):
+				or (one.has("plan") and not BodyPlan.is_stamp(one["plan"])) \
+				or (one.has("riders") and not is_riders(one["riders"])):
 			return at + "daughters is not two daughters by gene name"
 	var genome: Dictionary = cell["genome"]
 	if not _is_genes(genome["dna"]) or not _is_genes(genome["body"]):
@@ -864,6 +894,11 @@ static func bad_cell(cell: Dictionary, at := "cell.") -> String:
 	# checked key by key, and a key it does not name is not looked at.
 	if genome.has("plan") and not BodyPlan.is_stamp(genome["plan"]):
 		return at + "genome.plan is not slot ids"
+	# **The genes in genes' own slots** (gene-sockets.md §7), the DNA's and the
+	# body's: absent from a file kept before them, which had none.
+	for key: String in ["riders", "body_riders"]:
+		if genome.has(key) and not is_riders(genome[key]):
+			return at + "genome.%s is not hosts to their slots" % key
 	for one: Variant in genome["waiting"]:
 		if not one is Array or (one as Array).size() != 3 \
 				or typeof(one[0]) != TYPE_STRING or typeof(one[1]) != TYPE_INT \
@@ -880,6 +915,21 @@ static func bad_cell(cell: Dictionary, at := "cell.") -> String:
 
 
 ## Whether [param value] is a genome as the file keeps one: gene names to tiers.
+## **Whether [param value] is riders as a file keeps them** (riders.gd's
+## `by_name`): host names to their slots, each a rider's name and its copies.
+static func is_riders(value: Variant) -> bool:
+	if not value is Dictionary:
+		return false
+	for host: Variant in value:
+		if typeof(host) != TYPE_STRING or not value[host] is Array:
+			return false
+		for one: Variant in value[host]:
+			if not one is Array or (one as Array).size() != 2 \
+					or typeof(one[0]) != TYPE_STRING or typeof(one[1]) != TYPE_INT:
+				return false
+	return true
+
+
 static func _is_genes(value: Variant) -> bool:
 	if not value is Dictionary:
 		return false

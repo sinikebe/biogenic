@@ -437,14 +437,14 @@ func _check_hint_row() -> void:
 
 
 ## **The names of the word tables the catalogue reads out of an organ's file**: its
-## KEY_WORDS, WAY_WORDS and PART_WORDS. Empty when the catalogue will not load, which
+## KEY_WORDS, WAY_WORDS, PART_WORDS and SOCKET_WORDS. Empty when the catalogue will not load, which
 ## leaves every organ's table unnamed, and so a problem: words nobody can show.
 func _catalogue_tables() -> Dictionary:
 	var out := {}
 	var catalogue := _script("catalogue")
 	if catalogue == null:
 		return out
-	for table: String in ["KEY_WORDS", "WAY_WORDS", "PART_WORDS"]:
+	for table: String in ["KEY_WORDS", "WAY_WORDS", "PART_WORDS", "SOCKET_WORDS"]:
 		var names: Variant = _script_const(catalogue, table)
 		if names is Dictionary:
 			for name: Variant in names:

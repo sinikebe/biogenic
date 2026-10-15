@@ -51,6 +51,12 @@ letters `a-z` and permanent once shipped.
   `controls.lever(&"<part>")` of a lever, and a tap gets its line in `cell.gd`'s
   `_tap`. README, "An organ on mechanics the game has", step 3;
   docs/design/gene-controls.md §2.
+- **Slots of its own**, for another gene to change it: `sockets` in its file, each
+  `{"takes": [organ], "gives": {gift: table by the rider's copies}}`, a
+  `SOCKET_EXPLAINS` line keyed `host.taken`, the host's mechanic reading the gift by
+  name (`Riders.value`, `Riders.through`), and the gift in the gene probe's
+  `READ_GIFTS`. Moves `Wire.RULES`. README, "An organ on mechanics the game has",
+  step 4; docs/design/gene-sockets.md §2.
 - **A new mechanic**: the mechanic, reading stats by name; its rows in `stats.gd`
   (`none`, `better`, `combine`, `unit`, `judged`, `contact`, `group`); `SEATED` for one
   that acts from a place, which then takes every number it uses -- its stats through

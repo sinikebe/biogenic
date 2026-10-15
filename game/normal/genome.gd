@@ -43,6 +43,9 @@ const Progression := preload("res://game/mechanics/progression.gd")
 ## its tags and its numbers, by key. Every rule here is generic and asks it.
 const Catalogue := preload("res://game/genes/catalogue.gd")
 const Stats := preload("res://game/genes/stats.gd")
+## The genes in genes' own slots, and every question asked of them
+## (docs/design/gene-sockets.md). It preloads only the catalogue.
+const Riders := preload("res://game/genes/riders.gd")
 ## **The body plan** (docs/design/gene-catalogue.md §10): every slot, its place and
 ## its anatomy, and the home seats. It preloads nothing.
 const BodyPlan := preload("res://game/genes/body_plan.gd")
@@ -340,6 +343,19 @@ var _gift: StringName = &""
 ## foul. Beside it, nothing another machine can see changes (§6).
 var _levels := {}
 
+## **The DNA's riders** (docs/design/gene-sockets.md §4): host to its own slots, as
+## riders.gd keeps them -- the genes the player placed in a gene's slots, for the
+## daughters, as [member _dna] is. A host the DNA no longer carries takes its riders
+## with it ([method _tend_riders]).
+##
+## **Never in [member _dna]**, and that is load-bearing: a rider is no gene of the
+## body's, so nothing that reads a `{gene: tier}` map -- stats, controls, instincts,
+## what eating this cell gives, the wire's tiers -- may see one.
+var _riders := {}
+## **The body's riders**, fixed at birth as [member _body] is: what of
+## [member _riders] it wears, which is every rider whose host it wears.
+var _body_riders := {}
+
 var _cell: CellBody = null
 
 
@@ -394,8 +410,15 @@ func reset() -> void:
 ## `null` -- a death, a forced genome, the replay -- every levelled gene starts
 ## at level 1. Copied before anything is replaced, so passing this genome's own
 ## [method levels] is safe.
+##
+## [param riders] is **the DNA's riders** (docs/design/gene-sockets.md §4), as
+## [method riders] returns them: a birth passes her mother's DNA's, which she keeps
+## for every host her own DNA carries. [param body_riders] is **what the body
+## wears of them**, passed only by a save and the replay; left `null`, the body
+## wears every rider whose host it wears. Both copied. `null` for none.
 func express(dna: Dictionary, order: Array, body: Variant = null,
-		worn: Variant = null, levels: Variant = null) -> void:
+		worn: Variant = null, levels: Variant = null, riders: Variant = null,
+		body_riders: Variant = null) -> void:
 	var inherited := {}
 	if levels != null:
 		for gene: Variant in (levels as Dictionary):
@@ -431,6 +454,13 @@ func express(dna: Dictionary, order: Array, body: Variant = null,
 	# normal_mode.gd's `_be_born()` hands it over through [method carry].
 	_waiting.clear()
 	_levels = inherited
+	# **The riders, as the two registers are** (gene-sockets.md §4): the DNA's for
+	# the hosts it carries, and the body's -- passed only by a save and the replay,
+	# which restore a body that may have since parted from its DNA -- or, at a
+	# birth, every rider whose host the body wears.
+	_riders = Riders.kept(Riders.copy(riders), _dna)
+	_body_riders = Riders.kept(Riders.copy(body_riders) if body_riders != null
+		else _riders, _body)
 	_tend_levels()
 	_sync_order()
 	body_version += 1
@@ -566,6 +596,12 @@ func _lapse(waiting: Waiting) -> void:
 			return
 	if has_forms(waiting.gene):
 		_lapse_form(waiting)
+		return
+	# **A gene the DNA carries waited only for a slot of a gene's own** (gene-sockets.md
+	# §4), which only the player's hand fills: left to lapse, it is the copy more it
+	# would have been at the meal, room or none.
+	if _dna.has(waiting.gene):
+		_settle(waiting, -1)
 		return
 	var free := _first_free()
 	if free < 0 and waiting.gene == _gift and slots() < CellBody.SLOT_MAX:
@@ -740,6 +776,19 @@ func dna_tier(gene: StringName) -> int:
 	return int(_dna.get(gene, 0))
 
 
+## **The DNA's riders** (docs/design/gene-sockets.md), host to its slots, as
+## riders.gd keeps them. Read it; do not write it -- [method place_rider] is the one
+## thing allowed to.
+func riders() -> Dictionary:
+	return _riders
+
+
+## **The body's riders**: what it wears in its genes' own slots, fixed at birth.
+## What a host's mechanic reads its slots' gifts off (riders.gd's `value`).
+func body_riders() -> Dictionary:
+	return _body_riders
+
+
 ## How many slots the body can carry right now. The arithmetic lives in cell.gd
 ## next to the radius it is made of; this is the accessor everything else uses.
 func slots() -> int:
@@ -763,14 +812,15 @@ func filled() -> int:
 ## §5). Copies stopped buying strength, so they stopped costing anything: what
 ## the body pays for its beam is the beam it actually has.
 func upkeep() -> float:
-	return upkeep_with_levels(_body, _levels)
+	return upkeep_with_levels(_body, _levels, _body_riders)
 
 
 ## **[method upkeep] from plain values** (docs/design/cells.md §6.5): the body
 ## [param body], gene to tier, and the lineage's [param levels], gene to
 ## progression -- so a screen that shows a cell from its file prices it as the
 ## run does, without a genome.
-static func upkeep_with_levels(body: Dictionary, levels: Dictionary) -> float:
+static func upkeep_with_levels(body: Dictionary, levels: Dictionary,
+		riders: Dictionary = {}) -> float:
 	var priced := {}
 	for gene: StringName in levels:
 		if not body.has(gene):
@@ -780,7 +830,7 @@ static func upkeep_with_levels(body: Dictionary, levels: Dictionary) -> float:
 		var cost := CellBody.levelled_upkeep(gene, at, grown.path)
 		priced[gene] = cost if cost >= 0.0 \
 			else UPKEEP_PER_TIER * float(maxi(at - 1, 0))
-	return upkeep_of(body, priced)
+	return upkeep_of(body, priced, riders)
 
 
 # --- Levels (docs/design/beam-levels.md) ------------------------------------
@@ -878,6 +928,9 @@ func restore_levels(state: Dictionary) -> void:
 ## waiting gene with its copies and the seconds it has left, and the lineage's
 ## levels. A gene this build does not know is kept by the name it has.
 ##
+## **And the riders** (docs/design/gene-sockets.md §7), the DNA's and the body's,
+## which a file before them has none of.
+##
 ## **And `plan`, the body plan's slot ids by index** (gene-catalogue.md §10.3),
 ## which the two layouts are kept under: a build on another plan puts each gene
 ## back in its slot by id ([method layout_from]). A file before it has none, and
@@ -900,6 +953,8 @@ func to_state() -> Dictionary:
 		"gift": String(_gift),
 		"waiting": waiting,
 		"levels": levels,
+		"riders": Riders.by_name(_riders),
+		"body_riders": Riders.by_name(_body_riders),
 	}
 
 
@@ -910,7 +965,8 @@ func to_state() -> Dictionary:
 func set_state(state: Dictionary) -> void:
 	var order := layout_from(state["order"], state.get("plan"))
 	var worn := layout_from(state["worn"], state.get("plan"))
-	express(tiers_from_names(state["dna"]), order, tiers_from_names(state["body"]), worn)
+	express(tiers_from_names(state["dna"]), order, tiers_from_names(state["body"]), worn,
+		null, state.get("riders"), state.get("body_riders"))
 	restore_levels(state["levels"])
 	bonus_slots = int(state["bonus"])
 	_gift = StringName(state["gift"])
@@ -960,6 +1016,16 @@ func _tend_levels() -> void:
 	for gene: StringName in _levels.keys():
 		if not _dna.has(gene) and not _body.has(gene):
 			_levels.erase(gene)
+	_tend_riders()
+
+
+## **Keeps the riders in step with the two registers**, tended wherever the levels
+## are: a host the DNA no longer carries -- written over, drifted away -- takes its
+## riders out of [member _riders], as it takes itself (gene-sockets.md §4), and the
+## body's keep only the hosts it wears.
+func _tend_riders() -> void:
+	_riders = Riders.kept(_riders, _dna)
+	_body_riders = Riders.kept(_body_riders, _body)
 
 
 ## **A fresh progression for [param gene]**, at level 1, by the rules its organ
@@ -994,17 +1060,25 @@ func dominant() -> StringName:
 ## the poison or become a venom. That decision is the placement, the owner's
 ## *"put its genes how he wants to"*. It is food alone only when every form of it
 ## is carried at three copies already.
+##
+## **And a gene one of the DNA's genes has a slot for** (docs/design/gene-sockets.md
+## §4): an empty slot that takes it, or one that holds it below three copies. Raising
+## the body's copy would be making the choice for the player; it waits instead, and
+## left to lapse it is that copy after all ([method _lapse]).
 func integrate(gene: StringName) -> int:
 	if gene == &"":
 		return Result.NOTHING
+	var slot_room := not Riders.room_for(_riders, _dna, gene).is_empty()
 	if has_forms(gene):
-		var room := false
+		var room := slot_room
 		for form: StringName in forms_of(gene):
 			if int(_dna.get(form, 0)) < TIER_MAX:
 				room = true
 				break
 		if not room:
 			return Result.SATURATED
+		return _hold(gene)
+	if slot_room:
 		return _hold(gene)
 	if _dna.has(gene):
 		var value := int(_dna[gene])
@@ -1106,6 +1180,47 @@ func placing(gene: StringName, slot: int) -> Array:
 			dna_slot(form), &""]
 	var over := _other_strains(form)
 	return [PLACE_WRITE, slot, _slot_gene(over[0]) if not over.is_empty() else &""]
+
+
+## **A waiting gene into slot [param socket] of [param host]** (docs/design/
+## gene-sockets.md §4), a gene the DNA carries: into an empty slot, over the rider
+## there -- which is lost, as a gene written over is -- or, the same rider, as more
+## of its copies. [param which] is the waiting gene's place in the queue, as for
+## [method place]. A gene that does not fit, or a slot full of it already, is
+## refused and keeps waiting: [constant Result.NOTHING].
+##
+## **The DNA's, for the daughters**, as every placement is: the body keeps what it
+## was born wearing. The gift placed here is no gift any more -- it is the player's
+## gene to put where they like, and a slot is not the body.
+func place_rider(host: StringName, socket: int, which: int = 0) -> int:
+	if which < 0 or which >= _waiting.size() or not _dna.has(host):
+		return Result.NOTHING
+	var waiting := _waiting[which]
+	var done := Riders.put(_riders, host, socket, waiting.gene, waiting.copies)
+	if done == Riders.Put.NOTHING:
+		return Result.NOTHING
+	_waiting.remove_at(which)
+	if waiting.gene == _gift:
+		_gift = &""
+	return Result.RAISED if done == Riders.Put.RAISED else Result.INTEGRATED
+
+
+## **What a second tap on slot [param socket] of [param host] would do with the
+## waiting [param gene]**, as `[what, over]`: [constant PLACE_WRITE] into it, over
+## the rider `over` (`&""` for an empty slot); [constant PLACE_RAISE], more copies of
+## the rider there; [constant PLACE_FULL], that rider at three copies already;
+## [constant PLACE_FACES_OUT], a gene the slot does not take. The slot view's armed
+## preview, its line and its guard all ask this, as the ring asks [method placing].
+func placing_rider(gene: StringName, host: StringName, socket: int) -> Array:
+	var there := Riders.rider_at(_riders, host, socket)
+	if not _dna.has(host) or not Catalogue.fits(host, socket, gene):
+		return [PLACE_FACES_OUT, &""]
+	match Riders.putting(_riders, host, socket, gene):
+		Riders.Put.RAISED:
+			return [PLACE_RAISE, there]
+		Riders.Put.NOTHING:
+			return [PLACE_FULL, there]
+	return [PLACE_WRITE, there]
 
 
 ## **Where the DNA carries [param form]**: its outside slot, the inside slot that
@@ -1434,8 +1549,13 @@ static func tier_of(tiers: Dictionary, gene: StringName) -> int:
 ## whose price is not its copies -- a levelled one, priced by its level. Every
 ## other gene pays `UPKEEP_PER_TIER` for each tier above the first, as it always
 ## has. Empty for every cell in the water, which has no levels.
-static func upkeep_of(tiers: Dictionary, priced: Dictionary = {}) -> float:
-	var extra := 0
+##
+## [param riders] are **the body's riders** (docs/design/gene-sockets.md §4), which
+## cost what genes cost: nothing for the first copy, `UPKEEP_PER_TIER` for each one
+## after. Their own organs buy nothing back: a burn in a slot is no burn of the body's.
+static func upkeep_of(tiers: Dictionary, priced: Dictionary = {},
+		riders: Dictionary = {}) -> float:
+	var extra := Riders.extra_copies(riders)
 	var levelled := 0.0
 	for gene: Variant in tiers:
 		if priced.has(gene):

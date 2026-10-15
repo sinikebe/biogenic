@@ -160,6 +160,17 @@ msgstr ""
 msgid "holding on pushes you, instead of only steering"
 msgstr ""
 
+#. What a gene placed in one of another gene's own slots does to that gene, in
+#. one line shown after the placed gene's word and a middle dot: "venom ·
+#. every sting leaves it too". "It" is the placed gene. Lowercase, plain
+#. words, no numbers, no longer than the English: it shares the explanation's
+#. line. The `entry` line says which gene's slot, then which gene it takes.
+#. entry: axoneme.crista
+#. Room: at most 440 px in 15 px type; the English takes 202 px.
+#: game/genes/organs/axoneme.gd
+msgid "your push costs less hunger"
+msgstr ""
+
 #. Explains one sense, action or value of the player's "instincts", on one
 #. line under them: its name (the same words as on its chip), a middle dot,
 #. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
@@ -386,6 +397,17 @@ msgstr ""
 msgid "a wider mouth swallows bigger things whole"
 msgstr ""
 
+#. What a gene placed in one of another gene's own slots does to that gene, in
+#. one line shown after the placed gene's word and a middle dot: "venom ·
+#. every sting leaves it too". "It" is the placed gene. Lowercase, plain
+#. words, no numbers, no longer than the English: it shares the explanation's
+#. line. The `entry` line says which gene's slot, then which gene it takes.
+#. entry: cytostome.toxin
+#. Room: at most 440 px in 15 px type; the English takes 164 px.
+#: game/genes/organs/cytostome.gd
+msgid "every bite leaves it too"
+msgstr ""
+
 #. The mouth gene (`cytostome`, shown as `eat`). "Its biggest meal" is the
 #. largest body this mouth can swallow; "worth {} s" is how many seconds of
 #. food it gives the cell. "Your size" is the cell's own size. "Head-on" is
@@ -466,6 +488,17 @@ msgstr ""
 #. Room: at most 440 px in 15 px type; the English takes 278 px.
 #: game/genes/organs/flagellum.gd
 msgid "your tail beats harder, and more often"
+msgstr ""
+
+#. What a gene placed in one of another gene's own slots does to that gene, in
+#. one line shown after the placed gene's word and a middle dot: "venom ·
+#. every sting leaves it too". "It" is the placed gene. Lowercase, plain
+#. words, no numbers, no longer than the English: it shares the explanation's
+#. line. The `entry` line says which gene's slot, then which gene it takes.
+#. entry: flagellum.crista
+#. Room: at most 440 px in 15 px type; the English takes 189 px.
+#: game/genes/organs/flagellum.gd
+msgid "your tail costs less hunger"
 msgstr ""
 
 #. The name of an action the player's cell can be told to do by one of its
@@ -636,6 +669,17 @@ msgstr ""
 #. Room: at most 440 px in 15 px type; the English takes 308 px.
 #: game/genes/organs/myoneme.gd
 msgid "tap for a burst of speed, paid for in hunger"
+msgstr ""
+
+#. What a gene placed in one of another gene's own slots does to that gene, in
+#. one line shown after the placed gene's word and a middle dot: "venom ·
+#. every sting leaves it too". "It" is the placed gene. Lowercase, plain
+#. words, no numbers, no longer than the English: it shares the explanation's
+#. line. The `entry` line says which gene's slot, then which gene it takes.
+#. entry: myoneme.crista
+#. Room: at most 440 px in 15 px type; the English takes 201 px.
+#: game/genes/organs/myoneme.gd
+msgid "your dash costs less hunger"
 msgstr ""
 
 #. Explains one sense, action or value of the player's "instincts", on one
@@ -1366,6 +1410,17 @@ msgstr ""
 #. Room: at most 440 px in 15 px type; the English takes 327 px.
 #: game/genes/organs/trichocyst.gd
 msgid "stings whatever touches that side, on its own"
+msgstr ""
+
+#. What a gene placed in one of another gene's own slots does to that gene, in
+#. one line shown after the placed gene's word and a middle dot: "venom ·
+#. every sting leaves it too". "It" is the placed gene. Lowercase, plain
+#. words, no numbers, no longer than the English: it shares the explanation's
+#. line. The `entry` line says which gene's slot, then which gene it takes.
+#. entry: trichocyst.toxin
+#. Room: at most 440 px in 15 px type; the English takes 171 px.
+#: game/genes/organs/trichocyst.gd
+msgid "every sting leaves it too"
 msgstr ""
 
 #. The sting gene (`trichocyst`, shown as `sting`): whatever touches that side
@@ -3307,6 +3362,14 @@ msgstr ""
 msgid "genome · %s"
 msgstr ""
 
+#. The chip in the corner of a gene's own slots, on the pause screen: it goes
+#. back to the whole genome, the ring of slots round the cell. Keep the arrow
+#. on its left, as on "‹ programs". Lowercase.
+#. Room: at most 88 px in 15 px type; the English takes 68 px.
+#: game/normal/figure.gd
+msgid "‹ genome"
+msgstr ""
+
 #. How many copies of a gene the cell's DNA holds, in words, at the start of
 #. the odds line ("one copy · 55% of daughters wear it"). One to three; the
 #. numbers are spelled out on purpose.
@@ -3704,6 +3767,83 @@ msgstr ""
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "tap again to choose how %s grows"
+msgstr ""
+
+#. Some genes have small slots of their own, where another gene can be placed
+#. to change them. %s is the short word of the gene that has them, such as
+#. `sting`.
+#. Room: at most 560 px in 14 px type, measured with your widest gene word in
+#. place of the placeholders; the English takes 214 px.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "tap again to open %s's slots"
+msgstr ""
+
+#. The same, while the player holds a waiting gene that fits one of those
+#. slots. The first %s is the word of the gene with the slots (`sting`), the
+#. second the waiting gene's (`toxin`). Keep both, in this order.
+#. Room: at most 560 px in 14 px type, measured with your widest gene word and
+#. your second widest in place of the placeholders; the English takes 296 px.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "tap again to open %s's slots · %s fits"
+msgstr ""
+
+#. In the view of a gene's own slots, with a waiting gene in hand and no slot
+#. chosen yet: the slots that would take it are lit. %s is the waiting gene's
+#. word, such as `toxin`.
+#. Room: at most 560 px in 14 px type, measured with your widest gene word in
+#. place of the placeholders; the English takes 204 px.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "tap a lit slot to put %s in it"
+msgstr ""
+
+#. In the view of a gene's own slots, when none of them takes the waiting
+#. gene. The first %s is the word of the gene whose slots these are (`sting`),
+#. the second the waiting gene's (`ping`). Keep both, in this order.
+#. Room: at most 560 px in 14 px type, measured with your widest gene word and
+#. your second widest in place of the placeholders; the English takes 203 px.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "no slot of %s takes %s"
+msgstr ""
+
+#. A slot of a gene's own is chosen that does not take the waiting gene. %s is
+#. the word of the gene the slot does take, such as `venom`.
+#. Room: at most 560 px in 14 px type, measured with your widest gene word in
+#. place of the placeholders; the English takes 144 px.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "this slot takes %s"
+msgstr ""
+
+#. An empty slot of a gene's own is chosen with a waiting gene in hand, and a
+#. second tap places it. The first %s is the waiting gene's word as it would
+#. be in the slot (`venom`), the second the word of the gene whose slot it is
+#. (`sting`). Keep both, in this order.
+#. Room: at most 560 px in 14 px type, measured with your widest gene word and
+#. your second widest in place of the placeholders; the English takes 262 px.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "tap again to put %s in %s's slot"
+msgstr ""
+
+#. The hint under a gene placed in one of another gene's own slots: a daughter
+#. cell wears it whenever she wears that gene. %s is the word of the gene
+#. whose slot it is (`sting`). The rarity word of the placed gene starts the
+#. row.
+#. Room: at most 470 px in 14 px type, measured with your widest gene word in
+#. place of the placeholders; the English takes 324 px.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "a daughter wears it whenever she wears %s"
+msgstr ""
+
+#. The hint under an empty slot of a gene's own.
+#. Room: at most 470 px in 14 px type; the English takes 151 px.
+#: game/normal/normal_mode.gd
+msgid "nothing in this slot yet"
 msgstr ""
 
 #. While a toxin is waiting and no slot is chosen: tapping a slot round the

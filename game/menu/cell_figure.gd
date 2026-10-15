@@ -30,6 +30,8 @@ const Cilia := preload("res://game/vision/cilia.gd")
 const Progression := preload("res://game/mechanics/progression.gd")
 const Metabolism := preload("res://game/normal/metabolism.gd")
 const FoodField := preload("res://game/normal/food.gd")
+## The genes in genes' own slots (docs/design/gene-sockets.md).
+const Riders := preload("res://game/genes/riders.gd")
 ## For the `numbers` switch's one remembered preference.
 const RunState := preload("res://game/run_state.gd")
 
@@ -87,6 +89,10 @@ var _tiers := {}
 var _worn: Array[StringName] = []
 var _levels := {}
 var _waiting: Array = []
+## **Its genes' own slots** (docs/design/gene-sockets.md §7), the DNA's -- the chips'
+## ports -- and the body's -- its beads, and their upkeep.
+var _riders := {}
+var _body_riders := {}
 var _forks: Array[StringName] = []
 var _radius := CellBody.BASE_RADIUS
 var _generation := 1
@@ -287,6 +293,8 @@ func show_cell(cell: Dictionary, record: bool) -> void:
 	var genome: Dictionary = cell.get("genome", {})
 	_dna = GenomeNode.tiers_from_names(genome.get("dna", {}))
 	_tiers = GenomeNode.tiers_from_names(genome.get("body", {}))
+	_riders = Riders.kept(Riders.copy(genome.get("riders", {})), _dna)
+	_body_riders = Riders.kept(Riders.copy(genome.get("body_riders", {})), _tiers)
 	# Both layouts on the body plan in use, each gene in its slot by id
 	# (gene-catalogue.md §10.3), as the cell would load.
 	_worn.assign(GenomeNode.layout_from(genome.get("worn", PackedStringArray()),
@@ -382,7 +390,7 @@ func _rebuild() -> void:
 ## odds, for the slot being read.
 func _say() -> void:
 	_caption.text = Figure.caption(_generation, _show_numbers, _radius, _tiers,
-		GenomeNode.upkeep_with_levels(_tiers, _levels))
+		GenomeNode.upkeep_with_levels(_tiers, _levels, _body_riders))
 	_numbers.visible = _show_numbers
 	_update_explain()
 	_update_hint()
@@ -591,7 +599,7 @@ func _path_of(gene: StringName) -> StringName:
 func _draw_body() -> void:
 	if _genes.is_empty():
 		return
-	Figure.draw_body(_body, _tiers, _worn, _genes, _live, _slack, _felt)
+	Figure.draw_body(_body, _tiers, _worn, _genes, _live, _slack, _felt, _body_riders)
 	var slot := _reading()
 	if _live_at(slot):
 		Figure.draw_mark(_body, slot, _gene_at(slot))
@@ -602,10 +610,15 @@ func _draw_chip(node: Control, slot: int) -> void:
 	var copies := int(_dna.get(gene, 0))
 	var worn := mini(int(_tiers.get(gene, 0)), copies)
 	var grown: Progression = _levels.get(gene, null) as Progression if gene != &"" else null
+	# Its gene's own slots as ports, none lit: nothing is in hand on a cell at rest.
+	var ports: Array = []
+	for k in Catalogue.sockets(gene).size():
+		ports.append([Riders.rider_at(_riders, gene, k), Color(0.0, 0.0, 0.0, 0.0)])
 	Figure.draw_chip(node, slot, gene, copies, worn,
 		Cilia.hue(gene) if gene != &"" else Figure.PALE,
 		grown.level() if grown != null else 0,
-		grown != null and grown.can_choose(), _selected == slot)
+		grown != null and grown.can_choose(), _selected == slot, false, false, &"", 0,
+		Figure.GHOST_INK, ports)
 
 
 func _draw_organ() -> void:

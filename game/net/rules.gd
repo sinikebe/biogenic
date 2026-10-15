@@ -55,7 +55,9 @@ extends RefCounted
 ##    the names they have where they are defined;
 ## 3. the contact rules no table holds: the bite's gap and flank, `bite_damage`, the
 ##    doses' constants, and the sting's arc, touch and limit, by sample where a rule
-##    is a function;
+##    is a function -- and **every gene's own slots** (docs/design/gene-sockets.md
+##    §6), what each takes and gives, by key, and the most a gene has, which the
+##    referee holds a guest to;
 ## 4. the referee's own limits ([constant REFEREE_LIMITS]);
 ## 5. the body plan's fingerprint (body_plan.gd), so builds on other plans -- other
 ##    slot counts, other arcs -- refuse each other too.
@@ -129,6 +131,7 @@ const REFEREE_NOT_LIMITS := {
 	"Stats": "a script it loads: every table it reads is a line above",
 	"FoodField": "a script it loads: the grace and the names of contacts are above",
 	"Basin": "a script it loads: the rim's arithmetic, sampled above",
+	"Riders": "a script it loads: every gene's own slots are lines above",
 	"MOVE": "a rule's name, as the log and the tools say it: it judges nothing",
 	"TURN": "a rule's name, as the log and the tools say it: it judges nothing",
 	"SIZE": "a rule's name, as the log and the tools say it: it judges nothing",
@@ -242,6 +245,13 @@ static func text() -> String:
 	put.call("cell.DART_ARC_DEG", CellBody.DART_ARC_DEG)
 	put.call("cell.STING_TOUCH", CellBody.STING_TOUCH)
 	put.call("cell.STING_MOST", CellBody.STING_MOST)
+	# **A gene's own slots** (gene-sockets.md §6): a sting's dose and a bite's ride on
+	# what is in them, and the referee judges what a guest says is there.
+	put.call("catalogue.SOCKETS_MAX", Catalogue.SOCKETS_MAX)
+	for key: StringName in Catalogue.keys():
+		var all := Catalogue.sockets(key)
+		for k in all.size():
+			put.call("socket.%s.%d" % [key, k], all[k])
 	# 4. The referee's own limits.
 	var referee: Dictionary = (Referee as Script).get_script_constant_map()
 	for name: String in REFEREE_LIMITS:

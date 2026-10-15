@@ -286,6 +286,12 @@ extends Node
 ##                           1 starboard flank, 2 astern, 3 and 4 the forward
 ##                           diagonals, 5 and 6 the rear ones. That is how a
 ##                           beam gets aimed.
+##   --riders=<host:slot:g:copies,...>
+##                           pose genes in genes' own slots (docs/design/
+##                           gene-sockets.md), e.g. trichocyst:0:toxicyst:2 for a
+##                           sting with venom at two copies in its slot: into the
+##                           DNA, and the body for a host it wears. Applied after
+##                           --genome=, --dna= and --body=.
 ##   --level=<g:level[:path],...>
 ##                           pose a levelled gene's level and the path it took
 ##                           at its fork (docs/design/beam-levels.md), e.g.
@@ -722,6 +728,8 @@ const Catalogue := preload("res://game/genes/catalogue.gd")
 const Stats := preload("res://game/genes/stats.gd")
 ## For places and forms: the inside slot, and what a gene becomes there.
 const GenomeNode := preload("res://game/normal/genome.gd")
+## The genes in genes' own slots (docs/design/gene-sockets.md), for --riders=.
+const Riders := preload("res://game/genes/riders.gd")
 ## Only for `MEAL`, so the `[meal]` line says how much of the bar a meal gave
 ## back at whatever the meal is worth.
 const Metabolism := preload("res://game/normal/metabolism.gd")
@@ -857,6 +865,7 @@ var _sister_radius := 0.0
 var _genome_spec := ""
 var _dna_spec := ""
 var _body_spec := ""
+var _riders_spec := ""
 var _level_spec := ""
 ## --earn=: [[seconds, gene, xp], ...], consumed as the clock passes each one.
 var _earns: Array = []
@@ -1274,6 +1283,8 @@ func _ready() -> void:
 					float(earn[2])])
 		elif text.begins_with("--body="):
 			_body_spec = text.trim_prefix("--body=")
+		elif text.begins_with("--riders="):
+			_riders_spec = text.trim_prefix("--riders=")
 		elif text.begins_with("--check-seeding="):
 			_check_seeding = int(text.trim_prefix("--check-seeding="))
 		elif text.begins_with("--cell="):
@@ -1592,6 +1603,8 @@ func _ready() -> void:
 	# levels are put back in step with them before anything reads a level.
 	if (_dna_spec != "" or _body_spec != "") and _genome != null:
 		_genome.call("_tend_levels")
+	if _riders_spec != "" and _genome != null:
+		_force_riders(_riders_spec)
 	if _level_spec != "" and _genome != null:
 		_force_levels(_level_spec)
 	if _sample != &"" and _genome != null:
@@ -4097,6 +4110,27 @@ func _force_body(spec: String) -> void:
 	_genome.set("_body_slots", seats)
 	print("[drive] body forced to %s at %s (dna stays %s)" % [
 		_genome_text(tiers), seats, _genome_text(_genome.dna())])
+
+
+## **Genes in genes' own slots, posed** (docs/design/gene-sockets.md):
+## `host:slot:gene:copies`, into the DNA's riders and, for a host the body wears,
+## the body's -- through riders.gd's own `put`, so a gene a slot does not take is
+## refused here as the pause screen refuses it.
+func _force_riders(spec: String) -> void:
+	var riders := {}
+	for one in spec.split(",", false):
+		var bits := str(one).split(":")
+		if bits.size() < 4:
+			print("[drive] --riders= needs host:slot:gene:copies, not %s" % one)
+			continue
+		if Riders.put(riders, StringName(bits[0].strip_edges()), int(bits[1]),
+				StringName(bits[2].strip_edges()), int(bits[3])) == Riders.Put.NOTHING:
+			print("[drive] --riders=: %s does not fit" % one)
+	_genome.set("_riders", Riders.kept(riders, _genome.dna()))
+	_genome.set("_body_riders", Riders.kept(riders, _genome.tiers()))
+	_genome.body_version += 1
+	print("[drive] riders forced to %s (worn %s)" % [Riders.by_name(_genome.riders()),
+		Riders.by_name(_genome.body_riders())])
 
 
 ## **A level and a path, posed** (beam-levels.md): `gene:level[:path]`. The
