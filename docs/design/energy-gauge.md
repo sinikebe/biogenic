@@ -14,7 +14,7 @@ fast it is going.
 
 ## 1. What it says
 
-- **Storage**: how much is in the tank, of how much it holds. `27 / 36`.
+- **Storage**: how much is in the tank, of how much it holds. `67 / 72`.
 - **Consumption rate**: how much goes out a second. `−1.4/s`.
 - **The next five seconds**, on the bar itself: the end of the fill that the rate
   will take in five seconds, struck through with stripes. At a glance, a long
@@ -25,9 +25,10 @@ fast it is going.
 
 **The unit is the one every cost is already paid in**: seconds of rest, how long a
 born cell doing nothing takes to burn as much (energy.md §1.1). A born cell's tank
-holds 36, and a cell at rest burns 1.0 a second. So the gauge agrees with the pause
-screen's numbers (`a full tank: 36 s`, `wearing it burns 0.09 s a second`, `each
-dash burns 2.2 s`). A bigger `vacuole` tank is a bigger second number, and a
+holds 72 since it doubled (energy.md §9; 36 when the gauge was built), and a cell
+at rest burns 1.0 a second. So the gauge agrees with the pause screen's numbers
+(`a full tank: 72 s`, `wearing it burns 0.09 s a second`, `each dash burns
+2.2 s`). A bigger `vacuole` tank is a bigger second number, and a
 `plastid` that makes some of its own is a smaller rate.
 
 ## 2. How it looks
@@ -76,18 +77,18 @@ keep the bar bright and say *on its way out*.
 
 | it stands at | colour | when |
 | --- | --- | --- |
-| full | mint, `#66DBB8` | more than half a tank |
-| low | amber, `#F7B852` | under half a tank: metabolism.gd's `HUNGRY_FROM`, where the beat starts to race and the body to crease (hunger.md §3) |
+| full | mint, `#66DBB8` | more than a quarter of the tank left |
+| low | amber, `#F7B852` | under a quarter: metabolism.gd's `HUNGRY_FROM`, twenty seconds from death, where the beat starts to race and the body to crease (hunger.md §3). It was half a tank before the tank doubled (energy.md §9) |
 | out | red, `#F56157` | the tank is empty and the grace is running |
 
 The fill and the bolt take the colour together. Full turns to low over a tenth of
-the bar around the half, so the colour turns as the warning does, without a hard
+the bar around the quarter, so the colour turns as the warning does, without a hard
 step. The colour is never the only signal: the fill's length, the stripes and the
 numbers say the same thing.
 
 ### 2.4 What changes it
 
-- **A lump that falls off stays a moment**: a stroke of the tail (1.3 of 36), a
+- **A lump that falls off stays a moment**: a stroke of the tail (1.3 of 72), a
   dash, venom. Its part of the bar is drawn pale for a quarter of a second, then
   shrinks away. So each beat of the tail can be seen to cost something. The steady
   drain of being alive leaves nothing behind.
@@ -133,7 +134,9 @@ a number read every frame does not change width as it crosses a whole one.
 
 ## 5. Rendered
 
-At 1280 × 720 and 2400 × 1080, in full vision and point of view:
+At 1280 × 720 and 2400 × 1080, in full vision and point of view, on the
+thirty-six-second tank it was built on (since the tank doubled it reads `67 / 72`
+a few seconds in, and turns amber at a quarter):
 
 - a born cell with a two-copy ping, three quarters full: mint, `27 / 36`, `−1.4/s`,
   the striped end about a quarter of the fill;

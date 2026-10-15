@@ -418,11 +418,10 @@ func _energy() -> void:
 		% [turning, pushing], absf(beating - 0.50) < 0.005
 		and absf(turning - 0.81) < 0.005 and absf(pushing - 0.68) < 0.005)
 
-	# The owner's number (energy.md §7): a born cell that never eats, steering a
-	# third of the time, dies at thirty seconds. Being alive, its tail's own
-	# beating and a third of a flat-out turn, then the grace; seeds 1 to 3
-	# measure 30.2 to 30.3 s. Move HUNGER_SECONDS, STARVE_GRACE or a cost and
-	# this says so. **Through the tank's own arithmetic** (ocean.md §14.3): the
+	# The owner's number (energy.md §9): a born cell that never eats, steering a
+	# third of the time, dies at fifty seconds -- the thirty of §7 with the tank
+	# doubled. Being alive, its tail's own beating and a third of a flat-out turn,
+	# then the grace. Move HUNGER_SECONDS, STARVE_GRACE or a cost and this says so. **Through the tank's own arithmetic** (ocean.md §14.3): the
 	# static functions the node and the drop's water both call -- and then the
 	# node itself, a frame at a time, dying at the same moment.
 	var moving := beating + turning / 3.0
@@ -434,14 +433,14 @@ func _energy() -> void:
 	_nodes.append(dying)
 	dying.upkeep = GenomeNode.upkeep_of(Catalogue.born())
 	var frames := 0
-	while not dying.starved() and frames < 3600:
+	while not dying.starved() and frames < 6000:
 		dying.spend(moving / 60.0)
 		dying.call(&"_process", 1.0 / 60.0)
 		frames += 1
 	_check("a born cell that never eats and steers a third of the time dies at %.1f s"
-		% dies_at + " (burning %.2f of rest) -- the owner's thirty; the node, a frame"
-		% steering + " at a time, at %.2f s" % (float(frames) / 60.0),
-		absf(dies_at - 30.0) < 1.0 and absf(float(frames) / 60.0 - dies_at) < 2.0 / 60.0)
+		% dies_at + " (burning %.2f of rest) -- the owner's doubled tank; the node, a"
+		% steering + " frame at a time, at %.2f s" % (float(frames) / 60.0),
+		absf(dies_at - 50.0) < 1.0 and absf(float(frames) / 60.0 - dies_at) < 2.0 / 60.0)
 
 	# The tank: seconds of rest in, a share of the bar out, and the grace is time.
 	var met: Node = Metabolism.new()
@@ -584,12 +583,18 @@ func _alarm() -> void:
 	_check("from fed to the end of the grace the beat never once slows", never_slower)
 
 	met.reset()
-	met.set_hunger(0.5)
+	met.set_hunger(Metabolism.HUNGRY_FROM)
 	var calm: float = met.hungry()
 	met.set_hunger(1.0)
 	var warned: float = met.hungry()
-	_check("the body's warning is %.2f at half a tank and %.2f empty -- 0 and 1"
-		% [calm, warned], calm == 0.0 and warned == 1.0)
+	# **Twenty seconds from death where it starts** (energy.md §9): what is left of
+	# the tank there, at a born cell's steering pace, then the grace.
+	var steering_pace := 1.0 + 0.50 + 0.81 / 3.0
+	var from_death := (1.0 - Metabolism.HUNGRY_FROM) * Metabolism.HUNGER_SECONDS \
+		/ steering_pace + Metabolism.STARVE_GRACE
+	_check("the body's warning is %.2f where it starts and %.2f empty -- 0 and 1 --"
+		% [calm, warned] + " and it starts %.1f s from a born cell's death, about twenty"
+		% from_death, calm == 0.0 and warned == 1.0 and absf(from_death - 20.0) < 1.0)
 
 	met.reset()
 	met.set_hunger(0.99)
@@ -667,10 +672,10 @@ func _gene_stats() -> void:
 	_check("a ping reaches 1100, 1500 and 1900 µm",
 		rows[6].contains("out to 1100 µm") and rows[7].contains("out to 1500 µm")
 		and rows[8].contains("out to 1900 µm"))
-	_check("a vacuole's tank holds 46, 58 and 72 s: %s" % rows[9],
-		rows[9].begins_with("a full tank holds 46 s, not 36") and rows[10].begins_with(
-		"a full tank holds 58 s, not 36") and rows[11].begins_with(
-		"a full tank holds 72 s, not 36"))
+	_check("a vacuole's tank holds 92, 115 and 144 s, of the doubled 72: %s" % rows[9],
+		rows[9].begins_with("a full tank holds 92 s, not 72") and rows[10].begins_with(
+		"a full tank holds 115 s, not 72") and rows[11].begins_with(
+		"a full tank holds 144 s, not 72"))
 	var eye := _genome()
 	eye.express({&"cytostome": 1, &"ocellus": 1}, [&"cytostome", &"ocellus"])
 	var grown: Progression = eye.progression(&"ocellus")
@@ -697,7 +702,8 @@ func _gene_stats() -> void:
 	var clause := Readout.plain(GeneStats.cell_items(CellBody.BASE_RADIUS,
 		Catalogue.born(), GenomeNode.upkeep_of(Catalogue.born())))
 	_check("a newborn's caption says `%s` -- energy.md §7.2 measured 24.0 s to empty"
-		% clause, clause == "52 µm across · a full tank: 36 s, 24 s drifting")
+		% clause + ", doubled with the tank (§9)",
+		clause == "52 µm across · a full tank: 72 s, 48 s drifting")
 
 	# **The dash is paid as its row says** (§11, call 2), by the run's own
 	# handler: seconds of rest through `spend`, so a newborn pays the share it
@@ -719,17 +725,21 @@ func _gene_stats() -> void:
 	var dash := Stats.at(&"dash_cost", 1)
 	var burn := Stats.at(&"burn", 2)
 	var tank := Stats.at(&"store", 3)
+	# **In seconds of rest since the tank doubled** (energy.md §9): 6 % of the old
+	# thirty-six-second tank, so a newborn pays the seconds it always paid.
 	var newborn_dash := _paid(run, met, 0, 0, dash)
-	_check("a newborn's dash takes %.3f of the bar, exactly the share it always took"
-		% newborn_dash[0], is_equal_approx(newborn_dash[0], dash))
+	_check("a newborn's dash costs %.2f s of rest, the 2.16 it always cost, %.3f of the"
+		% [newborn_dash[1], newborn_dash[0]] + " bar",
+		is_equal_approx(newborn_dash[1], 2.16) and is_equal_approx(dash, 2.16)
+		and is_equal_approx(newborn_dash[0], dash / Metabolism.HUNGER_SECONDS))
 	var burned_dash := _paid(run, met, 2, 0, dash)
 	_check("with crista 2 it costs %.2f of it: %.2f s" % [burn, burned_dash[1]],
-		is_equal_approx(burned_dash[1], dash * Metabolism.HUNGER_SECONDS * burn))
+		is_equal_approx(burned_dash[1], dash * burn))
 	var stored_dash := _paid(run, met, 0, 3, dash)
 	_check("with vacuole 3 it costs the same seconds (%.2f s), a smaller share"
 		% stored_dash[1] + " of a tank %.0f times as big" % tank,
-		is_equal_approx(stored_dash[1], dash * Metabolism.HUNGER_SECONDS)
-		and is_equal_approx(stored_dash[0], dash / tank))
+		is_equal_approx(stored_dash[1], dash)
+		and is_equal_approx(stored_dash[0], dash / (Metabolism.HUNGER_SECONDS * tank)))
 	var s04 := GeneStats.context({&"crista": 2, &"vacuole": 3})
 	var said_dash: float = GeneStats.lines(&"myoneme", 1, 0, &"", s04)[1][0]["values"][0]
 	_check("and the numbers say what is paid: `each dash burns %s s`"

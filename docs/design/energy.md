@@ -536,3 +536,92 @@ The levers for this change are the share (0.5 on each of the four files),
 `UPKEEP_PER_TIER` (0.18, every gene's), and the beam's own `BEAM_RAY_COST` and
 `BEAM_SWEEP_COST`. Balance waits for players (CLAUDE.md): the share is a starting
 value.
+
+## 9. Seventy-two
+
+The owner, 2026-10-15, after playing the dev app with the gauge:
+
+> Double the base energy storage. We die too soon.
+
+**Read as: the tank doubles, and nothing else.** "Storage" is the tank, and only
+the tank moves. Every cost, a meal and the grace keep the seconds of rest they
+were. So the change is the buffer: a stretch with no food in sight, which §7.3
+found is what kills a forager that eats when it can, now has to outlast
+seventy-two seconds of rest instead of thirty-six.
+
+### 9.1 What moved
+
+| | before | now | why |
+| --- | --- | --- | --- |
+| `HUNGER_SECONDS`, the tank at rest | 36 | **72** | the owner's ask |
+| `MEAL`, a meal your own size | 1.0 (the whole bar) | **0.5** (half the bar) | the same 36 s of rest it was worth: the owner doubled the storage, not the food |
+| `HUNGRY_FROM`, where the warning starts | 0.5 | **0.75** (a quarter left) | the same twenty seconds from death (hunger.md §3); at half of seventy-two the beat would race for thirty seconds before a death |
+| `myoneme`'s `DASH_COST_BY_TIER` | 6, 4.5 and 3.2 % of a born tank | **2.16, 1.62 and 1.152 s of rest** | the same seconds; as a share of the tank it would have doubled with it, and in seconds no tank moves it again |
+
+`STARVE_GRACE` stays ten seconds: it is time, not energy. `STROKE_COST`,
+`TURN_COST`, upkeep, `ABSORB` and the sun were always seconds of rest and did not
+move. The water's bodies run the same arithmetic (§1, ocean.md §5.2), so their
+tanks doubled too: a water cell starves later, and eats what it did.
+
+### 9.2 Dies at
+
+A born cell that never eats, at §7.2's burns:
+
+| play | burn | empty at | dies at | was |
+| --- | --- | --- | --- | --- |
+| drifting, no input | ×1.50 | 48.0 s | **58.0 s** | 34.0 s |
+| steering a third of the time | ×1.78 | 40.4 s | **50.4 s** | 30.3 s |
+| pushing all the time (`axoneme 1`) | ×2.18 | 33.0 s | **43.0 s** | 26.5 s |
+| turning all the time | ×2.31 | 31.2 s | **41.2 s** | 25.6 s |
+| pushing and turning, flat out | ×2.97 | 24.2 s | **34.2 s** | 22.1 s |
+| `crista 2`, drifting | ×1.30 | 55.4 s | **65.4 s** | 37.8 s |
+| `vacuole 2`, drifting | ×1.05 | 68.6 s | **78.6 s** | 44.2 s |
+
+`levels_probe.gd` holds the steering row at fifty from the constants, and the node
+a frame at a time to the same moment, as it held thirty before.
+
+**A meal your size is half the bar now**, and a drifter a born cell can swallow
+a quarter to two fifths of it. On the gauge a meal reads as the same number it did
+(`+36` for one your size); the bar it fills is twice as long.
+
+### 9.3 What it changes, and what to watch
+
+- **The opening.** The first body the water places for a newborn is about 18 s of
+  swimming away (§7.4) and the free sense comes at five seconds: a newborn steering
+  now and then now has thirty seconds to spare where it had ten. Nothing may hunt
+  the player before `FIRST_DELAY`, 42 s, which a newborn that never eats now
+  outlives.
+- **The free sense still lapses at 50 s** if nobody places it, which is now
+  inside a hungry newborn's life rather than after it.
+- **The warning** turns on at a quarter of the tank, so the gauge is amber only in
+  the last quarter, and the beat races only there.
+- **The water** starves less, so it holds more hunters for longer. drop_probe's
+  seeded lines moved with it.
+- **Watch** whether dying of hunger is now rare enough that the slowing tank stops
+  mattering, and whether the opening is now too easy. The levers are
+  `HUNGER_SECONDS` and `STARVE_GRACE` (§7.6 row 1), `MEAL` (row 2) and the costs
+  in §2. Balance waits for players (CLAUDE.md): these are starting values.
+
+### 9.4 The pins it moved
+
+The water runs the same tank, so every seeded run moved with it, and each was
+re-recorded from its own check's output:
+
+- **drop_probe**: `DEV_LINES`, `THREE_ONE_LINES`, `IDENTITY_LINES`, `PACK3_LINES`,
+  `TAIL_LINES`, `DEV_MEMBRANE`, `PACK3_TRACE` and `TAIL_TRACE`;
+- **`ci.yml`'s check 8**: `f7e09406…`, 68,616 lines, from `49611ed8…` and 70,074.
+
+**Only the tank moved them.** On a copy of this branch with `HUNGER_SECONDS`,
+`MEAL`, `HUNGRY_FROM` and the dash put back as they were, everything else
+included (the eyespot's glow too), the drop probe passed against the old pins and
+check 8 printed `49611ed8…` to the byte.
+
+In the game's water at five minutes (the tail check's row 37, seed 1), the
+hunters are 95 against 92 and the swallowed 905 against 963. Starved are 230
+against 428: half as many water cells die of hunger, and about as many live.
+
+Three checks of the drop probe also read the tank's size. The mouthless body is
+empty at 93.6 s, twice §5.3's 46. A floc must feed a hunter a fifth of a meal's
+share of the bar. The save's dosed water body is picked as one with no toxin and
+nothing in its slots, because the first body with a mouth now grows a toxin into
+its mouth's slot.

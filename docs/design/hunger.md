@@ -194,7 +194,11 @@ frame.
 
 ## 3. The thresholds, and why
 
-- **Half a tank (`HUNGRY_FROM` 0.5).** At the usual pace that is 20 s from
+- **Half a tank (`HUNGRY_FROM` 0.5)**, and **a quarter left (0.75) since the tank
+  doubled** (energy.md §9, 2026-10-15). Twenty seconds from death is the reason,
+  so the share moved with the tank: at half of the doubled tank the beat would
+  race for thirty seconds before a death. What follows is the reasoning, made on
+  the thirty-six-second tank. At the usual pace that is 20 s from
   death. That is a good forager's gap between meals (median 12.5 s, energy.md
   §7.3), with margin to spare.
   - It is late enough that a forager who eats on time is not warned all the

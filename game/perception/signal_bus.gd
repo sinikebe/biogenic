@@ -183,6 +183,26 @@ const TASTE_FULL := 0.70
 ## docs/design/food-and-predators.md §4.2.
 const TASTE_DREAD_SUPPRESS := 0.6
 
+## **The eyespot glows with the shadow it is under** (three-senses.md §2.7; the
+## owner, 2026-10-15: *"see should act a bit like smell. The organ changing
+## visually to represent the stimulus"*), the way the nose glows with what it
+## smells: dark at [constant SIGHT_GLOW_FROM], full at [constant SIGHT_FULL],
+## along a smoothstep of the shadow's strength.
+##
+## A shadow is one sum with one bearing (food.gd), 1.0 for a body your own size
+## within 180 µm and nothing past 620, so a glow from 0.08 lights for a body your
+## size about 590 µm off and is full by about 310: the edge of the screen's middle
+## third at 16:9, where it is worth turning to see.
+const SIGHT_GLOW_FROM := 0.08
+const SIGHT_FULL := 0.70
+## **Brightest facing the shadow, as the nose is facing food.** A real eyespot is
+## a pigment cup: it shades the receptor on one side, so the cell knows where the
+## light is by turning (Euglena's stigma). What the eyespot glows by is the shadow
+## times this weight: 1.0 with the shadow straight off its arc, and this much with
+## it dead astern of it -- dimmer, never out, because the membrane's lobe still
+## says where it is and an eyespot gone dark would read as *nothing there*.
+const SIGHT_AWAY := 0.35
+
 const WAKE_CAP := 0.95
 const WAKE_HALFWIDTH_DEG := 34.0
 const WAKE_ATTACK := 0.07
@@ -1127,6 +1147,20 @@ func taste(concentration: float) -> void:
 func smell_glow() -> float:
 	return smoothstep(GLOW_FROM, TASTE_FULL, _taste_c) \
 		* (1.0 - TASTE_DREAD_SUPPRESS * _dread)
+
+
+## **How brightly the eyespot glows**, 0..1 (three-senses.md §2.7): the shadow it
+## is under, weighted by how squarely the eyespot, worn at [param facing] (a body
+## bearing), faces it -- [constant SIGHT_AWAY] dead astern of it, 1.0 straight off
+## it -- from dark at [constant SIGHT_GLOW_FROM] to full at [constant SIGHT_FULL].
+## Dread does not dim it, as it does not muffle [method light]: light is another
+## organ. 0 for a cell with no `stigma`, which [method light] already enforces.
+func sight_glow(facing: float) -> float:
+	if _light <= 0.0:
+		return 0.0
+	var squarely := 0.5 + 0.5 * cos(angle_difference(_light_bearing, facing))
+	return smoothstep(SIGHT_GLOW_FROM, SIGHT_FULL,
+		_light * lerpf(SIGHT_AWAY, 1.0, squarely))
 
 
 ## A pressure wave: the contour dents physically inward at one bearing.

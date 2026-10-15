@@ -285,21 +285,30 @@ func _write_state() -> void:
 	_panes.set_division(_read_division())
 	# How slack the body was: the body's half of hunger, as the run drew it.
 	_panes.set_slack(_frame[RecorderNode.AT_SLACK])
-	# How brightly the nose glowed, on the nose the restored genome wears.
-	_panes.set_lit(_lit_nose(_frame[RecorderNode.AT_SMELL]))
+	# How brightly the nose and the eyespot glowed, on the organs the restored
+	# genome wears.
+	_panes.set_lit(_lit_organs(_frame[RecorderNode.AT_SMELL],
+		_frame[RecorderNode.AT_SIGHT]))
 	# The same question the run asks of its genome, asked of the one restored.
 	_panes.set_eye(Run.eye_of(_genome, _eye_gene, _eye_flare.value()))
 	_panes.push_block(_frame, RecorderNode.AT_MEMBRANE)
 
 
-## **The nose, lit as the run lit it** (docs/design/three-senses.md §2.6):
-## cilia.gd's `lit` for the organ the restored genome smells with, at
-## [param glow]. Empty for no glow, or no nose.
-func _lit_nose(glow: float) -> Dictionary:
-	if glow <= 0.0 or _genome == null:
+## **The nose and the eyespot, lit as the run lit them** (docs/design/
+## three-senses.md §2.6, §2.7): cilia.gd's `lit` for the organ the restored genome
+## smells with, at [param smelt], and the one it sees shadows with, at
+## [param seen]. Empty for no glow, or no such organ.
+func _lit_organs(smelt: float, seen: float) -> Dictionary:
+	if _genome == null:
 		return {}
+	var glows := {}
 	var nose := Catalogue.worn_provider(_genome.tiers(), &"smell_range")
-	return {} if nose == &"" else {"glow": {nose: glow}}
+	if smelt > 0.0 and nose != &"":
+		glows[nose] = smelt
+	var eye := Catalogue.worn_on(_genome.tiers(), Catalogue.LIGHT)
+	if seen > 0.0 and eye != &"":
+		glows[eye] = maxf(seen, float(glows.get(eye, 0.0)))
+	return {} if glows.is_empty() else {"glow": glows}
 
 
 ## **The friend, where the recording has them** (shared-pond.md §5, Phase 3):

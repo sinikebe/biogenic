@@ -1652,7 +1652,6 @@ func _process(delta: float) -> void:
 	# nose's own arc, `smell_bearing` above, so it is brightest pointed at food.
 	_bus.taste(_food.taste_level)
 	_bus.dread(_food.dread_level)
-	_light_nose()
 	# **What body this membrane is attached to** (§2.1). One post a frame, beside
 	# the beat, and it is what makes a tier change something point of view can
 	# feel: the thrust bloom, the turn shear and the ingest flood are the same
@@ -1670,6 +1669,8 @@ func _process(delta: float) -> void:
 	# sensations a minute for an organ it does not have.
 	var eye := _eyespot_tier() > 0
 	_bus.light(_food.shadow_bearing if eye else 0.0, _food.shadow if eye else 0.0)
+	# The nose and the eyespot glow with what each senses, on the body in both views.
+	_light_organs()
 	# The earned senses, beside organs() and for the same reason: a tier is a
 	# property of the organ, not of what it senses.
 	# The beam's by its level, held to the three rungs the membrane's lobe
@@ -1688,7 +1689,8 @@ func _process(delta: float) -> void:
 	# body, which both views draw.
 	_bus.set_beat(_metabolism.beat_period(), _metabolism.beat_amplitude())
 	# **Hunger on the body and on the frame** (docs/design/hunger.md): the body
-	# goes slack from half a tank, and the membrane falls in once it is empty.
+	# goes slack from a quarter of a tank left, and the membrane falls in once it
+	# is empty.
 	# A meal undoes both, behind the beat calming.
 	_step_slack(delta)
 	_bus.faint(_metabolism.faint())
@@ -1753,10 +1755,21 @@ func _settle_slack() -> void:
 ## lit by the bus's `smell_glow()` -- the level along its arc, through the
 ## membrane's curve and dimmed by dread. The membrane draws nothing for it. Found
 ## by its stat, never by its name, so a second nose glows the same way.
-func _light_nose() -> void:
+##
+## **And the eyespot with the shadow it is under** (§2.7, 2026-10-15): the organ
+## on the light channel, lit by the bus's `sight_glow()` -- the shadow, brightest
+## with the eyespot facing it. The membrane's lobe still says where the shadow is.
+func _light_organs() -> void:
+	var glows := {}
 	var nose := _cell.provider(&"smell_range")
-	var glow := _bus.smell_glow() if nose != &"" else 0.0
-	var lit := {} if glow <= 0.0 else {"glow": {nose: glow}}
+	var smelt := _bus.smell_glow() if nose != &"" else 0.0
+	if smelt > 0.0:
+		glows[nose] = smelt
+	var eye := _cell.on_channel(Catalogue.LIGHT)
+	var seen := _bus.sight_glow(_slot_bearing_of(eye)) if eye != &"" else 0.0
+	if seen > 0.0:
+		glows[eye] = maxf(seen, float(glows.get(eye, 0.0)))
+	var lit := {} if glows.is_empty() else {"glow": glows}
 	_soma.lit = lit
 	_vision.lit = lit
 
@@ -2628,16 +2641,15 @@ func _on_impulsed(strength: float) -> void:
 
 ## `myoneme`. The cell asked for the burst and cannot spend hunger itself.
 ##
-## [param cost] is a share of a born cell's tank, and it is paid as the seconds
-## of rest that share comes to, **through `spend`, like every other cost**
-## (gene-stats.md §11, owner's call 2, answered *yes* on 2026-09-29): `crista`
-## makes it cheaper and a bigger `vacuole` tank makes it a smaller share. A born
-## cell -- burn 1, reserve 1 -- pays exactly what it did when this was a fixed
-## share of the bar.
+## [param cost] is in seconds of rest, and it is paid **through `spend`, like
+## every other cost** (gene-stats.md §11, owner's call 2, answered *yes* on
+## 2026-09-29): `crista` makes it cheaper and a bigger `vacuole` tank makes it a
+## smaller share. It was a share of a born cell's tank, turned into seconds here,
+## until the tank doubled (energy.md §9): the seconds are the dash's own now.
 func _on_dashed(cost: float) -> void:
 	if _life != Life.ALIVE:
 		return
-	_metabolism.spend(cost * MetabolismNode.HUNGER_SECONDS)
+	_metabolism.spend(cost)
 
 
 ## `trichocyst`. Your sting went off into whatever touched you on its side

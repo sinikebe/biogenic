@@ -584,6 +584,55 @@ table: *"remove it"*). It was a green bloom round every edible cell, floc and
 friend, drawn whether or not you had a nose: full vision's mark of *what your
 mouth can take*. Smell now shows on the nose and nowhere else, in either view.
 
+### 2.7 The eyespot glows with the shadow it is under (2026-10-15)
+
+The owner, after the nose glowed:
+
+> And see should act a bit like smell. The organ changing visually to represent
+> the stimulus
+
+**What the player sees.** The `stigma` (`see` on its chip), wherever it is worn,
+lights up the way the nose does when a shadow falls on the cell: the organ drawn
+again over itself, its pigment flaring white, a haze round it. The bigger and
+nearer the body casting the shadow, the brighter it is. **It is brightest facing
+the shadow, as the nose is facing food**, so turning the eyespot onto a big body
+brightens it and turning it away dims it. Dead astern it reads the shadow at a
+third of its strength, so a near, big one still lights it.
+
+That is the real organ's way. An eyespot is a pigment cup that shades its
+receptor on one side, so a cell like Euglena finds the light by turning, which
+is the nose's sweep, read off the eyespot.
+
+**What did not change.** The sense is the same shadow from the same field: one
+sum of every body big enough, with one bearing. **Its lobe stays on the membrane**,
+in point of view, at the shadow's true bearing. "A bit like smell" is the organ,
+not the loss of the direction: the nose had no direction left to lose when it went
+onto the organ, and the eyespot keeps its own. Dread does not dim it, as it never
+muffled the light: it is another organ than the nose.
+
+**How it is built**, on §2.6's generic glow:
+
+- `signal_bus.gd`'s `sight_glow(facing)`: the shadow, weighted by
+  `lerp(SIGHT_AWAY, 1, ½ + ½ cos(shadow − facing))`, through a smoothstep from
+  `SIGHT_GLOW_FROM` 0.08 to `SIGHT_FULL` 0.70. A body your own size lights it from
+  about 590 µm and fills it by about 310.
+- `normal_mode.gd`'s `_light_organs()` (it was `_light_nose()`) lights the nose and
+  the organ on the light channel in one `lit`, read after the shadow is posted, and
+  hands both views the same one.
+- The replay records the eyespot's glow beside the nose's (`recorder.gd`'s
+  `AT_SIGHT`, each read off `lit` by its organ's channel) and lights the eyespot
+  the restored genome wears.
+
+**Rendered** at 1280 × 720 and 2400 × 1080, in both views, with a body of radius
+40 placed 240 µm off at four bearings: facing it the eyespot flares white with a
+halo in full vision and glows violet in point of view; astern it is near its
+plain look; with nothing near, it is its plain look.
+
+**What to watch**: whether the glow is noticed in full vision, where the body
+casting the shadow is on screen anyway; and in point of view, whether the eyespot
+and the lobe read as one sense. The levers are `SIGHT_GLOW_FROM`, `SIGHT_FULL` and
+`SIGHT_AWAY`.
+
 ---
 
 ## 3. `ocellus` — twenty rays

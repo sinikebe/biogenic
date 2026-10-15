@@ -459,8 +459,8 @@ static func gone_world() -> String:
 	return String(TranslationServer.translate("a world that is gone"))
 
 
-## **A cell's hunger in a word** (cells-ux.md §2.2): `hungry` from half a tank
-## (Metabolism.HUNGRY_FROM), `starving` once the tank is empty, and nothing for a
+## **A cell's hunger in a word** (cells-ux.md §2.2): `hungry` from a quarter of a
+## tank left (Metabolism.HUNGRY_FROM), `starving` once the tank is empty, and nothing for a
 ## cell that is fed. It is shown because a cell left starving resumes starving.
 static func hunger_text(hunger: float) -> String:
 	if hunger >= 1.0:
@@ -470,7 +470,7 @@ static func hunger_text(hunger: float) -> String:
 		# ROOM: 160 px at 15 px
 		return String(TranslationServer.translate("starving"))
 	if hunger >= Metabolism.HUNGRY_FROM:
-		# TRANSLATORS: The same, when its tank is half empty or less: it is hungry
+		# TRANSLATORS: The same, when its tank is nearly empty: it is hungry
 		# (French "affamée", agreeing with "cellule").
 		# ROOM: 160 px at 15 px
 		return String(TranslationServer.translate("hungry"))

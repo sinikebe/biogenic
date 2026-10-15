@@ -53,6 +53,7 @@ const FoodField := preload("res://game/normal/food.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
 ## The genes in genes' own slots (docs/design/gene-sockets.md).
 const Riders := preload("res://game/genes/riders.gd")
+const Catalogue := preload("res://game/genes/catalogue.gd")
 const SignalBus := preload("res://game/perception/signal_bus.gd")
 const SomaLayer := preload("res://game/perception/soma.gd")
 
@@ -209,6 +210,9 @@ const AT_SLACK := AT_PING_RANGE + 10
 ## did -- the membrane draws nothing for it, so it is not in the block. Which
 ## organ is the nose is the restored genome's to say. A quantity, so it lerps.
 const AT_SMELL := AT_PING_RANGE + 11
+## **How brightly the eyespot glowed** (three-senses.md §2.7): the same, for the
+## organ on the light channel, with the shadow it was under.
+const AT_SIGHT := AT_PING_RANGE + 12
 ## **The other player, as a body** (shared-pond.md §5, Phase 3): in a pond, the
 ## friend in the field's person slot, `food.gd`'s PERSON_SLOT on every client --
 ## where they are, which way they face, how big, their wound and their loads,
@@ -218,7 +222,7 @@ const AT_SMELL := AT_PING_RANGE + 11
 ## silence fades their halo, trail and edge mark (shared-pond-ux.md §0.2, §0.3).
 ## **A radius of 0 is nobody** -- no pond, a friend dead or gone, or single
 ## player, which writes nothing else here. What they wear is a PERSON delta.
-const AT_PERSON := AT_PING_RANGE + 12
+const AT_PERSON := AT_PING_RANGE + 13
 const PERSON_FLOATS := 8
 ## Where in the person's block: their loads packed as a body's are, and stepped
 ## the same; in the water, 1 or 0, stepped; and the silence, which lerps.
@@ -475,7 +479,8 @@ func capture(delta: float) -> void:
 	# Nobody, until the seal says who. See AT_KILLER.
 	_ring[at + AT_KILLER] = -1.0
 	_ring[at + AT_SLACK] = _soma.slack if _soma != null else 0.0
-	_ring[at + AT_SMELL] = _glow_of(_soma.lit) if _soma != null else 0.0
+	_ring[at + AT_SMELL] = _glow_on(_soma.lit, Catalogue.SMELL) if _soma != null else 0.0
+	_ring[at + AT_SIGHT] = _glow_on(_soma.lit, Catalogue.LIGHT) if _soma != null else 0.0
 	_ring[at + AT_DELTA] = delta
 	_capture_division(at)
 
@@ -608,13 +613,16 @@ func _capture_bodies(at: int) -> void:
 		i += BODY_FLOATS
 
 
-## The brightest glow in a `lit` (cilia.gd's), 0 for none: one nose today, and
-## the replay's genome says which organ it lights.
-static func _glow_of(lit: Dictionary) -> float:
+## The brightest glow in a `lit` (cilia.gd's) of an organ on [param channel], 0
+## for none: the nose's on smell, the eyespot's on light. The replay's genome says
+## which organ each lights.
+static func _glow_on(lit: Dictionary, channel: StringName) -> float:
 	var most := 0.0
 	var glows: Dictionary = lit.get("glow", {})
 	for gene: StringName in glows:
-		most = maxf(most, float(glows[gene]))
+		var organ := Catalogue.gene(gene)
+		if organ != null and organ.channel == channel:
+			most = maxf(most, float(glows[gene]))
 	return most
 
 
