@@ -85,6 +85,9 @@ func _init() -> void:
 	# **Its look** (gene-looks.md §6): three short plain bristles over its pigment,
 	# the plainest sense.
 	family = SENSING
+	# **Its tile in the HUD's row** (gene.gd's `readout`; sense-tiles.md): the organ
+	# lit by the shadow it is under.
+	readout = true
 	# **A sense that points pays half** for each copy past the first (gene.gd's
 	# `upkeep_share`; docs/design/energy.md §8): the owner, 2026-10-15, so a grown
 	# one takes half the share of the tank a second. A starting value, for play to judge.

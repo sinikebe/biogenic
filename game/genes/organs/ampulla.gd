@@ -136,6 +136,9 @@ func _init() -> void:
 	# pores of a cluster of ampullae of Lorenzini -- over its pigment. Sensing's shade
 	# 2, which the ping's lobes and wave are drawn in, a shade apart from the beam's.
 	family = SENSING
+	# **Its tile in the HUD's row** (gene.gd's `readout`; sense-tiles.md): the organ
+	# lit by its echoes, and how long it still listens.
+	readout = true
 	# **A sense that points pays half** for each copy past the first (gene.gd's
 	# `upkeep_share`; docs/design/energy.md §8): the owner, 2026-10-15, so a grown
 	# one takes half the share of the tank a second. A starting value, for play to judge.

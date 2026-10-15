@@ -136,7 +136,7 @@ const SHIPPED_ORDERS := {
 ## organ's -- every variant of it has them, under the organ's name, and its rules
 ## read them alike (§6.2; [method declares]).
 const OVERRIDES: Array[String] = ["order", "provides", "numbers", "levels", "water", "tags",
-	"channel", "born", "look", "upkeep_share"]
+	"channel", "born", "look", "upkeep_share", "readout"]
 
 ## An empty list, the answer for a name nothing is filed under.
 static var _none: Array[StringName] = _read_only([] as Array[StringName])

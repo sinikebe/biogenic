@@ -87,6 +87,9 @@ func _init() -> void:
 	# **Its look** (gene-looks.md §6): forked bristles, a chemoreceptor's pores, over
 	# its pigment.
 	family = SENSING
+	# **Its tile in the HUD's row** (gene.gd's `readout`; sense-tiles.md): the organ
+	# lit by how much food it smells.
+	readout = true
 	look = {"shape": TUFT, "tip": Kinds.TIP_FORK}
 
 

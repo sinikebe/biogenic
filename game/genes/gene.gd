@@ -171,6 +171,13 @@ var levels := {}
 ## by). The nose pays in full: it says *how much*, never where.
 var upkeep_share := 1.0
 
+## **Whether its sense has a tile in the HUD's row** (docs/design/sense-tiles.md):
+## the organ drawn as its tile, lit by what it senses, after the energy gauge. Shown
+## while the lineage carries the gene, grey while the body does not wear it. Off for
+## most organs, and for the beam, whose rays already say what they strike (the owner,
+## 2026-10-15: *"Beam does not need one"*).
+var readout := false
+
 ## **Its place in the water** (§9; docs/design/gene-rarity.md §2):
 ##
 ## - `rarity`, **how often the water makes it**: a class on `rarity.gd`'s ladder --
