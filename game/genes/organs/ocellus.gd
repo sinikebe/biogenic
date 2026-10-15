@@ -187,6 +187,11 @@ func _init() -> void:
 	# Sensing's shade 0, which the beam's lobe and rays are drawn in. Its pigment buds
 	# at a fork and flares as a level arrives (cilia.gd's `_draw_bud`).
 	family = SENSING
+	# **A sense that points pays half** for every ray after the first and every
+	# degree a second of sweep (gene.gd's `upkeep_share`; docs/design/energy.md §8):
+	# the owner, 2026-10-15, so a grown beam takes half the share of the tank a second.
+	# A starting value, for play to judge.
+	upkeep_share = 0.5
 	look = {"shape": LENS, "shade": 0}
 
 
@@ -241,7 +246,7 @@ func lines(_t: int, level: int, path: StringName, ctx: Dictionary, _slot: int,
 	var sweep := float(shape[2])
 	var fan := 2.0 * half
 	var reach := Readout.item("reaches {} µm", [shape[3]], [U.DISTANCE])
-	var costs := [(ctx["wear_item"] as Callable).call(upkeep_at(at, path), burn)]
+	var costs := [(ctx["wear_item"] as Callable).call(upkeep_at(at, path) * upkeep_share, burn)]
 	if rays <= 1:
 		return [[Readout.item("{} ray", [rays], [U.COUNT]), reach], costs]
 	if sweep > 0.0:

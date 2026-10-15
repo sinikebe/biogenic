@@ -73,6 +73,10 @@ func _init() -> void:
 		"values": {&"closeness": &"level"}}]}
 	# **Its look** (gene-looks.md §6): two long feelers, splayed apart as feelers are.
 	family = SENSING
+	# **A sense that points pays half** for each copy past the first (gene.gd's
+	# `upkeep_share`; docs/design/energy.md §8): the owner, 2026-10-15, so a grown
+	# one takes half the share of the tank a second. A starting value, for play to judge.
+	upkeep_share = 0.5
 	look = {"shape": TUFT, "shade": 2, "count": 2, "length": 0.54, "bend": 34.0}
 
 

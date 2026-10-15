@@ -829,7 +829,7 @@ static func upkeep_with_levels(body: Dictionary, levels: Dictionary,
 		var at := grown.effective_level()
 		var cost := CellBody.levelled_upkeep(gene, at, grown.path)
 		priced[gene] = cost if cost >= 0.0 \
-			else UPKEEP_PER_TIER * float(maxi(at - 1, 0))
+			else UPKEEP_PER_TIER * float(maxi(at - 1, 0)) * Catalogue.upkeep_share(gene)
 	return upkeep_of(body, priced, riders)
 
 
@@ -1550,23 +1550,27 @@ static func tier_of(tiers: Dictionary, gene: StringName) -> int:
 ## other gene pays `UPKEEP_PER_TIER` for each tier above the first, as it always
 ## has. Empty for every cell in the water, which has no levels.
 ##
+## **Each copy after the first at its gene's share** (the catalogue's
+## `upkeep_share`, docs/design/energy.md §8): the senses that point pay half of
+## `UPKEEP_PER_TIER` a copy, every other gene all of it.
+##
 ## [param riders] are **the body's riders** (docs/design/gene-sockets.md §4), which
 ## cost what genes cost: nothing for the first copy, `UPKEEP_PER_TIER` for each one
 ## after. Their own organs buy nothing back: a burn in a slot is no burn of the body's.
 static func upkeep_of(tiers: Dictionary, priced: Dictionary = {},
 		riders: Dictionary = {}) -> float:
-	var extra := Riders.extra_copies(riders)
+	var extra := float(Riders.extra_copies(riders))
 	var levelled := 0.0
 	for gene: Variant in tiers:
 		if priced.has(gene):
 			levelled += float(priced[gene])
 			continue
-		extra += maxi(int(tiers[gene]) - 1, 0)
+		extra += float(maxi(int(tiers[gene]) - 1, 0)) * Catalogue.upkeep_share(gene)
 	# `burn` is the one stat that buys upkeep back (`crista`'s), and it is
 	# applied as a multiplier on the whole bill rather than as a subtraction: it
 	# is worth most to the expensive build, which is the one that needs it.
 	var burn := Stats.of(tiers, &"burn")
-	return (1.0 + UPKEEP_PER_TIER * float(extra) + levelled) * burn
+	return (1.0 + UPKEEP_PER_TIER * extra + levelled) * burn
 
 
 ## The highest-tier gene, ties broken by arc order. Deterministic on purpose:

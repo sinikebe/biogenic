@@ -183,7 +183,10 @@ A new nose, a new armour: everything it does, some mechanic already does.
    **Rarity**, below -- and `drifter` when the water may make it),
    `tags`, `channel` for a sense, `family`
    and `look` (**Looks**), the words and `lines` (its numbers on the pause screen).
-   Write the comment the other files have beside each table and number.
+   Set `upkeep_share` only when growing it costs other than the usual: what each copy
+   past the first is multiplied by, 0.5 for a sense that says *where* -- the beam, the
+   ping, the eyespot, the palps -- and 1.0 for everything else (docs/design/energy.md
+   §8). Write the comment the other files have beside each table and number.
 2. **Add one line to `catalogue.gd`'s `ORGANS`**, after the last live organ. The probe
    fails on a file the index lacks, or a line with no file. Import again: Godot writes
    the file's `.uid`, which is committed beside it, as every organ's is -- never

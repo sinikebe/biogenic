@@ -3370,6 +3370,29 @@ msgstr ""
 msgid "‹ genome"
 msgstr ""
 
+#. Under the energy gauge in the top-left corner, once the cell's food tank is
+#. empty: how many whole seconds the cell has left to eat before it dies. {}
+#. is the number. 14 px type, right-aligned under the gauge's bar.
+#. {} is a number the game writes; keep every {}, in this order.
+#. Room: at most 90 px in 14 px type, measured with 10 in place of the
+#. placeholders; the English takes 53 px.
+#: game/normal/gauge.gd
+#, python-brace-format
+msgid "{} s left"
+msgstr ""
+
+#. Under the energy gauge in the top-left corner: how much of the cell's food
+#. tank it burns each second, in the same unit as the "23 / 36" beside it. {}
+#. is the number; the minus sign says it goes out, and "/s" is "each second"
+#. -- keep it as short.
+#. {} is a number the game writes; keep every {}, in this order.
+#. Room: at most 80 px in 14 px type, measured with 12.5 in place of the
+#. placeholders; the English takes 49 px.
+#: game/normal/gauge.gd
+#, python-brace-format
+msgid "−{}/s"
+msgstr ""
+
 #. How many copies of a gene the cell's DNA holds, in words, at the start of
 #. the odds line ("one copy · 55% of daughters wear it"). One to three; the
 #. numbers are spelled out on purpose.

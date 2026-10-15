@@ -203,7 +203,12 @@ func _price() -> void:
 	_check("three copies and level 1 cost nothing: copies are odds now (%.2f)"
 		% g.upkeep(), is_equal_approx(g.upkeep(), 1.0))
 	var rows := []
-	var want := {3: [1.36, 1.36], 5: [1.72, 1.54], 10: [2.62, 1.99]}
+	# **At the beam's share** (gene.gd's `upkeep_share`; energy.md §8): a sense that
+	# points pays half of what x and y come to, so each is 1 + half the old part.
+	var half := Catalogue.upkeep_share(&"ocellus")
+	_check("the beam pays half, as every sense that points (%.2f)" % half,
+		is_equal_approx(half, 0.5))
+	var want := {3: [1.18, 1.18], 5: [1.36, 1.27], 10: [1.81, 1.495]}
 	var ok := true
 	for at: int in want:
 		for i in 2:
@@ -216,15 +221,16 @@ func _price() -> void:
 			ok = ok and is_equal_approx(one.upkeep(), float(want[at][i]))
 	_check("x per ray, y per degree a second of sweep: %s" % ", ".join(rows), ok)
 	var water := {&"cytostome": 2, &"ocellus": 3, &"palp": 2}
-	_check("a cell in the water, with no levels, pays by copies as it always did",
-		is_equal_approx(GenomeNode.upkeep_of(water), 1.0 + 0.18 * 4.0))
+	_check("a cell in the water, with no levels, pays by copies, a sense that points at"
+		+ " half (%.2f)" % GenomeNode.upkeep_of(water),
+		is_equal_approx(GenomeNode.upkeep_of(water), 1.0 + 0.18 * (1.0 + 2.0 * 0.5 + 0.5)))
 	var burned := _genome()
 	burned.express({&"cytostome": 1, &"ocellus": 1, &"crista": 1},
 		[&"cytostome", &"ocellus", &"crista"])
 	burned.earn(&"ocellus", Progression.xp_at(5, _beam_step()))
 	burned.choose(&"ocellus", &"extend")
 	_check("crista still discounts the whole bill, the level's part included",
-		is_equal_approx(burned.upkeep(), 1.72 * Stats.at(&"burn", 1)))
+		is_equal_approx(burned.upkeep(), 1.36 * Stats.at(&"burn", 1)))
 
 
 # --- The shape (§4) ------------------------------------------------------------
@@ -468,6 +474,33 @@ func _energy() -> void:
 	met.spend(-30.0)
 	_check("spending at full hunger leaves the grace alone, and nothing spent is"
 		+ " nothing", full_ok and met.hunger == 0.0)
+
+	# **What the gauge reads** (energy-gauge.md §3): the tank's own seconds of rest,
+	# paid over the last five seconds. A born cell at rest pays 1.0 a second; five
+	# seconds of rest spent inside the window adds one more, at burn 1; a meal adds
+	# nothing to it; and it is gone again once the window has passed it.
+	met.reset()
+	for i in 360:
+		met.call(&"_process", 1.0 / 60.0)
+	var resting: float = met.paying()
+	met.spend(5.0)
+	var spent: float = met.paying()
+	met.feed(1.0)
+	var fed: float = met.paying()
+	for i in 360:
+		met.call(&"_process", 1.0 / 60.0)
+	var after: float = met.paying()
+	met.reset()
+	met.reserve = 2.0
+	met.set_hunger(0.25)
+	var held: Array = [met.capacity(), met.stored()]
+	_check("the gauge's rate: %.3f a second at rest, %.3f with five seconds spent in the"
+		% [resting, spent] + " window, %.3f after a meal, %.3f once it has passed;" % [
+		fed, after] + " a tank twice a born one holds %.0f and %.0f of it is left" % held,
+		absf(resting - 1.0) < 0.01 and absf(spent - resting - 1.0) < 0.06
+		and is_equal_approx(fed, spent) and absf(after - 1.0) < 0.01
+		and is_equal_approx(held[0], 2.0 * Metabolism.HUNGER_SECONDS)
+		and is_equal_approx(held[1], 1.5 * Metabolism.HUNGER_SECONDS))
 
 	# The body: a stroke pays on the speed it adds, a push on the speed it adds
 	# each frame, a turn on the angle it turns -- and the water's wander is free.

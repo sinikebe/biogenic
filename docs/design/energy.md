@@ -453,3 +453,86 @@ drive's own `--sniff` with `chemocyte:1`. With none of them it is the drifting
 row. `--seek=800`, the first draft's bot, sees 800 units in every direction,
 past a real screen's top and bottom, and it starved in none of eight games: it
 is there to compare with, not to quote.
+
+## 8. The senses that point pay half
+
+The owner, 2026-10-15, after playing the dev app:
+
+> It's too hard to find food with smell. increase energy storage and energy usage
+> of precise senses (beam, sonar, etc.) the idea is to only reduce the percentage
+> of energy used per second by this gene.
+
+### 8.1 How it is read
+
+**The one thing that changes is the share of the tank such a gene takes a
+second.** "The idea is to only reduce the percentage" is the aim, and "only" rules
+out everything else moving with it: the thirty seconds, a meal, a stroke, a turn,
+a dash.
+
+A bigger tank with every other cost made bigger by the same factor is the same
+game, number for number. It would also have changed every figure a player can
+read -- the 36 s tank, every cost on the pause screen, the gauge's numbers -- for
+nothing. So the tank stays at 36 seconds of rest, and what these genes cost to
+grow is halved. Against the tank that is the same as doubling the tank for them
+alone.
+
+**A sense that points** is every sense that says *where*: the beam (`ocellus`),
+the ping (`ampulla`, the sonar), the eyespot (`stigma`) and the palps (`palp`).
+The nose (`chemocyte`) is the one it is set against. It says *how much*, never
+where, since the owner took its direction away (three-senses.md §2), and it pays
+in full.
+
+### 8.2 What it costs now
+
+**One copy of any gene was free and still is**: genome.gd's upkeep charges each
+copy past the first, and a levelled organ by its level. So a newborn, whose senses
+are one copy each, pays nothing for them before this change or after it. **What
+costs is growing a sense**: a second and third copy of the ping, and every ray and
+every degree a second of sweep a beam earns.
+
+| a sense that points, grown to | before, in seconds of rest a second | now | share of a born tank a second, now |
+| --- | --- | --- | --- |
+| two copies (ping, eyespot, palps) | 0.18 | **0.09** | 0.25 % (was 0.5 %) |
+| three copies | 0.36 | **0.18** | 0.5 % (was 1 %) |
+| beam level 2 or 3 (2 or 3 rays) | 0.18 · 0.36 | **0.09 · 0.18** | 0.25 · 0.5 % |
+| beam level 5, fill · sweep | 0.72 · 0.54 | **0.36 · 0.27** | 1.0 · 0.75 % |
+| beam level 10, fill · sweep | 1.62 · 0.99 | **0.81 · 0.50** | 2.3 · 1.4 % |
+
+A born cell drifting with a three-copy ping burned ×1.86 a resting cell and was
+empty at 19.4 s. It now burns ×1.68 and is empty at 21.4 s. With a level-5 beam
+filling it was ×2.22 and 16.2 s; now it is ×1.86 and 19.4 s.
+
+### 8.3 What moved
+
+- **`gene.gd` has `upkeep_share`**, 1.0 by default: what each copy past the first,
+  or a levelled organ's own price, is multiplied by. `ampulla.gd`, `ocellus.gd`,
+  `stigma.gd` and `palp.gd` set it to **0.5**, a starting value. The catalogue's
+  `upkeep_at` and `upkeep_share` apply it, `genome.gd`'s `upkeep_of` and
+  `upkeep_with_levels` pay it, and the pause screen's costs line and the beam's
+  fork cards say it.
+- **The water pays it too**: a hunter that grew a sense that points starves later.
+  So the drop probe's seeded lines moved, and were re-recorded from its own output.
+  With the share set back to 1.0, this branch printed the old lines to the byte.
+- **A kept drop's rules** gain a `genome.UPKEEP_SHARE.<gene>` line for each gene
+  that pays other than all of it, so a drop saved before this reads as one kept
+  under other rules, and is converted and logged on load (drop_save.gd).
+- **Nothing on the wire.** Upkeep is each body's own: no `Wire.RULES`, no
+  `Wire.PROTOCOL`. A content pack.
+
+### 8.4 What to watch
+
+The owner's complaint was the nose, and this does not touch a newborn: its first
+thirty seconds are what they were, since one copy of anything is free. What it
+changes is the run after that. A lineage that grows a ping or a beam to find food
+pays half of what it did to keep it.
+
+- **Does a grown ping or beam now feel affordable**, read on the new gauge as the
+  rate it adds?
+- **Is the start, on smell alone, still too hard?** If so, this is not the lever
+  for it. The levers there are the tank and the grace (§7.6 row 1), and how fast
+  the free sense arrives and what it can be.
+
+The levers for this change are the share (0.5 on each of the four files),
+`UPKEEP_PER_TIER` (0.18, every gene's), and the beam's own `BEAM_RAY_COST` and
+`BEAM_SWEEP_COST`. Balance waits for players (CLAUDE.md): the share is a starting
+value.

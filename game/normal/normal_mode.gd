@@ -501,6 +501,10 @@ var library_at := Library.PATH
 ## pause scrim covers them -- they stay drawn while paused, dead to input, which
 ## is the whole wordless explanation of the chooser below them (§5.1).
 @onready var _controls: Control = $Hud/Controls
+## **The energy gauge** (docs/design/energy-gauge.md): the first of the HUD's
+## readouts, in their row after the pause target. gauge.gd draws it and knows nothing
+## of energy; [method _update_gauges] reads the tank into it.
+@onready var _energy_gauge: Control = $Hud/Gauges/Energy
 @onready var _recorder: RecorderNode = $Recorder
 @onready var _watch_ui: CenterContainer = $Hud/Watch
 @onready var _watch_button: Button = $Hud/Watch/Button
@@ -1077,6 +1081,15 @@ func _ready() -> void:
 	# reach back. Set after _ready has built them and before the first frame.
 	_cell.controls = _controls
 	_update_controls()
+	# **The gauge is the pause target's slab too**, darker: a quiet button can let
+	# the water show through it, and a readout cannot -- a cell passing under the
+	# corner drew its outline across the bar and the numbers at the pause target's
+	# 0.13, and still faintly at 0.72. Then the energy's mark and the metabolism's
+	# own warning and window.
+	_energy_gauge.setup(_well(GAUGE_FILL, GAUGE_EDGE), PackedVector2Array(ENERGY_MARK))
+	_energy_gauge.horizon = MetabolismNode.PAYING_WINDOW
+	_energy_gauge.low_from = 1.0 - MetabolismNode.HUNGRY_FROM
+	_update_gauges()
 
 	_bus.gain = clampf(RunState.load_gain(SignalBus.GAIN_DEFAULT),
 		SignalBus.GAIN_MIN, SignalBus.GAIN_MAX)
@@ -1291,6 +1304,8 @@ func _resume_cell(state: Dictionary) -> void:
 	_metabolism.starve_seconds = float(state["starve"])
 	# As slack as it was left: a body opened crumpled is not one crumpling now.
 	_settle_slack()
+	# And its gauge as full as it was left, with no trail falling to it.
+	_energy_gauge.settle(1.0 - _metabolism.hunger)
 	_generation = int(state["generation"])
 	_id = int(state["id"]) if state.has("id") else _take_id()
 	_parent = int(state.get("parent", Descent.NOBODY))
@@ -1510,6 +1525,8 @@ func _process(delta: float) -> void:
 	# And before them for the opposite reason: the controls are drawn through a
 	# division, and what changes is *which* of them.
 	_update_controls()
+	# The gauges too: the tank is still yours through a division and a still moment.
+	_update_gauges()
 	# Before them too: the states they lead to -- dead, paused, held, divided --
 	# are exactly the ones the body held open has to shut in. dna-body.md §8.
 	_step_offer(delta)
@@ -2455,6 +2472,7 @@ func _be_born() -> void:
 	_cell.reset(true)
 	_cell.radius = CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)
 	_metabolism.reset()
+	_energy_gauge.settle(1.0 - _metabolism.hunger)
 	# Born fed, so born full: none of her mother's creases.
 	_settle_slack()
 	# **A new body, the same programs** (automation.md §2.4, row 40): she has not
@@ -3142,6 +3160,7 @@ func _return(place: Array) -> void:
 		_cell.position = place[0]
 		_cell.heading = float(place[1])
 	_metabolism.reset()
+	_energy_gauge.settle(1.0 - _metabolism.hunger)
 	# A born cell is a fed one: the starved cell's creases do not come back.
 	_settle_slack()
 	if pond:
@@ -3316,6 +3335,34 @@ func _update_controls() -> void:
 	_controls.update(_life == Life.ALIVE and not _menu_open,
 		_split >= Split.PINCH or _held or _water_beat >= 0.0 or _entering_held,
 		_cell.buttons(), _cell.cooling())
+
+
+## **The gauges' slab**: the pause target's, filled enough that nothing in the water
+## reads through it, with an edge a little brighter so it still sits on the water.
+const GAUGE_FILL := 0.9
+const GAUGE_EDGE := 0.14
+
+
+## **The energy's mark** on its gauge: a bolt, in a unit box. The one thing on the
+## gauge that says what it is of; the HUD's next readouts bring marks of their own.
+const ENERGY_MARK: Array[Vector2] = [Vector2(0.62, 0.0), Vector2(0.0, 0.58),
+	Vector2(0.44, 0.58), Vector2(0.30, 1.0), Vector2(1.0, 0.38), Vector2(0.56, 0.38),
+	Vector2(0.78, 0.0)]
+
+
+## **The gauges, once a frame** (docs/design/energy-gauge.md): shown while the cell
+## lives and the pause screen is shut, as the drawn controls are. The tank in
+## metabolism.gd's own unit, seconds of rest: what it holds of what it can, what it
+## pays a second over the last few, and once it is empty the grace that is left.
+func _update_gauges() -> void:
+	var shown := _life == Life.ALIVE and not _menu_open
+	_energy_gauge.visible = shown
+	if not shown:
+		return
+	var empty := _metabolism.hunger >= 1.0
+	_energy_gauge.read(1.0 - _metabolism.hunger, _metabolism.capacity(),
+		_metabolism.paying(), _metabolism.grace_left() if empty else -1.0,
+		MetabolismNode.STARVE_GRACE)
 
 
 ## True while the world layer is the thing behind the Hud. Read by the pause

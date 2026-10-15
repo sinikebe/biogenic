@@ -160,6 +160,17 @@ var numbers := {}
 ## `genome.gd`, which keeps a progression for every gene that levels.
 var levels := {}
 
+## **What growing it costs, as a share of the usual** (docs/design/energy.md §8):
+## each copy past the first, or a levelled organ's own price at its level
+## ([method upkeep_at]), is multiplied by it before it reaches the metabolic
+## multiplier. 1.0 for most. The first copy is free whatever this says.
+##
+## **The senses that point pay half** -- the beam, the ping, the eyespot and the
+## palps, every sense that says *where* -- so a grown one takes half the share of
+## the tank a second it did (the owner, 2026-10-15: smell alone is too hard to eat
+## by). The nose pays in full: it says *how much*, never where.
+var upkeep_share := 1.0
+
 ## **Its place in the water** (§9; docs/design/gene-rarity.md §2):
 ##
 ## - `rarity`, **how often the water makes it**: a class on `rarity.gd`'s ladder --

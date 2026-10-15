@@ -88,7 +88,8 @@ static func lines(gene: StringName, copies: int, level: int, path: StringName,
 		return [[], []]
 	var t := clampi(copies, 1, GenomeNode.TIER_MAX)
 	var burn := float(ctx.get("burn", 1.0))
-	var wear := wear_item(GenomeNode.UPKEEP_PER_TIER * float(t - 1), burn)
+	var wear := wear_item(GenomeNode.UPKEEP_PER_TIER * float(t - 1)
+		* Catalogue.upkeep_share(gene), burn)
 	# A context built without context() -- a bare `{}` -- still has what a line reads.
 	var full := ctx if ctx.has("cell") else _completed(ctx)
 	return organ.lines(t, level, path, full, slot, wear)
