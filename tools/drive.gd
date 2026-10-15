@@ -822,10 +822,9 @@ var _trace_clock := 0.0
 ## How often to print what the `ampulla` has in the water, or -1 for never.
 var _pings_trace := -1.0
 var _pings_clock := 0.0
-## The most fronts and the most echoes seen live at one instant, over the whole
-## run. The overlap ping-as-outline.md section 7 is about is a maximum, not an
-## average: it is the worst instant that decides whether a mark is ambiguous.
-var _pings_peak_fronts := 0
+## The most echoes due at one instant, over the whole run. The overlap
+## ping-as-outline.md section 7 is about is a maximum, not an average: it is the
+## worst instant that decides whether a mark is ambiguous.
 var _pings_peak_echoes := 0
 ## Whether to pin a gene's numbers, 0 off or 1 on, or -1 to take user://'s.
 var _numbers := -1
@@ -1086,7 +1085,7 @@ const FINGERPRINT_BODY: Array[StringName] = [
 const FINGERPRINT_FIELD: Array[StringName] = [
 	&"concentration", &"dread_level", &"threat", &"shadow", &"shadow_bearing",
 	&"taste_level", &"touch_level", &"touch_bearing", &"beams", &"pings",
-	&"ping_fronts", &"ping_echoes", &"ping_listen", &"_echoes", &"_pulses",
+	&"ping_listen", &"_echoes",
 	&"_ping_clock", &"_ping_age", &"_dart_clock", &"_bite_clock",
 	&"_first_pending", &"_first_hunt", &"_serial"]
 ## The cell: its body, its motion, and every clock its drive runs on.
@@ -3060,34 +3059,27 @@ func _membrane_text() -> String:
 		_bus.INGEST_DECAY_BY_TIER[organs[0]]]
 
 
-## **What the pulse actually has in the water**, which is arithmetic off three
-## constants until something counts it. `--pings=<seconds>` prints how many
-## outgoing fronts and returning echoes are live, the running maxima, and where
-## the nearest echoes have got to.
-##
-## The maxima are the numbers that matter: ping-as-outline.md section 7 is about
-## whether a player can tell which pulse a mark belongs to, and that is decided
-## by the worst instant and not by the mean.
+## **What the pulse has still to come**, which is arithmetic off three constants
+## until something counts it. `--pings=<seconds>` prints how many echoes are due,
+## the running maximum, and the soonest four: seconds until each lands and how
+## loud it will be. No wave travels (ping-as-outline.md §14), so an echo is its
+## latency and nothing else.
 func _step_pings_trace(delta: float) -> void:
 	if _pings_trace <= 0.0 or _food == null:
 		return
-	var fronts: Array = _food.ping_fronts
-	var echoes: Array = _food.ping_echoes
-	_pings_peak_fronts = maxi(_pings_peak_fronts, fronts.size())
-	_pings_peak_echoes = maxi(_pings_peak_echoes, echoes.size())
+	var due: Array = (_food.get("_echoes") as Array).duplicate()
+	_pings_peak_echoes = maxi(_pings_peak_echoes, due.size())
 	_pings_clock += delta
 	if _pings_clock < _pings_trace:
 		return
 	_pings_clock = 0.0
+	due.sort_custom(func(a: Array, b: Array) -> bool: return float(a[0]) < float(b[0]))
 	var near := ""
-	for i in mini(echoes.size(), 4):
-		var echo: Array = echoes[i]
-		near += "  [r%6.1f  %+6.1fdeg  w%4.1f  lv%4.2f]" % [
-			float(echo[0]), rad_to_deg(float(echo[1])), float(echo[2]),
-			float(echo[3])]
-	print("[pings] %6.2f  fronts %2d (peak %2d)  echoes %2d (peak %2d)  listen %4.2f%s" % [
-		_clock, fronts.size(), _pings_peak_fronts, echoes.size(),
-		_pings_peak_echoes, _food.ping_listen, near])
+	for i in mini(due.size(), 4):
+		var echo: Array = due[i]
+		near += "  [in %5.2fs  lv%4.2f]" % [float(echo[0]), float(echo[2])]
+	print("[pings] %6.2f  echoes due %2d (peak %2d)  listen %4.2f%s" % [
+		_clock, due.size(), _pings_peak_echoes, _food.ping_listen, near])
 
 
 func _step_trace(delta: float) -> void:

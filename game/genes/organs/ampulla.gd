@@ -48,14 +48,19 @@ const U := Readout.Unit
 ## the hum now breathes from full to empty exactly once per call at **every**
 ## tier. Under the old ladder a tier-3 period was a tenth of its trip and the
 ## hum sat nearly flat. ping-as-outline.md §10 row 1 is the table.
+##
+## The fronts counted above were the drawn wave, which is gone (ping-as-outline.md
+## §14): the call is now heard only as it comes back, each echo timed from the
+## distance at the moment of the call. The counts stay as what was measured then.
 ## The host's referee judges by these: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const PING_RANGE_BY_TIER: Array[float] = [0.0, 1100.0, 1500.0, 1900.0]
 const PING_PERIOD_BY_TIER: Array[float] = [0.0, 8.8, 12.0, 15.2]
 
 ## **How much of the pulse survives one body in the way, including your own.**
-## The pulse leaves the membrane at the organ's own arc and stops on everything
-## it meets, so the body it left is the first thing in the way: an `ampulla` is
-## stone blind astern of the slot it is worn in.
+## The pulse leaves the membrane in a cone off the organ's own arc (food.gd's
+## `PING_CONE_DEG`) and stops on everything it meets, so the body it left is the
+## first thing in the way: an `ampulla` is stone blind astern of the slot it is
+## worn in.
 ##
 ## **Nothing passes, at any copies, for now** (owner, 2026-10-12;
 ## ping-as-outline.md §13): *"We remove the ability of waves to go through
@@ -134,7 +139,7 @@ func _init() -> void:
 		"values": {&"distance": &"distance", &"size": &"size"}}]}
 	# **Its look** (gene-looks.md §6): short bristles each ending in a ring -- the
 	# pores of a cluster of ampullae of Lorenzini -- over its pigment. Sensing's shade
-	# 2, which the ping's lobes and wave are drawn in, a shade apart from the beam's.
+	# 2, which the ping's lobes and marks are drawn in, a shade apart from the beam's.
 	family = SENSING
 	# **Its tile in the HUD's row** (gene.gd's `readout`; sense-tiles.md): the organ
 	# lit by its echoes, and how long it still listens.

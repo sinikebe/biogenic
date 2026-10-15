@@ -513,6 +513,17 @@ var library_at := Library.PATH
 ## channel a gene with a `readout` drives, made once in the catalogue's order and
 ## shown only while the lineage carries a gene on it.
 var _sense_tiles := {}
+## **How lit the ping's organ is** (ping-as-outline.md §14): lit by the last echo
+## to land, by its strength, and falling over [constant ECHO_GLOW_FALL].
+var _echo_glow := 0.0
+## An echo's light on the organ falls to nothing over this, as its tile's flash does.
+const ECHO_GLOW_FALL := 0.6
+## **The least an echo lights it**: an echo is a moment, and one quiet enough to be
+## dim would pass unseen in the time it is lit. So any echo the organ hears lights it
+## at least this much, and a louder one more, up to full at an echo of 1. Judged off
+## renders in both views; an echo off a body 300 units ahead, at about 0.4, lights it
+## at about two thirds.
+const ECHO_GLOW_FLOOR := 0.4
 @onready var _recorder: RecorderNode = $Recorder
 @onready var _watch_ui: CenterContainer = $Hud/Watch
 @onready var _watch_button: Button = $Hud/Watch/Button
@@ -1687,8 +1698,6 @@ func _process(delta: float) -> void:
 	# sensations a minute for an organ it does not have.
 	var eye := _eyespot_tier() > 0
 	_bus.light(_food.shadow_bearing if eye else 0.0, _food.shadow if eye else 0.0)
-	# The nose and the eyespot glow with what each senses, on the body in both views.
-	_light_organs()
 	# The earned senses, beside organs() and for the same reason: a tier is a
 	# property of the organ, not of what it senses.
 	# The beam's by its level, held to the three rungs the membrane's lobe
@@ -1697,7 +1706,10 @@ func _process(delta: float) -> void:
 		_cell.tier_for(&"smell_range"), _cell.tier_for(&"ping_range"))
 	_post_beam(delta)
 	_earn_beam(delta)
-	_post_pings()
+	_post_pings(delta)
+	# The nose, the eyespot and the ping's organ glow with what each senses, on the
+	# body in both views: after the echoes that landed this frame are in.
+	_light_organs()
 	_tell_others()
 	# `palp`: something solid, right there, felt with no light at all.
 	if _food.touch_level > 0.0:
@@ -1777,6 +1789,9 @@ func _settle_slack() -> void:
 ## **And the eyespot with the shadow it is under** (§2.7, 2026-10-15): the organ
 ## on the light channel, lit by the bus's `sight_glow()` -- the shadow, brightest
 ## with the eyespot facing it. The membrane's lobe still says where the shadow is.
+##
+## **And the ping's organ as each echo comes home** (ping-as-outline.md §14,
+## 2026-10-15): the organ that provides `ping_range`, lit at [member _echo_glow].
 func _light_organs() -> void:
 	var glows := {}
 	var nose := _cell.provider(&"smell_range")
@@ -1787,6 +1802,9 @@ func _light_organs() -> void:
 	var seen := _bus.sight_glow(_slot_bearing_of(eye)) if eye != &"" else 0.0
 	if seen > 0.0:
 		glows[eye] = maxf(seen, float(glows.get(eye, 0.0)))
+	var caller := _cell.provider(&"ping_range")
+	if caller != &"" and _echo_glow > 0.0:
+		glows[caller] = maxf(_echo_glow, float(glows.get(caller, 0.0)))
 	var lit := {} if glows.is_empty() else {"glow": glows}
 	_soma.lit = lit
 	_vision.lit = lit
@@ -2029,13 +2047,22 @@ func _post_beam(delta: float) -> void:
 ## makes an eight-second wait read as *listening* rather than as nothing, and it
 ## draws the blind arc for free: the hum is where the pulse went, so the half of
 ## the water you are not asking is the half that is dark.
-func _post_pings() -> void:
+##
+## **Each echo lights the organ** (ping-as-outline.md §14; the owner, 2026-10-15:
+## *"the organ will light up as the screen does when a reflection comes back"*):
+## [member _echo_glow] jumps with the echo's strength as it lands, never below
+## [constant ECHO_GLOW_FLOOR], and falls over [constant ECHO_GLOW_FALL]; its tile
+## flashes with it.
+func _post_pings(delta: float) -> void:
+	_echo_glow = move_toward(_echo_glow, 0.0, delta / ECHO_GLOW_FALL)
 	var tile: SenseTile = _sense_tiles.get(Catalogue.PING)
 	for echo: Array in _food.pings:
 		_bus.ping(float(echo[0]), float(echo[1]), float(echo[2]), float(echo[3]))
-		# Each echo lights the ping's tile at its strength (sense-tiles.md §1).
+		var lit := lerpf(ECHO_GLOW_FLOOR, 1.0, clampf(float(echo[1]), 0.0, 1.0))
+		_echo_glow = maxf(_echo_glow, lit)
+		# Each echo lights the ping's tile as it lights the organ (sense-tiles.md §1).
 		if tile != null and tile.visible:
-			tile.flash(float(echo[1]))
+			tile.flash(lit)
 	_hear_others()
 	_bus.ping_out(_food.ping_bearing, _food.ping_listen)
 
@@ -3460,6 +3487,7 @@ func _sense_reading(channel: StringName, organ: StringName) -> Array:
 ## and no tile still flashing.
 func _settle_gauges(level: float) -> void:
 	_energy_gauge.settle(level)
+	_echo_glow = 0.0
 	for channel: StringName in _sense_tiles:
 		(_sense_tiles[channel] as SenseTile).settle()
 

@@ -253,11 +253,9 @@ func _write_state() -> void:
 		_write_friend()
 		_write_flocs()
 		_food.beams = _read_beams()
-		_food.ping_fronts = _read_ping_fronts()
-		_food.ping_echoes = _read_ping_echoes()
 		_food.ping_range = _frame[RecorderNode.AT_PING_RANGE]
 		# **Where the organ was**, off the body layout the PLAYER delta now
-		# carries. The wavefront leaves the membrane at the `ampulla`'s own arc
+		# carries. The ping calls and hears at the `ampulla`'s own arc
 		# and both panes read that bearing off the field, so what this needs is
 		# the slot the organ was *worn* in -- which is recorded, because it
 		# cannot be worked back out of the DNA once a move has parted the two.
@@ -285,20 +283,21 @@ func _write_state() -> void:
 	_panes.set_division(_read_division())
 	# How slack the body was: the body's half of hunger, as the run drew it.
 	_panes.set_slack(_frame[RecorderNode.AT_SLACK])
-	# How brightly the nose and the eyespot glowed, on the organs the restored
-	# genome wears.
+	# How brightly the nose, the eyespot and the ping's organ glowed, on the
+	# organs the restored genome wears.
 	_panes.set_lit(_lit_organs(_frame[RecorderNode.AT_SMELL],
-		_frame[RecorderNode.AT_SIGHT]))
+		_frame[RecorderNode.AT_SIGHT], _frame[RecorderNode.AT_ECHO]))
 	# The same question the run asks of its genome, asked of the one restored.
 	_panes.set_eye(Run.eye_of(_genome, _eye_gene, _eye_flare.value()))
 	_panes.push_block(_frame, RecorderNode.AT_MEMBRANE)
 
 
-## **The nose and the eyespot, lit as the run lit them** (docs/design/
-## three-senses.md §2.6, §2.7): cilia.gd's `lit` for the organ the restored genome
-## smells with, at [param smelt], and the one it sees shadows with, at
-## [param seen]. Empty for no glow, or no such organ.
-func _lit_organs(smelt: float, seen: float) -> Dictionary:
+## **The nose, the eyespot and the ping's organ, lit as the run lit them**
+## (docs/design/three-senses.md §2.6, §2.7; ping-as-outline.md §14): cilia.gd's
+## `lit` for the organ the restored genome smells with, at [param smelt], the one
+## it sees shadows with, at [param seen], and the one it calls with, at
+## [param heard]. Empty for no glow, or no such organ.
+func _lit_organs(smelt: float, seen: float, heard: float = 0.0) -> Dictionary:
 	if _genome == null:
 		return {}
 	var glows := {}
@@ -308,6 +307,9 @@ func _lit_organs(smelt: float, seen: float) -> Dictionary:
 	var eye := Catalogue.worn_on(_genome.tiers(), Catalogue.LIGHT)
 	if seen > 0.0 and eye != &"":
 		glows[eye] = maxf(seen, float(glows.get(eye, 0.0)))
+	var caller := Catalogue.worn_on(_genome.tiers(), Catalogue.PING)
+	if heard > 0.0 and caller != &"":
+		glows[caller] = maxf(heard, float(glows.get(caller, 0.0)))
 	return {} if glows.is_empty() else {"glow": glows}
 
 
@@ -375,37 +377,6 @@ func _read_beams() -> Array:
 		if _frame[at + 1] <= 0.0 and _frame[at + 2] <= 0.0:
 			continue
 		out.append([_frame[at], _frame[at + 1], _frame[at + 2] > 0.5])
-	return out
-
-
-## **The wave going out**, as radii from the organ. Recorded newest-first and
-## handed back that way: both views only iterate, and the field's own "oldest
-## first" is about which one is about to expire, which a replay never asks.
-func _read_ping_fronts() -> Array:
-	var out: Array = []
-	for slot in RecorderNode.PING_FRONTS:
-		var r := _frame[RecorderNode.AT_PING_FRONTS + slot]
-		if r <= 0.0:
-			continue
-		out.append(r)
-	return out
-
-
-## **The echoes coming home**, exactly the four scalars the live field hands the
-## views: `[radius, bearing, halfwidth_deg, level]`. A radius of -1 or a level of
-## 0 is an empty slot.
-##
-## These four are **stepped** between recorded frames rather than lerped, and
-## [method RecorderNode.sample] is where that is enforced and why: an echo slot
-## is not an identity, so slot 2 in two consecutive frames is routinely two
-## different bodies.
-func _read_ping_echoes() -> Array:
-	var out: Array = []
-	for slot in RecorderNode.PING_ECHOES:
-		var at := RecorderNode.AT_PING_ECHOES + slot * RecorderNode.ECHO_FLOATS
-		if _frame[at] <= 0.0 or _frame[at + 3] <= 0.0:
-			continue
-		out.append([_frame[at], _frame[at + 1], _frame[at + 2], _frame[at + 3]])
 	return out
 
 
