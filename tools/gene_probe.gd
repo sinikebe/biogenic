@@ -153,6 +153,13 @@ const Families := preload("res://game/genes/families.gd")
 const Kinds := preload("res://game/genes/kinds.gd")
 ## **The ladder a gene's `water.rarity` names a row of** (docs/design/gene-rarity.md §2).
 const Rarity := preload("res://game/genes/rarity.gd")
+## The genes in genes' own slots (docs/design/gene-sockets.md).
+const Riders := preload("res://game/genes/riders.gd")
+## **What a gene's slot may give its host, by the name a host's mechanic reads it
+## by** (docs/design/gene-sockets.md §2): a gift by any other name is read by nothing,
+## and a slot that gives it gives nothing. A new gift is a line here, with the
+## mechanic that reads it.
+const READ_GIFTS: Array[StringName] = [&"sting_dose", &"bite_dose", &"effort"]
 ## **The fields a gene's `water` holds** (gene.gd): its class, whether the water makes
 ## it, and its places. A field outside them is read by nothing -- `weight`, which the
 ## draws read until gene-rarity.md's phase 7-2, above all -- and would only mislead.
@@ -317,6 +324,7 @@ func _ready() -> void:
 	_senses_and_gift()
 	_tables()
 	_rules()
+	_sockets()
 	_owner_bits()
 	_wiring()
 	_mechanics()
@@ -1641,6 +1649,153 @@ func _rules() -> void:
 		unknown_kinds.is_empty() and not kinds.is_empty())
 
 
+## **A gene's own slots** (docs/design/gene-sockets.md). Every organ's are well made:
+## at most the catalogue's and the wire's most, each taking live organs other than
+## its own that can ride, giving a table a copy long by a name a mechanic reads, and
+## with a line of its own. Then what a rider does, and nothing else: its gift by its
+## copies and none in a slot it does not fit; never a stat, a toxin record or a body
+## slot of the body's; its copies in the upkeep; the sting's and the mouth's records;
+## and the genome's own rules -- a meal a slot takes waits, and lapses into the body's
+## copy; placing, writing over a host, moving one, a birth, and a save.
+func _sockets() -> void:
+	var shapes: Array[String] = []
+	var bad: Array[String] = []
+	for key: StringName in Catalogue.keys():
+		var all := Catalogue.sockets(key)
+		if all.is_empty():
+			continue
+		if all.size() > Catalogue.SOCKETS_MAX:
+			bad.append("%s has %d slots" % [key, all.size()])
+		for k in all.size():
+			var slot: Dictionary = all[k]
+			var takes: Array = slot.get("takes", [])
+			var gives: Dictionary = slot.get("gives", {})
+			shapes.append("%s.%d %s>%s" % [key, k, str(takes), str(gives.keys())])
+			if takes.is_empty() or gives.is_empty():
+				bad.append("%s.%d takes or gives nothing" % [key, k])
+			for organ: Variant in takes:
+				var keys := Catalogue.keys_of_organ(StringName(organ))
+				if StringName(organ) == Catalogue.organ_of(key) or keys.is_empty() \
+						or Catalogue.rides_as(keys[0]) == &"" \
+						or Catalogue.has_tag(keys[0], Catalogue.RETIRED):
+					bad.append("%s.%d takes %s" % [key, k, organ])
+			for stat: Variant in gives:
+				var table: Array = gives[stat]
+				if not READ_GIFTS.has(StringName(stat)):
+					bad.append("%s.%d gives %s, which nothing reads" % [key, k, stat])
+				if table.size() != Gene.TIER_MAX + 1:
+					bad.append("%s.%d's %s is %d long" % [key, k, stat, table.size()])
+			if Figure.socket_line(key, k).is_empty():
+				bad.append("%s.%d has no line" % [key, k])
+	_check("every gene's own slots are well made, at most %d (the wire's %d), each with"
+		% [Catalogue.SOCKETS_MAX, Wire.SOCKETS_MAX] + " its line: %s%s" % [", ".join(shapes),
+			"" if bad.is_empty() else "; not: %s" % ", ".join(bad)],
+		bad.is_empty() and not shapes.is_empty() and Catalogue.SOCKETS_MAX == Wire.SOCKETS_MAX)
+
+	# **What a rider gives, and only that**: the sting's dose by the venom's copies, none
+	# for an empty slot or a gene the slot does not take, and nothing of the body's.
+	var body := {&"trichocyst": 1, &"cytostome": 1, &"flagellum": 1}
+	var doses: Array[float] = []
+	for copies in range(0, 4):
+		var riders := {}
+		if copies > 0:
+			Riders.put(riders, &"trichocyst", 0, &"veneneux", copies)
+		doses.append(Riders.value(riders, &"trichocyst", &"sting_dose", -1.0))
+	var stray := {&"trichocyst": [[&"crista", 2]]}
+	var riding := {}
+	Riders.put(riding, &"trichocyst", 0, &"toxicyst", 3)
+	Riders.put(riding, &"cytostome", 0, &"toxicyst", 2)
+	Riders.put(riding, &"flagellum", 0, &"crista", 2)
+	var refused := Riders.put(riding, &"trichocyst", 0, &"crista", 1) == Riders.Put.NOTHING \
+		and Riders.put(riding, &"cytostome", 0, &"cytostome", 1) == Riders.Put.NOTHING
+	var unchanged := true
+	for stat: StringName in Stats.ROWS:
+		if Stats.of(body, stat) != Stats.of(body.merged({}), stat):
+			unchanged = false
+	var plain := FoodField.toxins_of(body, [&"cytostome", &"", &"flagellum", &"trichocyst"])
+	var records := FoodField.toxins_of(body, [&"cytostome", &"", &"flagellum", &"trichocyst"],
+		true, riding)
+	var harm := float(Doses.Kind.HARM)
+	var upkeep := Genome.upkeep_of(body, {}, riding)
+	_check(("a rider gives its host its slot's gift by its copies -- the sting's dose %s at 0"
+		+ " to 3 venom -- none in a slot it does not fit (%.1f), cannot go where it does not"
+		+ " fit, and is no gene of the body's: no stat moves, no toxin rides on a body"
+		+ " without riders (%s), the venoms ride on the sting and the bite (%s), and its"
+		+ " copies past the first cost upkeep (%.2f)") % [str(doses),
+			Riders.value(stray, &"trichocyst", &"sting_dose", 0.0), str(plain), str(records),
+			upkeep],
+		doses == [0.0, 1.0, 2.0, 3.0] and Riders.value(stray, &"trichocyst", &"sting_dose",
+			0.0) == 0.0 and refused and unchanged and plain.is_empty()
+		and records == PackedFloat64Array([FoodField.HOW_BITE, harm, 2.0, 0.0,
+			FoodField.HOW_DART, harm, 3.0, 0.0])
+		and is_equal_approx(upkeep, 1.0 + Genome.UPKEEP_PER_TIER * 4.0))
+
+	# **The burn in a moving gene's slot**: that gene's price, and nothing else's.
+	var water := FoodField.Body.new()
+	water.genome = {&"flagellum": 1, &"axoneme": 1, &"myoneme": 1, &"cytostome": 1}
+	water.riders = {&"flagellum": [[&"crista", 2]]}
+	_check("a burn in the tail's slot takes its strokes to %.2f and leaves the push %.2f and"
+		% [water.stat_effort_tail, water.stat_effort_push] + " the dash %.2f, and the body's"
+		% water.stat_effort_dash + " own burn %.2f" % Stats.of(water.genome, &"burn"),
+		is_equal_approx(water.stat_effort_tail, 0.55) and water.stat_effort_push == 1.0
+		and water.stat_effort_dash == 1.0 and Stats.of(water.genome, &"burn") == 1.0)
+
+	# **The genome's rules for a rider.**
+	var genome: Node = Genome.new()
+	genome.express({&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"crista": 1},
+		[&"cytostome", &"cirrus", &"flagellum", &"crista"])
+	# A burn the body carries, with the tail's slot empty, waits for the hand ...
+	var waits: int = genome.integrate(&"crista")
+	var held: Array = genome.waiting()
+	# ... and left to lapse is the copy more it would have been.
+	genome.call(&"_lapse", genome.call(&"take_waiting")[0])
+	var lapsed: int = genome.dna_tier(&"crista")
+	genome.integrate(&"crista")
+	var preview: Array = genome.placing_rider(&"crista", &"flagellum", 0)
+	var placed: int = genome.place_rider(&"flagellum", 0)
+	var after: Dictionary = Riders.by_name(genome.riders())
+	var body_untouched: bool = genome.body_riders().is_empty() \
+		and genome.dna_tier(&"crista") == 2
+	# A toxin waits and goes into the mouth's slot as venom; a second copy raises it.
+	genome.integrate(&"veneneux")
+	genome.place_rider(&"cytostome", 0)
+	genome.integrate(&"veneneux")
+	var raise_preview: Array = genome.placing_rider(&"veneneux", &"cytostome", 0)
+	genome.place_rider(&"cytostome", 0)
+	var venom := Riders.copies_at(genome.riders(), &"cytostome", 0)
+	# The tail moved keeps its slot; a birth wears what the DNA has; a save keeps both.
+	genome.move(2, 3)
+	var moved: bool = Riders.rider_at(genome.riders(), &"flagellum", 0) == &"crista"
+	genome.express(genome.dna(), genome.layout(), null, null, null, genome.riders())
+	var worn: Dictionary = Riders.by_name(genome.body_riders())
+	var state: Dictionary = genome.to_state()
+	var again: Node = Genome.new()
+	again.set_state(state)
+	var kept: bool = Riders.same(again.riders(), genome.riders()) \
+		and Riders.same(again.body_riders(), genome.body_riders())
+	# And a gene written over its host takes its riders with it.
+	again.integrate(&"palp")
+	var tail_at: int = again.dna_slot(&"flagellum")
+	again.place(tail_at)
+	var gone: bool = not again.riders().has(&"flagellum") \
+		and again.riders().has(&"cytostome")
+	_check(("the genome holds a rider: a burn the body carries waits while the tail's slot"
+		+ " is empty (%s, %s) and lapses into the body's copy (%d); placing it (%s, %s)"
+		+ " writes the DNA's slot alone (%s); a toxin goes in as venom and a second copy"
+		+ " raises it (%s, %d); the tail moved keeps it, a birth wears it (%s), a save keeps"
+		+ " both, and the tail written over takes its rider and leaves the mouth's")
+		% [Genome.Result.keys()[waits], str(held), lapsed, str(preview),
+			Genome.Result.keys()[placed], str(after), str(raise_preview), venom, str(worn)],
+		waits == Genome.Result.HELD and held == [&"crista"] and lapsed == 2
+		and preview == [Genome.PLACE_WRITE, &""] and placed == Genome.Result.INTEGRATED
+		and after == {"flagellum": [["crista", 1]]} and body_untouched
+		and raise_preview == [Genome.PLACE_RAISE, &"toxicyst"] and venom == 2 and moved
+		and worn == {"flagellum": [["crista", 1]], "cytostome": [["toxicyst", 2]]}
+		and kept and gone)
+	genome.free()
+	again.free()
+
+
 ## **The rulebook has no ceiling on owners** (§13, §15.6): the game's tables and seventy
 ## owners more, each declaring a sense, an action and an action at level 2, number every
 ## owner-and-level -- 151 bits, past the one int that held them all -- and the game's
@@ -2962,7 +3117,8 @@ func _synthetic_plan() -> void:
 	var limits := [Wire.ORDER_MAX, Wire.GENES_MAX, Wire.PERSON_MAX]
 	var genes_max := PLAN_TEST.size() + 1
 	var expect_limits := [outside.size(), genes_max, Wire.EVENT_HEADER + 1
-		+ (1 + genes_max * (1 + Wire.NAME_MAX + 1)) + (1 + outside.size() * (1 + Wire.NAME_MAX))]
+		+ (1 + genes_max * (1 + Wire.NAME_MAX + 1)) + (1 + outside.size() * (1 + Wire.NAME_MAX))
+		+ (1 + genes_max * (1 + Wire.NAME_MAX + 1 + Wire.SOCKETS_MAX * (1 + Wire.NAME_MAX + 1)))]
 	var fits := Referee._order_fits(ten, eight)
 
 	# **The figure lays it out**: the port flank in the cell the shipped plan leaves
@@ -3002,7 +3158,7 @@ func _synthetic_plan() -> void:
 		ten.size(), eight.size(), str(not crossed.is_empty()), str(fits),
 		_outside_indexes(SHIPPED_PLAN).size(), str(refused)],
 		limits == expect_limits and ten.size() == genes_max and eight.size() == outside.size()
-		and crossed.size() == 3 and (crossed[1] as Dictionary) == ten
+		and crossed.size() == 4 and (crossed[1] as Dictionary) == ten
 		and _same_list(crossed[2], eight) and fits and refused == fewer)
 	_check(("and the pause figure lays it out: seats %s, Tab round %s, and from the inside"
 		+ " left to the port flank, %s") % [str(seats), str(ring), str(inside_ways)],

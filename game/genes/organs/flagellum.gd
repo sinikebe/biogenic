@@ -56,6 +56,16 @@ const WORDS := {&"flagellum": "swim"}
 ## `entry` line says which gene.
 ## ROOM: 440 px at 15 px
 const EXPLAINS := {&"flagellum": "your tail beats harder, and more often"}
+## **The line of each of its own slots** (docs/design/gene-sockets.md §2), keyed
+## `host.taken`: what the gene in it does to this one, after the slot's word.
+##
+## TRANSLATORS: What a gene placed in one of another gene's own slots does to that
+## gene, in one line shown after the placed gene's word and a middle dot: "venom ·
+## every sting leaves it too". "It" is the placed gene. Lowercase, plain words, no
+## numbers, no longer than the English: it shares the explanation's line. The
+## `entry` line says which gene's slot, then which gene it takes.
+## ROOM: 440 px at 15 px
+const SOCKET_EXPLAINS := {&"flagellum.crista": "your tail costs less hunger"}
 ## **What its action is called** on an instinct's chip (automation.md §13.1).
 ##
 ## TRANSLATORS: The name of an action the player's cell can be told to do by one
@@ -122,6 +132,10 @@ func _init() -> void:
 	# EXPLAIN_ORGAN_SEAT).
 	family = MOVING
 	look = {"shape": LASH, "shade": 0}
+	# **Its own slot** (gene-sockets.md §3 row 10): a crista in it, and the tail's
+	# strokes cost less -- more off one gene than the crista takes off the whole
+	# body (crista.gd's BURN_BY_TIER), which still multiplies on top.
+	sockets = [{"takes": [&"crista"], "gives": {&"effort": [1.0, 0.70, 0.55, 0.40]}}]
 
 
 ## **Its numbers on the pause screen** (gene.gd's `lines`): how fast it swims, how often

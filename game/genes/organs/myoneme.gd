@@ -43,6 +43,16 @@ const WORDS := {&"myoneme": "dash"}
 ## `entry` line says which gene.
 ## ROOM: 440 px at 15 px
 const EXPLAINS := {&"myoneme": "tap for a burst of speed, paid for in hunger"}
+## **The line of each of its own slots** (docs/design/gene-sockets.md §2), keyed
+## `host.taken`: what the gene in it does to this one, after the slot's word.
+##
+## TRANSLATORS: What a gene placed in one of another gene's own slots does to that
+## gene, in one line shown after the placed gene's word and a middle dot: "venom ·
+## every sting leaves it too". "It" is the placed gene. Lowercase, plain words, no
+## numbers, no longer than the English: it shares the explanation's line. The
+## `entry` line says which gene's slot, then which gene it takes.
+## ROOM: 440 px at 15 px
+const SOCKET_EXPLAINS := {&"myoneme.crista": "your dash costs less hunger"}
 ## **What its action is called** on an instinct's chip (automation.md §13.1).
 ##
 ## TRANSLATORS: The name of an action the player's cell can be told to do by one
@@ -79,6 +89,9 @@ func _init() -> void:
 	# beads, and beads mean armed.
 	family = MOVING
 	look = {"shape": COIL}
+	# **Its own slot** (gene-sockets.md §3 row 10): a crista in it, and the dash
+	# costs less -- as the tail's slot does.
+	sockets = [{"takes": [&"crista"], "gives": {&"effort": [1.0, 0.70, 0.55, 0.40]}}]
 
 
 ## **Its numbers on the pause screen** (gene.gd's `lines`): how hard a dash bursts, how

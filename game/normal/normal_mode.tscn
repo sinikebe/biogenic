@@ -334,6 +334,12 @@ offset_top = 41.0
 offset_right = 420.0
 offset_bottom = 331.0
 
+[node name="Sockets" type="Control" parent="Hud/Pause/Center/Columns/Genome"]
+visible = false
+custom_minimum_size = Vector2(420, 372)
+mouse_filter = 2
+size_flags_horizontal = 4
+
 [node name="Lines" type="Control" parent="Hud/Pause/Center/Columns/Genome"]
 custom_minimum_size = Vector2(0, 82)
 mouse_filter = 2

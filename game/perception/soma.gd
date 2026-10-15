@@ -225,7 +225,8 @@ func _draw_figure() -> void:
 		_cell.gape() * SCALE, r, true, _clock, FADE, _cell.steer,
 		clampf(beat, 0.0, 1.0), 0.0, 1.0, order, _cell.wound,
 		float(division.get("double", 0.0)), float(division.get("pinch", 0.0)),
-		0.0, false, eye, _tail, slack, _dosed(), _lit())
+		0.0, false, eye, _tail, slack, _dosed(), _lit(),
+		_genome.body_riders() if _genome != null else {})
 	# **What is loose in you, and where it could go.** Both are facts about this
 	# body and about nothing in the water, so both are inside the line this
 	# figure stands on. It is the only place point of view says a gene is

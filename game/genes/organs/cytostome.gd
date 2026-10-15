@@ -53,6 +53,16 @@ const WORDS := {&"cytostome": "eat"}
 ## `entry` line says which gene.
 ## ROOM: 440 px at 15 px
 const EXPLAINS := {&"cytostome": "a wider mouth swallows bigger things whole"}
+## **The line of each of its own slots** (docs/design/gene-sockets.md §2), keyed
+## `host.taken`: what the gene in it does to this one, after the slot's word.
+##
+## TRANSLATORS: What a gene placed in one of another gene's own slots does to that
+## gene, in one line shown after the placed gene's word and a middle dot: "venom ·
+## every sting leaves it too". "It" is the placed gene. Lowercase, plain words, no
+## numbers, no longer than the English: it shares the explanation's line. The
+## `entry` line says which gene's slot, then which gene it takes.
+## ROOM: 440 px at 15 px
+const SOCKET_EXPLAINS := {&"cytostome.toxin": "every bite leaves it too"}
 
 
 func _init() -> void:
@@ -75,6 +85,10 @@ func _init() -> void:
 	# *is* nutrition.
 	family = EATING
 	look = {"shape": MAT, "shade": 2}
+	# **Its own slot** (gene-sockets.md §3 row 3): a toxin in it, and every bite
+	# leaves the toxin's dose, as venom at the front does at the same copies
+	# (toxin.gd's VENOM_STACKS_BY_TIER), without a body slot spent on it.
+	sockets = [{"takes": [&"toxin"], "gives": {&"bite_dose": [0.0, 1.0, 2.0, 3.0]}}]
 
 
 ## **Its numbers on the pause screen** (gene.gd's `lines`): what it swallows and bites,

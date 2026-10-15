@@ -51,6 +51,8 @@ const CellBody := preload("res://game/normal/cell.gd")
 const MotesField := preload("res://game/normal/motes.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
+## The genes in genes' own slots (docs/design/gene-sockets.md).
+const Riders := preload("res://game/genes/riders.gd")
 const SignalBus := preload("res://game/perception/signal_bus.gd")
 const SomaLayer := preload("res://game/perception/soma.gd")
 
@@ -575,12 +577,15 @@ func _capture_bodies(at: int) -> void:
 		var b := cells[index]
 		# **Its genome, keyed on the body**: when it takes the slot, and when
 		# it eats -- a meal is the only thing that moves a genome in either
-		# water. Stepped at playback, and carrying the body's id.
+		# water. Stepped at playback, and carrying the body's id -- and what
+		# rides in its genes' own slots (gene-sockets.md §7), which a meal may
+		# also move.
 		var meals := b.meals
 		if meals != _slot_meals[slot]:
 			_slot_meals[slot] = meals
 			_gape_scale[slot] = CellBody.gape_of(b.genome, 1.0)
-			_deltas.append([_clock, Delta.BODY, slot, b.genome.duplicate(), b.id])
+			_deltas.append([_clock, Delta.BODY, slot, b.genome.duplicate(), b.id,
+				b.riders.duplicate(true)])
 		var pos := b.pos
 		_ring[i] = pos.x
 		_ring[i + 1] = pos.y
@@ -812,6 +817,10 @@ func _watch_state() -> void:
 				# **The lineage's levels** (beam-levels.md §7): what the beam's
 				# shape and a sweep's hold are read off at playback.
 				"levels": _genome.level_state(),
+				# **The genes in its genes' own slots** (gene-sockets.md §7), the
+				# DNA's and the body's: a host's look and what it delivers.
+				"riders": _genome.riders().duplicate(true),
+				"body_riders": _genome.body_riders().duplicate(true),
 			}])
 	# **The drop's rim**, once: it moves only when a run starts in it, and the
 	# ring is cleared then. Today's water has none, and writes none.
@@ -900,6 +909,9 @@ func _sign_genome() -> int:
 		var grown: RefCounted = levels[gene]
 		sig += gene.hash() * (int(grown.level()) + 13) * 307
 		sig += StringName(grown.path).hash() * 17
+	# And what rides in its genes' own slots (gene-sockets.md §7): a placement into
+	# one changes nothing above.
+	sig += Riders.sign_of(_genome.riders()) * 409 + Riders.sign_of(_genome.body_riders()) * 23
 	return sig
 
 

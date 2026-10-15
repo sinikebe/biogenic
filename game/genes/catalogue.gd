@@ -97,6 +97,9 @@ const WAY_WORDS := {"PATH_TITLES": &"way_titles", "PATH_LINES": &"way_lines",
 ## ... and the words of a part it declares, by the part's qualified name.
 const PART_WORDS := {"GENE_SAYS": &"says", "GENE_SENSES": &"sense",
 	"GENE_EXPLAINS": &"explains", "GENE_ASLEEP": &"asleep", "GENE_NEEDS": &"needs"}
+## ... and the line of each of its own slots, by `host.taken`: the host's organ and
+## the organ the slot takes (docs/design/gene-sockets.md §2).
+const SOCKET_WORDS := {"SOCKET_EXPLAINS": &"line"}
 
 ## **The water's list of what a drifter may be made of**, and the parts genes
 ## declare to a body's rules, by the names their orders are pinned under below.
@@ -230,6 +233,10 @@ static var _words := {}
 ## Qualified part name to its words, [constant PART_WORDS]' names to the English:
 ## every part an organ's file has words for.
 static var _part_words := {}
+## `host.taken` to a slot's words, [constant SOCKET_WORDS]' names to the English.
+static var _socket_words := {}
+## No slots, the answer for a key with none.
+static var _no_sockets := _frozen_list()
 
 
 static func _static_init() -> void:
@@ -802,6 +809,73 @@ static func part_words(part: StringName) -> Dictionary:
 	return _part_words.get(part, _no_words)
 
 
+# --- A gene's own slots (docs/design/gene-sockets.md) ------------------------------------
+
+## The most slots one gene may have: what the wire sizes a host's by (wire.gd's
+## `SOCKETS_MAX`), and what the gene probe holds every organ to.
+const SOCKETS_MAX := 4
+
+## **[param key]'s own slots** (gene.gd's `sockets`), read-only: one dictionary a
+## slot, `takes` and `gives`. Empty for a gene with none and for a key this build does
+## not know.
+static func sockets(key: StringName) -> Array:
+	var record := gene(key)
+	return record.sockets if record != null else _no_sockets
+
+
+## **The key [param gene] rides as**: its outside form, which is itself for a gene of
+## one form. `&""` for a gene that cannot sit outside, which can ride in nothing.
+static func rides_as(gene: StringName) -> StringName:
+	return form_in(gene, Gene.OUTSIDE) if known(gene) else &""
+
+
+## **Whether [param gene] fits slot [param socket] of [param host]**: its organ is one
+## the slot takes, it can ride ([method rides_as]), and it is no form of the host's
+## own organ.
+static func fits(host: StringName, socket: int, gene: StringName) -> bool:
+	var all := sockets(host)
+	if socket < 0 or socket >= all.size() or rides_as(gene) == &"":
+		return false
+	var organ := organ_of(gene)
+	return organ != organ_of(host) and ((all[socket] as Dictionary).get("takes", [])
+		as Array).has(organ)
+
+
+## **What slot [param socket] of [param host] gives** its host by [param stat], with
+## a rider of [param copies] in it: its table read at the copies, clamped to it, as a
+## stat's table is. [param none] where the slot gives nothing by that name.
+static func gives(host: StringName, socket: int, stat: StringName, copies: int,
+		none: float) -> float:
+	var all := sockets(host)
+	if socket < 0 or socket >= all.size():
+		return none
+	var table: Array = ((all[socket] as Dictionary).get("gives", {}) as Dictionary).get(
+		stat, [])
+	if table.is_empty():
+		return none
+	return float(table[clampi(copies, 0, table.size() - 1)])
+
+
+## **The organs slot [param socket] of [param host] takes**, read-only; empty for a
+## slot it does not have.
+static func takes(host: StringName, socket: int) -> Array:
+	var all := sockets(host)
+	if socket < 0 or socket >= all.size():
+		return _no_sockets
+	return (all[socket] as Dictionary).get("takes", _no_sockets)
+
+
+## **The words of slot [param socket] of [param host]**, read-only: [constant
+## SOCKET_WORDS]' names -- `line` -- to the English, from its host's file, under
+## `host.taken` by the first organ it takes. Empty for a slot with none, which the
+## gene probe fails.
+static func socket_words(host: StringName, socket: int) -> Dictionary:
+	var organs := takes(host, socket)
+	if organs.is_empty():
+		return _no_words
+	return _socket_words.get(StringName("%s.%s" % [organ_of(host), organs[0]]), _no_words)
+
+
 # --- Tools -----------------------------------------------------------------------------------
 
 ## **A tool's seam: a gene of its own** (§4.3), filed as an organ's file would be,
@@ -848,6 +922,7 @@ static func _index() -> void:
 	# Each key's words, and every part's, from its organ file's word tables.
 	var words := {}
 	var part_words := {}
+	var socket_words := {}
 	var one_variant := {}
 	var organ_classes := {}
 	for organ: Gene in organs:
@@ -867,6 +942,7 @@ static func _index() -> void:
 			if not organ_classes.has(record.organ):
 				organ_classes[record.organ] = own_class
 		_part_words_into(part_words, tables)
+		_socket_words_into(socket_words, tables)
 	_one_variant = one_variant
 	for record: Gene in resolved:
 		for field: StringName in FROZEN:
@@ -888,6 +964,8 @@ static func _index() -> void:
 	_words = words
 	_freeze(part_words)
 	_part_words = part_words
+	_freeze(socket_words)
+	_socket_words = socket_words
 	_index_looks(organs, resolved)
 	var ordered := resolved.filter(func(one: Gene) -> bool: return one.order >= 0)
 	ordered.sort_custom(func(a: Gene, b: Gene) -> bool: return a.order < b.order)
@@ -1144,8 +1222,10 @@ static func _resolve(organ: Gene) -> Array:
 			var record: Gene = organ.get_script().new()
 			record.organ = organ.organ
 			record.variants = organ.variants
-			# The parts are the organ's, on every variant and form ([method declares]).
+			# The parts are the organ's, on every variant and form ([method declares]),
+			# and so are its own slots ([method sockets]).
 			record.declares = organ.declares
+			record.sockets = organ.sockets
 			_write_over(record, _fields_of(organ))
 			# No copies at birth unless the variant or its form says so (above).
 			record.born = 0
@@ -1221,6 +1301,26 @@ static func _part_words_into(into: Dictionary, tables: Dictionary) -> void:
 			(into[part] as Dictionary)[PART_WORDS[table]] = entries[part]
 
 
+## Adds the words of every slot an organ file's [param tables] have words for to
+## [param into], `host.taken` to [constant SOCKET_WORDS]' names.
+static func _socket_words_into(into: Dictionary, tables: Dictionary) -> void:
+	for table: String in SOCKET_WORDS:
+		var entries: Variant = tables.get(table)
+		if not entries is Dictionary:
+			continue
+		for slot: Variant in entries:
+			if not into.has(slot):
+				into[slot] = {}
+			(into[slot] as Dictionary)[SOCKET_WORDS[table]] = entries[slot]
+
+
+## An empty array, read-only.
+static func _frozen_list() -> Array:
+	var out := []
+	out.make_read_only()
+	return out
+
+
 ## An empty dictionary, read-only.
 static func _frozen_empty() -> Dictionary:
 	var out := {}
@@ -1280,7 +1380,7 @@ static func _pinned(keys: Array[StringName], shipped: Array) -> Array[StringName
 ## rest hand out is the catalogue's own, and a reader that wrote into it would
 ## change that gene for every body.
 const FROZEN: Array[StringName] = [&"provides", &"numbers", &"levels", &"water", &"tags",
-	&"declares", &"variants", &"look"]
+	&"declares", &"variants", &"look", &"sockets"]
 
 
 ## [param value] made read-only, and every dictionary and array inside it.

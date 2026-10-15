@@ -52,6 +52,8 @@ const Cilia := preload("res://game/vision/cilia.gd")
 const CellBody := preload("res://game/normal/cell.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
 const Catalogue := preload("res://game/genes/catalogue.gd")
+## The genes in genes' own slots (docs/design/gene-sockets.md).
+const Riders := preload("res://game/genes/riders.gd")
 const GeneStats := preload("res://game/normal/gene_stats.gd")
 const Readout := preload("res://game/mechanics/readout.gd")
 const Progression := preload("res://game/mechanics/progression.gd")
@@ -283,6 +285,24 @@ const CHIP_AMP := 11.0
 ## The word's baseline, and its size -- one up from the strand's 13, because a
 ## chip is read on its own rather than along a row of neighbours.
 const CHIP_BASE := 50.0
+## **A gene's own slots, as ports off its chip** (docs/design/gene-sockets.md §5.1):
+## a 4 px port 5 px past the chip's right edge, one every 9.5 px down the helix's
+## end, on a stem from it. Up to four fit the helix's 22 px and a little over; a
+## neighbour chip is 54 px away. Lit, a port gains a ring and a glow in the hue of
+## the gene in hand.
+const PORT_X := 101.0
+const PORT_R := 4.0
+const PORT_PITCH := 9.5
+const PORT_RING := 1.4
+const PORT_GLOW := 4.0
+const PORT_GLOW_ALPHA := 0.32
+const PORT_LIT_ALPHA := 0.95
+const PORT_FULL_ALPHA := 0.95
+const PORT_EMPTY_ALPHA := 0.62
+const PORT_STEM_ALPHA := 0.40
+const PORT_STEM_WIDTH := 1.2
+## The hole an empty port is, so a stem never shows through it.
+const PORT_HOLE := Color(0.031, 0.075, 0.067, 0.95)
 const CHIP_WORD := 14
 ## **The copies are three pips**, after the word, at its x-height. Built three
 ## ways on one frame (dna-body.md §3.1): seats for three rungs inside the helix
@@ -878,14 +898,15 @@ static func caption(generation: int, numbers: bool, radius: float, body: Diction
 ## do to it (`FoodField.felt_of`), stains round the inside chip's window and pits
 ## the rim, as hunger's crumple is.
 static func draw_body(canvas: Control, body: Dictionary, worn: Array[StringName],
-		genes: Array[StringName], live: int, slack: float, felt: Vector3) -> void:
+		genes: Array[StringName], live: int, slack: float, felt: Vector3,
+		riders: Dictionary = {}) -> void:
 	for slot in live:
 		_draw_tether(canvas, slot, _gene_in(genes, slot))
 	Cilia.draw_cell(canvas, FIGURE_AT, 0.0, FIGURE_R, body,
 		CellBody.gape_of(body, FIGURE_R), FIGURE_R,
 		true, 0.0, FIGURE_FADE, 0.0, 0.0, 0.0, 1.0, worn, 0.0, 0.0, 0.0, 0.0,
 		false, Cilia.NO_EYE, Cilia.NO_TAIL, slack,
-		Cilia.NO_DOSE if felt == Vector3.ZERO else {"felt": felt})
+		Cilia.NO_DOSE if felt == Vector3.ZERO else {"felt": felt}, Cilia.NO_LIT, riders)
 	_draw_dissent(canvas, worn, genes, live)
 
 
@@ -1011,13 +1032,15 @@ static func chip_at(slot: int) -> Vector2:
 ## waits; [param selected] fills the lens, which is the whole of "selected";
 ## [param trace] leaves only a trace of it, where a tap adds a copy elsewhere;
 ## [param refused] drops the weave to [constant REFUSED_INK]; and [param ghost]
-## is a form not written yet, at [param ghost_copies] and [param ghost_ink]. The
-## keyboard's underline is drawn whenever the node has the focus.
+## is a form not written yet, at [param ghost_copies] and [param ghost_ink].
+## [param ports] are **its gene's own slots** (docs/design/gene-sockets.md §5.1),
+## one `[rider, lit]` each -- [method draw_ports]. The keyboard's underline is drawn
+## whenever the node has the focus.
 static func draw_chip(node: Control, slot: int, gene: StringName, copies: int,
 		worn: int, tone: Color, level: int = 0, forking: bool = false,
 		selected: bool = false, trace: bool = false, refused: bool = false,
 		ghost: StringName = &"", ghost_copies: int = 0,
-		ghost_ink: float = GHOST_INK) -> void:
+		ghost_ink: float = GHOST_INK, ports: Array = []) -> void:
 	# **The inside chip sits on the body, over a window of the base colour**, so
 	# its weave and word read over the nucleus and a stain (dna-slots-ux.md §3.1).
 	if GenomeNode.is_inside(slot):
@@ -1047,6 +1070,8 @@ static func draw_chip(node: Control, slot: int, gene: StringName, copies: int,
 			CHIP_AMP, 0, CHIP_LOBE * 1.5, Cilia.hue(gene), copies, worn)
 		draw_accent(node, gene, Vector2(CHIP_LOBE * 0.5, CHIP_MID))
 	node.draw_set_transform(Vector2.ZERO)
+	if gene != &"" and not ports.is_empty():
+		draw_ports(node, ports, REFUSED_INK if refused else 1.0)
 
 	draw_chip_label(node, gene, copies, worn, selected, level)
 	if ghost != &"":
@@ -1058,6 +1083,35 @@ static func draw_chip(node: Control, slot: int, gene: StringName, copies: int,
 		node.draw_line(Vector2(FOCUS_INSET, SLOT_SIZE.y - 1.0),
 			Vector2(SLOT_SIZE.x - FOCUS_INSET, SLOT_SIZE.y - 1.0),
 			FOCUS_TINT, FOCUS_WIDTH, true)
+
+
+## **A gene's own slots, as ports off its chip's helix** (docs/design/gene-sockets.md
+## §5.1): one a slot, stacked at the helix's right end on a short stem -- hollow for
+## an empty slot, a disc in its rider's hue for a full one. [param ports] holds
+## `[rider, lit]` a slot, `lit` the hue of the gene in hand where that slot takes
+## it, and transparent where it does not: a lit port rings and glows in it, so
+## everywhere the gene could go is lit at once. [param ink] is the chip's own.
+static func draw_ports(node: CanvasItem, ports: Array, ink: float = 1.0) -> void:
+	var count := ports.size()
+	var root := Vector2(CHIP_X + CHIP_LOBE * float(CHIP_LOBES), CHIP_MID)
+	for k in count:
+		var at := Vector2(PORT_X, CHIP_MID + (float(k) - float(count - 1) * 0.5) * PORT_PITCH)
+		var rider := StringName(ports[k][0])
+		var lit: Color = ports[k][1]
+		node.draw_line(root, at, Color(PALE, PORT_STEM_ALPHA * ink), PORT_STEM_WIDTH, true)
+		if lit.a > 0.0:
+			node.draw_circle(at, PORT_R + PORT_GLOW, Color(lit, PORT_GLOW_ALPHA * ink),
+				true, -1.0, true)
+		if rider != &"":
+			node.draw_circle(at, PORT_R, Color(Cilia.hue(rider), PORT_FULL_ALPHA * ink),
+				true, -1.0, true)
+		else:
+			node.draw_circle(at, PORT_R, PORT_HOLE, true, -1.0, true)
+			node.draw_arc(at, PORT_R - PORT_RING * 0.5, 0.0, TAU, 16,
+				Color(PALE, PORT_EMPTY_ALPHA * ink), PORT_RING, true)
+		if lit.a > 0.0:
+			node.draw_arc(at, PORT_R + PORT_RING, 0.0, TAU, 20,
+				Color(lit, PORT_LIT_ALPHA * ink), PORT_RING, true)
 
 
 ## **[param gene]'s accent at [param at]** (gene-looks.md §4): a variant's mark,
@@ -1218,6 +1272,102 @@ static func draw_pips(node: CanvasItem, first: Vector2, tone: Color, copies: int
 		else:
 			node.draw_circle(at, PIP_ROOM_R, Color(PALE, PIP_ROOM_ALPHA * ink),
 				true, -1.0, true)
+
+
+# ---------------------------------------------------------------------------
+# A gene's own slots: its view (docs/design/gene-sockets.md §5.2).
+# ---------------------------------------------------------------------------
+
+## **The view's places, in the figure's own 420 x 372**, which it takes over as the
+## fork's cards do: the gene drawn large at the top, its chip under it, its slots
+## in a row below on threads from it, and `‹ genome` in the top-left corner, the
+## view's way back. Chips are the ring's own [constant SLOT_SIZE].
+const HOST_ORGAN_AT := Vector2(210.0, 100.0)
+const HOST_ORGAN_SCALE := 2.6
+const HOST_CHIP_AT := Vector2(162.0, 140.0)
+const SOCKET_ROW_Y := 272.0
+const SOCKET_GAP := 24.0
+const BACK_AT := Vector2(0.0, 4.0)
+const BACK_SIZE := Vector2(104.0, 48.0)
+const BACK_WORD := 15
+## The threads from the gene's chip to each slot: quiet, and lit in the hue of the
+## gene in hand where the slot takes it.
+const THREAD_ALPHA := 0.28
+const THREAD_LIT_ALPHA := 0.85
+const THREAD_WIDTH := 1.6
+const THREAD_LIT_WIDTH := 2.2
+## TRANSLATORS: The chip in the corner of a gene's own slots, on the pause screen:
+## it goes back to the whole genome, the ring of slots round the cell. Keep the
+## arrow on its left, as on "‹ programs". Lowercase.
+## ROOM: 88 px at 15 px
+const SOCKETS_BACK := "‹ genome"
+
+
+## **Slot [param k] of [param count]'s chip**, its top-left: the row centred under
+## the gene's chip.
+static func socket_chip_at(k: int, count: int) -> Vector2:
+	var row := float(count) * SLOT_SIZE.x + float(maxi(count - 1, 0)) * SOCKET_GAP
+	return Vector2(FIGURE_AT.x - row * 0.5 + float(k) * (SLOT_SIZE.x + SOCKET_GAP),
+		SOCKET_ROW_Y)
+
+
+## **The view behind its chips**: [param host] drawn large -- its tile organ at
+## [param tier], dimmer for a gene the body does not wear -- and a thread from its
+## chip to each of its slots, `lit[k]` the hue of the gene in hand where slot `k`
+## takes it and transparent where it does not.
+static func draw_host_view(canvas: Control, host: StringName, tier: int, worn: bool,
+		lit: Array) -> void:
+	Cilia.draw_tile_organ(canvas, host, tier, HOST_ORGAN_AT,
+		Cilia.TILE_STROKE_ALPHA if worn else ORGAN_UNEXPRESSED, HOST_ORGAN_SCALE)
+	var from := HOST_CHIP_AT + Vector2(SLOT_SIZE.x * 0.5, SLOT_SIZE.y)
+	for k in lit.size():
+		var to := socket_chip_at(k, lit.size()) + Vector2(SLOT_SIZE.x * 0.5, 0.0)
+		var tone: Color = lit[k]
+		var bend := from + Vector2(0.0, (to.y - from.y) * 0.5)
+		var turn := Vector2(to.x, bend.y)
+		var points := PackedVector2Array([from, bend, turn, to])
+		if tone.a > 0.0:
+			canvas.draw_polyline(points, Color(tone, THREAD_LIT_ALPHA), THREAD_LIT_WIDTH,
+				true)
+		else:
+			canvas.draw_polyline(points, Color(PALE, THREAD_ALPHA), THREAD_WIDTH, true)
+
+
+## **The view's way back**, `‹ genome`, in the chips' word tint, underlined while
+## it has the keyboard.
+static func draw_back(node: Control) -> void:
+	var font := node.get_theme_default_font()
+	if font == null:
+		return
+	var says := String(TranslationServer.translate(SOCKETS_BACK))
+	var height := font.get_height(BACK_WORD)
+	node.draw_string(font, Vector2(FOCUS_INSET * 0.5,
+		(BACK_SIZE.y + height) * 0.5 - font.get_descent(BACK_WORD)), says,
+		HORIZONTAL_ALIGNMENT_LEFT, -1.0, BACK_WORD, LABEL_TINT)
+	if node.has_focus():
+		node.draw_line(Vector2(FOCUS_INSET * 0.5, BACK_SIZE.y - 1.0),
+			Vector2(BACK_SIZE.x - FOCUS_INSET * 0.5, BACK_SIZE.y - 1.0),
+			FOCUS_TINT, FOCUS_WIDTH, true)
+
+
+## **What a slot takes, said as the gene it would hold**: the form its first organ
+## rides as -- `venom` for the toxin's slot, `burn` for the crista's. What an empty
+## slot's chip draws faint, and its line names.
+static func socket_takes(host: StringName, socket: int) -> StringName:
+	var organs := Catalogue.takes(host, socket)
+	if organs.is_empty():
+		return &""
+	var keys := Catalogue.keys_of_organ(organs[0])
+	return Catalogue.rides_as(keys[0]) if not keys.is_empty() else &""
+
+
+## **A slot's line** (the host file's `SOCKET_EXPLAINS`), translated: what the gene
+## in it does to its host. Empty for a slot with none.
+##
+## i18n-ok: the organ files' word tables, which the template lists from there.
+static func socket_line(host: StringName, socket: int) -> String:
+	var line := String(Catalogue.socket_words(host, socket).get(&"line", ""))
+	return String(TranslationServer.translate(line)) if not line.is_empty() else ""
 
 
 # ---------------------------------------------------------------------------

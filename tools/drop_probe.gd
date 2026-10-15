@@ -202,6 +202,8 @@ const MotesField := preload("res://game/normal/motes.gd")
 const Cilia := preload("res://game/vision/cilia.gd")
 const RecorderNode := preload("res://game/replay/recorder.gd")
 const DropSave := preload("res://game/normal/drop_save.gd")
+## The genes in genes' own slots (docs/design/gene-sockets.md).
+const Riders := preload("res://game/genes/riders.gd")
 const Drops := preload("res://game/normal/drops.gd")
 ## **Your cells** (docs/design/cells.md): the slots, the index, the migration, and a
 ## cell's file.
@@ -656,8 +658,10 @@ class WatchedDrop extends "res://game/normal/food.gd":
 		elif b.resting and b.stun <= 0.0 and dash == 0.0:
 			rest_steps += 1
 			if tails_beat and b.tail_level < CellBody.hold_level(b.genome):
-				if absf(b.speed - b.tail) < 1e-6 \
-						and absf(paid - CellBody.stroke_cost(b.tail) * delta) < 1e-9:
+				# At its tail's price -- less what a burn in the tail's own slot
+				# takes off it (docs/design/gene-sockets.md §3 row 10).
+				if absf(b.speed - b.tail) < 1e-6 and absf(paid
+						- CellBody.stroke_cost(b.tail) * delta * b.stat_effort_tail) < 1e-9:
 					rest_swam += 1
 				else:
 					rest_wrong += 1
@@ -799,6 +803,14 @@ func _ready() -> void:
 		print("[drop-probe] NOTE --rarity-only: %d failed" % _failed)
 		get_tree().quit(0 if _failed == 0 else 1)
 		return
+	# `--sockets-only` is for working on a gene's own slots (docs/design/
+	# gene-sockets.md §9): their own section, and nothing else. CI never passes it,
+	# and it never prints ALL PASS.
+	if OS.get_cmdline_user_args().has("--sockets-only"):
+		_gene_slots()
+		print("[drop-probe] NOTE --sockets-only: %d failed" % _failed)
+		get_tree().quit(0 if _failed == 0 else 1)
+		return
 	# `--cells-only` is for working on your cells (docs/design/cells.md §6.3): the
 	# save, your drops and your cells, the three sections a kept cell runs through,
 	# and nothing else. CI never passes it, and it never prints ALL PASS.
@@ -827,6 +839,7 @@ func _ready() -> void:
 	_shared_senses()
 	_no_magic()
 	_coming_for_you()
+	_gene_slots()
 	_changes()
 	_modular()
 	await _tail()
@@ -6559,6 +6572,112 @@ func _coming_for_you() -> void:
 		felt[0] >= 1 and felt[1] == 0 and felt[2] == 0
 		and yours == [[1, true], [0, false], [0, false]] and turned
 		and on_you == [true, true, true] and is_equal_approx(most, CellBody.STING_MOST))
+	_done(water)
+	seed(20260930)
+
+
+## **A gene's own slots, in the water** (docs/design/gene-sockets.md §9). A sting with
+## venom in its slot doses what it stings, in the water's frame -- a water cell's into
+## you, yours into a water cell -- and one with nothing in it doses nothing; a mouth
+## with venom in its slot doses what it bites. A full-grown water cell's meal with no
+## room on its body goes into a slot that takes it; her daughters carry it, and wear
+## it where they wear its host; and the drop's file keeps it.
+func _gene_slots() -> void:
+	seed(41)
+	var water := _water(3000.0)
+	var field: WatchedDrop = water[0]
+	var cell: CellBody = water[1]
+	var cells: Array = field.get("_cells")
+	var p := cell.position
+	cell.heading = 0.0
+	field.in_water = true
+	var harm := Doses.Kind.HARM
+	# A water cell's sting, its arc on you and touching you: with venom in its slot
+	# you take the venom's stacks; with nothing in it, none.
+	var taken: Array[float] = []
+	for venom in [2, 0]:
+		var at := p + Vector2(0.0, -(cell.radius + 30.0 + 1.0))
+		var k := _pose(field, at, 30.0, {&"cytostome": 1, &"trichocyst": 2}, 0.0, 0.6)
+		var b: Object = cells[k]
+		if venom > 0:
+			b.set("riders", {&"trichocyst": [[&"toxicyst", venom]]})
+		b.set("heading", wrapf(_facing(at, p) - float(b.get("dart_bearing")), -PI, PI))
+		cell.loads[harm] = 0.0
+		field._sting_from(k, at, 30.0, float(b.get("heading")) + float(b.get("dart_bearing")),
+			null)
+		taken.append(cell.loads[harm])
+		field.take_out(k)
+	# Yours, with venom in its slot, into a water cell touching its side.
+	var riders := {&"trichocyst": [[&"toxicyst", 3]]}
+	field.toxins = FoodField.toxins_of({&"trichocyst": 3}, [], true, riders)
+	field.dart_wound = Stats.at(&"dart_wound", 3)
+	field.dart_bearing = PI * 0.5
+	field.dart_cooldown = Stats.at(&"dart_cooldown", 3)
+	field.set("_dart_clock", 0.0)
+	var spot := p + Vector2(cell.radius + 20.0 + 1.0, 0.0)
+	var target := _pose(field, spot, 20.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1},
+		0.0, 0.6)
+	field._process(1.0 / 60.0)
+	var dosed := float(((cells[target] as Object).get("loads") as PackedFloat64Array)[harm])
+	field.take_out(target)
+	field.dart_wound = 0.0
+	field.toxins = PackedFloat64Array()
+	# A water mouth with venom in its slot, biting you.
+	var mouth := _pose(field, p + Vector2(0.0, -80.0), 30.0, {&"cytostome": 2}, 0.0, 0.6)
+	(cells[mouth] as Object).set("riders", {&"cytostome": [[&"toxicyst", 2]]})
+	cell.loads[harm] = 0.0
+	field._bite_doses(mouth, FoodField.TARGET_PLAYER, 0.0, 0.0)
+	var bitten := cell.loads[harm]
+	field.take_out(mouth)
+	# A full-grown water cell: every outside slot its radius earns full. A toxin it eats
+	# has no room on its body, and goes into the first slot that takes it -- its mouth's,
+	# the first host in the order -- as venom.
+	var full := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"trichocyst": 1,
+		&"ampulla": 1, &"palp": 1, &"chemocyte": 1}
+	var grown := _pose(field, p + Vector2(600.0, 0.0), CellBody.DIVIDE_RADIUS - 1.0, full,
+		0.0, 0.6)
+	var gb: Object = cells[grown]
+	field._grow(gb, &"toxicyst")
+	var meal: Dictionary = Riders.by_name(gb.get("dna_riders"))
+	var body_kept: bool = (gb.get("riders") as Dictionary).is_empty()
+	# Her daughters carry it, and wear it: the mouth is always worn.
+	var daughters: PackedInt32Array = field._divide(grown, gb)
+	var carried := 0
+	var wearing := 0
+	for d: int in daughters:
+		var db: Object = cells[d]
+		if Riders.rider_at(db.get("dna_riders"), &"cytostome", 0) == &"toxicyst":
+			carried += 1
+		if Riders.rider_at(db.get("riders"), &"cytostome", 0) == &"toxicyst":
+			wearing += 1
+	# And the drop's file keeps both, through the shape it is checked by.
+	var data := DropSave.compose(field.drop_state(), {})
+	var shape := DropSave.unusable(data)
+	var cell2 := CellBody.new()
+	var field2 := WatchedDrop.new()
+	field2.process_mode = Node.PROCESS_MODE_DISABLED
+	add_child(field2)
+	field2.load_drop(cell2, data["drop"])
+	var kept := 0
+	for i in (field2.get("_cells") as Array).size():
+		var b2: Object = (field2.get("_cells") as Array)[i]
+		if bool(b2.get("seeded")) and Riders.rider_at(b2.get("riders"), &"cytostome",
+				0) == &"toxicyst" and Riders.rider_at(b2.get("dna_riders"), &"cytostome",
+				0) == &"toxicyst":
+			kept += 1
+	field2.queue_free()
+	cell2.free()
+	_check(("a gene's own slots: a water cell's sting with venom in its slot doses you %.1f"
+		+ " stacks, with nothing in it %.1f; yours with venom doses a cell it stings %.1f;"
+		+ " a water mouth with venom in its slot doses you %.1f as it bites; a full cell's"
+		+ " toxin goes into the first slot that takes it, its mouth's %s (its body as it"
+		+ " was: %s), its %d daughters carry it (%d) and wear it (%d); the file is %s and"
+		+ " keeps both for %d") % [taken[0], taken[1], dosed, bitten, str(meal),
+			str(body_kept), daughters.size(), carried, wearing,
+			"sound" if shape.is_empty() else shape, kept],
+		taken == [2.0, 0.0] and is_equal_approx(dosed, 3.0) and is_equal_approx(bitten, 2.0)
+		and meal == {"cytostome": [["toxicyst", 1]]} and body_kept and daughters.size() == 2
+		and carried == 2 and wearing == 2 and shape.is_empty() and kept == 2)
 	_done(water)
 	seed(20260930)
 

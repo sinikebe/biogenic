@@ -37,6 +37,9 @@ const Genome := preload("res://game/normal/genome.gd")
 ## by key and by stat, and this file names no gene to work them out.
 const Catalogue := preload("res://game/genes/catalogue.gd")
 const Stats := preload("res://game/genes/stats.gd")
+## The genes in genes' own slots (docs/design/gene-sockets.md): what a host's slots
+## give it, read by the mechanic of the host.
+const Riders := preload("res://game/genes/riders.gd")
 ## **For [method Cilia.mouth_touches]**, which is where the lip bow's geometry is
 ## defined and therefore where the water has to ask whether a mouth is actually
 ## on something; and for [method Cilia.skin_point], the curve every body is drawn
@@ -294,11 +297,15 @@ const MIRROR_SHOWN := 1.0
 ## [constant HOW_STING]: venom on a side or the stern, into a mouth biting
 ## within `VENOM_ARC_DEG / 2` of its bearing. [constant HOW_POISON]: poison,
 ## into whatever bites it, anywhere. [constant HOW_SWALLOW]: poison, into
-## whatever swallows it.
+## whatever swallows it. [constant HOW_DART]: a toxin in the sting's own slot
+## (docs/design/gene-sockets.md §3 row 1), into whatever the sting stings. A
+## toxin in the mouth's own slot (row 3) is a [constant HOW_BITE], as venom at
+## the front is.
 const HOW_BITE := 0
 const HOW_STING := 1
 const HOW_POISON := 2
 const HOW_SWALLOW := 3
+const HOW_DART := 4
 const TOX_STRIDE := 4
 ## [signal toxin_fired]'s three: this cell's venom on its bite, its sting, its
 ## poison taken.
@@ -1095,6 +1102,17 @@ class Body:
 	## drop writes the DNA alone** ([method _grow]): the body is fixed at birth,
 	## as yours is, and what it eats reaches its daughters ([method _divide]).
 	var dna := {}
+	## **Its riders** (docs/design/gene-sockets.md): the genes in its genes' own
+	## slots, host to slots as riders.gd keeps them -- what the body wears, fixed at
+	## birth with [member genome], every rider whose host it wears. **Written whole,
+	## what it buys is read again** ([method derive]), as the genome's is.
+	var riders := {}:
+		set(value):
+			riders = value
+			derive()
+	## **And its DNA's**, beside [member dna]: where a meal with no room on the body
+	## goes (gene-sockets.md §4), and what its daughters' riders are.
+	var dna_riders := {}
 	## **The newborn grace** (§3.4): seconds left in which no mouth begins a run
 	## at it -- [member newborn_grace] for every daughter, water or sister, and
 	## none for a body the water makes. Not armour: a mouth it touches still
@@ -1185,6 +1203,12 @@ class Body:
 	var stat_dash_cost := 0.0
 	var stat_grip := 0.0
 	var stat_tether := 0.0
+	## **What its moving genes' own slots take off their price** (gene-sockets.md §3
+	## row 10): a multiplier on what its tail's strokes, its push and its dash cost,
+	## 1 for a gene with nothing in its slot.
+	var stat_effort_tail := 1.0
+	var stat_effort_push := 1.0
+	var stat_effort_dash := 1.0
 
 	func _init() -> void:
 		derive()
@@ -1211,6 +1235,9 @@ class Body:
 		stat_dash_cost = Stats.of(g, &"dash_cost")
 		stat_grip = Stats.of(g, &"grip")
 		stat_tether = Stats.of(g, &"tether")
+		stat_effort_tail = Riders.through(riders, g, &"impulse_speed", &"effort", 1.0)
+		stat_effort_push = Riders.through(riders, g, &"push_accel", &"effort", 1.0)
+		stat_effort_dash = Riders.through(riders, g, &"dash_speed", &"effort", 1.0)
 
 	## **The slots it wears its organs in**: a person's worn order, as they sent it,
 	## or the default order a water cell is drawn in (cilia.gd) -- where a mechanic
@@ -2191,7 +2218,8 @@ func _swim(b: Body, delta: float, speed: float) -> void:
 	# drag, at the player's own price, and every radian it steered. The wander
 	# is the water's, and free. A dash's burst fades with the drag.
 	if _drop != null:
-		b.effort += CellBody.stroke_cost(speed) * delta + absf(turn) * CellBody.TURN_COST
+		b.effort += CellBody.stroke_cost(speed) * delta * b.stat_effort_tail \
+			+ absf(turn) * CellBody.TURN_COST
 		if b.dash_v > 0.0:
 			b.dash_v *= exp(-CellBody.DRAG * delta)
 			if b.dash_v < 1.0:
@@ -2951,8 +2979,14 @@ func _felt(damage: float) -> float:
 ## seat rides on the bite. Empty for a body with no toxin, which is most of the
 ## water. Read once, whenever what a body wears changes. [param sides] false is
 ## a venom on a side or the stern that stings nothing ([member venom_sides]).
+##
+## [param riders] are **the body's riders** (docs/design/gene-sockets.md): a toxin
+## in its mouth's own slot rides on every bite ([constant HOW_BITE]), and one in
+## its sting's on every sting ([constant HOW_DART]) -- the sting that fires, the
+## first in slot order. Each is its slot's gift at the rider's copies, of the dose
+## the rider's strain delivers.
 static func toxins_of(tiers: Dictionary, order: Array = [],
-		sides := CellBody.VENOM_SIDES) -> PackedFloat64Array:
+		sides := CellBody.VENOM_SIDES, riders: Dictionary = {}) -> PackedFloat64Array:
 	var out := PackedFloat64Array()
 	var seats: Array = order
 	for gene: Variant in tiers:
@@ -2975,7 +3009,28 @@ static func toxins_of(tiers: Dictionary, order: Array = [],
 		elif sides:
 			_toxin_record(out, HOW_STING, kind, Stats.value(form, &"venom_stacks", copies),
 				Cilia.slot_bearing(slot))
+	if riders.is_empty():
+		return out
+	_rider_record(out, HOW_BITE, riders, Catalogue.worn_provider(tiers, &"bite"),
+		&"bite_dose")
+	if seats.is_empty():
+		seats = Cilia.default_order(tiers)
+	_rider_record(out, HOW_DART, riders, Catalogue.seated_provider(seats, tiers,
+		&"dart_wound"), &"sting_dose")
 	return out
+
+
+## One record of [method toxins_of] for the toxin in [param host]'s own slot that
+## gives it [param stat], onto [param out]: nothing for no host, no rider, or a
+## rider whose strain doses nothing.
+static func _rider_record(out: PackedFloat64Array, how: int, riders: Dictionary,
+		host: StringName, stat: StringName) -> void:
+	if host == &"":
+		return
+	var stacks := Riders.value(riders, host, stat, 0.0)
+	var kind := Doses.kind_of(Genome.strain_of(Riders.giver(riders, host, stat)))
+	if stacks > 0.0 and kind >= 0:
+		_toxin_record(out, how, kind, stacks)
 
 
 ## One record of [method toxins_of], onto [param out].
@@ -3003,9 +3058,9 @@ func _toxins_at(who: int) -> PackedFloat64Array:
 		return PackedFloat64Array()
 	var b := _cells[who]
 	var key := hash(b.genome) ^ (hash(b.order) * 31 if not b.order.is_empty() else 0) \
-		^ (0 if venom_sides else 0x5157)
+		^ (0 if venom_sides else 0x5157) ^ (Riders.sign_of(b.riders) * 17)
 	if key != b.toxins_key:
-		b.toxins = toxins_of(b.genome, b.order, venom_sides)
+		b.toxins = toxins_of(b.genome, b.order, venom_sides, b.riders)
 		b.toxins_key = key
 	return b.toxins
 
@@ -4732,10 +4787,11 @@ func killer() -> int:
 ## moments the recording says it changed, never interpolated -- and what the
 ## body's organs buy is read again from it, so the view measures its mouth and
 ## its armour as the live one did.
-func restore_genome(index: int, genome: Dictionary) -> void:
+func restore_genome(index: int, genome: Dictionary, riders: Dictionary = {}) -> void:
 	if index < 0 or index >= _cells.size():
 		return
 	var b := _cells[index]
+	b.riders = Riders.kept(Riders.copy(riders), genome)
 	b.genome = genome
 	b.inert = false
 	_refresh_body(b)
@@ -5065,13 +5121,15 @@ func place_person(at: Vector2, heading: float, body_radius: float,
 ## read -- so their dart looks along the arc it is worn on and their mouth is
 ## the width it is drawn.
 func set_person_genome(tiers: Dictionary, order: Array,
-		slot: int = PERSON_SLOT) -> void:
+		slot: int = PERSON_SLOT, riders: Dictionary = {}) -> void:
 	if not _pond or not _is_person_slot(slot) or _cells.size() <= slot:
 		return
 	var pb := _cells[slot]
 	# The order first: writing the genome reads what it buys, the seated dart's stun
-	# among it, under the order it is worn in (gene-catalogue.md §15.6).
+	# among it, under the order it is worn in (gene-catalogue.md §15.6) -- and what
+	# its genes' own slots give them (gene-sockets.md §6).
 	pb.order = order.duplicate()
+	pb.riders = Riders.kept(Riders.copy(riders), tiers)
 	pb.genome = tiers.duplicate()
 	if pb.person != null:
 		_derive_person(pb)
@@ -5182,7 +5240,7 @@ func enter_water() -> void:
 ## passed on (lineage.md §8).
 func place_sister(at: Vector2, heading: float, body_radius: float,
 		tiers: Dictionary, dna := {}, mother := PackedInt32Array(),
-		brain: Variant = null) -> int:
+		brain: Variant = null, riders := {}) -> int:
 	if not _pond or _mirror or _cell == null:
 		return -1
 	at = _clear_of_players(at, body_radius)
@@ -5195,7 +5253,7 @@ func place_sister(at: Vector2, heading: float, body_radius: float,
 			body_radius, tiers)
 		_cells[index].heading = heading
 		_cells[index].brain = brain
-		_born_of(_cells[index], dna, mother)
+		_born_of(_cells[index], dna, mother, riders)
 		_stat(&"sisters")
 		return index
 	var slot := _free_slot()
@@ -5217,6 +5275,7 @@ func place_sister(at: Vector2, heading: float, body_radius: float,
 	var b := _cells[slot]
 	b.drifter = false
 	b.radius = body_radius
+	b.riders = Riders.kept(Riders.copy(riders), tiers)
 	b.genome = tiers.duplicate()
 	b.pos = at
 	b.heading = heading
@@ -5653,7 +5712,8 @@ func apply_pond(your_wound: float, entries: Array,
 			# and the same body grown keeps what it had until its GENOME lands.
 			var key := _book_key(id, meals)
 			if _book.has(key):
-				b.genome = _book[key]
+				b.riders = Riders.kept(Riders.copy(_book[key][1]), _book[key][0])
+				b.genome = _book[key][0]
 			b.meals = meals
 			_mirror_refresh(b)
 		b.pos = entry[Entry.AT]
@@ -5722,16 +5782,17 @@ func _mirror_person(pb: Body, entry: Array, wet: bool) -> void:
 ## version: remembered by the body's id and its meals, and worn at once if that
 ## body is already here at that version -- so it can arrive before its body or
 ## after it.
-func apply_genome(id: int, meals: int, tiers: Dictionary) -> void:
+func apply_genome(id: int, meals: int, tiers: Dictionary, riders: Dictionary = {}) -> void:
 	if not _mirror:
 		return
-	_book[_book_key(id, meals)] = tiers
+	_book[_book_key(id, meals)] = [tiers, riders]
 	while _book.size() > BOOK_MAX:
 		_book.erase(_book.keys()[0])
 	var slot := int(_mirror_slots.get(id, -1))
 	if slot >= 0:
 		var b := _cells[slot]
 		if b.meals == meals:
+			b.riders = Riders.kept(Riders.copy(riders), tiers)
 			b.genome = tiers
 			_mirror_refresh(b)
 			_changes += 1
@@ -6115,6 +6176,11 @@ func _renew(b: Body) -> void:
 	b.tuned = -1
 	if not b.order.is_empty():
 		b.order = []
+	# Nothing in its genes' own slots (gene-sockets.md): a body is born with what
+	# its mother's DNA put there, and the water makes none.
+	if not b.riders.is_empty():
+		b.riders = {}
+	b.dna_riders = {}
 	# And nothing of what a body on rules was doing (behaviour.md §4): no heading
 	# held, no claim, no stun, no meal yet, no hit, its own call due at once and
 	# nothing in flight or remembered. No number is drawn for any of it.
@@ -6256,7 +6322,7 @@ static func _anchor_slot(anchor: int) -> int:
 ## water cell's list, hers, which her line's divisions change.
 func put_sister(bearing: float, distance: float, body_radius: float,
 		tiers: Dictionary, dna := {}, mother := PackedInt32Array(),
-		brain: Variant = null) -> void:
+		brain: Variant = null, riders := {}) -> void:
 	# **In the drop she comes in by the one door every body does** (§8.2,
 	# §12): [method _spawn], born fed, a water cell under every rule of §5 from
 	# then on -- and held inside the rim if her side of her mother is past it.
@@ -6266,13 +6332,14 @@ func put_sister(bearing: float, distance: float, body_radius: float,
 		# **In a pond, as a guest's sister is** ([method place_sister]): never on
 		# the other player, and inside the rim.
 		if _pond:
-			place_sister(at, _angle_of(side, 0.0), body_radius, tiers, dna, mother, brain)
+			place_sister(at, _angle_of(side, 0.0), body_radius, tiers, dna, mother, brain,
+				riders)
 			return
 		at = _drop.meniscus.contain(at, body_radius)
 		var index := _spawn(at, false, false, body_radius, tiers)
 		_cells[index].heading = _angle_of(side, _cells[index].heading)
 		_cells[index].brain = brain
-		_born_of(_cells[index], dna, mother)
+		_born_of(_cells[index], dna, mother, riders)
 		_stat(&"sisters")
 		return
 	if _cell == null or _cells.size() < 2:
@@ -6280,7 +6347,7 @@ func put_sister(bearing: float, distance: float, body_radius: float,
 	if _pond:
 		var side := _cell.forward() * cos(bearing) + _cell.starboard() * sin(bearing)
 		place_sister(_cell.position + side * distance, _angle_of(side, 0.0),
-			body_radius, tiers, dna, mother, brain)
+			body_radius, tiers, dna, mother, brain, riders)
 		return
 	var index := 1
 	# Seeded first, so every clock, counter and serial on that slot is reset by
@@ -7202,6 +7269,8 @@ func drop_state() -> Dictionary:
 	var lineage := PackedInt32Array()
 	var graces := PackedFloat64Array()
 	var dna: Array = []
+	var riders: Array = []
+	var dna_riders: Array = []
 	var kind := PackedByteArray()
 	var meals := PackedInt32Array()
 	var at := PackedVector2Array()
@@ -7261,6 +7330,8 @@ func drop_state() -> Dictionary:
 		# since the order is what a mutation draws from.
 		dna.append({} if b.dna == b.genome and b.dna.keys() == b.genome.keys()
 			else Genome.tiers_by_name(b.dna))
+		riders.append(Riders.by_name(b.riders))
+		dna_riders.append(Riders.by_name(b.dna_riders))
 		kind.append((1 if b.drifter else 0) | (2 if b.inert else 0))
 		meals.append(b.meals)
 		at.append(b.pos)
@@ -7360,7 +7431,7 @@ func drop_state() -> Dictionary:
 			"acts": acts, "push": push, "tumble": tumble, "tumble_tick": tumble_tick,
 			"stun": stun, "ate": ate, "hit": hit, "hit_from": hit_from, "call": calls,
 			"echoes": echoes, "memory": memory, "harm": harm, "paralysis": paralysis,
-			"sleep": sleep},
+			"sleep": sleep, "riders": riders, "dna_riders": dna_riders},
 		"behaviours": {"version": DropSave.BEHAVIOURS_VERSION, "lists": lists},
 		"runs": {"state": run_state, "target": run_target, "flags": run_flags,
 			"clocks": run_clocks, "points": run_points},
@@ -7496,6 +7567,10 @@ func load_drop(cell: CellBody, state: Dictionary) -> Dictionary:
 	var lineage: PackedInt32Array = rows.get("lineage", PackedInt32Array())
 	var graces: PackedFloat64Array = rows.get("grace", PackedFloat64Array())
 	var dna: Array = rows.get("dna", [])
+	# **Its riders, where the file keeps them** (gene-sockets.md §7). A file from
+	# before has none, and every body in it comes back with nothing in its slots.
+	var kept_riders: Array = rows.get("riders", [])
+	var kept_dna_riders: Array = rows.get("dna_riders", [])
 	# **Its loads, where the file keeps them** (docs/design/dna-slots.md §12). A
 	# file from before has none, and every body in it comes back carrying none.
 	var kept_loads: Array = [rows.get("harm", PackedFloat64Array()),
@@ -7543,6 +7618,10 @@ func load_drop(cell: CellBody, state: Dictionary) -> Dictionary:
 		var carried: Dictionary = dna[k] if not dna.is_empty() else {}
 		b.dna = b.genome.duplicate() if carried.is_empty() \
 			else Genome.tiers_from_names(carried)
+		b.dna_riders = Riders.kept(Riders.copy(kept_dna_riders[k]), b.dna) \
+			if not kept_dna_riders.is_empty() else {}
+		b.riders = Riders.kept(Riders.copy(kept_riders[k]), b.genome) \
+			if not kept_riders.is_empty() else {}
 		if not b.inert and b.radius > CellBody.DIVIDE_RADIUS:
 			b.radius = CellBody.DIVIDE_RADIUS
 			trimmed += 1
@@ -8012,9 +8091,20 @@ func _grow(b: Body, gene: StringName) -> void:
 	b.radius = minf(b.radius + CellBody.GROWTH_PER_MEAL, CellBody.DIVIDE_RADIUS)
 	b.meals += 1
 	var slots := CellBody.slots_for(b.radius)
-	Genome.integrate_into(b.dna, gene, slots)
+	var placed := Genome.integrate_into(b.dna, gene, slots)
+	# **A meal with no room on the body goes into a gene's own slot** that takes it
+	# (docs/design/gene-sockets.md §4): an empty one, or one holding it below three
+	# copies. It used to be lost. Only then: a copy more, or a free body slot, comes
+	# first, so riders grow in full-grown lineages.
+	var room: Array = Riders.room_for(b.dna_riders, b.dna, gene) \
+		if placed == Genome.Result.NO_ROOM else []
+	if not room.is_empty():
+		Riders.put(b.dna_riders, room[0], room[1], gene, 1)
+		_stat(&"rider_meals")
 	if not (births and _drop != null):
 		Genome.integrate_into(b.genome, gene, slots)
+		if not room.is_empty() and b.genome.has(room[0]):
+			Riders.put(b.riders, room[0], room[1], gene, 1)
 		b.derive()
 	_refresh_body(b)
 	_changes += 1
@@ -8063,7 +8153,7 @@ func _rest(b: Body, seconds: float) -> void:
 ## load, the toxin given back.
 func _refresh_body(b: Body) -> void:
 	var g := b.genome
-	b.upkeep = Genome.upkeep_of(g)
+	b.upkeep = Genome.upkeep_of(g, {}, b.riders)
 	b.reserve = Stats.of(g, &"store")
 	b.sun = Stats.of(g, &"sun")
 	# **A body with no mouth absorbs** (§5.3, row 11): an income like light, keyed
@@ -8118,7 +8208,7 @@ func _drift_in_drop(index: int, b: Body, delta: float) -> void:
 	var pace := DRIFT_SPEED
 	if b.searching:
 		pace = _cruise_speed(b)
-		b.effort += CellBody.stroke_cost(pace) * delta
+		b.effort += CellBody.stroke_cost(pace) * delta * b.stat_effort_tail
 	b.pos += _forward(b.heading) * pace * delta
 	b.speed = pace
 	if b.drifter or not b.look:
@@ -8285,7 +8375,7 @@ func _dash(b: Body) -> void:
 		return
 	b.dash_v = b.stat_dash_speed
 	b.dash_clock = CellBody.DASH_COOLDOWN
-	b.effort += b.stat_dash_cost * Metabolism.HUNGER_SECONDS
+	b.effort += b.stat_dash_cost * Metabolism.HUNGER_SECONDS * b.stat_effort_dash
 	_stat(&"water_dashes")
 
 
@@ -8917,11 +9007,11 @@ func _move_ruled(b: Body, delta: float) -> void:
 	var pace := DRIFT_SPEED
 	if _tail_beats(b):
 		pace = b.tail
-		b.effort += CellBody.stroke_cost(b.tail) * delta
+		b.effort += CellBody.stroke_cost(b.tail) * delta * b.stat_effort_tail
 	if not still and b.push > 0.0:
 		var thrust := b.thrust * b.push
 		pace += thrust / CellBody.DRAG
-		b.effort += thrust * CellBody.STROKE_COST * delta
+		b.effort += thrust * CellBody.STROKE_COST * delta * b.stat_effort_push
 	if b.dash_v > 0.0:
 		pace += b.dash_v
 		b.dash_v *= exp(-CellBody.DRAG * delta)
@@ -9325,11 +9415,27 @@ func _sting_from(from: int, at: Vector2, radius: float, facing: float, p: Person
 	else:
 		_cells[from].dart_clock = _cells[from].stat_dart_cooldown
 		wound = _cells[from].stat_dart_wound
+	# **A toxin in the sting's own slot rides on it** (gene-sockets.md §3 row 1):
+	# its dose first, as a bite's is, then the sting it arrived with.
+	_dart_doses(from, best, _cell.bearing_to(at) if best == TARGET_PLAYER else 0.0)
 	_stung(best, at, wound, By.WATER if from >= 0 and not _is_person_slot(from) else By.FRIEND)
 	# A player feels their own sting go off, at the bearing it went.
 	if from == TARGET_PLAYER or p != null:
 		_tell(p, Contact.DARTED, best_at, 0.0, By.WATER, &"")
 	_stat(&"stings")
+
+
+## **A sting's toxins** (docs/design/gene-sockets.md §3 row 1): the body [param from]
+## names stung [param target], and the toxin in its sting's own slot goes in with
+## it ([constant HOW_DART]). [param felt] is the bearing the cell on this device
+## feels its dose from, when it is the one stung.
+func _dart_doses(from: int, target: int, felt: float) -> void:
+	var delivers := _toxins_at(from)
+	for r in range(0, delivers.size(), TOX_STRIDE):
+		if int(delivers[r]) == HOW_DART:
+			_dose(target, int(delivers[r + 1]), delivers[r + 2], from, felt, false)
+			if from == TARGET_PLAYER:
+				toxin_fired.emit(FIRED_STING)
 
 
 ## Whether [param point] lies within [param half] radians of the world bearing
@@ -9738,11 +9844,18 @@ func _record_onto(b: Body, record: PackedInt32Array) -> void:
 ## (automation.md §10.3). **And she has a
 ## newborn's grace** (§3.4), as every daughter does -- a guest's too, who is
 ## no less newborn for arriving without her record.
-func _born_of(b: Body, dna: Dictionary, mother: PackedInt32Array) -> void:
+func _born_of(b: Body, dna: Dictionary, mother: PackedInt32Array,
+		riders: Dictionary = {}) -> void:
 	if not dna.is_empty():
 		b.dna = dna.duplicate()
 	_record_onto(b, Descent.child(b.id, mother))
 	b.grace = newborn_grace if births else 0.0
+	# **Her riders, her DNA's** (gene-sockets.md §4), and she wears those whose host
+	# she wears.
+	if not riders.is_empty():
+		b.dna_riders = Riders.kept(Riders.copy(riders), b.dna)
+		b.riders = Riders.kept(b.dna_riders, b.genome)
+		b.upkeep = Genome.upkeep_of(b.genome, {}, b.riders)
 
 
 ## **A water cell divides** (lineage.md §3.1): the player's division with nobody
@@ -9787,6 +9900,9 @@ func _divide(i: int, b: Body) -> PackedInt32Array:
 	# The daughter the coin gave the changed DNA, who carries the changed rules.
 	var changed := 1 if coin else 0
 	var points := Descent.split(at, _forward(heading).orthogonal(), r)
+	# **Her riders go with her DNA** (gene-sockets.md §4), read before her slot is
+	# lost: each daughter keeps those whose host her DNA keeps.
+	var riders := Riders.copy(b.dna_riders)
 	# She was stepped this frame and her daughters were not: neither mouth closes,
 	# nor pushes, before the next frame -- the first takes her slot, which is the
 	# last one stepped.
@@ -9806,6 +9922,10 @@ func _divide(i: int, b: Body) -> PackedInt32Array:
 		var d := _cells[j]
 		d.heading = heading
 		d.dna = dna
+		d.dna_riders = Riders.kept(riders, dna)
+		d.riders = Riders.kept(d.dna_riders, body)
+		if not d.riders.is_empty():
+			d.upkeep = Genome.upkeep_of(body, {}, d.riders)
 		d.brain = brain
 		if k == changed and changes and rules and rule_change:
 			var rolled: Array = Drop.daughter_behaviours(founders() if brain == null else brain,

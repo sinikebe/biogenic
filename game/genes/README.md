@@ -201,7 +201,16 @@ A new nose, a new armour: everything it does, some mechanic already does.
    key (`Q`, then `F`, then `C`). The mechanic asks `cell.hand_holds(&"<part>")` of a
    held part and `controls.lever(&"<part>")` of a lever, by the part's own name; a
    tap gets its line in `cell.gd`'s `_tap`.
-4. **Then steps 5 to 9 of a variant.**
+4. **Slots of its own** (`sockets`, docs/design/gene-sockets.md §2), for a gene
+   another gene can change: one entry a slot, `takes` the organs that fit by organ
+   name, `gives` a table by the rider's copies -- index 0 no rider -- under a name its
+   host's mechanic reads through `Riders.value` / `Riders.through` (or, for a toxin,
+   `food.gd`'s `toxins_of`), and that name in `tools/gene_probe.gd`'s `READ_GIFTS`.
+   Each slot's line is the file's `SOCKET_EXPLAINS`, keyed `host.taken`. The rider
+   gives the body nothing: the slot is all it does. The pause screen draws the ports,
+   the view and the lit slots by themselves, and `rules.gd` writes the slot out, so
+   the `Wire.RULES` pin moves.
+5. **Then steps 5 to 9 of a variant.**
 
 ## An organ with a new mechanic
 

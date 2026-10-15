@@ -963,6 +963,7 @@ func _step_friend(delta: float) -> void:
 		"double": smoothstep(CellBody.DIVIDE_WARN_RADIUS, CellBody.DIVIDE_RADIUS, drawn),
 		"tiers": pb.genome,
 		"order": pb.order,
+		"riders": pb.riders,
 		"gape": _food_node.gape_at(FoodField.PERSON_SLOT),
 		"wound": float(pb.wound),
 		"felt": _food_node.felt_at(FoodField.PERSON_SLOT),
@@ -1492,7 +1493,7 @@ func _draw_drop_cells(a: float, middle: Vector2, half: float) -> void:
 		Cilia.draw_cell(_world, p, float(b.heading), r, b.genome, _food_node.gape_at(i),
 			_cell.radius, false, _clock, a, 0.0, 0.0, float(i) * 1.9, 1.0 / ZOOM, [],
 			float(b.wound), double, 0.0, 0.0, false, Cilia.NO_EYE, Cilia.NO_TAIL,
-			0.0, _dose_of(i))
+			0.0, _dose_of(i), Cilia.NO_LIT, b.riders)
 
 
 ## **A floc of detritus** (ocean.md §7.6): a clump of five rounded fragments in
@@ -1869,7 +1870,8 @@ func _draw_cell(a: float) -> void:
 		r, true, _clock, ca, _cell.steer, beat, 0.0, 1.0 / ZOOM,
 		_genome_node.body_layout() if _genome_node != null else [], _cell.wound,
 		float(division.get("double", 0.0)), float(division.get("pinch", 0.0)),
-		0.0, false, eye, _tail, slack, dose, _lit(ca))
+		0.0, false, eye, _tail, slack, dose, _lit(ca),
+		_genome_node.body_riders() if _genome_node != null else {})
 	_draw_held_sample(p, r, beat, ca)
 
 	_draw_heading(p, fwd, stb, r, ca)
@@ -2095,7 +2097,7 @@ func _draw_friend(a: float) -> void:
 		alpha * a, 0.0, 0.0, PEER_PHASE, 1.0 / ZOOM, _peer["order"],
 		float(_peer["wound"]), float(_peer["double"]), float(_peer["pinch"]), 0.0,
 		true, Cilia.NO_EYE, Cilia.NO_TAIL, 0.0,
-		_dose_felt(_peer.get("felt", Vector3.ZERO)))
+		_dose_felt(_peer.get("felt", Vector3.ZERO)), Cilia.NO_LIT, _peer.get("riders", {}))
 
 
 ## **Broken, and that is the whole of what it says.** Every other ring in this

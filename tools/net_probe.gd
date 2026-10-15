@@ -842,10 +842,13 @@ func _check_pond_wire() -> void:
 	var enter := Wire.event(9, Wire.EVENT_ENTER, Wire.enter_payload(28.28))
 	var arrive := Wire.event(10, Wire.EVENT_ARRIVE,
 		Wire.arrive_payload(Vector2(560.5, -12.25), 1.0, Vector2(-1234.5, 777.25), 6000.0))
+	# **And what rides in its genes' own slots** (gene-sockets.md §6): venom in the
+	# mouth's, and a slot left empty before a full one.
+	var riders := {&"cytostome": [[&"toxicyst", 2]], &"flagellum": [[&"", 0], [&"crista", 1]]}
 	var person_frame := Wire.event(11, Wire.EVENT_PERSON,
-		Wire.person_payload(true, worn, order))
+		Wire.person_payload(true, worn, order, riders))
 	var genome := Wire.event(12, Wire.EVENT_GENOME,
-		Wire.genome_payload(3000000001, 4, worn))
+		Wire.genome_payload(3000000001, 4, worn, riders))
 	var ate := Wire.event(13, Wire.EVENT_CONTACT, Wire.contact_payload(
 		FoodField.Contact.ATE, Vector2(3.5, -4.5), 0.93, FoodField.By.FRIEND,
 		&"veneneux"))
@@ -891,12 +894,13 @@ func _check_pond_wire() -> void:
 			and absf(angle_difference(float(a[1]), 1.0)) <= step * 0.5
 			and (a[2] as Vector2).is_equal_approx(Vector2(-1234.5, 777.25))
 			and is_equal_approx(float(a[3]), 6000.0)
-			and p.size() == 3 and bool(p[0]) and p[1] == worn and p[2] == order
-			and g.size() == 3 and int(g[0]) == 3000000001 and int(g[1]) == 4
-			and g[2] == worn,
+			and p.size() == 4 and bool(p[0]) and p[1] == worn and p[2] == order
+			and p[3] == riders
+			and g.size() == 4 and int(g[0]) == 3000000001 and int(g[1]) == 4
+			and g[2] == worn and g[3] == riders,
 		"pond wire: ENTER, ARRIVE with the drop's rim, PERSON and GENOME round-trip --"
-		+ " the worn genome by name, with its empty slots, and a body's id past 31"
-		+ " bits whole")
+		+ " the worn genome by name, with its empty slots, its genes' own slots, and a"
+		+ " body's id past 31 bits whole")
 	_says(st.size() == 5 and int(st[0]) == 4000000123
 			and (st[1] as Vector2).is_equal_approx(Vector2(-812.5, 4410.25))
 			and is_equal_approx(float(st[2]), 12.75)
@@ -916,10 +920,11 @@ func _check_pond_wire() -> void:
 			and d.size() == 3 and int(d[0]) == FoodField.Cause.CHEWED
 			and int(d[1]) == FoodField.By.FRIEND
 			and (d[2] as Vector2).is_equal_approx(Vector2(-44.5, 90.0))
-			and s.size() == 6 and (s[0] as Vector2).is_equal_approx(Vector2(700.0, -3.0))
+			and s.size() == 7 and (s[0] as Vector2).is_equal_approx(Vector2(700.0, -3.0))
 			and absf(angle_difference(float(s[1]), -1.25)) <= step * 0.5
 			and is_equal_approx(float(s[2]), 28.28) and s[3] == worn
-			and (s[4] as Dictionary).is_empty() and (s[5] as PackedStringArray).is_empty(),
+			and (s[4] as Dictionary).is_empty() and (s[5] as PackedStringArray).is_empty()
+			and (s[6] as Dictionary).is_empty(),
 		"pond wire: CONTACT carries an ATE's gene and a KILLED's cause, and DIED"
 		+ " and SISTER round-trip -- a SISTER that names no DNA and no list reads as"
 		+ " neither")
@@ -969,6 +974,7 @@ func _check_pond_wire() -> void:
 		ten_frame.append_array(String(gene).to_ascii_buffer())
 		ten_frame.append(1)
 	ten_frame.append(0)
+	ten_frame.append(0)
 	var nine := ten.duplicate()
 	nine.erase(ten.keys().back())
 	var nine_said := Wire.take_person(Wire.event(1, Wire.EVENT_PERSON,
@@ -979,15 +985,16 @@ func _check_pond_wire() -> void:
 		f.append_array(name.to_utf8_buffer())
 		f.append(tier)
 		f.append(0)
+		f.append(0)
 		return f
 	var clamped := Wire.take_person(named.call("cytostome", 9))
 	var eight_slots := Wire.event(1, Wire.EVENT_PERSON,
 		PackedByteArray([0, 0, Wire.ORDER_MAX + 1]))
 	for i in Wire.ORDER_MAX + 1:
 		eight_slots.append(0)
-	_says(loud.size() == 3 and int(loud[1][&"cytostome"]) == Wire.TIER_TOP
+	_says(loud.size() == 4 and int(loud[1][&"cytostome"]) == Wire.TIER_TOP
 			and int(loud[1][&"cirrus"]) == 0
-			and clamped.size() == 3 and int(clamped[1][&"cytostome"]) == Wire.TIER_TOP
+			and clamped.size() == 4 and int(clamped[1][&"cytostome"]) == Wire.TIER_TOP
 			and not Wire.take_person(named.call("cirrus")).is_empty()
 			and Wire.take_person(named.call("Cirrus")).is_empty()
 			and Wire.take_person(named.call("")).is_empty()
@@ -995,7 +1002,7 @@ func _check_pond_wire() -> void:
 			and Wire.take_person(named.call("cir rus")).is_empty()
 			and Wire.take_person(named.call("cili5")).is_empty()
 			and Wire.take_person(ten_frame).is_empty()
-			and nine_said.size() == 3 and nine_said[1] == nine
+			and nine_said.size() == 4 and nine_said[1] == nine
 			and Wire.GENES_MAX == BodyPlan.SLOTS + 1 and Wire.ORDER_MAX == BodyPlan.SLOT_MAX
 			and Wire.TIER_TOP == Genome.TIER_MAX
 			and Wire.take_person(eight_slots).is_empty(),
@@ -1009,7 +1016,7 @@ func _check_pond_wire() -> void:
 		past.append(StringName(String.chr(97 + past.size() - 3)))
 	var written := Wire.take_person(Wire.event(1, Wire.EVENT_PERSON,
 		Wire.person_payload(false, {&"cytostome": 1, &"Bad Name": 2, &"": 1}, past)))
-	_says(written.size() == 3 and (written[1] as Dictionary).size() == 1
+	_says(written.size() == 4 and (written[1] as Dictionary).size() == 1
 			and (written[2] as Array).size() == Wire.ORDER_MAX
 			and written[2][1] == &"",
 		"pond wire: and the writer leaves out what the reader would refuse --"
@@ -1063,15 +1070,17 @@ func _check_sister_wire() -> void:
 		Wire.guest_cap(padded.call(0x20, Wire.EVENT_SISTER, past)),
 		Wire.guest_cap(padded.call(Wire.KIND_EVENT, Wire.EVENT_SISTER, Wire.SISTER_MIN)),
 		Wire.guest_cap(PackedByteArray())]
-	# **1378 is the pin a plan change moves**: the body plan's slot count is in every
+	# **2189 is the pin a plan change moves**: the body plan's slot count is in every
 	# size that holds a genome. The plan's fingerprint rides in the handshake's rules
-	# since protocol 8, so no protocol moves with it -- said where it fails.
-	var pinned := Wire.SISTER_MAX == 1378
+	# since protocol 8, so no protocol moves with it -- said where it fails. It was
+	# 1378 until protocol 9 added her DNA's riders (gene-sockets.md §6), which moved
+	# the protocol.
+	var pinned := Wire.SISTER_MAX == 2189
 	_says(Wire.MOST_RULES == FoodField.Drop.MOST_RULES and alphabet
 			and Wire.RULE_BYTES.length() == 40 and Wire.RULE_BYTES_MAX == 128
 			and Wire.SISTER_MAX == Wire.EVENT_HEADER + 13 + 2 * Wire.TIERS_MAX + 1
-				+ 8 * (1 + Wire.RULE_BYTES_MAX)
-			and pinned and Wire.SISTER_MIN == Wire.EVENT_HEADER + 16
+				+ 8 * (1 + Wire.RULE_BYTES_MAX) + Wire.RIDERS_BYTES_MAX
+			and pinned and Wire.SISTER_MIN == Wire.EVENT_HEADER + 17
 			and Wire.GUEST_FRAME_MAX == maxi(Wire.PERSON_MAX, Wire.SISTER_MAX)
 			and Wire.GUEST_OTHER_MAX == Wire.PERSON_MAX
 			and caps == [Wire.SISTER_MAX, Wire.GUEST_OTHER_MAX, Wire.GUEST_OTHER_MAX,
@@ -1082,7 +1091,7 @@ func _check_sister_wire() -> void:
 		% Wire.SISTER_MIN + " to %d bytes, automation.md §10.3's sum, and the one"
 		% Wire.SISTER_MAX + " guest frame that may pass the %d every other keeps"
 		% Wire.GUEST_OTHER_MAX + " (caps read %s)" % str(caps) + ("" if pinned
-			else " -- the body plan's slots changed (%d genes cross now): move the 1378 here"
+			else " -- the body plan's slots changed (%d genes cross now): move the 2189 here"
 			% Wire.GENES_MAX + " and Wire.RULES in the same commit -- no Wire.PROTOCOL: the"
 			+ " plan is in the rules the handshake carries, and builds on other plans refuse"
 			+ " each other there (body_plan.gd)"))
@@ -1126,11 +1135,11 @@ func _check_sister_wire() -> void:
 	var said := Wire.take_sister(frame)
 	var bare := Wire.take_sister(Wire.event(22, Wire.EVENT_SISTER, Wire.sister_payload(at,
 		2.0, Referee.DAUGHTER_RADIUS, body, dna)))
-	var read: Array = _list_said(Pond.sister_list(said[5]) if said.size() == 6 else null)
-	_says(said.size() == 6 and (said[0] as Vector2) == at
+	var read: Array = _list_said(Pond.sister_list(said[5]) if said.size() == 7 else null)
+	_says(said.size() == 7 and (said[0] as Vector2) == at
 			and is_equal_approx(float(said[2]), Referee.DAUGHTER_RADIUS)
 			and said[3] == body and said[4] == carried and said[5] == lines
-			and bare.size() == 6 and bare[4] == carried
+			and bare.size() == 7 and bare[4] == carried
 			and (bare[5] as PackedStringArray).is_empty() and Pond.sister_list(bare[5]) == null
 			and read[0] == lines and read[1] == [false, false, true, false],
 		"sister wire (check 24): a guest's sister crosses with her body, her DNA --"
@@ -1156,17 +1165,21 @@ func _check_sister_wire() -> void:
 	var crowded := PackedStringArray([most[0], "", _rule_line_of(Wire.RULE_BYTES_MAX + 1, 99),
 		"Chemocyte.smell above 0.5 -> body.swim"])
 	crowded.append_array(most.slice(1))
+	# And the longest riders: every host a sixteen-letter name, each with the most
+	# slots a gene has, each holding a sixteen-letter rider at three copies.
+	var longest_riders := _longest_riders()
 	var biggest := Wire.sister_payload(at, 2.0, Referee.DAUGHTER_RADIUS, overfull, overfull,
-		crowded)
+		crowded, longest_riders)
 	var biggest_said := Wire.take_sister(Wire.event(23, Wire.EVENT_SISTER, biggest))
-	_says(biggest.size() + Wire.EVENT_HEADER == Wire.SISTER_MAX and biggest_said.size() == 6
+	_says(biggest.size() + Wire.EVENT_HEADER == Wire.SISTER_MAX and biggest_said.size() == 7
 			and biggest_said[3] == full and biggest_said[4] == full
-			and biggest_said[5] == most.slice(0, Wire.MOST_RULES),
+			and biggest_said[5] == most.slice(0, Wire.MOST_RULES)
+			and biggest_said[6] == longest_riders,
 		"sister wire: SISTER_MAX, %d bytes, is the most the writer writes -- two"
-		% Wire.SISTER_MAX + " genomes of nine sixteen-letter genes and eight lines"
-		+ " of 128 -- and handed more it writes no more: a gene the wire cannot name,"
-		+ " a ninth line, an empty one, one of 129 bytes and one in capitals are left"
-		+ " out")
+		% Wire.SISTER_MAX + " genomes of nine sixteen-letter genes, eight lines"
+		+ " of 128 and the longest riders -- and handed more it writes no more: a gene"
+		+ " the wire cannot name, a ninth line, an empty one, one of 129 bytes and one in"
+		+ " capitals are left out")
 
 	# **Check 25: the refusals.** Each by hand, the way no writer of this build
 	# writes it, against the reader and against the gate's own parse
@@ -1238,7 +1251,7 @@ func _check_sister_wire() -> void:
 				or not Wire.size_ok(Wire.KIND_EVENT, Wire.EVENT_SISTER, f.size(), false):
 			wrong.append("NOT TAKEN: " + name)
 	var at_no_copies := Wire.take_sister(taken["a DNA gene at no copies"])
-	if at_no_copies.size() != 6 or not (at_no_copies[4] as Dictionary).is_empty():
+	if at_no_copies.size() != 7 or not (at_no_copies[4] as Dictionary).is_empty():
 		wrong.append("a gene at no copies carried")
 	var whole: PackedByteArray = taken["eight instincts"]
 	var cuts := 0
@@ -1259,6 +1272,20 @@ func _check_sister_wire() -> void:
 ## would: [param worn] and [param dna] as `[name bytes, tier]` pairs, [param lines]
 ## as raw bytes, [param count] the count byte as said -- -1 for the true one, -2
 ## for none, a protocol-5 SISTER's shape -- and [param tail] any bytes after.
+## **The longest riders the wire carries** (gene-sockets.md §6): [member
+## Wire.GENES_MAX] hosts of sixteen letters, each with [constant Wire.SOCKETS_MAX]
+## slots, each holding a sixteen-letter rider at three copies.
+static func _longest_riders() -> Dictionary:
+	var out := {}
+	for i in Wire.GENES_MAX:
+		var slots: Array = []
+		for k in Wire.SOCKETS_MAX:
+			slots.append([StringName(String.chr(97 + k).repeat(Wire.NAME_MAX - 1)
+				+ String.chr(97 + i)), Wire.TIER_TOP])
+		out[StringName(String.chr(97 + i).repeat(Wire.NAME_MAX))] = slots
+	return out
+
+
 static func _sister_by_hand(worn: Array, dna: Array, lines: Array, count := -1,
 		tail := PackedByteArray()) -> PackedByteArray:
 	var out := Wire.event(30, Wire.EVENT_SISTER, Wire.sister_payload(Vector2(560.0, 0.0),
@@ -1278,6 +1305,8 @@ static func _sister_by_hand(worn: Array, dna: Array, lines: Array, count := -1,
 	for line: PackedByteArray in lines:
 		out.append(line.size())
 		out.append_array(line)
+	# Since protocol 9 her DNA's riders follow her list (gene-sockets.md §6): none.
+	out.append(0)
 	out.append_array(tail)
 	return out
 
@@ -2241,9 +2270,11 @@ func _limits_edges() -> void:
 		Wire.POND_IS_PERSON | Wire.POND_IN_WATER, Vector2(512.25, -96.5), 1.5, 28.28,
 		0.4, 44.0, Vector2(-37.5, 12.25), -0.75])
 	var at := Vector2(700.0, -3.0)
-	var person_max := Wire.person_payload(true, genes, order)
-	var sister_max := Wire.sister_payload(at, -1.25, 28.28, genes, genes, longest_list)
-	var genome_max := Wire.genome_payload(0xFFFFFFFF, 255, genes)
+	var riding := _longest_riders()
+	var person_max := Wire.person_payload(true, genes, order, riding)
+	var sister_max := Wire.sister_payload(at, -1.25, 28.28, genes, genes, longest_list,
+		riding)
+	var genome_max := Wire.genome_payload(0xFFFFFFFF, 255, genes, riding)
 	var contact_max := Wire.contact_payload(FoodField.Contact.ATE, at, 0.9,
 		FoodField.By.FRIEND, long_gene)
 	# `[name, frame, least, most, the host sends it, a guest sends it]` -- the
@@ -2440,16 +2471,19 @@ func _limits_sister_room() -> void:
 	var lines := PackedStringArray()
 	for i in Wire.MOST_RULES:
 		lines.append(_rule_line_of(Wire.RULE_BYTES_MAX, i))
+	# Since protocol 9 a PERSON may carry the longest riders too, so the SISTER that
+	# passes every other frame's cap carries them as well (gene-sockets.md §6).
+	var riding := _longest_riders()
 	var payload := Wire.sister_payload(Vector2(560.0, 0.0), 0.0, Referee.DAUGHTER_RADIUS,
-		{&"cytostome": 1}, {&"cytostome": 2}, lines)
+		{&"cytostome": 1}, {&"cytostome": 2}, lines, riding)
 	guest.send_event(Wire.EVENT_SISTER, payload)
 	await _limits_until(func() -> bool: return (host.pond_events as Array).size() >= 1)
 	var taken: Array = (host.pond_events as Array).map(func(f: PackedByteArray) -> int:
 		return f.size())
 	# The same length, its count of rules made nine: a SISTER that does not read.
 	var spoiled := payload.duplicate()
-	spoiled[payload.size() - 1 - Wire.MOST_RULES * (1 + Wire.RULE_BYTES_MAX)] = \
-		Wire.MOST_RULES + 1
+	spoiled[payload.size() - Wire._riders_bytes(riding).size() - 1
+		- Wire.MOST_RULES * (1 + Wire.RULE_BYTES_MAX)] = Wire.MOST_RULES + 1
 	guest.send_event(Wire.EVENT_SISTER, spoiled)
 	await _limits_until(func() -> bool: return int(host.gate_counts["malformed"]) >= 1)
 	var points: float = host.points_of(gid)
@@ -2971,7 +3005,7 @@ func _limits_queues() -> void:
 	var order: Array = []
 	for i in Wire.ORDER_MAX:
 		order.append(StringName(String.chr(97 + i).repeat(Wire.NAME_MAX)))
-	var longest := Wire.person_payload(false, genes, order)
+	var longest := Wire.person_payload(false, genes, order, _longest_riders())
 	var peer := func(id: int) -> Dictionary:
 		return {"id": id, "in_event": -1, "greeted": true}
 	node.hosting = true
@@ -3224,6 +3258,8 @@ func _limits_unclean(all: Array) -> String:
 # ---------------------------------------------------------------------------
 
 const Referee := preload("res://game/net/referee.gd")
+## The genes in genes' own slots (docs/design/gene-sockets.md), as a guest says them.
+const Riders := preload("res://game/genes/riders.gd")
 ## **The rules two builds must agree on, as the game writes them** (§11.3).
 const Rules := preload("res://game/net/rules.gd")
 ## R2's and R3's link: `tools/net_lag.gd`'s `rough`, modelled here with no
@@ -3288,6 +3324,7 @@ func _check_referee() -> void:
 	_referee_dividing()
 	_referee_unseen()
 	_referee_bodies()
+	_referee_riders()
 	_referee_arrivals()
 	_referee_deaths()
 	_referee_shouts()
@@ -3316,6 +3353,41 @@ func _ref_arrived(now: float, at: Vector2, radius: float = CellBody.BASE_RADIUS,
 
 
 ## The rules of [param fouls] (from `take_fouls`), in order.
+## **A guest's genes' own slots** (docs/design/gene-sockets.md §6): a new body's
+## riders are taken -- venom in its sting's slot -- and so is the same body said
+## again with them. Refused, each a body foul: a rider on a host it does not wear,
+## on a slot its host does not have, one its slot does not take, one at four copies,
+## and riders changed with no new body.
+func _referee_riders() -> void:
+	var body := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"trichocyst": 2}
+	var order: Array = [&"cytostome", &"cirrus", &"flagellum", &"trichocyst"]
+	var riding := {&"trichocyst": [[&"toxicyst", 2]]}
+	var ref := Referee.new(0.0)
+	var born := ref.judge_person(0.0, true, body, order, false, riding)
+	var same := ref.judge_person(1.0, false, body, order, true, riding)
+	var clean := ref.take_fouls().is_empty()
+	var bad := {
+		"a host it does not wear": {&"axoneme": [[&"crista", 1]]},
+		"a slot its host does not have": {&"trichocyst": [[&"toxicyst", 1], [&"toxicyst", 1]]},
+		"a rider its slot does not take": {&"trichocyst": [[&"crista", 1]]},
+		"four copies": {&"trichocyst": [[&"toxicyst", 4]]},
+		"changed with no new body": {&"trichocyst": [[&"toxicyst", 3]]},
+	}
+	var wrong: Array[String] = []
+	var t := 2.0
+	for name: String in bad:
+		var said := ref.judge_person(t, false, body, order, true, bad[name])
+		var fouls := _ref_rules(ref.take_fouls())
+		if not said.is_empty() or fouls != [Referee.BODY]:
+			wrong.append(name)
+		t += 1.0
+	_says(born == [true] and same == [false] and clean and wrong.is_empty()
+			and Riders.same(ref.worn_riders, riding),
+		"referee: a new body's riders are taken and the same said again is no foul; refused"
+		+ " as a body foul: %s%s" % [", ".join(PackedStringArray(bad.keys())),
+			"" if wrong.is_empty() else " -- NOT: " + ", ".join(wrong)])
+
+
 static func _ref_rules(fouls: Array) -> Array:
 	return fouls.map(func(foul: Array) -> String: return str(foul[0]))
 
@@ -3571,6 +3643,15 @@ func _rules_text(doubts: Array = []) -> String:
 	put.call("cell.DART_ARC_DEG", CellBody.DART_ARC_DEG)
 	put.call("cell.STING_TOUCH", CellBody.STING_TOUCH)
 	put.call("cell.STING_MOST", CellBody.STING_MOST)
+	# **A gene's own slots** (docs/design/gene-sockets.md §6), read off each organ's
+	# record as its file wrote it, and the most a gene has by the wire's copy, which
+	# the gene probe holds to the catalogue's.
+	put.call("catalogue.SOCKETS_MAX", Wire.SOCKETS_MAX)
+	for key: StringName in Catalogue.keys():
+		var record: Variant = Catalogue.gene(key)
+		var slots: Array = record.sockets if record != null else []
+		for k in slots.size():
+			put.call("socket.%s.%d" % [key, k], slots[k])
 	# referee.gd: its own limits, and its copies of the run's numbers, by the one list
 	# of them (rules.gd's REFEREE_LIMITS), each read here off referee.gd by name.
 	# `_referee_rules` sorts every constant referee.gd has by that list and the list of
@@ -5072,6 +5153,11 @@ class StubGenome extends Node:
 	# seats.
 	func body_layout() -> Array[StringName]:
 		return []
+
+	# cell.gd reads what a moving gene's own slot takes off its price
+	# (gene-sockets.md); a hand-built cell has nothing in any.
+	func body_riders() -> Dictionary:
+		return {}
 
 
 ## **The field, watched.** A seed, a seed-for, a retirement on the person's
@@ -6887,13 +6973,14 @@ class PondWatchedFood extends "res://game/normal/food.gd":
 
 	func place_sister(at: Vector2, heading: float, body_radius: float,
 			tiers: Dictionary, dna := {}, mother := PackedInt32Array(),
-			brain: Variant = null) -> int:
+			brain: Variant = null, riders := {}) -> int:
 		var before := PackedInt64Array()
 		var seeded := PackedByteArray()
 		for b in _cells:
 			before.append(b.serial)
 			seeded.append(1 if b.seeded else 0)
-		var slot := super.place_sister(at, heading, body_radius, tiers, dna, mother, brain)
+		var slot := super.place_sister(at, heading, body_radius, tiers, dna, mother, brain,
+			riders)
 		var changed: Array[int] = []
 		for i in mini(_cells.size(), before.size()):
 			if _cells[i].serial != before[i]:
