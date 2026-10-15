@@ -587,6 +587,15 @@ const TILE_ARC_TO := 1.96 * PI
 const TILE_ARC_ALPHA := 0.30
 const TILE_ARC_WIDTH := 1.7
 const TILE_STROKE_ALPHA := 0.88
+## **A lit tile** ([method draw_tile_organ]'s glow): the haze's first ring, as a share
+## of the dome's radius, each ring that much wider than the last, its ink at the
+## middle, and how far its strokes whiten. Brighter than the body's glow, because the
+## tile is the whole of what it says; small enough that the widest ring stays inside
+## the tile it is drawn on.
+const TILE_GLOW_HALO := 0.42
+const TILE_GLOW_SPREAD := 0.45
+const TILE_GLOW_HAZE := 0.34
+const TILE_GLOW_WHITE := 0.55
 const TILE_CENTRE_Y := 0.66
 const TILE_PIGMENT := 4.2
 
@@ -2998,12 +3007,27 @@ static func _to_segment(point: Vector2, a: Vector2, b: Vector2) -> float:
 ## at 13 pixels a 22% length difference is one pixel, so magnitude cannot carry it
 ## here the way it does on a body. This is the one place the two vocabularies
 ## deliberately differ, and the tile says why -- it is a label, not an organism.
+##
+## **[param glow] lights it** as the organ on the body is lit (three-senses.md §2.6,
+## sense-tiles.md): a haze of its own hue over the dome and its strokes whitened.
+## **[param tone] draws it in another colour** than its family's -- a grey tile for a
+## sense not at work -- where its alpha is above nothing.
 static func draw_tile_organ(canvas: CanvasItem, gene: StringName, _tier: int,
 		centre: Vector2, alpha: float = TILE_STROKE_ALPHA,
-		scale: float = 1.0) -> void:
-	var tone := hue(gene)
+		scale: float = 1.0, glow: float = 0.0, tone: Color = Color(0, 0, 0, 0)) -> void:
+	if tone.a <= 0.0:
+		tone = hue(gene)
 	var ink := alpha / TILE_STROKE_ALPHA
 	var arc_r := TILE_ARC_RADIUS * scale
+	var g := clampf(glow, 0.0, 1.0)
+	if g > 0.0:
+		var mid := centre + Vector2(0.0, -arc_r)
+		for k in GLOW_RINGS:
+			var q := float(k) / float(GLOW_RINGS)
+			canvas.draw_circle(mid, arc_r * TILE_GLOW_HALO * (1.0 + TILE_GLOW_SPREAD * float(k)),
+				Color(tone, TILE_GLOW_HAZE * (1.0 - q) * g), true, -1.0, true)
+		tone = tone.lerp(Color.WHITE, TILE_GLOW_WHITE * g)
+		alpha = minf(alpha * (1.0 + (GLOW_INK - 1.0) * g), 1.0)
 	canvas.draw_arc(centre, arc_r, TILE_ARC_FROM, TILE_ARC_TO, 32,
 		Color(tone, TILE_ARC_ALPHA * ink), TILE_ARC_WIDTH * scale, true)
 	var look := _look_of(gene)

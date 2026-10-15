@@ -56,6 +56,8 @@ const REPLAY_SCENE := "res://game/replay/replay.tscn"
 ## vocabulary: §2.4's promise is that a point-of-view player who looks in the
 ## mirror already speaks the language if they ever switch views.
 const Cilia := preload("res://game/vision/cilia.gd")
+## **A sense's tile in the HUD's row** (docs/design/sense-tiles.md).
+const SenseTile := preload("res://game/normal/sense_tile.gd")
 ## **The other cell, if there is one.** Preloaded for one static lookup: the
 ## session is a node under `/root` that the earshot screen left there, and a run
 ## reached any other way finds nothing and is the game that already shipped.
@@ -505,6 +507,12 @@ var library_at := Library.PATH
 ## readouts, in their row after the pause target. gauge.gd draws it and knows nothing
 ## of energy; [method _update_gauges] reads the tank into it.
 @onready var _energy_gauge: Control = $Hud/Gauges/Energy
+## The row the gauges and the senses' tiles sit in, after the pause target.
+@onready var _gauges_row: Container = $Hud/Gauges
+## **The senses' tiles** (docs/design/sense-tiles.md), channel to tile: one for every
+## channel a gene with a `readout` drives, made once in the catalogue's order and
+## shown only while the lineage carries a gene on it.
+var _sense_tiles := {}
 @onready var _recorder: RecorderNode = $Recorder
 @onready var _watch_ui: CenterContainer = $Hud/Watch
 @onready var _watch_button: Button = $Hud/Watch/Button
@@ -1086,9 +1094,19 @@ func _ready() -> void:
 	# corner drew its outline across the bar and the numbers at the pause target's
 	# 0.13, and still faintly at 0.72. Then the energy's mark and the metabolism's
 	# own warning and window.
-	_energy_gauge.setup(_well(GAUGE_FILL, GAUGE_EDGE), PackedVector2Array(ENERGY_MARK))
+	var gauge_well := _well(GAUGE_FILL, GAUGE_EDGE)
+	_energy_gauge.setup(gauge_well, PackedVector2Array(ENERGY_MARK))
 	_energy_gauge.horizon = MetabolismNode.PAYING_WINDOW
 	_energy_gauge.low_from = 1.0 - MetabolismNode.HUNGRY_FROM
+	# **One tile a sense, after the gauge**, in the catalogue's order, each hidden
+	# until a gene on its channel is carried: the beam has none (gene.gd's `readout`).
+	for channel: StringName in _readout_channels():
+		var tile: SenseTile = SenseTile.new()
+		tile.name = "Sense_" + String(channel)
+		tile.visible = false
+		_gauges_row.add_child(tile)
+		tile.setup(gauge_well, &"")
+		_sense_tiles[channel] = tile
 	_update_gauges()
 
 	_bus.gain = clampf(RunState.load_gain(SignalBus.GAIN_DEFAULT),
@@ -1305,7 +1323,7 @@ func _resume_cell(state: Dictionary) -> void:
 	# As slack as it was left: a body opened crumpled is not one crumpling now.
 	_settle_slack()
 	# And its gauge as full as it was left, with no trail falling to it.
-	_energy_gauge.settle(1.0 - _metabolism.hunger)
+	_settle_gauges(1.0 - _metabolism.hunger)
 	_generation = int(state["generation"])
 	_id = int(state["id"]) if state.has("id") else _take_id()
 	_parent = int(state.get("parent", Descent.NOBODY))
@@ -2012,8 +2030,12 @@ func _post_beam(delta: float) -> void:
 ## draws the blind arc for free: the hum is where the pulse went, so the half of
 ## the water you are not asking is the half that is dark.
 func _post_pings() -> void:
+	var tile: SenseTile = _sense_tiles.get(Catalogue.PING)
 	for echo: Array in _food.pings:
 		_bus.ping(float(echo[0]), float(echo[1]), float(echo[2]), float(echo[3]))
+		# Each echo lights the ping's tile at its strength (sense-tiles.md §1).
+		if tile != null and tile.visible:
+			tile.flash(float(echo[1]))
 	_hear_others()
 	_bus.ping_out(_food.ping_bearing, _food.ping_listen)
 
@@ -2485,7 +2507,7 @@ func _be_born() -> void:
 	_cell.reset(true)
 	_cell.radius = CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)
 	_metabolism.reset()
-	_energy_gauge.settle(1.0 - _metabolism.hunger)
+	_settle_gauges(1.0 - _metabolism.hunger)
 	# Born fed, so born full: none of her mother's creases.
 	_settle_slack()
 	# **A new body, the same programs** (automation.md §2.4, row 40): she has not
@@ -3172,7 +3194,7 @@ func _return(place: Array) -> void:
 		_cell.position = place[0]
 		_cell.heading = float(place[1])
 	_metabolism.reset()
-	_energy_gauge.settle(1.0 - _metabolism.hunger)
+	_settle_gauges(1.0 - _metabolism.hunger)
 	# A born cell is a fed one: the starved cell's creases do not come back.
 	_settle_slack()
 	if pond:
@@ -3369,12 +3391,77 @@ const ENERGY_MARK: Array[Vector2] = [Vector2(0.62, 0.0), Vector2(0.0, 0.58),
 func _update_gauges() -> void:
 	var shown := _life == Life.ALIVE and not _menu_open
 	_energy_gauge.visible = shown
+	_update_sense_tiles(shown)
 	if not shown:
 		return
 	var empty := _metabolism.hunger >= 1.0
 	_energy_gauge.read(1.0 - _metabolism.hunger, _metabolism.capacity(),
 		_metabolism.paying(), _metabolism.grace_left() if empty else -1.0,
 		MetabolismNode.STARVE_GRACE)
+
+
+## **The channels whose genes have a tile** (gene.gd's `readout`), once each, in the
+## catalogue's order: smell, the eyespot's light, the ping, touch -- today.
+func _readout_channels() -> Array[StringName]:
+	var out: Array[StringName] = []
+	for key: StringName in Catalogue.keys():
+		var organ := Catalogue.gene(key)
+		if organ != null and organ.readout and organ.channel != &"" \
+				and not out.has(organ.channel) and not organ.tags.has(Catalogue.RETIRED):
+			out.append(organ.channel)
+	return out
+
+
+## **The senses' tiles, once a frame** (docs/design/sense-tiles.md). A tile is shown
+## while the lineage carries a gene on its channel -- in the DNA or on the body -- and
+## is at work only while this body wears one and its senses are running, which a
+## division's pinch and a pond's still moments stop. Grey otherwise: a sense the line
+## carries and this body does not grow is one its daughters may.
+func _update_sense_tiles(shown: bool) -> void:
+	var running := not (_split >= Split.PINCH or _held or _water_beat >= 0.0
+		or _entering_held)
+	for channel: StringName in _sense_tiles:
+		var tile: SenseTile = _sense_tiles[channel]
+		var worn := _cell.on_channel(channel)
+		var key := worn if worn != &"" else Catalogue.worn_on(_genome.dna(), channel)
+		if not shown or key == &"":
+			tile.visible = false
+			continue
+		if tile.gene != key:
+			tile.gene = key
+			tile.queue_redraw()
+		tile.visible = true
+		var reading := _sense_reading(channel, worn) if worn != &"" else [0.0, 0.0]
+		tile.read(float(reading[0]), float(reading[1]), worn != &"" and running)
+
+
+## **What a sense's tile shows**, `[glow, level]`, by its channel: the edge where
+## the tiles learn what each sense is (docs/design/sense-tiles.md §1).
+##
+## - smell: the nose's glow, as on the body, and the level it smells;
+## - light: the eyespot's glow, facing the shadow, and the shadow's strength;
+## - ping: no glow of its own -- its echoes flash it ([method _post_pings]) -- and how
+##   much of the call's round trip it is still listening for;
+## - touch: what the palps feel, both.
+func _sense_reading(channel: StringName, organ: StringName) -> Array:
+	match channel:
+		Catalogue.SMELL:
+			return [_bus.smell_glow(), _food.taste_level]
+		Catalogue.LIGHT:
+			return [_bus.sight_glow(_slot_bearing_of(organ)), _food.shadow]
+		Catalogue.PING:
+			return [0.0, _food.ping_listen]
+		Catalogue.TOUCH:
+			return [_food.touch_level, _food.touch_level]
+	return [0.0, 0.0]
+
+
+## **Every readout quiet**, for a new life: the gauge at [param level] with no trail,
+## and no tile still flashing.
+func _settle_gauges(level: float) -> void:
+	_energy_gauge.settle(level)
+	for channel: StringName in _sense_tiles:
+		(_sense_tiles[channel] as SenseTile).settle()
 
 
 ## True while the world layer is the thing behind the Hud. Read by the pause
