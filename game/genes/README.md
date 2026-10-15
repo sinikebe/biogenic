@@ -193,12 +193,14 @@ A new nose, a new armour: everything it does, some mechanic already does.
    name, and their words (`GENE_SAYS`, `GENE_SENSES`, `GENE_EXPLAINS`, and
    `GENE_ASLEEP` and `GENE_NEEDS` for a part that waits for a level). The probe fails
    a part nothing wires. A declaring organ joins `SHIPPED_LISTS`' `declares`.
-   **An output the hand should work too** takes `"button": true`: a body that wears
-   the organ at the part's level gets a pad under every control scheme, drawn as the
-   organ's tile, and a key (`Q`, then `F`, then `C`), and while either is held the
-   part acts as it does while an instinct claims it. The mechanic asks
-   `cell.hand_holds(&"<part>")` for the player, by the part's own name
-   (docs/design/haptonema.md §4).
+   **An output the hand should work too** takes a `"button"` naming the kind of
+   control its behaviour wants (docs/design/gene-controls.md §2): `&"held"`, a pad
+   that acts while held; `&"tap"`, a pad that fires once on the press; `&"lever"`, a
+   slider whose strength the part acts at while held. A body that wears the organ at
+   the part's level gets that control on screen, drawn with the organ's tile, and a
+   key (`Q`, then `F`, then `C`). The mechanic asks `cell.hand_holds(&"<part>")` of a
+   held part and `controls.lever(&"<part>")` of a lever, by the part's own name; a
+   tap gets its line in `cell.gd`'s `_tap`.
 4. **Then steps 5 to 9 of a variant.**
 
 ## An organ with a new mechanic

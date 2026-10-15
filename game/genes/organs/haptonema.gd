@@ -82,7 +82,7 @@ func _init() -> void:
 	# Declared last of every gene's parts, so its owner's bits come after every
 	# other. **A button** (gene.gd's `declares`): your hand clings too, on its pad
 	# or its key, while it is held.
-	declares = {"out": [{"name": &"cling", "claims": [&"cling"], "button": true}]}
+	declares = {"out": [{"name": &"cling", "claims": [&"cling"], "button": &"held"}]}
 	# **Its look** (gene-looks.md §6): a coil that wraps -- the grip is more wrap,
 	# so four turns where myoneme's default two reads as a spring. In moving's shade
 	# 1: one step off the tail's shade 0, so a tile with both tells them apart.

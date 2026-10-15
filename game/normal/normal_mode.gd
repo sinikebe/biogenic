@@ -133,10 +133,6 @@ const MODE_SELECT_SCENE := "res://game/mode_select.tscn"
 # two ways of turning the picture (see "north up" and "forward up"). One lowercase
 # word, about 12 characters at most.
 #
-# TRANSLATORS "controls": A caption above the pause screen's button that cycles
-# through three ways of steering (see "anywhere", "stick" and "pads"). One lowercase
-# word, about 12 characters at most.
-#
 # TRANSLATORS "resume": A button on the pause screen: close it and go on playing.
 # About 12 characters at most.
 #
@@ -332,13 +328,6 @@ var mode := -1
 ## drop_probe does: everything a probe runs is the editor's.
 var view_flip := OS.has_feature("editor")
 
-## Which control scheme this run is played with, as [enum RunState.Scheme]. Set
-## it before the scene enters the tree to override the remembered choice --
-## which is what `tools/drive.gd --scheme=` does, because the choice lives in
-## `user://` and a harness that had to write one would leave it for the next
-## run to inherit.
-var scheme := -1
-
 ## Whether this run shows a gene's numbers: 1 on, 0 off, -1 to take whatever
 ## `user://` remembers (gene-stats.md §2.2). Set it before the scene enters the
 ## tree to pin it, which is what `tools/drive.gd --numbers=` does. **A pinned
@@ -426,9 +415,6 @@ var library_at := Library.PATH
 @onready var _view_panel: PanelContainer = $Hud/Pause/Center/Columns/Side/Settings/View
 @onready var _view_caption: Label = $Hud/Pause/Center/Columns/Side/Settings/View/Box/Caption
 @onready var _view_button: Button = $Hud/Pause/Center/Columns/Side/Settings/View/Box/Toggle
-@onready var _feel_panel: PanelContainer = $Hud/Pause/Center/Columns/Side/Settings/Feel
-@onready var _feel_caption: Label = $Hud/Pause/Center/Columns/Side/Settings/Feel/Box/Caption
-@onready var _feel_button: Button = $Hud/Pause/Center/Columns/Side/Settings/Feel/Box/Toggle
 @onready var _genome_caption: Label = $Hud/Pause/Center/Columns/Genome/Caption
 ## **The waiting genes, head first** (#118), one chip each above the figure --
 ## which is the queue, drawn, and why the verb line no longer counts it.
@@ -878,10 +864,6 @@ var _autopilot_frame := -1
 ## or the genome. Kept for the run, so pause opens where it was left -- unless a
 ## gene is waiting, whose clock puts the genome first.
 var _on_programs := false
-## How long the drawn controls still show behind the genome page after the
-## controls chooser was cycled ([method _controls_previewed]): seconds of frames,
-## counted down in [method _process], which runs while paused.
-var _scheme_preview_left := 0.0
 
 
 func _ready() -> void:
@@ -979,12 +961,8 @@ func _ready() -> void:
 	# While the switch is off (CAMERA_SWITCH), a saved `forward up` stays on disk
 	# and is not obeyed.
 	_camera_locked = CAMERA_SWITCH and RunState.load_camera_locked()
-	# Read in the same breath and for the same reason: a player who chose
-	# `stick` last run must not have to choose it again.
-	if scheme < 0:
-		scheme = RunState.load_scheme()
-	# And the numbers (gene-stats.md §2.2), for the same reason again: a player
-	# who asked for them once should not have to ask every run.
+	# And the numbers (gene-stats.md §2.2), for the same reason: a player who
+	# asked for them once should not have to ask every run.
 	_show_numbers = RunState.load_numbers() if numbers < 0 else numbers > 0
 	_apply_mode()
 
@@ -1089,12 +1067,9 @@ func _ready() -> void:
 		&"knob": _well(0.045, 0.28),
 		&"knob_lit": _well(0.16, 0.80),
 	})
-	_controls.set_scheme(scheme)
 	# The cell asks the controls what it is being told to do; the controls never
 	# reach back. Set after _ready has built them and before the first frame.
 	_cell.controls = _controls
-	_feel_button.pressed.connect(_cycle_scheme)
-	_update_scheme_button()
 	_update_controls()
 
 	_bus.gain = clampf(RunState.load_gain(SignalBus.GAIN_DEFAULT),
@@ -1523,10 +1498,7 @@ func _process(delta: float) -> void:
 	# And the autopilot's, for the same reason: hidden in exactly those states.
 	_update_autopilot_icon(delta)
 	# And before them for the opposite reason: the controls are drawn through a
-	# division and through a pause, and what changes is *which* of them. The
-	# chooser's preview counts down in frames' time, which this node keeps under
-	# the pause, so a render at a fixed rate shows what a player sees.
-	_scheme_preview_left = maxf(_scheme_preview_left - delta, 0.0)
+	# division, and what changes is *which* of them.
 	_update_controls()
 	# Before them too: the states they lead to -- dead, paused, held, divided --
 	# are exactly the ones the body held open has to shut in. dna-body.md §8.
@@ -2356,12 +2328,11 @@ func _read_lean() -> int:
 		return -1
 	if Input.is_action_pressed(&"ui_right") or Input.is_key_pressed(KEY_D):
 		return 1
-	# **A drawn control that is being held decides it.** A thumb parked on the
-	# stick sits at canvas x 144, which is the port half *whichever way it is
-	# pushing*, and under `pads` both turn pads are in the port half -- so the
+	# **The turn, while it is held, decides it.** A thumb parked on it sits at
+	# canvas x 144, which is the port half *whichever way it is pushing* -- so the
 	# screen half cannot be the only read once anything is drawn down there. A
-	# steering control that is held and centred therefore means *no lean*, and
-	# does not fall through.
+	# turn that is held and centred therefore means *no lean*, and does not fall
+	# through.
 	if _controls.steering():
 		var want: float = _controls.steer()
 		if absf(want) > CellBody.STEER_DEADZONE:
@@ -3297,113 +3268,36 @@ func _update_view_button() -> void:
 
 
 # ---------------------------------------------------------------------------
-# Where the player's thumbs live. docs/design/controls.md.
+# Where the player's thumbs live. docs/design/gene-controls.md.
 #
-# The owner asked for "more control options ... a left right joystick and
-# buttons. We can choose from the pause menu". Three schemes, one cycling
-# button beside `light` and `camera`, and the explanation is that **the controls
-# themselves stay drawn behind the pause scrim**, so cycling the word changes
-# the corners in front of the player. That costs no string, and today the game
-# has exactly one authored sentence.
-#
-# The scheme that ships is the default and is not touched: under `anywhere`
-# nothing is drawn, cell.gd's input path is exactly what it was, and a player
-# who never opens pause never sees any of this.
+# The owner, 2026-10-15: "No more controls without buttons. Add a proper control
+# element for each gene ... the control type must reflect the gene's behavior."
+# One layout, no chooser: the turn is a slider, and every gene the hand can work
+# brings a control of its own kind (controls.gd). Open water is never a control.
 # ---------------------------------------------------------------------------
-
-## The word on the button, and the whole of the chooser's vocabulary. Each says
-## what is on screen; `anywhere` also states the rule it names.
-##
-## TRANSLATORS: The pause screen's "controls" button, which cycles through three
-## ways of steering with a thumb. `anywhere`: drag anywhere on the water, nothing
-## is drawn. `stick`: a drawn joystick in one corner. `pads`: drawn buttons in the
-## corners. One lowercase word each, about 10 characters at most: the button sizes
-## to its text and the whole left column grows with it.
-const SCHEME_WORDS: Array[String] = ["anywhere", "stick", "pads"]
-
-
-## **No confirmation and no apply.** Cycling takes effect immediately and
-## `RunState` writes it, so the corners under the scrim are the preview and the
-## preview is the game.
-func _cycle_scheme() -> void:
-	scheme = (scheme + 1) % SCHEME_WORDS.size()
-	_scheme_preview_left = SCHEME_PREVIEW
-	_controls.set_scheme(scheme)
-	RunState.save_scheme(scheme)
-	_update_scheme_button()
-	_update_controls()
-	# A finger still down when the scheme changed is not steering the new one.
-	_cell.release()
-	_controls.let_go()
-	# **The drawn control is the onboarding**, so the authored line is not shown
-	# under the two schemes that have one. `RunState`'s seen-flag is untouched:
-	# a player who switches back to `anywhere` still gets it if they never had
-	# it.
-	if _onboard_steer and _onboard != Onboard.OFF and not _floating():
-		_onboarding.hide()
-		_onboard = Onboard.OFF
-
-
-## **The drawn controls behind the pause screen** (controls.md §5.1;
-## automation-ux.md §2.1). In play, always. On the genome page, **while its
-## controls chooser is in use** -- the keyboard's focus on it, or for
-## [constant SCHEME_PREVIEW] seconds after it was cycled -- so cycling the word
-## still changes the corners under the scrim, which is the chooser's whole
-## explanation; the rest of the time no pad's ghost sits under the caption, the
-## `numbers` switch or `leave`, which the 4-1 layout put over three of them. The
-## programs page never shows them, so none sits under `resume`.
-##
-## **Not a hover, nor the hidden focus a press leaves**: a phone's tap leaves the
-## chooser focused that way and, by the emulated mouse, hovered for good, and the
-## four seconds would never end.
-func _controls_previewed() -> bool:
-	if not _menu_open:
-		return true
-	if _on_programs:
-		return false
-	if _feel_button.has_focus(true):
-		return true
-	return _scheme_preview_left > 0.0
-
-
-func _update_scheme_button() -> void:
-	_feel_button.text = tr(SCHEME_WORDS[clampi(scheme, 0, SCHEME_WORDS.size() - 1)])
-
-
-## True while the water itself is the control. The one test anything outside
-## controls.gd makes about the scheme.
-func _floating() -> bool:
-	return scheme == RunState.Scheme.ANYWHERE
-
 
 ## What is drawn in the corners this frame.
 ##
 ## **The controls are a readout of the genome** (`gene-lines-and-the-pause-target.md`
-## §4.1): a pad exists only when the organ that works it does, so a newborn on
-## `pads` has two controls and grows into four. Positions never move, so growing
-## a gene adds a control and never relocates one.
+## §4.1): a gene's control exists only while the gene that works it does, so a
+## newborn has the turn alone and grows into the rest.
 ##
-## **Only the two action pads go at the pinch**, and the steering control stays
-## for the whole division. A first build hid everything from `QUICKEN` to `PART`
-## and took steering away from a cell that was still swimming -- `QUICKEN` is
-## still simulating -- and a target that vanishes from under a thumb and returns
-## 1.5 s later is a target the player has to find twice at the one beat in a run
-## that cannot be replayed.
+## **Only the genes' controls go at the pinch**, and the turn stays for the whole
+## division. A first build hid everything from `QUICKEN` to `PART` and took
+## steering away from a cell that was still swimming -- `QUICKEN` is still
+## simulating -- and a target that vanishes from under a thumb and returns 1.5 s
+## later is a target the player has to find twice at the one beat in a run that
+## cannot be replayed.
+##
+## **Not behind the pause screen**: there is no chooser to preview any more, and
+## a control's ghost under the scrim sat under the caption, the `numbers` switch
+## and `leave`.
 func _update_controls() -> void:
-	# **The hold pad is drawn under every scheme** (automation-ux.md §6.1), from
-	# the moment the tail can be held still: under `anywhere` the one control
-	# there is, so that scheme's screen stays empty until then.
-	var hold := _cell.can_hold()
-	# **And so are the genes' buttons** (haptonema.md §4), from the moment a worn
-	# gene brings one.
-	var buttons: Array = _cell.buttons()
-	# The pond's still moments behave as a pinch does (UX §0.5, §5): the
-	# steering control stays drawn and dead, and the action pads go.
-	_controls.update((not _floating() or hold or not buttons.is_empty())
-			and _life == Life.ALIVE and _controls_previewed(),
+	# The pond's still moments behave as a pinch does (UX §0.5, §5): the turn
+	# stays drawn and dead, and the genes' controls go.
+	_controls.update(_life == Life.ALIVE and not _menu_open,
 		_split >= Split.PINCH or _held or _water_beat >= 0.0 or _entering_held,
-		_cell.provider(&"push_accel") != &"", _cell.provider(&"dash_speed") != &"", hold,
-		buttons)
+		_cell.buttons(), _cell.cooling())
 
 
 ## True while the world layer is the thing behind the Hud. Read by the pause
@@ -3453,11 +3347,10 @@ func _begin_onboarding() -> void:
 		_onboarding.hide()
 		_onboard = Onboard.OFF
 		return
-	# **The drawn control is the onboarding.** Under `stick` and `pads` there is
-	# a picture in the corner saying what the sentence would have said, and the
-	# game keeps its one authored line. The seen-flag is deliberately not
-	# marked: a player who switches to `anywhere` later still gets it.
-	if not _floating():
+	# **On a phone the drawn turn is the onboarding** (gene-controls.md): there is
+	# a slider in the corner saying what the sentence would have said. The keys
+	# draw nothing, so a keyboard keeps the line. The seen-flag is not marked.
+	if _touch_first():
 		_onboarding.hide()
 		_onboard = Onboard.OFF
 		return
@@ -3506,11 +3399,11 @@ func _say(says: StringName, hold: float) -> void:
 func _line_words(says: StringName) -> String:
 	match says:
 		&"steer":
-			# TRANSLATORS: The first line a new player sees, in 18 px type over the
-			# water, teaching how to steer: on a phone, drag a finger; on a keyboard,
-			# hold the A key to turn one way and the D key to turn the other. Keep the
-			# key letters A and D. One short line: about 25 characters.
-			return tr("drag to turn") if _touch_first() else tr("A · D to turn")
+			# TRANSLATORS: The first line a new player sees on a computer, in 18 px
+			# type over the water, teaching how to steer: hold the A key to turn one
+			# way and the D key to turn the other. Keep the key letters A and D. One
+			# short line: about 25 characters.
+			return tr("A · D to turn")
 		&"sense":
 			# TRANSLATORS: A notice in 18 px type, for seven seconds, when the cell has
 			# grown a new sense (a gene waiting for a place on its body). "Place it"
@@ -3761,9 +3654,6 @@ func _bar(alpha: float) -> StyleBoxFlat:
 ## The icon's light, falling from on to off when the hand takes the cell back,
 ## so a player who did it by accident can see what happened (UX §5.2).
 const AUTOPILOT_FALL := 0.6
-## How long the drawn controls show behind the genome page after its controls
-## chooser is cycled ([method _controls_previewed]).
-const SCHEME_PREVIEW := 4.0
 
 
 ## **Whether there is anything to run**: the programs that are on hold at least
@@ -4113,7 +4003,7 @@ func _notification(what: int) -> void:
 ## The pinch is where `_update_simulating()` stops `cell.gd`'s own input, so
 ## from there to PART -- `DIVIDE_PINCH`, a second and a half -- **no node in the
 ## tree consumed a pointer press at all.** Measured before the change, at
-## `--fixed-fps 60`: `--scheme=2 --radius=40 --press=3.0:216,624,0` logged
+## `--fixed-fps 60`: under the old `pads` scheme, `--radius=40 --press=3.0:216,624,0` logged
 ## `held []  steer +0.00` for the whole run and never committed, while the same
 ## press at 2.0 s -- one phase earlier, on the cell's own watch -- logged
 ## `held [starboard#0]  steer +1.00` and committed. The turn pad stayed drawn
@@ -4335,7 +4225,7 @@ func _read_touch_lean(event: InputEvent) -> bool:
 		if touch.pressed:
 			# The drawn controls own the corners for the whole division. A
 			# finger they claim never reaches the screen half, which is the
-			# point: under `stick` it would be reading the wrong side.
+			# point: on the turn it would be reading the wrong side.
 			if _controls.press(touch.index, touch.position) != _controls.NONE:
 				return true
 			if _touch_index == -2:
@@ -4560,11 +4450,9 @@ func _set_menu(open: bool) -> void:
 	if paused:
 		# A finger still down when the pause opened must not keep steering.
 		_cell.release()
-		# Both halves: the free drag under `anywhere`, and every finger on a
-		# drawn control under the other two. The controls stay *drawn* behind
-		# the scrim -- that is the chooser's own explanation -- and they are
-		# dead to input there, because the `Cell` node is PAUSABLE and this run
-		# is only awake to hear Esc and Back.
+		# And every finger on a drawn control: they are dead to input under the
+		# scrim, because the `Cell` node is PAUSABLE and this run is only awake
+		# to hear Esc and Back.
 		_controls.let_go()
 		# **The scrim is set per view, and the reason is the camera.** The
 		# camera holds the player's cell at the exact centre of the screen and
@@ -4645,7 +4533,6 @@ func _set_menu(open: bool) -> void:
 ## deferred, because the genome strip is built by adding nodes.
 func _say_again() -> void:
 	_update_view_button()
-	_update_scheme_button()
 	_programs.say_chip(not _on_programs)
 	if _onboard_says != &"":
 		_onboarding.text = _line_words(_onboard_says)
@@ -4721,8 +4608,7 @@ func _on_gain_settled(changed: bool) -> void:
 ## and it looked wrong; at 232 they stay the buttons Phase 4 shipped whatever is
 ## beside them, and the column they share now is exactly that wide.
 func _style_pause() -> void:
-	for control: Control in [_light_panel, _view_panel, _feel_panel,
-			_resume_button, _leave_button]:
+	for control: Control in [_light_panel, _view_panel, _resume_button, _leave_button]:
 		control.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 
 	# **Every group on the pause column is a surface, and `light` was the one
@@ -4735,12 +4621,9 @@ func _style_pause() -> void:
 	# this column is a surface.
 	_light_panel.add_theme_stylebox_override("panel", _slab(-0.2))
 	# Same slab, same rule: every group on this column is a surface.
-	for panel: PanelContainer in [_view_panel, _feel_panel]:
-		panel.add_theme_stylebox_override("panel", _slab(-0.2))
-	for caption: Label in [_view_caption, _feel_caption]:
-		caption.add_theme_font_size_override("font_size", 16)
-		caption.add_theme_color_override("font_color",
-			Color(0.855, 0.953, 0.933, 0.52))
+	_view_panel.add_theme_stylebox_override("panel", _slab(-0.2))
+	_view_caption.add_theme_font_size_override("font_size", 16)
+	_view_caption.add_theme_color_override("font_color", Color(0.855, 0.953, 0.933, 0.52))
 
 	# The tray's `waiting` wears the same, so the genome's two captions are one
 	# voice. See [method Figure.make_tray_caption].
@@ -4761,12 +4644,10 @@ func _style_pause() -> void:
 	_pause_well_breath = _well(0.13, 0.09)
 	_pause_bar_breath = _bar(PAUSE_REST)
 
-	# The camera toggle and the control-scheme toggle are buttons, so they are
-	# styled like ones -- but narrower and shorter than `resume`, because they
-	# are settings inside a surface and not things that end the run. Still 48
-	# tall, which is the touch rule. **One loop over both**, because they are
-	# the same kind of thing and a second copy is how two settings drift apart.
-	for toggle: Button in [_view_button, _feel_button]:
+	# The camera toggle is a button, so it is styled like one -- but narrower and
+	# shorter than `resume`, because it is a setting inside a surface and not a
+	# thing that ends the run. Still 48 tall, which is the touch rule.
+	for toggle: Button in [_view_button]:
 		toggle.custom_minimum_size = Vector2(192.0, 48.0)
 		toggle.focus_mode = Control.FOCUS_ALL
 		toggle.add_theme_font_size_override("font_size", 16)
@@ -7829,7 +7710,7 @@ func _draw_centred(card: Control, font: Font, text: String, base: float,
 # **Free slots only, never an eviction.** Placing into an empty slot destroys
 # nothing and a move can still change it, so one gesture is enough; the one
 # irreversible action in the game keeps its two taps on the pause screen. With
-# no free slot the body does not open, and a press on it is an ordinary steer.
+# no free slot the body does not open, and a press on it is nothing.
 #
 # **The inside is a free slot too, for a toxin** (dna-slots-ux.md §3.7): out to
 # grow it on that side, back in to keep it inside. Its bud is the poison it
@@ -7838,10 +7719,9 @@ func _draw_centred(card: Control, font: Font, text: String, base: float,
 # nothing, for every gene.
 #
 # **The water keeps moving.** A pond cannot stop, and a shortcut that paused
-# would be the pause screen again. The price is the flick: about 0.6 s under
-# `anywhere`, when that finger is not steering, and about 0.25 s under `stick`
-# and `pads`, where the other thumb still is. When to place becomes a choice,
-# which is the game rather than a cost to design away.
+# would be the pause screen again. The price is the flick, about 0.25 s while
+# the other thumb is on the turn. When to place becomes a choice, which is the
+# game rather than a cost to design away.
 #
 # **Hand-hit-tested in `_input`, before the GUI and before cell.gd**, for the
 # reason controls.gd gives at its top: no `Control` in the playfield and no
@@ -7849,15 +7729,6 @@ func _draw_centred(card: Control, font: Font, text: String, base: float,
 # claimed reaches cell.gd untouched.
 # ---------------------------------------------------------------------------
 
-## Under `anywhere` a finger resting on the body becomes this gesture after this
-## long. Past cell.gd's TAP_SECONDS (0.28), so a tap on the body is still a
-## dash, and a finger that moves first is still a steer. Owner's call 5.
-const OFFER_HOLD := 0.35
-## Further than this from where it pressed, before the hold, and the finger is
-## steering: the gesture lets go of it for good. Stricter than cell.gd's
-## TAP_SLOP (26) on purpose -- a slow lean that starts on the body has to read
-## as the steer it is.
-const OFFER_SLOP := 14.0
 ## The body's hit circle: its drawn radius and a little, and never a radius
 ## under [constant OFFER_HIT_MIN] canvas px. Full vision draws a born cell at
 ## r26, which alone would be a hit radius of 30; the floor keeps the target a
@@ -7866,28 +7737,14 @@ const OFFER_HIT := 1.15
 const OFFER_HIT_MIN := 56.0
 
 ## The finger on the body -- a touch index, or [constant POINTER_MOUSE] for a
-## real mouse -- or [constant POINTER_NONE]. Under `anywhere` it is still
-## steering until [constant OFFER_HOLD] has passed with it resting.
+## real mouse -- or [constant POINTER_NONE].
 var _offer_pointer := POINTER_NONE
 ## The body is open: the bloom is drawn, and letting go places.
 var _offer_open := false
 ## Opened by holding `E` rather than by a finger.
 var _offer_key := false
-## Where the finger pressed, and where it is now, in canvas px.
-var _offer_from := Vector2.ZERO
+## Where the finger is, in canvas px.
 var _offer_at := Vector2.ZERO
-## Seconds the finger has rested, toward [constant OFFER_HOLD].
-var _offer_clock := 0.0
-## **True from the press until the first frame after it has been skipped.** The
-## frame that delivers a press steps with the whole delta since the frame
-## before, and most of that passed before the finger touched glass: summed in,
-## a stall at the press -- a GC, a shader compiled on first use -- counted
-## toward the hold, and one of 0.35 s opened the body on the first frame under
-## a tap that then neither dashed (cell.gd times its tap on the wall clock, from
-## the press) nor placed. Skipping that one delta keeps the hold measured from
-## the press on the frame clock, which is what keeps a `--fixed-fps` run
-## repeatable.
-var _offer_fresh := false
 ## The free slot that is lit -- [member GenomeNode.INSIDE] for the inside --
 ## or -1 for none: a finger that never left the body, or one back inside it
 ## when the inside is not offered.
@@ -7895,8 +7752,8 @@ var _offer_aim := -1
 ## **The finger has left the body since it opened** (dna-slots-ux.md §3.7).
 ## Back inside after that, it aims at the inside, while the inside is offered:
 ## *out to grow it on that side, back in to keep it inside*. A finger that never
-## left still places nothing when it lets go, which is what keeps a hold on your
-## own body safe under `anywhere`.
+## left still places nothing when it lets go, which is what keeps a press on your
+## own body safe.
 var _offer_left := false
 ## **The gene the body opened for, held by name** -- the guarantee [member
 ## _in_hand] keeps on the pause screen. It is the head when the body opens, and
@@ -8054,8 +7911,7 @@ func _offer_clockwise(a: int, b: int) -> bool:
 		< wrapf(Cilia.slot_bearing(b), 0.0, TAU)
 
 
-## Opens the body. The bloom is drawn from this frame's `_process`, and the
-## finger that opened it stops steering -- that finger and no other.
+## Opens the body. The bloom is drawn from this frame's `_process`.
 func _offer_begin() -> void:
 	_offer_open = true
 	_offer_gene = _genome.held_sample
@@ -8070,15 +7926,8 @@ func _offer_begin() -> void:
 		_cell.steering_off = true
 		_cell.release()
 		_controls.let_go()
-		return
-	# **Only this finger stops steering.** A thumb steering elsewhere keeps its
-	# turn: releasing the whole cell was measured taking a second finger's press
-	# on the body as a reason to drop the first finger's steer, +0.42 to 0.
-	# Under `stick` and `pads` cell.gd never grabs a press that misses the drawn
-	# controls, so neither of these finds anything to let go of.
-	_cell.release_pointer(_offer_pointer)
-	if _offer_pointer >= 0 and _offer_pointer == _mouse_twin:
-		_cell.release_pointer(POINTER_MOUSE)
+	# A finger on the body steers nothing: open water is inert, and a thumb on
+	# the turn elsewhere keeps its turn.
 
 
 ## Shuts the body, and places the gene first when [param place] says so and the
@@ -8097,8 +7946,6 @@ func _offer_close(place: bool) -> void:
 	_offer_pointer = POINTER_NONE
 	_offer_aim = -1
 	_offer_left = false
-	_offer_clock = 0.0
-	_offer_fresh = false
 	_offer_gene = &""
 	# Now, not on the next frame: a death draws its first frame of collapse
 	# this one, and the bloom must not be on it.
@@ -8263,20 +8110,13 @@ func _offer_pointer_input(event: InputEvent) -> bool:
 		at = moved.position
 	if press:
 		# One finger holds the body. Any other is whatever it would have been:
-		# the other thumb on the stick, or a steer.
+		# the other thumb on the turn, or nothing.
 		if _offer_pointer != POINTER_NONE or not _offer_on_body(at):
 			return false
 		_offer_pointer = index
-		_offer_from = at
 		_offer_at = at
-		_offer_clock = 0.0
-		_offer_fresh = true
-		if _floating():
-			# `anywhere`: a steer until the hold says otherwise. It goes on to
-			# cell.gd, so a tap on the body is still a dash.
-			return false
-		# `stick` and `pads`: the water is inert under them, so a press on the
-		# body means nothing else, and it opens at once.
+		# Open water is inert (gene-controls.md), so a press on the body means
+		# nothing else, and it opens at once.
 		_offer_begin()
 		return true
 	if index != _offer_pointer:
@@ -8286,15 +8126,11 @@ func _offer_pointer_input(event: InputEvent) -> bool:
 		if _offer_open:
 			_offer_close(not canceled)
 			return true
-		# Let go before the hold: a tap or a short press, and cell.gd's.
 		_offer_pointer = POINTER_NONE
 		return false
 	if _offer_open:
 		_offer_aim = _offer_aim_at(at)
 		return true
-	if at.distance_to(_offer_from) > OFFER_SLOP:
-		# Moved before the hold: a steer, and cell.gd's for good.
-		_offer_pointer = POINTER_NONE
 	return false
 
 
@@ -8307,13 +8143,6 @@ func _step_offer(delta: float) -> void:
 		# A death, a menu, the pinch, a held pond -- or the gene lapsed while
 		# the body was open. It shuts, and nothing is placed.
 		_offer_close(false)
-	if _offer_pointer != POINTER_NONE and not _offer_open:
-		if _offer_fresh:
-			_offer_fresh = false
-		else:
-			_offer_clock += delta
-		if _offer_clock >= OFFER_HOLD:
-			_offer_begin()
 	if _offer_open:
 		if _offer_key:
 			if not _offer_free().has(_offer_aim) \

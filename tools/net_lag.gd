@@ -120,26 +120,30 @@ const TURN_PLAIN := 0.15
 
 
 ## **`cell.gd`'s drawn controls, reduced to a steering demand.** The body reads
-## `floating()`, `steer()`, `pushing()` and `holding()` off its `controls` every
-## frame, which is the one way to steer one cell without steering every cell in
-## the process through the global `Input`.
+## `steer()`, `lever()` and `holds()` off its `controls` every frame, which is the
+## one way to steer one cell without steering every cell in the process through
+## the global `Input`.
 class Stick extends Node:
-	const NONE := 0
-	const DASH := 1
+	const NONE := -1
+	const TAP := &"tap"
 	var demand := 0.0
-
-	func floating() -> bool:
-		return false
 
 	func steer() -> float:
 		return demand
 
-	func pushing() -> bool:
+	## The push's lever: never pushed here.
+	func lever(_name: StringName) -> float:
+		return 0.0
+
+	## The hold pad and every other held part (automation-ux.md §6.1): never held.
+	func holds(_name: StringName) -> bool:
 		return false
 
-	## The hold pad (automation-ux.md §6.1): never held here.
-	func holding() -> bool:
-		return false
+	func kind_of(_id: int) -> StringName:
+		return &""
+
+	func name_of(_id: int) -> StringName:
+		return &""
 
 	func press(_index: int, _at: Vector2) -> int:
 		return NONE
@@ -560,7 +564,6 @@ func _build_pond(link: String, reliable: bool, rto: float) -> bool:
 	NetSession.current = _far
 	_host_run = (load(RUN) as PackedScene).instantiate()
 	_host_run.set("mode", 0)
-	_host_run.set("scheme", 0)
 	# **Neither run keeps a drop** (ocean.md §9): the game's default is the
 	# player's own file, which a measurement must neither open on nor write.
 	_host_run.set("keep", "")
@@ -572,7 +575,6 @@ func _build_pond(link: String, reliable: bool, rto: float) -> bool:
 	NetSession.current = _near
 	_guest_run = (load(RUN) as PackedScene).instantiate()
 	_guest_run.set("mode", 1)
-	_guest_run.set("scheme", 0)
 	_guest_run.set("keep", "")
 	_guest_run.set("library_at", "")
 	add_child(_guest_run)

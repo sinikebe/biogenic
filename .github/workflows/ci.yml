@@ -218,8 +218,14 @@ jobs:
         # positive assertion -- that the division actually commits -- because a
         # step that only greps for errors goes green if the harness quietly
         # stops driving anything. Measured against the two faults it exists for:
-        # the stale constant fails it under all three schemes, and so does the
-        # input gate that used to ignore every press for the 1.5s of the pinch.
+        # the stale constant fails it, and so does the input gate that used to
+        # ignore every press for the 1.5s of the pinch.
+        #
+        # One layout since docs/design/gene-controls.md: the turn's slider at the
+        # bottom left (48..240), the push's lever inboard on the right (1016..1112,
+        # y 480..672), the dash in the corner (1136..1232). The presses below
+        # hold the turn and push the lever, fire the dash, slide the turn over,
+        # and then hold the turn hard to starboard through the division.
         #
         # `--size=` is load-bearing. Canvas coordinates are converted through
         # `get_screen_transform()`, and a headless run with no window of its own
@@ -228,55 +234,51 @@ jobs:
         # testing nothing at all.
         #
         # `tools/` is excluded from export on every preset, so none of this
-        # reaches a player. About fifteen seconds for all three schemes.
+        # reaches a player. About five seconds.
         run: |
           set -uo pipefail
           fail=0
           genome="cytostome:1,cirrus:1,flagellum:1,axoneme:1,myoneme:1"
-          for scheme in 0 1 2; do
-            echo "--- driving scheme $scheme"
-            if ! out=$(~/godot/godot --headless --path . --fixed-fps 60 \
-                         --quit-after 660 res://tools/drive.tscn -- \
-                         --size=1280x720 --seed=12345 --scheme="$scheme" \
-                         --radius=40 --genome="$genome" --trace=2.0 \
-                         --press=1.0:144,624,0 --press=1.2:1064,624,1 \
-                         --touch=1.6:1184,624 --slide=1.8:200,624,0 \
-                         --lift=2.0:0 --lift=2.1:1 \
-                         --press=3.0:216,624,0 --lift=8.0:0 \
-                         --mouse-press=9.0:96,624 --mouse-slide=9.2:640,400 \
-                         --mouse-lift=9.4 2>&1); then
-              printf '%s\n' "$out"
-              echo "::error::scheme $scheme exited non-zero"
-              fail=1
-              continue
-            fi
-            if printf '%s\n' "$out" \
-                 | grep -E "SCRIPT ERROR|Parse Error|Failed to load|Cannot open file"; then
-              echo "::error::scheme $scheme reported script errors under input"
-              fail=1
-            fi
-            # The cell is forced to DIVIDE_RADIUS, so it splits at once and the
-            # press at 3.0s is a held lean -- the port half under `anywhere`,
-            # the stick hard over under `stick`, the starboard pad under
-            # `pads`. A daughter is half the area, so r40 becomes r28.28: any
-            # r2x in the trace is a division that was answered.
-            if ! grep -qE "^\[trace\].*me r2[0-9]\." <<< "$out"; then
-              printf '%s\n' "$out" | grep -E "^\[trace\]" || true
-              echo "::error::scheme $scheme never committed a daughter -- a held lean did not reach the division"
-              fail=1
-            fi
-          done
+          if ! out=$(~/godot/godot --headless --path . --fixed-fps 60 \
+                       --quit-after 660 res://tools/drive.tscn -- \
+                       --size=1280x720 --seed=12345 \
+                       --radius=40 --genome="$genome" --trace=2.0 \
+                       --press=1.0:144,624,0 --press=1.2:1064,540,1 \
+                       --press=1.6:1184,624,2 --lift=1.7:2 --slide=1.8:200,624,0 \
+                       --lift=2.0:0 --lift=2.1:1 \
+                       --press=3.0:216,624,0 --lift=8.0:0 \
+                       --mouse-press=9.0:96,624 --mouse-slide=9.2:640,400 \
+                       --mouse-lift=9.4 2>&1); then
+            printf '%s\n' "$out"
+            echo "::error::the drive exited non-zero"
+            exit 1
+          fi
+          if printf '%s\n' "$out" \
+               | grep -E "SCRIPT ERROR|Parse Error|Failed to load|Cannot open file"; then
+            echo "::error::script errors under input"
+            fail=1
+          fi
+          # The cell is forced to DIVIDE_RADIUS, so it splits at once and the
+          # press at 3.0s is a held lean -- the turn hard over to starboard. A
+          # daughter is half the area, so r40 becomes r28.28: any r2x in the
+          # trace is a division that was answered.
+          if ! grep -qE "^\[trace\].*me r2[0-9]\." <<< "$out"; then
+            printf '%s\n' "$out" | grep -E "^\[trace\]" || true
+            echo "::error::no daughter was committed -- a held lean did not reach the division"
+            fail=1
+          fi
           exit "$fail"
 
       - name: Check an empty library changes nothing
         # automation.md §18.3, check 8. With no programs, pack 4's autopilot
-        # must leave the game exactly as phase 4-1 left it: three seeded runs
-        # of tools/drive.tscn -- seed 1, sixty seconds at a fixed 60 fps, under
-        # each scheme, `--trace=0.5` -- hashed over their trace and compared
-        # with the hash 4-1's tree printed (dev at 2a761a5), pinned here as
-        # drop_probe pins pack 2's lines in DEV_LINES. The same hash under all
-        # three schemes: with no hand on it the scheme draws differently and
-        # moves nothing.
+        # must leave the game exactly as phase 4-1 left it: a seeded run of
+        # tools/drive.tscn -- seed 1, sixty seconds at a fixed 60 fps,
+        # `--trace=0.5` -- hashed over its trace and compared with the hash
+        # 4-1's tree printed (dev at 2a761a5), pinned here as drop_probe pins
+        # pack 2's lines in DEV_LINES. It ran once under each of three control
+        # schemes until docs/design/gene-controls.md left one layout; with no
+        # hand on it a layout draws and moves nothing, so the hash never told
+        # them apart.
         #
         # The autopilot's key, R, is pressed twenty seconds in by the real
         # input path. With nothing to run it must do nothing: the hash says it
@@ -341,42 +343,39 @@ jobs:
         # the toxin, so the drop differs from its first fill. 70,197 lines, from
         # 69,471, the same hash under all three schemes.
         #
-        # Each run prints about ten megabytes, so it goes to a file rather than
-        # a variable. About twenty seconds a scheme.
+        # The run prints about ten megabytes, so it goes to a file rather than a
+        # variable. About twenty seconds.
         run: |
           set -uo pipefail
           pinned="c5d5a00293bcd43b3547603413f7e47baeb6056fa42521b574cf27a0b56e37c0"
           log=$(mktemp)
           fail=0
-          for scheme in 0 1 2; do
-            echo "--- scheme $scheme, seed 1, sixty seconds, R pressed at 20 s"
-            if ! ~/godot/godot --headless --path . --fixed-fps 60 \
-                   --quit-after 3600 res://tools/drive.tscn -- \
-                   --size=1280x720 --seed=1 --scheme="$scheme" --trace=0.5 \
-                   --autopilot-at=20 > "$log" 2>&1; then
-              tail -n 40 "$log"
-              echo "::error::scheme $scheme exited non-zero"
-              fail=1
-              continue
-            fi
-            if grep -E "SCRIPT ERROR|Parse Error|Failed to load|Cannot open file" "$log"; then
-              echo "::error::scheme $scheme reported script errors"
-              fail=1
-            fi
-            lines=$(grep -cE '^(\[trace\]|        )' "$log" || true)
-            hash=$(grep -E '^(\[trace\]|        )' "$log" | sha256sum | cut -d' ' -f1)
-            echo "$lines trace lines, sha256 $hash"
-            if [ "$hash" != "$pinned" ]; then
-              grep -E "^\[trace\]" "$log" | tail -n 20 || true
-              echo "::error::scheme $scheme: with an empty library the trace is not the one 4-1 left (pinned $pinned)"
-              fail=1
-            fi
-            grep -E "^\[instincts\]" "$log" || true
-            if ! grep -qE "^\[instincts\] +20\.[0-9]+  after R: drives no, icon hidden$" "$log"; then
-              echo "::error::scheme $scheme: with nothing to run, R switched something on or drew the icon"
-              fail=1
-            fi
-          done
+          echo "--- seed 1, sixty seconds, R pressed at 20 s"
+          if ! ~/godot/godot --headless --path . --fixed-fps 60 \
+                 --quit-after 3600 res://tools/drive.tscn -- \
+                 --size=1280x720 --seed=1 --trace=0.5 \
+                 --autopilot-at=20 > "$log" 2>&1; then
+            tail -n 40 "$log"
+            echo "::error::the run exited non-zero"
+            exit 1
+          fi
+          if grep -E "SCRIPT ERROR|Parse Error|Failed to load|Cannot open file" "$log"; then
+            echo "::error::the run reported script errors"
+            fail=1
+          fi
+          lines=$(grep -cE '^(\[trace\]|        )' "$log" || true)
+          hash=$(grep -E '^(\[trace\]|        )' "$log" | sha256sum | cut -d' ' -f1)
+          echo "$lines trace lines, sha256 $hash"
+          if [ "$hash" != "$pinned" ]; then
+            grep -E "^\[trace\]" "$log" | tail -n 20 || true
+            echo "::error::with an empty library the trace is not the one 4-1 left (pinned $pinned)"
+            fail=1
+          fi
+          grep -E "^\[instincts\]" "$log" || true
+          if ! grep -qE "^\[instincts\] +20\.[0-9]+  after R: drives no, icon hidden$" "$log"; then
+            echo "::error::with nothing to run, R switched something on or drew the icon"
+            fail=1
+          fi
           rm -f "$log"
           exit "$fail"
 

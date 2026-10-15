@@ -1,20 +1,25 @@
 extends Control
-## The drawn controls, for the two schemes that have any -- and the hold pad and
-## the genes' buttons, for all three.
+## **The drawn controls: one for each thing the hand can do** (docs/design/
+## gene-controls.md). The owner, 2026-10-15: *"No more controls without buttons.
+## Add a proper control element for each gene (small button if binary entry, a
+## slider if analogic entry, etc.) the control type must reflect the gene's
+## behavior."* So open water is never a control: every steer, push, dash, hold and
+## cling is a drawn object, and its shape says how the gene behaves.
 ##
-## docs/design/controls.md. The owner asked for "a left right joystick and
-## buttons", chosen from the pause menu. There are three schemes and this file
-## draws two of them: `stick` is a knob in a channel plus a dash pad, `pads` is
-## two turn pads plus a push pad and a dash pad. `anywhere` -- the scheme that
-## ships and the default -- draws nothing at all, and under it this node is
-## invisible and inert, **but for one pad**: the hold, which exists only while
-## the tail can be held still (docs/design/automation-ux.md §6, rows 29, 37 and
-## 41), and is drawn under every scheme, `anywhere` included, from that moment.
+## - **turn**: the body's steering, which the `cirrus` makes faster. Analogue,
+##   left and right, and nothing once let go -- so a slider across the bottom-left
+##   corner, a knob in a channel that comes home the moment nothing holds it. It is
+##   always there: a body with no cirrus still turns, slowly.
+## - **every part a worn gene declares with a `"button"`** (gene.gd's `declares`),
+##   by the part's own kind. A `held` part is a pad that acts while it is held (the
+##   tail's hold, the cling). A `tap` part is a pad that fires once on the press
+##   (the dash). A `lever` part is a slider pushed up from rest, which acts at that
+##   strength while it is held and drops back when it is let go (the push).
 ##
-## **And a gene's button** (docs/design/haptonema.md §4): a pad for each part a
-## worn gene declares with `"button": true` -- the haptonema's cling first -- held
-## like the hold, drawn under every scheme as the hold is, stacked up the right
-## edge above the bottom row, each with its organ's tile for its mark.
+## **The controls are a readout of the genome** (gene-lines-and-the-pause-target.md
+## §4.1): a gene's control arrives with the gene, and goes with it. The pads stack
+## up the right edge from the corner -- taps first, so the dash has the corner --
+## and the levers stand in the bottom row inboard of them.
 ##
 ## **This node never enters the GUI pass, and that is not tidiness.** It is a
 ## `Control` for its rect and nothing else: `MOUSE_FILTER_IGNORE`, no children,
@@ -22,7 +27,7 @@ extends Control
 ## `MOUSE_FILTER_STOP` control in the playfield costs -- Godot hit-tests a drag
 ## afresh whenever the press did not land on a `Control`, and a STOP control
 ## handed a pointer event consumes it whether it wanted it or not, which cost a
-## release blocker on the genome strand. A stick in the bottom-left corner is
+## release blocker on the genome strand. A slider in the bottom-left corner is
 ## that same defect in the corner a thumb actually rests in. Everything here is
 ## hit-tested by hand, and the two nodes that already own input in their own
 ## phase drive it: cell.gd while the cell is swimming, normal_mode.gd from the
@@ -34,8 +39,8 @@ extends Control
 ## **One pointer per control, not one pointer.** `_owner` maps a touch index (or
 ## [constant POINTER_MOUSE]) to the control it grabbed at the press, and every
 ## later event of that gesture is dispatched on whose finger it is rather than
-## on what it is over. That is what lets `port` and `push` be held at once, and
-## a dash be fired while the stick is deflected.
+## on what it is over. That is what lets the turn and the push be held at once,
+## and a dash be fired while the turn is deflected.
 ##
 ## **Interface subtracts light; the body emits it.** The membrane's grammar is
 ## *light, at a bearing, means a sensation*, so a control at the rim has to be a
@@ -46,90 +51,87 @@ extends Control
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
 const Cilia := preload("res://game/vision/cilia.gd")
-## The organs the pads work the body through, found by what each provides.
+## The organs the controls work the body through, found by what each provides.
 const Catalogue := preload("res://game/genes/catalogue.gd")
-const RunState := preload("res://game/run_state.gd")
 
 # --- What there is to hold --------------------------------------------------
 
 ## Nothing under the point.
 const NONE := -1
-const STICK := 0
-const PORT := 1
-const STARBOARD := 2
-const PUSH := 3
-const DASH := 4
-## **The tail held still** (automation-ux.md §6): a pad of its own, held like
-## push, drawn only while the tail is at its hold level (`cell.gd`'s `can_hold`).
-const HOLD := 5
-## **A gene's button**: the first is this id, the next one more, and so on -- one
-## per part of [member _buttons], in its order.
-const BUTTON := 6
+## **The turn**: the body's own steering, always drawn.
+const TURN := 0
+## **A gene's control**: the first is this id, the next one more, and so on -- one
+## per part of [member _parts], in its order.
+const PART := 1
 
-## Draw and hit-test order. Never overlapping, so the order is only a
-## convention -- but a stated one is cheaper than a proof. The buttons follow it,
-## in their own order.
-const ORDER: Array[int] = [STICK, PORT, STARBOARD, PUSH, DASH, HOLD]
+## **The kinds a part's control may be** (gene.gd's `declares`).
+const HELD := &"held"
+const TAP := &"tap"
+const LEVER := &"lever"
 
 ## The mouse, as a pointer index. Touch indices are >= 0, so -1 is free.
 const POINTER_MOUSE := -1
 
-# --- Geometry (docs/design/controls.md §2) ----------------------------------
-# One baseline. Every control is 96 canvas px tall, bottom-aligned, EDGE from
-# the bottom and from its own side -- the launcher's `edge_margin` and
-# PauseTap's own offsets, so the game has one margin and not three. At canvas
-# height 720 every control occupies y 576 .. 672.
+# --- Geometry (docs/design/controls.md §2; gene-controls.md §3) --------------
+# One baseline. Every pad is 96 canvas px square, bottom-aligned, EDGE from the
+# bottom and from its own side -- the launcher's `edge_margin` and PauseTap's own
+# offsets, so the game has one margin and not three. At canvas height 720 the
+# bottom row occupies y 576 .. 672.
 
 const EDGE := 48.0
 ## 96 canvas px is 9.1 mm at 2400x1080 -- the ~9 mm perception.md §3 says a
 ## thumb actually needs, and twice CLAUDE.md's 48 px floor, which is a floor for
 ## a finger on a precise target and not for a thumb bracing a phone.
 const BOX := 96.0
-## Between the two turn pads, because a mis-hit there is the *opposite* of what
-## was asked; and between `push` and `dash` for the same reason.
+## Between two controls, because a mis-hit there is a different verb.
 const PAD_GAP := 24.0
+## The turn's well: twice a pad across, so the knob has a throw each way.
 const STICK_W := 192.0
 const KNOB := 56.0
 ## Full-scale deflection, each way, from the knob's home. 4.5 mm of thumb roll
-## at 2400x1080: a stick you pivot rather than a drag you reach for.
+## at 2400x1080: a slider you pivot rather than a drag you reach for.
 const THROW := 48.0
-## Below this the stick is centred. Remapped rather than clipped, so the first
+## Below this the knob is home. Remapped rather than clipped, so the first
 ## degree of steer past it is the first degree of steer.
 const DEAD := 6.0
-## The channel the knob rides: 6 px across the well's waist, and a slot rather
-## than a bowl. A bowl promises a second axis the simulation does not have.
+## The channel a knob rides: 6 px across the well's waist, and a slot rather than
+## a bowl. A bowl promises a second axis the simulation does not have.
 const TRACK_H := 6.0
+## **A lever's travel**, from rest at the bottom to full at the top: the turn's
+## whole throw, one way. Its well is a pad wide and this much taller than one, so
+## the knob rests on the bottom row's centre line, beside the pads.
+const LEVER_THROW := 96.0
+const LEVER_H := BOX + LEVER_THROW
 
 # --- The marks --------------------------------------------------------------
 
-## Alpha every mark is drawn at. Set by measurement, not by eye: the first pass
-## at 0.42 put the `pads` block at 66.4 glance against a 65.2 soma figure, which
-## is a dead heat, and a dead heat is not losing.
+## Alpha every mark is drawn at. Set by measurement, not by eye (controls.md
+## §4): at 0.42 the loudest block was a dead heat with the figure, and a dead heat
+## is not losing.
 const MARK_REST := 0.36
 ## Held. On a phone that is under the thumb; it is for the desktop cursor, for
 ## the light that spills past a fingertip, and -- at a division -- for being the
 ## only confirmation a lean has ever had.
 const MARK_HELD := 0.92
+## **A tap recharging** -- the dash on its cooldown: its mark at this share of
+## rest, and a line along the foot of its well filling back up, so the pad says
+## *not yet* and *how long* without a word.
+const MARK_COOLING := 0.35
+const RECHARGE_H := 3.0
+const RECHARGE_INSET := 14.0
 
-## Turn -- `cirrus` -- and push -- `axoneme`: **the hue of the organ each pad
-## works the body through**, asked of the organ files' looks by what it provides
-## rather than copied or named. A copy is what `cilia.gd` warns about in three
-## separate comments, and the pads are the surface where a drift would show
-## worst: the mark on the pad and the glyph beside that gene's name on the
-## pause screen are supposed to be the same object seen twice.
-##
-## `static var` rather than `const` because a constant expression in GDScript
-## cannot contain a call, and an instance `var` would re-read the looks for
-## every control on every frame it is drawn.
+## **The organ the turn is drawn as** -- the `cirrus`, which steers -- and its hue,
+## found by what it provides. `static var` rather than `const` because a constant
+## expression in GDScript cannot contain a call.
+static var TURN_ORGAN: StringName = Catalogue.first_provider(&"turn_rate")
 static var TURN_HUE: Color = Cilia.hue_for(&"turn_rate")
-static var PUSH_HUE: Color = Cilia.hue_for(&"push_accel")
-## Hold -- `flagellum`, the tail it holds still: moving's shade 0, beside the
-## axoneme's shade 2 -- one family, the movers' sky blue (gene-looks.md §1), so it
-## is the shape that tells the two pads apart: the push pad's wave marches, and
-## this one stops.
+## Hold -- `flagellum`, the tail it holds still: moving's shade 0 (gene-looks.md
+## §1), the hue of its mark.
 static var HOLD_HUE: Color = Cilia.hue_for(&"impulse_speed")
-## **The organ the burst pad is drawn as** -- `myoneme`, the one that dashes -- its
-## tile at the pad's size, found by what it provides.
+## **The push's hue and the dash's organ**, which the instincts page draws its
+## chips for those actions in (programs_page.gd): here, beside the turn's and the
+## hold's, so the marks of one action are asked of one place.
+static var PUSH_HUE: Color = Cilia.hue_for(&"push_accel")
 static var DASH_ORGAN: StringName = Catalogue.first_provider(&"dash_speed")
 
 ## [method Cilia.draw_slot_dart] owns its own alpha -- 0.95 on the dart -- and
@@ -138,81 +140,40 @@ static var DASH_ORGAN: StringName = Catalogue.first_provider(&"dash_speed")
 ## over a near-black well, `tone * k` at alpha 0.95 composites as `tone` at
 ## alpha `0.95 * k`.
 const DART_INK := 0.95
-## **No compass bezel on a turn pad.** `draw_slot_dart` draws a ring around
-## its dart, and in its home use that ring is the compass the dart is a needle
-## on -- *this is a bearing around the body*. A pad has no bearing to be on, so
-## here the circle carried no sentence at all, and it sat in the one shape
-## diegetic-hud.md section 4 forbids by name: *rounded rectangles, never
-## circles*, because a ring is what the water is full of. A parameter rather
-## than a fork -- every other caller renders exactly as it did.
+## **No compass bezel on a control.** `draw_slot_dart` draws a ring around its
+## dart, and in its home use that ring is the compass the dart is a needle on --
+## *this is a bearing around the body*. A control has no bearing to be on, and
+## a circle is the one shape diegetic-hud.md section 4 forbids by name.
 const DART_RING := false
 ## Slot 1 is the starboard cirrus arc, bearing 92.5 degrees -- a dart that
-## points to starboard. The port dart is the same call under a mirror, because
-## the arc table has no port lateral slot: the cirrus is a pair worn as one.
+## points to starboard; the port dart is the same call under a mirror. Slot 0 is
+## the nose, bearing 0 -- a dart that points the way you go, which is up a lever.
 const DART_SLOT := 1
-## On a turn pad the dart sits **under** the oars, at the foot of the well. The
-## first build put it above them and it read as an arrow in a circle -- a button
-## icon, not an organ. Below the tuft it is a caption on a body.
-const DART_R := 9.0
-const DART_LIFT := -30.0
-## On the stick the same dart sits at each end of the channel, and it is smaller
-## because that is all the room there is: the knob is 56 wide and travels 96, so
-## a 192 px well leaves 20 px at each end. A dart any bigger would be under the
-## knob at full deflection, which is the one moment it is being asked about.
+const DART_AHEAD := 0
+## The turn's darts sit at each end of the channel, small because that is all the
+## room there is: the knob is 56 wide and travels 96, so a 192 px well leaves 20
+## px at each end. A dart any bigger would be under the knob at full deflection,
+## which is the one moment it is being asked about. A lever's sits at its top.
 const STICK_DART_R := 7.0
 const STICK_DART_X := 13.0
 
-## The turn pad's oars: the cirrus tuft the body already wears, rooted on the
-## same upward dome [method Cilia.draw_tile_organ] uses and **swung the way the
-## turn goes, the swing growing across the row**. The last oar has come right
-## round to lie along the turn; the first has barely left the vertical. That
-## gradient is the mark's whole sentence, and it is the metachronal order a real
-## ciliature beats in.
-const OARS := 5
-## The dome, seated above the dart. Same 187..353 degrees the tile glyph opens
-## through, so a turn pad and a gene tile are the same vocabulary.
-const OAR_SEAT := -6.0
-const OAR_ARC := 12.0
-const OAR_FROM := 1.04 * PI
-const OAR_TO := 1.96 * PI
-const OAR_LEN := 26.0
-const OAR_SWING_FROM := 6.0
-const OAR_SWING_TO := 95.0
-## Where the oar bends, and how much further round the tip has come.
-## cilia.gd's own cirrus vocabulary: a knee, and more swing beyond it.
-const OAR_KNEE := 0.6
-const OAR_BEND := 1.35
-const OAR_WIDTH := 2.2
-
-## `push` is **not** the `axoneme` tile glyph. Rendered side by side, `axoneme`
-## (306 deg) and `myoneme` (333 deg) are near-twins in shape *and* hue -- both a
-## radial burst with a pigment at the heart -- and at 96 px the two pads were
-## the same picture. So `push` is three strokes of the body's own metachronal
-## wave, with the crests marching forward: **swim is a wave, dash is a burst.**
-const WAVE_ROWS := 3
-const WAVE_SPAN := 68.0
-const WAVE_GAP := 21.0
-const WAVE_AMP := 7.0
-const WAVE_STEPS := 18
-const WAVE_WIDTH := 2.4
-## How far the crest of each row lags the one behind it, in wavelengths. The
-## wave travels toward the front of the cell, which is the top of the screen,
-## which is the way you go.
-const WAVE_MARCH := 0.22
-
-## `dash` is the `myoneme` burst -- the same glyph the pause screen draws beside
-## that gene's name, so the player meets the mark on the surface where the
-## scheme is chosen.
-const BURST_SCALE := 2.0
-## The tile glyph is a dome: its arc opens upward and it has nothing below its
-## own centre, so seating it at the well's centre would hang it off the top.
-## 18 is what puts equal air above the topmost stroke and below the arc.
-const BURST_SEAT := 18.0
+## **A pad's organ**: the gene's own tile -- the same glyph the pause screen draws
+## beside that gene's name -- at this scale, seated this far down: the tile is a
+## dome, its arc opening upward and nothing below its own centre, and 18 puts
+## equal air above its topmost stroke and below its arc.
+const TILE_SCALE := 2.0
+const TILE_SEAT := 18.0
+## **A knob's organ**: the same tile, smaller, riding the knob -- so the slider
+## that turns carries the cirrus, and the lever that pushes the axoneme.
+const KNOB_TILE_SCALE := 0.95
+const KNOB_TILE_SEAT := 9.5
 
 ## `hold` is **one stroke of the tail's wave running into a stop bar**
 ## (automation-ux.md §6.2): a polyline 64 px wide, 1.25 wavelengths, its swing
 ## of 8 px damped to flat over the first 62 % of it, and a bar 26 px tall 6 px
-## past its end. The same picture the instincts page puts on the hold's chip.
+## past its end. The same picture the instincts page puts on the hold's chip --
+## the tail's own tile would say *swim*, and this pad says *stop swimming*.
+const HOLD_PART := &"hold"
 const HOLD_SPAN := 64.0
 const HOLD_WAVES := 1.25
 const HOLD_AMP := 8.0
@@ -223,24 +184,23 @@ const HOLD_BAR := 26.0
 const HOLD_BAR_WIDTH := 3.2
 const HOLD_BAR_GAP := 6.0
 
-## Which scheme is being drawn. [constant RunState.Scheme.ANYWHERE] draws
-## nothing, which is the whole of the shipped scheme being untouched.
-var scheme := RunState.Scheme.ANYWHERE
-
 ## pointer index -> control id, for the life of that gesture.
 var _owner: Dictionary = {}
-## Knob offset from home, in canvas px, -THROW .. +THROW.
+## The turn's knob, offset from home in canvas px, -THROW .. +THROW.
 var _stick_x := 0.0
-## Whether `push` and `dash` are drawn at all: the organ that works them has to
-## exist, and they go at the pinch of a division because there is nothing left
-## for them to do.
-var _has_push := false
-var _has_dash := false
-## Whether the hold pad is drawn: the tail can be held still.
-var _has_hold := false
-## **The buttons drawn**, `[part, name, organ, level]` each (`cell.gd`'s
-## `buttons`), in order: pad [constant BUTTON] + k is the k-th.
-var _buttons: Array = []
+## **Each lever's knob**, by its part's qualified name, 0 .. LEVER_THROW up from
+## rest. Keyed by part and not by id, so a gene arriving ahead of it in the list
+## never hands its push to another control.
+var _lever_up: Dictionary = {}
+## **The parts drawn**, `[part, name, organ, level, kind]` each (`cell.gd`'s
+## `buttons`), in order: control [constant PART] + k is the k-th.
+var _parts: Array = []
+## Each part's place: its row up the pad column, or its column inboard of it for
+## a lever. Made with [member _parts].
+var _places := PackedInt32Array()
+## **How much of its wait a tap has left**, 0 .. 1, by its own name (`cell.gd`'s
+## `cooling`): drawn as a pad recharging.
+var _cooling: Dictionary = {}
 var _acting := true
 
 var _well: StyleBoxFlat = null
@@ -275,54 +235,66 @@ func setup(wells: Dictionary) -> void:
 
 
 ## What is on screen this frame. [param shown] is the whole block; [param quiet]
-## is the pinch of a division, where the action pads go and the steering
-## control stays; [param push], [param dash] and [param hold] are the genome --
-## **a pad exists only when the organ that works it does**, and the hold only
-## while the tail is at its hold level (`cell.gd`'s `can_hold`); [param buttons]
-## is `cell.gd`'s `buttons`, a pad each.
-func update(shown: bool, quiet: bool, push: bool, dash: bool, hold: bool,
-		buttons: Array = []) -> void:
+## is the pinch of a division, where the genes' controls go and the turn stays;
+## [param parts] is `cell.gd`'s `buttons`, a control each -- **a control exists
+## only while the gene that works it does**; [param cooling] is `cell.gd`'s
+## `cooling`, how much of its wait each tap has left.
+func update(shown: bool, quiet: bool, parts: Array = [], cooling: Dictionary = {}) -> void:
 	var acting := not quiet
-	if visible == shown and _acting == acting and _has_push == push \
-			and _has_dash == dash and _has_hold == hold and _buttons == buttons:
+	if cooling != _cooling:
+		_cooling = cooling.duplicate()
+		queue_redraw()
+	if visible == shown and _acting == acting and _parts == parts:
 		return
 	visible = shown
 	_acting = acting
-	_has_push = push
-	_has_dash = dash
-	_has_hold = hold
-	_buttons = buttons.duplicate()
+	if _parts != parts:
+		_set_parts(parts)
 	# A control that stopped being drawn cannot stay held: the thumb on it is
-	# now a thumb on open water, and under `stick` and `pads` open water is
-	# inert. Done here rather than by the caller so the two cannot disagree.
+	# now a thumb on open water, which is inert. Done here rather than by the
+	# caller so the two cannot disagree.
 	for pointer: int in _owner.keys():
 		if not _live(_owner[pointer]):
 			_owner.erase(pointer)
+	for part: StringName in _lever_up.keys():
+		if not _held_part(part):
+			_lever_up.erase(part)
 	if not shown:
 		_owner.clear()
+		_lever_up.clear()
 		_stick_x = 0.0
 	queue_redraw()
 
 
-func set_scheme(value: int) -> void:
-	if scheme == value:
-		return
-	scheme = value
-	let_go()
-	# **Unconditionally**, and a render is what found that out: cycling from
-	# `stick` to `pads` changes neither the node's visibility nor what is held,
-	# so neither [method let_go] nor [method update] queued anything and the
-	# corner kept drawing the old scheme under the scrim -- with the word
-	# beside it already changed. The preview *is* the explanation (§5.1), so a
-	# stale one is the one failure this control cannot have.
-	queue_redraw()
-
-
-## True while the water itself is the control, which is the scheme that ships.
-## cell.gd reads this rather than the scheme number: under `anywhere` its input
-## path is exactly what it was, and that is the contract this file keeps.
-func floating() -> bool:
-	return scheme == RunState.Scheme.ANYWHERE
+## **A new list of parts**: each placed, and every finger that held a part's
+## control moved to wherever that part is now, by its name -- or let go, for a
+## part that went.
+func _set_parts(parts: Array) -> void:
+	var held_by := {}
+	for pointer: int in _owner:
+		var id: int = _owner[pointer]
+		held_by[pointer] = &"" if id == TURN else part_of(id)
+	_parts = parts.duplicate()
+	_places.resize(_parts.size())
+	var pads := 0
+	for want: StringName in [TAP, HELD]:
+		for k in _parts.size():
+			if kind_of(PART + k) == want:
+				_places[k] = pads
+				pads += 1
+	var levers := 0
+	for k in _parts.size():
+		if kind_of(PART + k) == LEVER:
+			_places[k] = levers
+			levers += 1
+	for pointer: int in held_by:
+		if held_by[pointer] == &"":
+			continue
+		var id := _id_of(held_by[pointer])
+		if id == NONE:
+			_owner.erase(pointer)
+		else:
+			_owner[pointer] = id
 
 
 # ---------------------------------------------------------------------------
@@ -333,54 +305,28 @@ func floating() -> bool:
 
 func rect_of(id: int) -> Rect2:
 	var top := size.y - EDGE - BOX
-	match id:
-		STICK:
-			return Rect2(EDGE, top, STICK_W, BOX)
-		PORT:
-			return Rect2(EDGE, top, BOX, BOX)
-		STARBOARD:
-			return Rect2(EDGE + BOX + PAD_GAP, top, BOX, BOX)
-		PUSH:
-			return Rect2(size.x - EDGE - BOX * 2.0 - PAD_GAP, top, BOX, BOX)
-		DASH:
-			return Rect2(size.x - EDGE - BOX, top, BOX, BOX)
-		HOLD:
-			# The innermost pad of the right-hand cluster (automation-ux.md §6.1):
-			# inboard of push under `pads`, and where `pads` puts it under
-			# `anywhere`, three pad widths in, past a resting thumb; under `stick`,
-			# which pushes with the stick, in push's place, inboard of dash.
-			var inboard := 2.0 if scheme == RunState.Scheme.STICK else 3.0
-			return Rect2(size.x - EDGE - BOX * inboard - PAD_GAP * (inboard - 1.0), top,
-				BOX, BOX)
-		_:
-			# **A button**: stacked up the right edge, above the dash's corner --
-			# the first just above the bottom row, where the right thumb reaches up
-			# from it, every scheme alike.
-			if id >= BUTTON:
-				var k := float(id - BUTTON + 1)
-				return Rect2(size.x - EDGE - BOX, top - (BOX + PAD_GAP) * k, BOX, BOX)
-			return Rect2()
+	if id == TURN:
+		return Rect2(EDGE, top, STICK_W, BOX)
+	var k := id - PART
+	if k < 0 or k >= _parts.size():
+		return Rect2()
+	var place := float(_places[k])
+	if kind_of(id) == LEVER:
+		# Inboard of the pad column, one column further in for each lever.
+		return Rect2(size.x - EDGE - BOX - (PAD_GAP + BOX) * (place + 1.0),
+			size.y - EDGE - LEVER_H, BOX, LEVER_H)
+	# **A pad**: stacked up the right edge from the corner, where the right thumb
+	# rests and reaches up from.
+	return Rect2(size.x - EDGE - BOX, top - (BOX + PAD_GAP) * place, BOX, BOX)
 
 
 ## Which control is drawn at all right now.
 func _live(id: int) -> bool:
 	if not visible:
 		return false
-	match id:
-		STICK:
-			return scheme == RunState.Scheme.STICK
-		PORT, STARBOARD:
-			return scheme == RunState.Scheme.PADS
-		PUSH:
-			return scheme == RunState.Scheme.PADS and _has_push and _acting
-		DASH:
-			return scheme != RunState.Scheme.ANYWHERE and _has_dash and _acting
-		HOLD:
-			# Under every scheme, `anywhere` too: the one control it draws.
-			return _has_hold and _acting
-		_:
-			# A button, under every scheme, as the hold is.
-			return id >= BUTTON and id - BUTTON < _buttons.size() and _acting
+	if id == TURN:
+		return true
+	return id >= PART and id - PART < _parts.size() and _acting
 
 
 ## The control under a canvas point, or [constant NONE]. **The only place a rect
@@ -389,18 +335,44 @@ func _live(id: int) -> bool:
 ## later event of a gesture is dispatched on whose finger it is, so nothing ever
 ## asks what is under a finger now.
 func hit(at: Vector2) -> int:
-	for id: int in _ids():
+	for id in _parts.size() + PART:
 		if _live(id) and rect_of(id).has_point(at):
 			return id
 	return NONE
 
 
-## [constant ORDER], then a button id for each of [member _buttons].
-func _ids() -> Array[int]:
-	var ids := ORDER.duplicate()
-	for k in _buttons.size():
-		ids.append(BUTTON + k)
-	return ids
+## **The kind of control [param id] is**: [constant HELD], [constant TAP] or
+## [constant LEVER] for a part's, `&""` for the turn or nothing.
+func kind_of(id: int) -> StringName:
+	var k := id - PART
+	if k < 0 or k >= _parts.size():
+		return &""
+	return StringName(_parts[k][4])
+
+
+## **The part [param id] works, by its own name** -- `dash`, `cling` -- or `&""`
+## for the turn or nothing.
+func name_of(id: int) -> StringName:
+	var k := id - PART
+	if k < 0 or k >= _parts.size():
+		return &""
+	return StringName(_parts[k][1])
+
+
+## The part [param id] works, by its qualified name -- `myoneme.dash` -- or `&""`.
+func part_of(id: int) -> StringName:
+	var k := id - PART
+	if k < 0 or k >= _parts.size():
+		return &""
+	return StringName(_parts[k][0])
+
+
+## The control of the part qualified [param part], or [constant NONE].
+func _id_of(part: StringName) -> int:
+	for k in _parts.size():
+		if StringName(_parts[k][0]) == part:
+			return PART + k
+	return NONE
 
 
 func _held(id: int) -> bool:
@@ -410,13 +382,18 @@ func _held(id: int) -> bool:
 	return false
 
 
+func _held_part(part: StringName) -> bool:
+	var id := _id_of(part)
+	return id != NONE and _held(id)
+
+
 # ---------------------------------------------------------------------------
 # The gesture. Three calls, and the only state they keep is whose finger owns
 # what -- never what is under a finger now.
 # ---------------------------------------------------------------------------
 
 ## A press at [param at]. Returns the control it landed on, or [constant NONE]
-## for open water, which under these two schemes is inert.
+## for open water, which is inert.
 func press(pointer: int, at: Vector2) -> int:
 	if not _one_pointer(pointer):
 		return NONE
@@ -426,40 +403,36 @@ func press(pointer: int, at: Vector2) -> int:
 	if id == NONE:
 		return NONE
 	_owner[pointer] = id
-	if id == STICK:
-		_aim(at)
+	_aim(id, at)
 	queue_redraw()
 	return id
 
 
 ## A drag. True when that pointer belongs to a control, whatever it is over now:
-## a thumb that rolls off the edge of the pad it is holding keeps holding it.
+## a thumb that rolls off the edge of the control it is holding keeps holding it.
 func move(pointer: int, at: Vector2) -> bool:
 	if not _owner.has(pointer):
 		return false
-	if _owner[pointer] == STICK:
-		_aim(at)
+	if _aim(_owner[pointer], at):
 		queue_redraw()
 	return true
 
 
-## **A thumb already down is adopted**, and only onto a steering control. Its
-## press happened before there was anything to lean at -- during the quickening,
-## or before the pinch -- so the only event that finger will ever produce is a
-## drag. Refused for `push` and `dash`, which are not leans.
+## **A thumb already down is adopted**, and only onto the turn. Its press
+## happened before there was anything to lean at -- during the quickening, or
+## before the pinch -- so the only event that finger will ever produce is a
+## drag. Refused for every gene's control, none of which is a lean.
 func adopt(pointer: int, at: Vector2) -> int:
 	if not _one_pointer(pointer):
 		return NONE
 	if _owner.has(pointer):
 		return _owner[pointer]
-	var id := hit(at)
-	if id != STICK and id != PORT and id != STARBOARD:
+	if hit(at) != TURN:
 		return NONE
-	_owner[pointer] = id
-	if id == STICK:
-		_aim(at)
+	_owner[pointer] = TURN
+	_aim(TURN, at)
 	queue_redraw()
-	return id
+	return TURN
 
 
 ## A release. Returns what was let go, or [constant NONE] if that pointer was
@@ -469,10 +442,12 @@ func release(pointer: int) -> int:
 		return NONE
 	var id: int = _owner[pointer]
 	_owner.erase(pointer)
-	if id == STICK and not _held(STICK):
-		# A stick that stayed deflected would steer forever. The knob comes
-		# home the instant nothing is holding it out.
+	# A slider that stayed deflected would act forever. Its knob comes home the
+	# instant nothing is holding it out.
+	if id == TURN and not _held(TURN):
 		_stick_x = 0.0
+	elif kind_of(id) == LEVER and not _held(id):
+		_lever_up.erase(part_of(id))
 	queue_redraw()
 	return id
 
@@ -480,11 +455,9 @@ func release(pointer: int) -> int:
 ## **Godot emulates a mouse from every touch**, so on a phone each press arrives
 ## twice -- once as itself and once as a click at the same point -- and left
 ## alone the pair would fill the table with a phantom finger holding the control
-## the real one is on. cell.gd's single slot solved that by taking whichever
-## arrived first and ignoring the other; a table keyed by pointer cannot, so the
-## rule is stated instead: **a real touch evicts the emulated mouse, and the
-## mouse does not claim while a finger is down.** A desktop mouse is untouched,
-## because on a desktop no touch ever arrives.
+## the real one is on. The rule is stated instead: **a real touch evicts the
+## emulated mouse, and the mouse does not claim while a finger is down.** A
+## desktop mouse is untouched, because on a desktop no touch ever arrives.
 ##
 ## Returns false when this pointer must not claim anything.
 func _one_pointer(pointer: int) -> bool:
@@ -499,79 +472,80 @@ func _one_pointer(pointer: int) -> bool:
 
 ## Drops every pointer. Called beside `cell.release()` wherever a finger still
 ## down must stop meaning anything: the pause screen opening, the app losing
-## focus, the scheme changing under a thumb.
+## focus, the autopilot taking the cell.
 func let_go() -> void:
-	if _owner.is_empty() and _stick_x == 0.0:
+	if _owner.is_empty() and _stick_x == 0.0 and _lever_up.is_empty():
 		return
 	_owner.clear()
 	_stick_x = 0.0
+	_lever_up.clear()
 	queue_redraw()
 
 
-## The knob is absolute, not relative: a fixed stick's whole advantage over the
-## scheme that ships is a **known centre**, and one that recentred on every
-## press would be `anywhere` with a picture on it.
-func _aim(at: Vector2) -> void:
-	_stick_x = clampf(at.x - rect_of(STICK).get_center().x, -THROW, THROW)
-
-
-# ---------------------------------------------------------------------------
-# What the cell asks. Three verbs, each independent of the others -- which is
-# the whole reason `pads` exists: it is the only scheme that can turn without
-# swimming.
-# ---------------------------------------------------------------------------
-
-func steer() -> float:
-	match scheme:
-		RunState.Scheme.STICK:
-			if not _held(STICK) or absf(_stick_x) <= DEAD:
-				return 0.0
-			return clampf((_stick_x - signf(_stick_x) * DEAD) / (THROW - DEAD),
-				-1.0, 1.0)
-		RunState.Scheme.PADS:
-			var want := 0.0
-			if _held(PORT):
-				want -= 1.0
-			if _held(STARBOARD):
-				want += 1.0
-			return want
-		_:
-			return 0.0
-
-
-func pushing() -> bool:
-	match scheme:
-		RunState.Scheme.STICK:
-			return _held(STICK)
-		RunState.Scheme.PADS:
-			return _held(PUSH)
-		_:
-			return false
-
-
-## True while the hold pad is held, under any scheme: the hand holding the tail
-## still (automation-ux.md §6.1). `cell.gd` asks it only of a tail that can be.
-func holding() -> bool:
-	return _held(HOLD)
-
-
-## **True while the button of [param part]** -- a part's qualified name,
-## `haptonema.cling` -- **is held**, under any scheme. `cell.gd` asks it of the
-## buttons its body has.
-func button_held(part: StringName) -> bool:
-	for k in _buttons.size():
-		if StringName(_buttons[k][0]) == part:
-			return _held(BUTTON + k)
+## **A slider's knob follows the finger, absolutely**: a fixed slider's whole
+## worth is a **known centre**, and one that recentred on every press would be a
+## drag on open water with a picture on it. Returns whether [param id] has a knob.
+func _aim(id: int, at: Vector2) -> bool:
+	if id == TURN:
+		_stick_x = clampf(at.x - rect_of(TURN).get_center().x, -THROW, THROW)
+		return true
+	if kind_of(id) == LEVER:
+		_lever_up[part_of(id)] = clampf(_lever_rest(rect_of(id)) - at.y, 0.0, LEVER_THROW)
+		return true
 	return false
 
 
-## True while a **steering** control is held. At a division that is what decides
-## the lean, because a thumb parked on the stick sits at canvas x 144 whichever
-## way it is pushing -- which is the port half either way -- and under `pads`
-## both turn pads are in the port half. The screen half stays live for a finger
-## anywhere else, and it is the floor.
+## Where a lever's knob rests: on the bottom row's centre line.
+func _lever_rest(box: Rect2) -> float:
+	return box.end.y - BOX * 0.5
+
+
+## A knob's offset past [constant DEAD], remapped to 0 .. 1 of [param throw].
+static func _past_dead(offset: float, throw: float) -> float:
+	if absf(offset) <= DEAD:
+		return 0.0
+	return clampf((offset - signf(offset) * DEAD) / (throw - DEAD), -1.0, 1.0)
+
+
+# ---------------------------------------------------------------------------
+# What the cell asks: the turn, and each part by its own name.
+# ---------------------------------------------------------------------------
+
+## The turn, -1 hard to port .. +1 hard to starboard, while it is held.
+func steer() -> float:
+	if not _held(TURN):
+		return 0.0
+	return _past_dead(_stick_x, THROW)
+
+
+## True while the turn is held. At a division that is what decides the lean,
+## because a thumb parked on it sits at canvas x 144 whichever way it is pushing
+## -- the port half either way. The screen half stays live for a finger anywhere
+## else, and it is the floor.
 func steering() -> bool:
-	return _held(STICK) or _held(PORT) or _held(STARBOARD)
+	return _held(TURN)
+
+
+## **True while the pad of the part named [param name]** -- `cling`, `hold` --
+## **is held.** `cell.gd` asks it of the parts its body has.
+func holds(name: StringName) -> bool:
+	for k in _parts.size():
+		if StringName(_parts[k][1]) == name and _held(PART + k):
+			return true
+	return false
+
+
+## **How far the lever of the part named [param name] is pushed**, 0 .. 1, while
+## it is held -- `push` -- and 0 for one at rest, let go or not there.
+func lever(name: StringName) -> float:
+	var most := 0.0
+	for k in _parts.size():
+		if StringName(_parts[k][1]) != name or kind_of(PART + k) != LEVER:
+			continue
+		if _held(PART + k):
+			most = maxf(most, _past_dead(float(_lever_up.get(_parts[k][0], 0.0)),
+				LEVER_THROW))
+	return most
 
 
 # ---------------------------------------------------------------------------
@@ -579,92 +553,89 @@ func steering() -> bool:
 # ---------------------------------------------------------------------------
 
 func _draw() -> void:
-	# Under `anywhere` [method _live] answers true for the hold pad and the
-	# buttons alone, so that is all this draws there: the scheme stays an empty
-	# screen until the tail can be held or a gene brings a button.
 	if _well == null:
 		return
-	for id: int in _ids():
+	for id in _parts.size() + PART:
 		if not _live(id):
 			continue
 		var box := rect_of(id)
 		var lit := _held(id)
 		draw_style_box(_well_lit if lit else _well, box)
 		var ink := MARK_HELD if lit else MARK_REST
-		match id:
-			STICK:
-				_draw_channel(box, lit, ink)
-			PORT:
-				_draw_turn(box, -1.0, ink)
-			STARBOARD:
-				_draw_turn(box, 1.0, ink)
-			PUSH:
-				_draw_wave(box, ink)
-			DASH:
-				_draw_burst(box, ink)
-			HOLD:
-				draw_hold_mark(self, box.get_center(), ink)
+		if id == TURN:
+			_draw_turn(box, lit, ink)
+			continue
+		var k := id - PART
+		var organ := Catalogue.first_key(StringName(_parts[k][2]))
+		match kind_of(id):
+			LEVER:
+				_draw_lever(box, organ, float(_lever_up.get(_parts[k][0], 0.0)), lit, ink)
 			_:
-				# A button: its organ's tile, as the dash pad is the myoneme's.
-				Cilia.draw_tile_organ(self,
-					Catalogue.first_key(StringName(_buttons[id - BUTTON][2])), 1,
-					box.get_center() + Vector2(0.0, BURST_SEAT), ink, BURST_SCALE)
+				var waiting := float(_cooling.get(_parts[k][1], 0.0))
+				if waiting > 0.0:
+					ink *= MARK_COOLING
+					_draw_recharge(box, 1.0 - waiting)
+				if StringName(_parts[k][1]) == HOLD_PART:
+					draw_hold_mark(self, box.get_center(), ink)
+				else:
+					Cilia.draw_tile_organ(self, organ, 1,
+						box.get_center() + Vector2(0.0, TILE_SEAT), ink, TILE_SCALE)
 
 
-func _draw_channel(box: Rect2, lit: bool, ink: float) -> void:
+## The turn: a channel across the well's waist, a dart at each end pointing the
+## way that end turns you, and the knob carrying the cirrus.
+func _draw_turn(box: Rect2, lit: bool, ink: float) -> void:
 	var mid := box.get_center()
-	draw_style_box(_track, Rect2(mid.x - THROW, mid.y - TRACK_H * 0.5,
-		THROW * 2.0, TRACK_H))
-	# A dart at each end, pointing the way that end turns you.
-	_draw_dart(Vector2(box.end.x - STICK_DART_X, mid.y), 1.0, ink, STICK_DART_R)
-	_draw_dart(Vector2(box.position.x + STICK_DART_X, mid.y), -1.0, ink,
-		STICK_DART_R)
-	draw_style_box(_knob_lit if lit else _knob, Rect2(
-		mid.x + _stick_x - KNOB * 0.5, mid.y - KNOB * 0.5, KNOB, KNOB))
+	var knob := mid + Vector2(_stick_x, 0.0)
+	_draw_track(Rect2(mid.x - THROW, mid.y - TRACK_H * 0.5, THROW * 2.0, TRACK_H), knob)
+	_draw_dart(Vector2(box.end.x - STICK_DART_X, mid.y), 1.0, ink)
+	_draw_dart(Vector2(box.position.x + STICK_DART_X, mid.y), -1.0, ink)
+	_draw_knob(knob, TURN_ORGAN, lit, ink)
 
 
-func _draw_turn(box: Rect2, side: float, ink: float) -> void:
-	var mid := box.get_center()
-	# The oars first, the dart under them. Built once without the dart and
-	# rendered as two similar tufts -- draw_slot_dart's own comment had already
-	# reached the same conclusion for the strand's compass, *a filled dart is
-	# unmistakable*, so it is that mark doing that job again.
-	var seat := mid + Vector2(0.0, OAR_SEAT)
-	var strokes := PackedVector2Array()
-	for i in OARS:
-		var u := (float(i) + 0.5) / float(OARS)
-		# The swing grows in the direction the turn goes, so port and starboard
-		# are mirror images rather than the same picture twice.
-		var along := u if side > 0.0 else 1.0 - u
-		var out := Vector2.RIGHT.rotated(lerpf(OAR_FROM, OAR_TO, u))
-		var swing := deg_to_rad(
-			lerpf(OAR_SWING_FROM, OAR_SWING_TO, along)) * side
-		var root := seat + out * OAR_ARC
-		var knee := root + out.rotated(swing) * (OAR_LEN * OAR_KNEE)
-		var tip := knee + out.rotated(swing * OAR_BEND) \
-			* (OAR_LEN * (1.0 - OAR_KNEE))
-		strokes.append(root)
-		strokes.append(knee)
-		strokes.append(knee)
-		strokes.append(tip)
-	draw_multiline(strokes, Color(TURN_HUE, ink), OAR_WIDTH, true)
-	_draw_dart(mid + Vector2(0.0, -DART_LIFT), side, ink)
+## A lever: a channel up the well from where the knob rests, a dart at its top
+## pointing the way you go, and the knob carrying the organ, [param up] above
+## rest.
+func _draw_lever(box: Rect2, organ: StringName, up: float, lit: bool, ink: float) -> void:
+	var rest := Vector2(box.get_center().x, _lever_rest(box))
+	var knob := rest - Vector2(0.0, up)
+	_draw_track(Rect2(rest.x - TRACK_H * 0.5, rest.y - LEVER_THROW, TRACK_H, LEVER_THROW),
+		knob)
+	Cilia.draw_slot_dart(self, DART_AHEAD, Cilia.hue(organ) * (ink / DART_INK),
+		Vector2(rest.x, box.position.y + STICK_DART_X), STICK_DART_R, DART_RING)
+	_draw_knob(knob, organ, lit, ink)
 
 
-func _draw_wave(box: Rect2, ink: float) -> void:
-	var mid := box.get_center()
-	for row in WAVE_ROWS:
-		# Row 0 is the aftmost. The crest marches forward across the rows, which
-		# is what makes three wavy lines a *wave* and not three wavy lines.
-		var lift := (float(row) - float(WAVE_ROWS - 1) * 0.5) * -WAVE_GAP
-		var phase := float(row) * WAVE_MARCH * TAU
-		var points := PackedVector2Array()
-		for i in WAVE_STEPS + 1:
-			var u := float(i) / float(WAVE_STEPS)
-			points.append(Vector2(
-				mid.x + (u - 0.5) * WAVE_SPAN,
-				mid.y + lift + sin(u * TAU + phase) * WAVE_AMP))
-		draw_polyline(points, Color(PUSH_HUE, ink), WAVE_WIDTH, true)
+## **A channel, and never under its knob**: the knob is a watermark with an edge,
+## and a track running on through it crossed the organ riding it. So [param run]
+## is drawn as the two pieces either side of the knob at [param knob].
+func _draw_track(run: Rect2, knob: Vector2) -> void:
+	var half := KNOB * 0.5
+	var across := run.size.x >= run.size.y
+	var from := run.position.x if across else run.position.y
+	var to := run.end.x if across else run.end.y
+	var at := knob.x if across else knob.y
+	for piece: Vector2 in [Vector2(from, minf(at - half, to)), Vector2(maxf(at + half, from), to)]:
+		if piece.y - piece.x < 1.0:
+			continue
+		draw_style_box(_track, Rect2(piece.x, run.position.y, piece.y - piece.x, run.size.y)
+			if across else Rect2(run.position.x, piece.x, run.size.x, piece.y - piece.x))
+
+
+## A knob at [param centre], with [param organ]'s tile riding it.
+func _draw_knob(centre: Vector2, organ: StringName, lit: bool, ink: float) -> void:
+	draw_style_box(_knob_lit if lit else _knob, Rect2(centre - Vector2(KNOB, KNOB) * 0.5,
+		Vector2(KNOB, KNOB)))
+	Cilia.draw_tile_organ(self, organ, 1, centre + Vector2(0.0, KNOB_TILE_SEAT), ink,
+		KNOB_TILE_SCALE)
+
+
+## **A tap filling back up**: a line along the foot of its well, [param ready] of
+## the way across.
+func _draw_recharge(box: Rect2, ready: float) -> void:
+	var span := box.size.x - RECHARGE_INSET * 2.0
+	draw_style_box(_track, Rect2(box.position.x + RECHARGE_INSET,
+		box.end.y - RECHARGE_INSET, span * clampf(ready, 0.0, 1.0), RECHARGE_H))
 
 
 ## **The hold's mark** (automation-ux.md §6.2), centred on [param centre] at
@@ -690,22 +661,15 @@ static func draw_hold_mark(canvas: CanvasItem, centre: Vector2, ink: float,
 		HOLD_BAR_WIDTH * scale, true)
 
 
-func _draw_burst(box: Rect2, ink: float) -> void:
-	Cilia.draw_tile_organ(self, DASH_ORGAN, 1,
-		box.get_center() + Vector2(0.0, BURST_SEAT), ink, BURST_SCALE)
-
-
-## The shared dart, quietened and -- to port -- mirrored. [param side] is +1 to
+## The turn's dart, quietened and -- to port -- mirrored. [param side] is +1 to
 ## starboard and -1 to port.
-func _draw_dart(centre: Vector2, side: float, ink: float,
-		radius: float = DART_R) -> void:
+func _draw_dart(centre: Vector2, side: float, ink: float) -> void:
 	var tone := TURN_HUE * (ink / DART_INK)
 	if side > 0.0:
-		Cilia.draw_slot_dart(self, DART_SLOT, tone, centre, radius, DART_RING)
+		Cilia.draw_slot_dart(self, DART_SLOT, tone, centre, STICK_DART_R, DART_RING)
 		return
 	# The arc table has no port lateral slot, so port is starboard under a
 	# mirror rather than a second call with a made-up bearing.
 	draw_set_transform(centre, 0.0, Vector2(-1.0, 1.0))
-	Cilia.draw_slot_dart(self, DART_SLOT, tone, Vector2.ZERO, radius,
-		DART_RING)
+	Cilia.draw_slot_dart(self, DART_SLOT, tone, Vector2.ZERO, STICK_DART_R, DART_RING)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

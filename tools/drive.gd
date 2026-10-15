@@ -27,12 +27,6 @@ extends Node
 ##                           view mid-run, as every run of the editor's binary
 ##                           can and no exported build does; a run flipped so
 ##                           keeps nothing after it
-##   --scheme=0|1|2          force the control scheme: 0 anywhere (the one that
-##                           ships), 1 stick, 2 pads. The choice lives in
-##                           `user://`, so without this a scheme cannot be
-##                           photographed without writing one the next run --
-##                           and every other render in this project -- would
-##                           inherit
 ##   --numbers=0|1           pin a gene's numbers off or on (gene-stats.md
 ##                           §2.2). Remembered in `user://` too, and for the same
 ##                           reason a pinned run never writes it: a tap on the
@@ -103,9 +97,9 @@ extends Node
 ##                           a read and not a lean* -- cannot be posed with it
 ##                           at all. `finger` is the touch index and defaults to
 ##                           0; a second one is the only way to pose two
-##                           controls held at once, which is exactly what `pads`
-##                           exists for -- `port` and `push` together, or a dash
-##                           fired while the stick is over. Same convention as
+##                           controls held at once -- the turn and the push
+##                           together, or a dash fired while the turn is over
+##                           (docs/design/gene-controls.md). Same convention as
 ##                           `--touch=`: seconds first, canvas coordinates,
 ##                           unscaled.
 ##   --slide=<seconds>:<x>,<y>[,<finger>]
@@ -413,8 +407,8 @@ extends Node
 ##                           nothing
 ##   --controls=<seconds>    print what the drawn controls are being told to do
 ##                           on that interval: which of them is held, by which
-##                           pointer, the steer they derive and whether they are
-##                           asking for thrust. The pads and the stick have no
+##                           pointer, the steer they derive and how hard they
+##                           push. The controls have no
 ##                           other output -- `axoneme` thrust is a velocity add
 ##                           and never reaches the bus -- so this is the only
 ##                           way to check two fingers at once from a log
@@ -825,8 +819,6 @@ var _pings_clock := 0.0
 ## average: it is the worst instant that decides whether a mark is ambiguous.
 var _pings_peak_fronts := 0
 var _pings_peak_echoes := 0
-## Which control scheme to force, or -1 to take whatever user:// remembers.
-var _scheme := -1
 ## Whether to pin a gene's numbers, 0 off or 1 on, or -1 to take user://'s.
 var _numbers := -1
 var _hunter_gape := 1.40
@@ -1187,8 +1179,6 @@ func _ready() -> void:
 			_freeze_after = float(text.trim_prefix("--freeze-after="))
 		elif text.begins_with("--mode="):
 			_mode = int(text.trim_prefix("--mode="))
-		elif text.begins_with("--scheme="):
-			_scheme = int(text.trim_prefix("--scheme="))
 		elif text.begins_with("--numbers="):
 			_numbers = clampi(int(text.trim_prefix("--numbers=")), 0, 1)
 		elif text.begins_with("--hunger="):
@@ -1555,14 +1545,9 @@ func _ready() -> void:
 		# Set before the scene enters the tree, which is where it is read.
 		run.set("mode", _mode)
 		print("[drive] mode forced to ", _mode)
-	if _scheme >= 0:
-		# Same, and for a sharper reason: the scheme is remembered in user://,
-		# so cycling the pause button to photograph one would leave it behind.
-		run.set("scheme", _scheme)
-		print("[drive] scheme forced to ", _scheme)
 	if _numbers >= 0:
-		# And the numbers, for the scheme's reason: a pinned run never writes
-		# the key, so a tapped switch is not inherited by the next render.
+		# And the numbers, for the mode's reason: a pinned run never writes the
+		# key, so a tapped switch is not inherited by the next render.
 		run.set("numbers", _numbers)
 		print("[drive] numbers pinned to ", _numbers)
 	add_child(run)
@@ -1887,7 +1872,6 @@ func _open_far_seat(scene: PackedScene) -> void:
 	_far_view.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	var far := scene.instantiate()
 	far.set("mode", 0)
-	far.set("scheme", 0)
 	# **In this run's water, keeping nothing** (ocean.md §9, §10.2): the game's
 	# default is the player's own file, which the far seat must neither open on
 	# nor write -- whatever `--keep=` gives this one.
@@ -3167,7 +3151,6 @@ func _step_rects() -> void:
 		"Settings": base + "/Side/Settings",
 		"Light": base + "/Side/Settings/Light",
 		"View": base + "/Side/Settings/View",
-		"Feel": base + "/Side/Settings/Feel",
 		"Resume": base + "/Side/Resume",
 		"Leave": base + "/Side/Leave",
 		"Genome": base + "/Genome",
@@ -3236,9 +3219,9 @@ func _step_rects() -> void:
 
 
 ## What the drawn controls are being told, straight off the node that owns
-## them. The pads and the stick post nothing to the membrane bus -- `axoneme`
-## thrust is a velocity add and a turn is a steer -- so a log is the only way to
-## see two fingers holding two controls at the same instant.
+## them. They post nothing to the membrane bus -- `axoneme` thrust is a velocity
+## add and a turn is a steer -- so a log is the only way to see two fingers
+## holding two controls at the same instant.
 func _step_controls(delta: float) -> void:
 	if _controls_trace <= 0.0 or _run == null:
 		return
@@ -3251,18 +3234,17 @@ func _step_controls(delta: float) -> void:
 		print("[ctl]  %6.2f  no controls node" % _clock)
 		return
 	var owners: Dictionary = node.get("_owner")
-	var names := ["stick", "port", "starboard", "push", "dash", "hold"]
 	var held := PackedStringArray()
 	for pointer: int in owners:
 		var id: int = owners[pointer]
-		held.append("%s#%d" % [
-			names[id] if id >= 0 and id < names.size() else "?", pointer])
+		var named: String = "turn" if id == node.TURN else String(node.name_of(id))
+		held.append("%s#%d" % [named if named != "" else "?", pointer])
 	var cell := _find_node_with(_run, &"bearing_to")
-	print(("[ctl]  %6.2f  scheme %d  drawn %s  held [%s]  steer %+5.2f  pushing %s  cell.steer"
+	print(("[ctl]  %6.2f  drawn %s  held [%s]  steer %+5.2f  push %4.2f  cell.steer"
 		+ " %+5.2f  holding %s  tail held %s") % [
-		_clock, node.scheme, "yes" if node.visible else "no ",
-		", ".join(held), node.steer(), "yes" if node.pushing() else "no ",
-		cell.steer if cell != null else 0.0, "yes" if node.holding() else "no ",
+		_clock, "yes" if node.visible else "no ",
+		", ".join(held), node.steer(), node.lever(&"push"),
+		cell.steer if cell != null else 0.0, "yes" if node.holds(&"hold") else "no ",
 		"yes" if cell != null and bool(cell.call(&"tail_held")) else "no "])
 
 

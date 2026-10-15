@@ -1740,42 +1740,6 @@ msgstr "avant en haut"
 msgid "north up"
 msgstr "nord en haut"
 
-#. The pause screen's "controls" button, which cycles through three ways of
-#. steering with a thumb. `anywhere`: drag anywhere on the water, nothing is
-#. drawn. `stick`: a drawn joystick in one corner. `pads`: drawn buttons in
-#. the corners. One lowercase word each, about 10 characters at most: the
-#. button sizes to its text and the whole left column grows with it.
-#. Button "Toggle" in game/normal/normal_mode.tscn
-#: game/normal/normal_mode.gd game/normal/normal_mode.tscn
-msgid "anywhere"
-msgstr "partout"
-
-#. The pause screen's "controls" button, which cycles through three ways of
-#. steering with a thumb. `anywhere`: drag anywhere on the water, nothing is
-#. drawn. `stick`: a drawn joystick in one corner. `pads`: drawn buttons in
-#. the corners. One lowercase word each, about 10 characters at most: the
-#. button sizes to its text and the whole left column grows with it.
-#: game/normal/normal_mode.gd
-msgid "stick"
-msgstr "joystick"
-
-#. The pause screen's "controls" button, which cycles through three ways of
-#. steering with a thumb. `anywhere`: drag anywhere on the water, nothing is
-#. drawn. `stick`: a drawn joystick in one corner. `pads`: drawn buttons in
-#. the corners. One lowercase word each, about 10 characters at most: the
-#. button sizes to its text and the whole left column grows with it.
-#: game/normal/normal_mode.gd
-msgid "pads"
-msgstr "boutons"
-
-#. The first line a new player sees, in 18 px type over the water, teaching
-#. how to steer: on a phone, drag a finger; on a keyboard, hold the A key to
-#. turn one way and the D key to turn the other. Keep the key letters A and D.
-#. One short line: about 25 characters.
-#: game/normal/normal_mode.gd
-msgid "drag to turn"
-msgstr "glissez pour tourner"
-
 #. The first line a new player sees, in 18 px type over the water, teaching
 #. how to steer: on a phone, drag a finger; on a keyboard, hold the A key to
 #. turn one way and the D key to turn the other. Keep the key letters A and D.
@@ -3099,14 +3063,6 @@ msgstr "lumière"
 #: game/normal/normal_mode.tscn
 msgid "camera"
 msgstr "caméra"
-
-#. A caption above the pause screen's button that cycles through three ways of
-#. steering (see "anywhere", "stick" and "pads"). One lowercase word, about 12
-#. characters at most.
-#. Label "Caption" in game/normal/normal_mode.tscn
-#: game/normal/normal_mode.tscn
-msgid "controls"
-msgstr "contrôles"
 
 #. A button on the pause screen: close it and go on playing. About 12
 #. characters at most.

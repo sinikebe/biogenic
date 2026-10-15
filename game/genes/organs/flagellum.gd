@@ -110,8 +110,11 @@ func _init() -> void:
 	# **The hold** (automation.md §4.3): it holds the tail still and only the
 	# tail, claiming the `swimming` trigger `body.swim` claims, from the second
 	# copy (rows 29 and 38). Declared last of every gene's parts, so its owner's
-	# bits come after every other.
-	declares = {"out": [{"name": &"hold", "claims": [&"swimming"], "level": HOLD_LEVEL}]}
+	# bits come after every other. **A held button** (gene.gd's `declares`): the
+	# hand holds the tail still while it is held, as an instinct does while it
+	# claims it.
+	declares = {"out": [{"name": &"hold", "claims": [&"swimming"], "level": HOLD_LEVEL,
+		"button": &"held"}]}
 	# **Its look** (gene-looks.md §6): the lash at the stern, a wave travelling out to
 	# its tips -- the kind's defaults are the tail it always drew -- in moving's shade
 	# 0. On a tile three strands at most, reaching 17 px: still the tallest organ on a

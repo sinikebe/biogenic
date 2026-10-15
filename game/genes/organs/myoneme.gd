@@ -71,7 +71,8 @@ func _init() -> void:
 	order = 9
 	provides = {&"dash_speed": DASH_SPEED_BY_TIER, &"dash_cost": DASH_COST_BY_TIER}
 	water = {"rarity": &"uncommon", "drifter": true}
-	declares = {"out": [{"name": &"dash", "claims": [&"dash"]}]}
+	# **A tap** (gene.gd's `declares`): a dash is one burst, fired on the press.
+	declares = {"out": [{"name": &"dash", "claims": [&"dash"], "button": &"tap"}]}
 	# **Its look** (gene-looks.md §6): a coil, a contractile spring -- which is what a
 	# myoneme is, Vorticella's stalk -- that draws up and lets go: a dash is that
 	# spring released. A bold zigzag, never small loops: at body size loops read as

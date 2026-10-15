@@ -1623,6 +1623,22 @@ func _rules() -> void:
 	_check("the genes declare parts in their shipped order, each at a level a gene reaches: %s"
 		% str(declarers), levelled_ok
 		and Array(declarers).slice(0, shipped.size()) == shipped)
+	# **Every hand control names a kind the controls draw** (docs/design/
+	# gene-controls.md §2): a `"button"` the catalogue does not know would leave its
+	# part with no control and no word about it.
+	var kinds: Array[String] = []
+	var unknown_kinds: Array[String] = []
+	for key: StringName in Catalogue.declares():
+		for one: Dictionary in (Catalogue.declares()[key] as Dictionary).get("out", []):
+			if not one.has("button"):
+				continue
+			var kind: Variant = one["button"]
+			var known := kind is bool or Catalogue.BUTTON_KINDS.has(StringName(str(kind)))
+			(kinds if known else unknown_kinds).append("%s.%s %s" % [key, one["name"], kind])
+	_check("every part the hand works names a kind of control the controls draw: %s%s"
+		% [", ".join(kinds), "" if unknown_kinds.is_empty()
+			else "; not: %s" % ", ".join(unknown_kinds)],
+		unknown_kinds.is_empty() and not kinds.is_empty())
 
 
 ## **The rulebook has no ceiling on owners** (§13, §15.6): the game's tables and seventy

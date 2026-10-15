@@ -3241,26 +3241,31 @@ const REF_RTO := 0.150
 var _ref_nodes: Array[Node] = []
 
 
-## **cell.gd's drawn controls, reduced to what R2 drives**: a push held, a
-## steering demand the probe sets. Never floating, so the body reads it. A Node
-## because that is what a body's `controls` holds.
+## **cell.gd's drawn controls, reduced to what R2 drives**: a push held full, a
+## steering demand the probe sets. A Node because that is what a body's
+## `controls` holds.
 class RefStick extends Node:
-	const NONE := 0
-	const DASH := 1
+	const NONE := -1
+	const TAP := &"tap"
 	var demand := 0.0
-
-	func floating() -> bool:
-		return false
 
 	func steer() -> float:
 		return demand
 
-	func pushing() -> bool:
-		return true
+	## The push's lever, pushed all the way.
+	func lever(name: StringName) -> float:
+		return 1.0 if name == &"push" else 0.0
 
-	## The hold pad (automation-ux.md §6.1), never held here: R2 swims flat out.
-	func holding() -> bool:
+	## The hold pad and every other held part (automation-ux.md §6.1), never held
+	## here: R2 swims flat out.
+	func holds(_name: StringName) -> bool:
 		return false
+
+	func kind_of(_id: int) -> StringName:
+		return &""
+
+	func name_of(_id: int) -> StringName:
+		return &""
 
 	func press(_index: int, _at: Vector2) -> int:
 		return NONE
@@ -8332,13 +8337,11 @@ func _check_pond_kept() -> void:
 
 
 ## A run of the game on [param net] -- null for one alone -- playing the selected
-## world and the selected cell of the folder [param root], in [param mode], on the
-## shipped scheme.
+## world and the selected cell of the folder [param root], in [param mode].
 func _kept_run_scene(net: Node, root: String, mode: int) -> Node:
 	NetSession.current = net
 	var run: Node = load(RUN_SCENE).instantiate()
 	run.set("mode", mode)
-	run.set("scheme", 0)
 	run.set("keep", Drops.selected_in(root))
 	run.set("cells_at", Cells.selected_in(root))
 	run.set("library_at", "")
@@ -8779,12 +8782,11 @@ func _ref_points(net: Node) -> float:
 
 
 ## A run of the game on [param net], in full vision so its view works the
-## friend out, on the shipped scheme -- and the host's with a watched field.
+## friend out -- and the host's with a watched field.
 func _pond_run_scene(net: Node, watched: bool) -> Node:
 	NetSession.current = net
 	var run: Node = load(RUN_SCENE).instantiate()
 	run.set("mode", 1)
-	run.set("scheme", 0)
 	# **A probe's run keeps no drop** (ocean.md §9): the game's default is the
 	# player's own file, which two runs in one process would share.
 	run.set("keep", "")
