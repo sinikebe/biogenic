@@ -37,7 +37,8 @@ signal impulsed(strength: float)
 ## does what it does. Never for a press that was already down, nor while the hand
 ## is silenced.
 signal took_back
-## `myoneme` -- a burst of speed the player asked for, and what it cost. The
+## `myoneme` -- a burst of speed the player asked for, and what it cost, in
+## seconds of rest. The
 ## cell cannot spend hunger itself: metabolism belongs to the run, so the price
 ## rides out on the signal and the run pays it.
 signal dashed(cost: float)

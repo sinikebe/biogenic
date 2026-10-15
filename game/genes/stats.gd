@@ -82,7 +82,7 @@ const ROWS := {
 		"judged": true, "contact": false, "group": &""},
 	&"dash_speed": {"none": 0.0, "better": HIGHER, "combine": BEST, "unit": "µm/s",
 		"judged": true, "contact": false, "group": &"dash_speed"},
-	&"dash_cost": {"none": 0.0, "better": LOWER, "combine": BEST, "unit": "of a tank",
+	&"dash_cost": {"none": 0.0, "better": LOWER, "combine": BEST, "unit": "s",
 		"judged": false, "contact": false, "group": &"dash_speed"},
 	# The body's own: its armour, its tank, its burn and its light.
 	&"armor": {"none": 1.0, "better": HIGHER, "combine": PRODUCT, "unit": "x size",

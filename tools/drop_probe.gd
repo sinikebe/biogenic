@@ -1660,7 +1660,7 @@ func _tank() -> void:
 	var high := 0.0
 	var frames := 3600
 	var dt := 1.0 / 60.0
-	var dash := Stats.at(&"dash_cost", 1) * Metabolism.HUNGER_SECONDS
+	var dash := Stats.at(&"dash_cost", 1)
 	for tiers: Dictionary in genomes:
 		var met: Node = Metabolism.new()
 		met.upkeep = GenomeNode.upkeep_of(tiers)

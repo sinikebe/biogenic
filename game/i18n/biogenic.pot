@@ -2931,8 +2931,8 @@ msgstr ""
 msgid "starving"
 msgstr ""
 
-#. The same, when its tank is half empty or less: it is hungry (French
-#. "affamée", agreeing with "cellule").
+#. The same, when its tank is nearly empty: it is hungry (French "affamée",
+#. agreeing with "cellule").
 #. Room: at most 160 px in 15 px type; the English takes 52 px.
 #: game/normal/cells.gd
 msgid "hungry"

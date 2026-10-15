@@ -12,13 +12,16 @@ const U := Readout.Unit
 ## **The burst**, by tier.
 ## The host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const DASH_SPEED_BY_TIER: Array[float] = [0.0, 190.0, 240.0, 300.0]
-## **What a dash costs, as a share of a born cell's tank**: 2.2, 1.6 and 1.2 s
-## of rest. The run pays it as those seconds, through metabolism.gd's `spend`,
-## like every other cost, so `crista` makes it cheaper and a bigger `vacuole`
-## tank makes it a smaller share (gene-stats.md §11, owner's call 2, answered
-## *yes* on 2026-09-29). It was a fixed share of the bar that neither softened;
-## a born cell pays what it did.
-const DASH_COST_BY_TIER: Array[float] = [0.0, 0.060, 0.045, 0.032]
+## **What a dash costs, in seconds of rest**: 2.16, 1.62 and 1.15. The run pays
+## it through metabolism.gd's `spend`, like every other cost, so `crista` makes it
+## cheaper and a bigger `vacuole` tank makes it a smaller share (gene-stats.md §11,
+## owner's call 2, answered *yes* on 2026-09-29).
+##
+## **In seconds since the tank doubled** (energy.md §9): it was written as a share
+## of a born cell's tank -- 6, 4.5 and 3.2 % of thirty-six seconds -- and doubling
+## the tank would have doubled the dash with it. These are those same seconds, so
+## a dash costs what it did and no tank moves it again.
+const DASH_COST_BY_TIER: Array[float] = [0.0, 2.16, 1.62, 1.152]
 
 
 # --- Its words (gene.gd; gene-catalogue.md §8.1) -------------------------------------
@@ -111,5 +114,5 @@ func lines(t: int, _level: int, _path: StringName, ctx: Dictionary, _slot: int,
 	return [[Readout.item("a burst of {} µm a second, about {} µm in all",
 			[burst, burst / cell.DRAG], [U.SPEED, U.DISTANCE]),
 		Readout.item("again after {} s", [cell.DASH_COOLDOWN], [U.TIME])],
-		[Readout.item("each dash burns {} s", [stat_at(&"dash_cost", t)
-			* metabolism.HUNGER_SECONDS * burn], [U.ENERGY]), wear]]
+		[Readout.item("each dash burns {} s", [stat_at(&"dash_cost", t) * burn],
+			[U.ENERGY]), wear]]

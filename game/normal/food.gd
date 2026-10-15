@@ -8375,7 +8375,7 @@ func _dash(b: Body) -> void:
 		return
 	b.dash_v = b.stat_dash_speed
 	b.dash_clock = CellBody.DASH_COOLDOWN
-	b.effort += b.stat_dash_cost * Metabolism.HUNGER_SECONDS * b.stat_effort_dash
+	b.effort += b.stat_dash_cost * b.stat_effort_dash
 	_stat(&"water_dashes")
 
 
