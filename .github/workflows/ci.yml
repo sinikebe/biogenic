@@ -351,11 +351,18 @@ jobs:
         # the stings left out here, the two agree to 37.2 s, the first daughter
         # whose division nudged a "turn toward"'s aim. 70,074 lines, from 70,197.
         #
+        # **Re-pinned when the tank doubled** (docs/design/energy.md §9), from
+        # f7e09406...: every body's tank holds seventy-two seconds of rest where it
+        # held thirty-six, at the same costs and meals, so the water's hunters
+        # starve later and the player's beat races later. With the tank, the meal
+        # and the dash put back as they were, this branch printed 49611ed8... to
+        # the byte. 68,616 lines, from 70,074.
+        #
         # The run prints about ten megabytes, so it goes to a file rather than a
         # variable. About twenty seconds.
         run: |
           set -uo pipefail
-          pinned="49611ed8a51f961f4c34d11f452bb3acc5380ac2cdfc9587e4bafdac44461e28"
+          pinned="f7e09406046218552f196205798201a09752380a6b6cb9f27b35ba707c495f80"
           log=$(mktemp)
           fail=0
           echo "--- seed 1, sixty seconds, R pressed at 20 s"

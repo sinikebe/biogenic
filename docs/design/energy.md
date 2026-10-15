@@ -601,3 +601,27 @@ a quarter to two fifths of it. On the gauge a meal reads as the same number it d
   mattering, and whether the opening is now too easy. The levers are
   `HUNGER_SECONDS` and `STARVE_GRACE` (§7.6 row 1), `MEAL` (row 2) and the costs
   in §2. Balance waits for players (CLAUDE.md): these are starting values.
+
+### 9.4 The pins it moved
+
+The water runs the same tank, so every seeded run moved with it, and each was
+re-recorded from its own check's output:
+
+- **drop_probe**: `DEV_LINES`, `THREE_ONE_LINES`, `IDENTITY_LINES`, `PACK3_LINES`,
+  `TAIL_LINES`, `DEV_MEMBRANE`, `PACK3_TRACE` and `TAIL_TRACE`;
+- **`ci.yml`'s check 8**: `f7e09406…`, 68,616 lines, from `49611ed8…` and 70,074.
+
+**Only the tank moved them.** On a copy of this branch with `HUNGER_SECONDS`,
+`MEAL`, `HUNGRY_FROM` and the dash put back as they were, everything else
+included (the eyespot's glow too), the drop probe passed against the old pins and
+check 8 printed `49611ed8…` to the byte.
+
+In the game's water at five minutes (the tail check's row 37, seed 1), the
+hunters are 95 against 92 and the swallowed 905 against 963. Starved are 230
+against 428: half as many water cells die of hunger, and about as many live.
+
+Three checks of the drop probe also read the tank's size. The mouthless body is
+empty at 93.6 s, twice §5.3's 46. A floc must feed a hunter a fifth of a meal's
+share of the bar. The save's dosed water body is picked as one with no toxin and
+nothing in its slots, because the first body with a mouth now grows a toxin into
+its mouth's slot.
