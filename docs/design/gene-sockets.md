@@ -261,3 +261,9 @@ touched. A body's organs are drawn as they always were.
 - **Rendered and judged at both shapes**: the ring with a gene in hand and its lit
   slots and ports, the slot view empty, armed and full, and a cell in the water with
   a rider's bead.
+- **Pins.** `Wire.PROTOCOL` 9 and `Wire.RULES` moved (§6); the net probe's SISTER
+  size pin is 2,189 bytes, from 1,378. The drop probe's seeded lines (pack 2's five
+  minutes, the identity gate, pack 3's and the game's water) are re-recorded: with the
+  meal that spills into a slot switched off they were the old lines to the byte, so
+  that one rule is all that moved them. `ci.yml`'s check 8 did not move: nothing in
+  its sixty seconds reaches a slot.
