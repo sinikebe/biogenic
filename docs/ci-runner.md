@@ -1,8 +1,9 @@
 # The self-hosted CI runner
 
-> **In use for dev** (the owner, 2026-10-16: *"Set it for dev and trigger ci"*):
-> dev's checks run on the self-hosted runner, and `main`'s, and every publish,
-> on GitHub's machines (§1, §6). The whole plan for going private, in order, is
+> **In use for everything** (the owner, 2026-10-16: *"I think we'll move it back
+> to my self hosted runner entirely"*): every check and every publish, `main`'s
+> and `dev`'s, runs on the self-hosted runner. Only a fork's pull request runs
+> on GitHub's machines (§1). The whole plan for going private, in order, is
 > docs/going-private.md.
 
 The owner, 2026-10-16, on taking the repository private: *"A self hosted runner
@@ -28,35 +29,33 @@ a minute: check GitHub's pricing page.
 
 ## 1. Switching
 
-The `runs-on` of `ci.yml`, `launcher-version.yml` and `sync-launcher.yml` picks
-the machine by what the job is for:
+Every job's `runs-on` -- `ci.yml`, `release.yml`, `launcher-version.yml` and
+`sync-launcher.yml` -- sends it to the self-hosted runner:
 
-- **dev's work runs on the self-hosted runner**: a pull request into `dev` from
-  this repository, and a push or a manual run on `dev` (dev's CI, a launcher sync
-  started on `dev`). It asks for the `self-hosted` label, which every self-hosted
-  runner carries, so no variable is needed;
-- **a fork's pull request never does.** Its code is a stranger's, and the runner
-  sits on the owner's own machine. It runs on GitHub's;
-- **everything else runs on GitHub's machines**: `main`'s CI and the scheduled
-  launcher sync, which starts from `main`.
+- **everything of ours runs there**: a pull request from this repository, a push
+  to `main` or `dev` (a release, the dev app's publish), the scheduled launcher
+  sync and every manual run. It asks for the `self-hosted` label, which every
+  self-hosted runner carries, so no variable is needed;
+- **a fork's pull request never does**, whatever the variables say. Its code is a
+  stranger's, and the runner sits on the owner's own machine. It runs on
+  GitHub's.
 
-**`release.yml` always runs on GitHub's machines**, the dev app's publish
-included (the owner, 2026-10-16, after measuring it: *"Let's try A"*). The runner
-builds a release in under a minute but uploads it to GitHub at about 1.5 Mbit/s
-(§6).
+**Publishing from the runner is slow**: the build takes under a minute, but the
+upload to GitHub's release server runs at about 1.5 Mbit/s, so a publish takes
+about 20 minutes, and the next pull request's CI waits behind it (§6). The owner
+chose it knowing that (2026-10-16: *"I think we'll move it back to my self
+hosted runner entirely"*, after measuring it).
 
-Three repository variables move them (Settings → Secrets and variables → Actions
-→ Variables):
+Two repository variables move them (Settings → Secrets and variables → Actions →
+Variables):
 
-- **`CI_RUNNER_DEV`**: where dev's work runs instead. Set it to `ubuntu-latest` to
-  send dev back to GitHub's machines whenever the container will be down for a
-  while. A job whose runner is offline waits in the queue (up to a day) and then
-  fails. Delete it to come back to the runner.
-- **`CI_RUNNER`**: where everything else runs, `ubuntu-latest` while it is unset.
-  Leave it unset: a fork's pull request runs there too, and must never reach the
-  runner.
-- **`CI_RUNNER_PUBLISH`**: where `release.yml` runs, `ubuntu-latest` while it is
-  unset. Set it to the runner's label (§3) only once §6 no longer holds.
+- **`CI_RUNNER`**: where everything runs instead, the runner while it is unset.
+  Set it to `ubuntu-latest` to send everything back to GitHub's machines whenever
+  the container will be down for a while. A job whose runner is offline waits in
+  the queue (up to a day) and then fails. Delete it to come back to the runner.
+- **`CI_RUNNER_PUBLISH`**: where `release.yml` runs instead, `CI_RUNNER`'s choice
+  while it is unset. `ubuntu-latest` moves publishing alone to GitHub's machines,
+  where it takes about 1.5 minutes.
 
 ## 2. The container
 
@@ -122,8 +121,8 @@ echo "runner ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/runner
 Runners → New self-hosted runner → Linux, x64. GitHub shows the download and a
 one-time registration token. dev's jobs ask for the `self-hosted` label every
 runner has (§1). When `config.sh` asks for labels, add one of your own too, such as
-`biogenic`: it is what `CI_RUNNER_PUBLISH` names if publishing ever moves to the
-runner (§6). Install it as a service, so it survives a restart:
+`biogenic`, so that `CI_RUNNER` can name this runner in particular should there
+ever be a second. Install it as a service, so it survives a restart:
 
 ```
 sudo ./svc.sh install runner
@@ -171,7 +170,7 @@ request into `dev`, or run CI by hand on `dev`. Then compare:
 - the time. The first run downloads Java, the Android SDK and Godot, and later
   runs reuse them.
 
-## 6. Why publishing stays on GitHub's machines
+## 6. Publishing from the runner is slow
 
 Measured on 2026-10-16, the dev app's publish (`release.yml` on `dev`) on the
 runner:
@@ -200,6 +199,7 @@ Players are not affected, since they only download.
 
 And there is one runner: a pull request's CI waited behind those 22 minutes.
 
-To try the runner again, set `CI_RUNNER_PUBLISH` to its label, push to `dev`, and
-time the "Publish release" step. It takes the runner back as soon as it is
-nearer GitHub's 1.5 minutes than 22.
+Publishing went to GitHub's machines for an hour on 2026-10-16 (pull request
+#231), where the merge's publish step took 8 seconds, and came back to the runner
+the same evening at the owner's word. If the wait ever matters more than keeping
+everything on one machine, `CI_RUNNER_PUBLISH=ubuntu-latest` is the switch (§1).

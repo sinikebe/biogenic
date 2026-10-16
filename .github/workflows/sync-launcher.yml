@@ -34,13 +34,12 @@ env:
 jobs:
   sync:
     name: Sync from template
-    # **Where it runs** (docs/ci-runner.md): **dev's work on the self-hosted
-    # runner** -- a pull request into dev from this repository, or a push or a
-    # dispatch on dev -- and everything else on GitHub's own machine, unless the
-    # repository variable CI_RUNNER names a runner's label. A fork's pull request
-    # never reaches the self-hosted runner: its code is a stranger's. To send dev
-    # back to GitHub's machines, set CI_RUNNER_DEV to ubuntu-latest.
-    runs-on: ${{ ((github.base_ref == 'dev' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name != 'pull_request' && github.ref_name == 'dev')) && (vars.CI_RUNNER_DEV || 'self-hosted') || (vars.CI_RUNNER || 'ubuntu-latest') }}
+    # **Where it runs** (docs/ci-runner.md §1): **on the self-hosted runner**,
+    # main and dev alike, unless the repository variable CI_RUNNER names another
+    # label (ubuntu-latest sends everything back to GitHub's machines). A fork's
+    # pull request never reaches the runner, whatever the variable says: its
+    # code is a stranger's, and the runner is on the owner's own machine.
+    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || (vars.CI_RUNNER || 'self-hosted') }}
     # Skip inside the template itself, which would otherwise sync from its own
     # HEAD and open a pull request against itself. Change this alongside
     # LAUNCHER_TEMPLATE_REPO if you maintain your own fork of the template.
