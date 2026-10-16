@@ -31,6 +31,12 @@ extends Node
 ## drop chip shows on the chooser and on CHOOSE, and not on a far page or the pause
 ## screen.
 ##
+## **And your cells, one layer at a time** (docs/design/cells-ux.md §2.3, §3.4): on
+## the view chooser, Back and Esc close a view's cells; over them, a cell's detailed
+## view goes back to the cells; over the detailed view, renaming the cell and the
+## delete confirm go back to it -- nothing renamed, nothing deleted. On cells of the
+## probe's own, never the player's.
+##
 ## Prints one line per check and `ALL PASS` only if every one held. CI asserts on
 ## that marker rather than on the exit code: Godot exits 0 even after a parse
 ## error, and a tree that quits mid-probe never reaches the final print either.
@@ -44,6 +50,14 @@ const Drops := preload("res://game/normal/drops.gd")
 ## **The drops the menu is opened on**: a folder of the probe's own, with a drop in
 ## slot 1, selected, one in slot 2 and slot 3 empty -- never the player's.
 const DROPS_ROOT := "user://back_probe_drops"
+## **Your cells, the sheet's and the detailed view's** (cells.md): a folder of the
+## probe's own, full vision's slot 1 holding the mock's own cell -- never the
+## player's.
+const CELLS_ROOT := "user://back_probe_cells"
+const Cells := preload("res://game/normal/cells.gd")
+const CellSave := preload("res://game/normal/cell_save.gd")
+const RunState := preload("res://game/run_state.gd")
+const CornerShot := preload("res://tools/corner_shot.gd")
 
 ## Frames to let a deferred scene change flush and the new scene reach `_ready`.
 const SETTLE_FRAMES := 4
@@ -76,6 +90,11 @@ func _run() -> void:
 	_forget_drops()
 	Drops.make(2, "", DROPS_ROOT)
 	Drops.select(1, DROPS_ROOT)
+	_forget_cells()
+	var where := {"world": 1, "drop": 1111, "rim": Vector2.ZERO, "age": 120.0}
+	CellSave.write(Cells.path_of(RunState.cell_key(RunState.Mode.FULL_VISION), 1, CELLS_ROOT),
+		CellSave.compose(RunState.cell_key(RunState.Mode.FULL_VISION), "", 0, 1759400000,
+		7200.0, where, CornerShot._cell(4, 34.0, 0.62, false)))
 	get_tree().change_scene_to_file(MODE_SELECT)
 	await _settle()
 	_check("the view chooser is on screen", _scene_path() == MODE_SELECT)
@@ -85,6 +104,7 @@ func _run() -> void:
 	# **The sheet before the screen**, by both doors.
 	await _sheet_first("the view chooser", MODE_SELECT)
 	await _drops_first("the view chooser", MODE_SELECT)
+	await _cells_first("the view chooser", MODE_SELECT)
 
 	# The earshot screen: the sheet first, then Back is the way back out.
 	get_tree().change_scene_to_file(EARSHOT)
@@ -157,6 +177,7 @@ func _run() -> void:
 			get_tree().quit_on_go_back)
 
 	_forget_drops()
+	_forget_cells()
 	if _failed == 0:
 		print("[back-probe] ALL PASS")
 	else:
@@ -328,6 +349,108 @@ func _drops_first(screen: String, path: String) -> void:
 		_layer(corner) == "" and _scene_path() == path)
 	_check("none of it changed the drops",
 		FileAccess.get_file_as_bytes(DROPS_ROOT.path_join(Drops.INDEX)) == before)
+
+
+## **On [param screen], your cells close one layer at a time**: Back and Esc close
+## full vision's cells, and the screen at [param path] stays; over them, a cell's
+## detailed view goes back to the cells on Back and on Esc, and the next one closes
+## them; over the detailed view, renaming the cell -- its field typing, its words
+## selected -- and the delete confirm go back to the detailed view on Back and on
+## Esc, the Esc pressed inside the naming field, nothing renamed and nothing
+## deleted.
+func _cells_first(screen: String, path: String) -> void:
+	var corner := _corner()
+	if corner == null:
+		return
+	corner.set(&"cells_root", CELLS_ROOT)
+	var before := _cells_files()
+	corner.call(&"open_cells", RunState.Mode.FULL_VISION)
+	await _settle()
+	_check("your cells open over %s" % screen, _layer(corner) == "Cells")
+	_press_back()
+	await _settle()
+	_check("Back closes your cells over %s, and it stays" % screen,
+		_layer(corner) == "" and _scene_path() == path and not get_tree().quit_on_go_back)
+	corner.call(&"open_cells", RunState.Mode.FULL_VISION)
+	await _settle()
+	await _press_esc()
+	_check("Esc closes your cells over %s, and it stays" % screen,
+		_layer(corner) == "" and _scene_path() == path)
+	for door: String in ["Back", "Esc"]:
+		if not is_instance_valid(corner):
+			return
+		await _open_cell(corner)
+		_check("a cell's detailed view opens over your cells on %s (%s)" % [screen, door],
+			_layer(corner) == "Cell")
+		await _door(door)
+		_check("%s from the detailed view goes back to your cells" % door,
+			_layer(corner) == "Cells" and _scene_path() == path)
+		await _door(door)
+		_check("and the next %s closes your cells, %s still there" % [door, screen],
+			_layer(corner) == "" and _scene_path() == path)
+	for over: Array in [["Rename", "Naming", "renaming the cell"],
+			["Delete", "Confirm", "the delete confirm"]]:
+		for door: String in ["Back", "Esc"]:
+			if not is_instance_valid(corner):
+				return
+			await _open_cell(corner)
+			(corner.get_node("Cell/Center/Columns/Side/Actions/%s" % over[0]) as Button) \
+				.pressed.emit()
+			await _settle()
+			var opened: bool = _layer(corner) == str(over[1])
+			if over[1] == "Naming":
+				var field := corner.get_node(^"Naming/Panel/Box/Field") as LineEdit
+				opened = opened and field.has_focus() and field.is_editing() \
+					and field.has_selection()
+			_check("%s opens over the detailed view on %s (%s)" % [over[2], screen, door],
+				opened)
+			await _door(door)
+			_check("%s from %s goes back to the detailed view" % [door, over[2]],
+				_layer(corner) == "Cell" and _scene_path() == path)
+			corner.call(&"close_all")
+			await _settle()
+	_check("none of it changed your cells", _cells_files() == before
+		and _layer(corner) == "" and _scene_path() == path)
+
+
+## Full vision's cells, then slot 1's `look`.
+func _open_cell(corner: Node) -> void:
+	corner.call(&"open_cells", RunState.Mode.FULL_VISION)
+	await _settle()
+	(corner.get_node(^"Cells/Panel/Box/Scroll/Rows/Row1/Look") as Button).pressed.emit()
+	await _settle()
+
+
+## Back, or Esc, as [param door] says.
+func _door(door: String) -> void:
+	if door == "Back":
+		_press_back()
+		await _settle()
+	else:
+		await _press_esc()
+
+
+## Every file of the probe's cells, with its bytes.
+func _cells_files() -> Dictionary:
+	var out := {}
+	var index := CELLS_ROOT.path_join(Cells.INDEX)
+	if FileAccess.file_exists(index):
+		out[index] = FileAccess.get_file_as_bytes(index)
+	var folder := Cells.folder_of(CELLS_ROOT)
+	if DirAccess.dir_exists_absolute(folder):
+		for file: String in DirAccess.get_files_at(folder):
+			out[folder.path_join(file)] = FileAccess.get_file_as_bytes(folder.path_join(file))
+	return out
+
+
+## Nothing of the probe's cells left in `user://`.
+func _forget_cells() -> void:
+	for dir: String in [Cells.folder_of(CELLS_ROOT), CELLS_ROOT]:
+		if not DirAccess.dir_exists_absolute(dir):
+			continue
+		for file: String in DirAccess.get_files_at(dir):
+			DirAccess.remove_absolute(dir.path_join(file))
+		DirAccess.remove_absolute(dir)
 
 
 ## Which of the corner's layers is on top: its node's name, "" for none, and

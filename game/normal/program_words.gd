@@ -3,8 +3,9 @@ extends RefCounted
 ## automation-ux.md §8): what a sense, a value, a test and an action are called
 ## on the programs page, in the replay and wherever an instinct is said.
 ##
-## **A part's words are its declaring file's**: `cell.gd`, `metabolism.gd` and
-## `genome.gd` keep a table beside their DECLARES, so a new gene brings its
+## **A part's words are its declaring file's**: `cell.gd` and `metabolism.gd` keep
+## a table beside their DECLARES, and each organ's file has its parts' (gene.gd's
+## word tables, read through `genome.gd`'s `words_of`), so a new gene brings its
 ## words, not a screen (behaviour.md §3.5). **The rulebook's own words live here**,
 ## with the page: `always`, the bearing every directed sense carries, the four
 ## tests in each kind's words, `my mouth` and `me`, and the units. A part with no
@@ -41,6 +42,40 @@ const RULEBOOK_EXPLAINS := {
 	&"bearing": "bearing · how far off your nose it is, to either side.",
 }
 
+## **The values the genes' senses report**, by value name, which a test is put to:
+## generic, so they live here with the page rather than in any one organ's file --
+## a value two organs report is one word. After the declaring files' own in
+## [method _words], so a file that names a value of its own (metabolism's
+## `level`) keeps its chip.
+##
+## TRANSLATORS: The name of a value a sense of the player's cell reports, which an
+## "instinct" can test, on a small choice cell. Lowercase, one short word.
+## "distance": how far away; "size": how big; "level": how strong; "closeness":
+## how near, for touch.
+## ROOM: 70 px at 14 px
+const VALUE_SAYS := {
+	&"distance": "distance",
+	&"size": "size",
+	&"level": "level",
+	&"closeness": "closeness",
+}
+## **The line that explains each of them**, beside the chip.
+##
+## TRANSLATORS: Explains one sense, action or value of the player's "instincts",
+## on one line under them: its name (the same words as on its chip), a middle
+## dot, then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+## which calls and listens; "your beam" its ocellus; "your nose" its chemocyte;
+## "your eyespot" its stigma; "your palps" its palp. "Your tail" is the cell's
+## flagellum, which swims; "two copies" means the gene is carried twice in the
+## cell's DNA, which is what lets the tail be held still. "For free" means it
+## costs no food.
+## ROOM: 856 px at 15 px
+const VALUE_EXPLAINS := {
+	&"distance": "distance · how far away it is.",
+	&"size": "size · how big it rings, against your mouth or your whole body.",
+	&"level": "level · how strong it is, from nothing to full.",
+	&"closeness": "closeness · how near it is, from the edge of your reach to your skin.",
+}
 ## **The four tests, in each kind's own words** (§3.1's below, above, rising and
 ## falling) -- the two put against a step, with the step in %s, and the two of
 ## change -- in the order `rulebook.gd`'s Test is numbered.
@@ -108,10 +143,17 @@ const UNITS := {
 	&"distance": "%s µm",
 	&"bearing": "%s°",
 }
+## **What an action's options are called**, by the part's own name, in its
+## ladder's order (its declaration's `options`): the push's strength, and how far
+## ahead a turn toward something aims.
+##
 ## TRANSLATORS: How hard a "push" instinct pushes: at "half" its strength or
-## "full". Lowercase, one short word.
+## "full". And how far ahead a "turn toward" instinct aims at something that is
+## moving: straight "at it", "near" (a little ahead), "ahead", or "far" ahead of
+## where it is now. Lowercase, one short word each.
 ## ROOM: 60 px at 14 px
-const OPTION_SAYS := ["half", "full"]
+const OPTION_SAYS := {&"push": ["half", "full"], &"turn-toward": ["at it", "near", "ahead",
+	"far"]}
 ## TRANSLATORS: A program's name inside a sentence, in your language's quotation
 ## marks: “flee” (French « fuite »). %s is the name the player gave it.
 ## ROOM: 230 px at 14 px with program 99
@@ -151,13 +193,24 @@ static func _words(part: StringName) -> Dictionary:
 		return out
 	# Each word from the first file that has it: a value two files report takes
 	# its chip from the first and its sentence from whichever file has one --
-	# metabolism names hunger's `level`, and the genome explains a level.
+	# metabolism names hunger's `level`, and the values' own words explain a level.
 	var out := {}
 	for table: Dictionary in [CellBody.words_of(part), Metabolism.words_of(part),
-			GenomeNode.words_of(part)]:
+			GenomeNode.words_of(part), _value_words(part)]:
 		for key: String in table:
 			if not out.has(key):
 				out[key] = table[key]
+	return out
+
+
+## **The words of a value the genes' senses report** ([constant VALUE_SAYS]), in
+## the language of the moment; empty for anything else.
+static func _value_words(part: StringName) -> Dictionary:
+	var out := {}
+	if VALUE_SAYS.has(part):
+		out["says"] = String(TranslationServer.translate(VALUE_SAYS[part]))
+	if VALUE_EXPLAINS.has(part):
+		out["explains"] = String(TranslationServer.translate(VALUE_EXPLAINS[part]))
 	return out
 
 
@@ -201,18 +254,41 @@ static func compare_text(kind: StringName, test: int) -> String:
 	return String(TranslationServer.translate(COMPARES[known][clampi(test, 0, 3)]))
 
 
-## **An action as its chip says it**: its word, and a push's strength after a
-## middle dot -- `push · half`.
+## **An action as its chip says it**: its word, and its option after a middle dot
+## -- `push · half`, `turn toward · ahead`.
 static func action_text(rule: Rulebook.Rule) -> String:
 	var said := says(rule.output)
 	if not is_nan(rule.option):
-		said += " · " + option_text(rule.option)
+		said += " · " + option_text(rule.output, rule.option)
 	return said
 
 
-## A push's strength: half, or full.
-static func option_text(option: float) -> String:
-	return String(TranslationServer.translate(OPTION_SAYS[0 if option < 0.75 else 1]))
+## **[param output]'s option [param option] in words**: the word at its place on
+## the part's ladder ([constant OPTION_SAYS]), or the number itself for a part
+## with no words.
+static func option_text(output: StringName, option: float) -> String:
+	var part := Rulebook.part_of(output)
+	var ladder := options_of(output)
+	var at := -1
+	for k in ladder.size():
+		if at < 0 or absf(float(ladder[k]) - option) < absf(float(ladder[at]) - option):
+			at = k
+	if at < 0 or at >= (OPTION_SAYS.get(part, []) as Array).size():
+		return Rulebook.number(option)
+	return String(TranslationServer.translate((OPTION_SAYS[part] as Array)[at]))
+
+
+## **The options [param output] takes**, from the table that declares it: the
+## body's own (cell.gd's DECLARES) or its gene's.
+static func options_of(output: StringName) -> Array:
+	var owner := StringName(String(output).get_slice(".", 0))
+	var tables: Dictionary = CellBody.DECLARES if CellBody.DECLARES.has(owner) \
+		else GenomeNode.Catalogue.declares()
+	var part := Rulebook.part_of(output)
+	for one: Dictionary in (tables.get(owner, {}) as Dictionary).get("out", []):
+		if StringName(one["name"]) == part:
+			return one.get("options", [])
+	return []
 
 
 ## **One instinct in words**, as a row reads (automation-ux.md §7.3): its sense,

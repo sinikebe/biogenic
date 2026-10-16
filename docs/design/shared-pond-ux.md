@@ -14,7 +14,9 @@ end of a loopback socket -- at 1280x720 and 2400x1080 in both views: §9 items 1
 listed with what was judged in §9. Before that, a scratch harness drew the marks
 with the shipped routines over a real run: pause under B at scrim 0.5, 0.70 and
 0.86, the ghost, a friend wearing a threat bow, the held pond, and the notices.
-**Not seen:** anything on a device, and anything in motion but as frames.
+**Not seen:** anything on a device, and anything in motion but as frames. **§4's
+replay is built in Phase 3** and was not rendered: the owner is playtesting it
+instead (§9, item 7).
 
 ## 0. Five rules every state shares
 
@@ -153,9 +155,23 @@ your own cell. A tap runs `revive` over 0.9 s straight into the pond near your
 friend, at generation 1, with no reseed; in full vision your friend is in the
 first frame. Back on the black still leaves the run; when the host does it, the
 guest goes straight to the §5 takeover with no wait. **The replay must record
-the friend as a body** and draw them as they were drawn live. Today a replay has
-no peer in it (`panes.gd` never calls `set_session`), so a player your friend
-ate would `watch` themselves being eaten by nothing.
+the friend as a body** and draw them as they were drawn live. Until Phase 3 a
+replay had no peer in it (`panes.gd` never calls `set_session`), so a player
+your friend ate would have watched themselves being eaten by nothing.
+
+**Built in Phase 3** (`shared-pond.md` §5). The black offers `watch` in a pond as
+alone, and the replay draws the friend as §0-§3 draw them live: their body in
+the truth pane with their tiers, fringe, mouth and threat bow, wound and doses;
+the ghost while they divide and the commit that brings them back; the arrival
+fade; halo, trail and edge mark, faded by the silence the recording kept; and
+their departure as it was drawn -- a SELF_TINT meal ring, a faint, or the
+arrival fade reversed. In the felt pane they are what your senses made of them,
+as every body is: the membrane and the returns are recorded as they were. **The
+pond runs on under it**, both seats: the replay writes onto a field, a cell, a
+genome and grit of its own, so a dead host's water keeps stepping and keeps
+being sent, and nothing about the watching player's cell changes on the wire.
+`panes.gd` still never calls `set_session`: a recording is not happening now, so
+the friend's silence and their departures are recorded and handed over instead.
 
 ## 5. A phone goes quiet, or is gone
 
@@ -262,7 +278,8 @@ eaten player's black gets no text: `watch` answers *what was that*, which is why
   pond, the §0.5 beat, the division dim moved to the pinch, and death and
   division stopping only your own cell, with no reseed.
 - **`normal_mode.tscn`:** the `Warn` label, a node rather than a resource, so
-  `load_steps` is unchanged. **The replay:** the friend recorded as a body.
+  `load_steps` is unchanged. **The replay:** the friend recorded as a body
+  (built in Phase 3, §4).
 - **`tools/drive.gd`:** needs flags to pose a friend who is out of the water,
   dead, quiet or held. §9 cannot be shot without them. **Built:**
   `--pond=host|guest` (this run's seat; the other is a second run, in a
@@ -299,6 +316,23 @@ Use `--seed=` for every shot, and zero-diff three runs before any A/B.
 items 1-6, both seats where an item has two, both views, both shapes -- 76
 frames, judged and not diffed, because loopback timing does not repeat. Item 7
 is Phase 3's, with the replay.
+
+**Item 7, Phase 3: built, and not rendered.** The owner, 2026-10-04: *"forget
+screenshots this time, i'll playtest it"* -- so no frame of the pond's replay
+was made, from either seat, at either shape, nor of the death screen offering
+`watch` in a pond. What stands in for them is held as numbers, in `net_probe`,
+because the picture is `cilia.gd`'s and the same call either way and what
+decides it is the friend dictionary the world view builds: a friend recorded in
+a host's drop and played back is drawn as the live view drew them on every one
+of 79 frames, at most 0.0002 units apart -- arriving, swimming, a ghost dividing and
+back, changing what they wear, falling quiet -- and eaten, a SELF_TINT meal ring
+where they were; and on two real runs the replay draws, in the frame before the
+death, the friend that ate the player, as recorded, from the host's seat and
+from a guest's. **What the playtest has to judge**: whether the friend reads as
+the killer in the half-width truth pane -- 640 canvas px at 1280x720, ±320 world
+units, so a friend's lunge from farther starts off the pane, where only the edge
+mark shows them -- and whether the departure lands right, a frame early as every
+replay mark does.
 
 1. **Passed.** The friend wears its own tiers and fringe on a SELF_TINT body, so
    the two read as the same kind of thing, and what sets the friend apart is

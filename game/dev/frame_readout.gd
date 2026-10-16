@@ -53,7 +53,7 @@ extends CanvasLayer
 ## pause target and of the thumbs' wells at the bottom corners. No figure takes
 ## more than [constant FIGURE_GLYPHS] glyphs, so the panel keeps one width from
 ## one refresh to the next instead of breathing with the digits.
-## The words and numbers are the pause screen's (normal_mode.gd's NUMBERS_*):
+## The words and numbers are the pause screen's (figure.gd's NUMBERS_*):
 ## words in the pale tint and the numbers a little brighter, with a dark edge
 ## round every letter.
 ##
@@ -84,7 +84,7 @@ const DROPPED_AFTER := 1.5
 ## is faster -- or will not say, as a headless run and some desktops will not.
 const HELD_HZ := 60.0
 ## The pause screen's numbers' tints -- words at 0.42 and the numbers at 0.70
-## of the column's pale tint (normal_mode.gd's NUMBERS_*) -- and its 14 px, 19
+## of the column's pale tint (figure.gd's NUMBERS_*) -- and its 14 px, 19
 ## apart...
 const FONT_SIZE := 14
 const PITCH := 19.0

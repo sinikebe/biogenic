@@ -23,35 +23,45 @@ extends Node
 ## the cell's front) and "strength" where those make sense.
 signal sensation(kind: StringName, info: Dictionary)
 
+## **Every gene the game knows** (game/genes/catalogue.gd, which preloads no view):
+## the organs whose hues the lobes are drawn in.
+const Catalogue := preload("res://game/genes/catalogue.gd")
+## The kinds of load, by name and index. doses.gd preloads nothing.
+const Doses := preload("res://game/mechanics/doses.gd")
+
 # --- Palette. pulse_color is the launcher's rim colour, so Play is a cut with
 # --- no flash. Chemistry is the only other hue phase 1 is allowed.
 const SELF_COLOR := Vector3(0.12, 0.70, 0.58)
 const NUTRIENT_COLOR := Vector3(0.35, 0.88, 0.42)
-## `stigma`, the first earned gene: the light-sensitive spot, and the same amber
-## the gene wears on the outside (docs/design/genes-and-cilia.md §4.4). Slot 2
-## has been reserved since Phase 1 for exactly this.
+## **The membrane colours channels, never organs** (docs/design/gene-looks.md §5):
+## each lobe takes its channel's colour, whichever organ drives it, so a new sense on
+## an existing channel changes nothing here.
+##
+## `light`, slot 2: **light's own amber**, because what it reports has a colour --
+## whichever eyespot drives it, and whatever family that eyespot is. Slot 2 has
+## been reserved since Phase 1 for exactly this. (`smell` is the nutrient green of
+## the ring, slot 1, and `touch` the self teal of the bruise envelope, slot 0: each
+## reports something with a colour of its own.)
 const LIGHT_COLOR := Vector3(0.98, 0.78, 0.30)
-## `ocellus`, the beam. The fourth glow slot, held empty since Phase 1 and spent
-## here. Same indigo-violet the gene wears on the outside.
-const BEAM_COLOR := Vector3(0.62, 0.55, 1.00)
-## `ampulla`, the ping's two arcs. The same violet the wave and the organ's own
-## tuft are drawn in -- `Cilia.hue(&"ampulla")`, copied rather than imported
-## because the membrane is a view and may not preload a sibling view. Deeper and
-## more saturated than the ocellus's pale periwinkle, which is the difference
-## the two lobes now have to carry on their own: they used to be one slot.
-const PING_COLOR := Vector3(0.655, 0.44, 1.00)
+## `beam` and `ping` report a struck body and an echo, which have no colour, so
+## their lobes are **the sense's own**: the hue of the first organ on the channel,
+## its family's shade -- sensing's 0 for the beam, its 2 for the ping's two arcs, a
+## shade apart, which is the difference the two lobes have to carry on their own
+## (they used to be one slot). Read once from the catalogue rather than copied: the
+## same organ cilia.gd's `hue_on` draws the rays and the wave in, so the lobe and the
+## marks cannot drift apart. `static var` because a constant expression cannot
+## contain a call.
+static var BEAM_COLOR: Vector3 = _hue_on(Catalogue.BEAM)
+static var PING_COLOR: Vector3 = _hue_on(Catalogue.PING)
 ## **The strains' hues**, by the kind of load each delivers -- harm, paralysis,
-## sleep, doses.gd's order -- copied from `Cilia.HUES` for the reason
-## [constant PING_COLOR] is (docs/design/dna-slots-ux.md §2.1). A dose that
-## arrives by a bite bruises in its strain's hue instead of teal; a poisonous meal
-## floods in it; a death by a dose closes in it. Lime is corrosive's, the one
-## strain phase 1 has. Ice and pale moon are the starting values for phases 3
-## and 4, to be rendered when those strains exist.
-const STRAIN_COLORS: Array[Vector3] = [
-	Vector3(0.84, 0.98, 0.22),   # harm: corrosive, lime
-	Vector3(0.42, 0.84, 1.00),   # paralysis: ice (phase 3)
-	Vector3(0.80, 0.78, 1.00),   # sleep: pale moon (phase 4)
-]
+## sleep, doses.gd's order: **the hue of the organ that delivered it**, read as
+## [member PING_COLOR] is (docs/design/gene-looks.md §3.3). Every strain of the
+## toxin wears its orange, and the kinds are told apart by their marks, which never
+## needed the hue. A dose that arrives by a bite bruises in it instead of teal; a
+## poisonous meal floods in it; a death by a dose closes in it. A kind no organ
+## delivers yet is never drawn, and keeps the self colour only to be something.
+## Read-only.
+static var STRAIN_COLORS: Array[Vector3] = _strain_colors()
 
 ## The shader's own defaults, kept here because the death frames fade them to
 ## black and something has to know what to fade back to.
@@ -112,46 +122,52 @@ const FLASH_PEAK := 0.80
 const FLASH_ATTACK := 0.016
 const FLASH_DECAY := 0.09
 
-# --- Taste, which is a level and not a direction (three-senses.md §2) -------
-# Smell stopped pointing. What arrives here is how much this nose picks up, and
-# the bearing that comes with it is **the organ's own arc on this body** -- the
-# same number every frame of a run. So the lobe is drawn as a full ring,
-# brightest where the nose is and dimmest dead astern of it, and what the player
-# watches is the ring's brightness changing as they turn.
+# --- Taste, which is a level, and which shows on the nose (three-senses.md §2.6) --
+# Smell stopped pointing (§2), and on 2026-10-14 it stopped being drawn here at
+# all. The owner: *"the effect of the sense must be a glowing smell organ when
+# pointing at food. No hud or other effect on screen that would merge with other
+# senses."* So the membrane draws nothing for it. What arrives here is how much
+# this nose picks up, and what leaves is [method smell_glow], 0..1, which the run
+# hands both views to light the organ with. The curve, the floor and dread's
+# suppression stay here because they are perception, not drawing: a hunted cell
+# still smells badly, wherever its smell is shown.
 #
-# Three things that used to be here have gone, and §2.2 is why: the lobe's two
-# widths, the bearing low-pass, and the bearing jitter. All three were vagueness
-# about a direction, and there is no direction left to be vague about. Vagueness
-# now lives in the level's own flatness, which is a truer place for it -- and
-# deleting the jitter removes one of the **two** draws this node made from its
-# private RNG. perception.md §4.1 is unchanged: the beat's draw remains, so
-# `--seed=` is still mandatory for any comparison.
+# Three things that used to be here went with the bearing (§2.2): the lobe's two
+# widths, the bearing low-pass and the bearing jitter. Deleting the jitter
+# removed one of the **two** draws this node made from its private RNG.
+# perception.md §4.1 is unchanged: the beat's draw remains, so `--seed=` is
+# still mandatory for any comparison.
 
-const TASTE_PEAK := 0.62
-## Where the readout starts, and where it fades in from. Both moved down with
-## the channel: the old 0.06 was `scent(680)`, a number off the plain summed
-## field this replaces, and the weighted level lives a whole band lower.
+## **Where the nose starts to glow**, as a level: the glow climbs from here to
+## [constant TASTE_FULL] along a smoothstep (three-senses.md §2.6).
 ##
-## **Re-checked against the saturating nose and left alone.** `food.gd` now
-## reports `s / (s + SMELL_HALF)`, which is 0 only when `s` is 0 -- a cell with
-## no `chemocyte`, or one with nothing edible inside its reach at all. Over
-## 1,690 samples of a tier-1 forage the fifth percentile of the level is 0.249,
-## a dozen times clear of this floor, so the band still cannot go dark
-## while the organ has anything to report. That is the whole of what this
-## number and food.gd's SMELL_BEHIND exist to guarantee.
-const TASTE_FLOOR := 0.02
-const TASTE_FADE := 0.02
-## Where the readout saturates. Pinned deliberately below 1.0, and the reason
-## is unchanged: above this the cell is on top of something edible and about to
-## eat it, and a readout still climbing while the mouth is closing is spending
-## range on a decision that has already been made. §2.3.
+## **Much higher than the band's floor, on purpose.** The band was drawn round
+## the whole membrane and was built never to go dark while the organ had anything
+## to report: its floor was 0.02, a dozen times under the fifth percentile of a
+## tier-1 forage's level, 0.249. A glow on one organ says something else -- *food
+## is in front of you* -- and the field is superposed, so the rest of the water
+## always smells a little. Measured on the built code (`tools/drive.gd`, seed 1, a
+## two-copy nose on a forward diagonal, one drifter 140 µm off): the level is
+## 0.60 with the nose on the drifter and 0.41 with it astern. Through the band's
+## old curve those glowed at 0.88 and 0.65, a difference nobody could read on a
+## 20 px organ. From here they glow at 0.83 and 0.19.
+##
+## Thin water smells under this and the nose is dark, which is true: unlit is the
+## organ as it is always drawn, with nothing in front of it. **A starting value**:
+## watch whether a far meal is ever found by the glow, and whether the nose sits
+## dark too long in thin water. The levers are this and [constant TASTE_FULL].
+const GLOW_FROM := 0.30
+## Where the glow saturates, as the band did. Pinned deliberately below 1.0, and
+## the reason is unchanged: above this the cell is on top of something edible and
+## about to eat it, and a readout still climbing while the mouth is closing is
+## spending range on a decision that has already been made. §2.3.
 ##
 ## **0.70 and not 0.45, because the input distribution moved and this number is
 ## a fact about that distribution.** 0.45 was fitted against a level that came
 ## out of `minf(smelt_top + 0.22 * smelt_rest, 1.0)`; the level is now
 ## `s / (s + SMELL_HALF)` over the full superposed sum, which lives a band
 ## higher. Left at 0.45 it would have re-created the exact fault the clamp was
-## removed to cure -- **63.4% of a measured forage pinned at TASTE_PEAK**, one
+## removed to cure -- **63.4% of a measured forage pinned at the top**, one
 ## saturation stacked on another, and the whole top of the range doing nothing.
 ##
 ## **Measured, not moved by eye.** The raw sum at the sample immediately before
@@ -162,39 +178,30 @@ const TASTE_FADE := 0.02
 ## pins **1.9%** rather than 63.4%, and the middle 80% of the water spends
 ## 0.306 to 0.582 of the band instead of 0.441 to pinned.
 const TASTE_FULL := 0.70
-## The shape between the two. Slightly concave, so the bottom of the band --
-## where a forager actually lives -- gets more of the curve than the top.
-##
-## **Re-checked against the new input and kept at 0.8.** At the tenth, fiftieth
-## and ninetieth percentiles of a measured forage the four candidates give:
-##
-##     0.8 -> 0.306 / 0.466 / 0.582      1.0 -> 0.256 / 0.434 / 0.573
-##     1.3 -> 0.197 / 0.390 / 0.559      1.4 -> 0.180 / 0.376 / 0.555
-##
-## Every steeper curve buys its extra separation at the bottom, not the top --
-## and the bottom is the one place §2.3 will not spend. 1.3 was rendered as
-## well as arithmetic: at p10 the ring drops to a thin grey-green outline that
-## reads as *the gene has stopped working* rather than as *there is not much
-## food here*, which is the same failure SMELL_BEHIND 0.22 exists to prevent.
-## 0.8 keeps p10 a lit green band and still separates the three
-## (three-senses.md §7.5.3 has the frames).
-const TASTE_CURVE := 0.8
-## What the drawn ring's dimmest point is worth against its brightest, which is
-## what [method _ring_edge] solves the lobe's `z` for.
-##
-## **This is food.gd's SMELL_BEHIND, drawn.** The ring is the organ's own
-## directivity pattern: the player is looking at the sensitivity curve the
-## simulation is using, so the two numbers are one number in two places. It is
-## copied rather than imported because the membrane is a view and may not
-## preload the field -- the same pairing this file already has between
-## PING_WIDTH_FLOOR and food.gd's copy of it, and between PING_RELEASE and
-## food.gd's PING_MIN_GAP. If they drift, the picture stops being the maths and
-## starts being a decoration.
-const SMELL_RING_FLOOR := 0.22
 ## Dread costs something, which is what stops it being mood: a hunted cell
 ## smells at 40%. It cannot smell its way out of the problem.
 ## docs/design/food-and-predators.md §4.2.
 const TASTE_DREAD_SUPPRESS := 0.6
+
+## **The eyespot glows with the shadow it is under** (three-senses.md §2.7; the
+## owner, 2026-10-15: *"see should act a bit like smell. The organ changing
+## visually to represent the stimulus"*), the way the nose glows with what it
+## smells: dark at [constant SIGHT_GLOW_FROM], full at [constant SIGHT_FULL],
+## along a smoothstep of the shadow's strength.
+##
+## A shadow is one sum with one bearing (food.gd), 1.0 for a body your own size
+## within 180 µm and nothing past 620, so a glow from 0.08 lights for a body your
+## size about 590 µm off and is full by about 310: the edge of the screen's middle
+## third at 16:9, where it is worth turning to see.
+const SIGHT_GLOW_FROM := 0.08
+const SIGHT_FULL := 0.70
+## **Brightest facing the shadow, as the nose is facing food.** A real eyespot is
+## a pigment cup: it shades the receptor on one side, so the cell knows where the
+## light is by turning (Euglena's stigma). What the eyespot glows by is the shadow
+## times this weight: 1.0 with the shadow straight off its arc, and this much with
+## it dead astern of it -- dimmer, never out, because the membrane's lobe still
+## says where it is and an eyespot gone dark would read as *nothing there*.
+const SIGHT_AWAY := 0.35
 
 const WAKE_CAP := 0.95
 const WAKE_HALFWIDTH_DEG := 34.0
@@ -252,7 +259,7 @@ const TOUCH_PEAK := 0.26
 ## on its bearing jitter. Both went with three-senses.md §2 -- there is no width
 ## and no jitter left -- and the owner retired the gene rather than re-aim it at
 ## the nose's floor (§8 row 2). Nothing replaced the constant and nothing should:
-## the floor is [constant SMELL_RING_FLOOR] and it does not vary by tier.
+## the floor is food.gd's SMELL_BEHIND and it does not vary by tier.
 
 ## `ampulla` / ping. One electroreceptive pulse, and a mark on the contour for
 ## every body its echo comes back off.
@@ -407,6 +414,9 @@ const IDLE_LOBE := Vector4(0.0, -1.0, 2.0, 0.0)
 
 ## Lobe slots.
 const LOBE_SELF := 0
+## The nose's ring until 2026-10-14, and **idle since**: the nose glows on the
+## body instead (three-senses.md §2.6). Kept in the shader and the block, so a
+## lobe a later channel needs is already there.
 const LOBE_NUTRIENT := 1
 ## Reserved since Phase 1 and spent by Phase 5 on the `stigma`.
 const LOBE_LIGHT := 2
@@ -419,9 +429,27 @@ const LOBE_BEAM := 3
 ## three phases.
 const LOBE_PING_A := 4
 const LOBE_PING_B := 5
+## **A channel the membrane does not draw**: its organ lights up on the body
+## instead, as cilia.gd's `lit`, and nothing else on screen says it -- the nose
+## (three-senses.md §2.6). A new sense here is drawn by its organ, with no lobe.
+const ON_ORGAN := -1
 ## How many glow lobes the shader has. Written down once, because the block
 ## layout, the colour palette and the idle sweep all count them.
 const LOBES := 6
+## **Each membrane channel's lobe** (docs/design/gene-looks.md §5.1): a sense names
+## its channel (gene.gd's `channel`), and the lobe is the channel's, whichever organ
+## drives it -- so a new sense on a channel here changes nothing on the membrane,
+## and a sense on a channel with no lobe is code: a lobe of its own, the shader's
+## arrays and the replay's block. `touch` rides the bruise's envelope on the self
+## lobe, held at a level; `smell` is [constant ON_ORGAN]. The gene probe fails a
+## sense whose channel is not here.
+const CHANNEL_LOBES := {
+	Catalogue.TOUCH: LOBE_SELF,
+	Catalogue.SMELL: ON_ORGAN,
+	Catalogue.LIGHT: LOBE_LIGHT,
+	Catalogue.BEAM: LOBE_BEAM,
+	Catalogue.PING: LOBE_PING_A,
+}
 
 ## Organ slots in [method organs], in genes-and-cilia.md §4.1's arc order --
 ## which is the order the body is drawn in, the order ties break in, and now the
@@ -430,7 +458,11 @@ const ORGAN_CYTOSTOME := 0
 const ORGAN_CIRRUS := 1
 const ORGAN_FLAGELLUM := 2
 const ORGAN_STIGMA := 3
-const ORGAN_TIER_MAX := 3
+## **The most copies an organ is told at**: a gene's own ceiling (gene.gd's TIER_MAX),
+## read rather than written out. The bus's tables by tier -- [constant
+## INGEST_DECAY_BY_TIER], [constant THRUST_PEAK_BY_TIER], [constant
+## PING_HOLLOW_BY_TIER] -- have an entry for each copy up to it.
+const ORGAN_TIER_MAX := Catalogue.Gene.TIER_MAX
 
 # --- Death ------------------------------------------------------------------
 # docs/design/food-and-predators.md §6. Predation slams the membrane shut;
@@ -653,7 +685,8 @@ var _pushed_hollow := -1.0
 var _pushed_self := Vector3(-1.0, -1.0, -1.0)
 ## **The colour of the self lobe**: teal, and a dose's strain hue while that
 ## dose's bruise is the loudest thing on your skin (dna-slots-ux.md §5.1). It
-## rides in the recorded block, so the felt pane bruises lime where the run did.
+## rides in the recorded block, so the felt pane bruises where the run did, in
+## the hue the run bruised in.
 var _self_hue := SELF_COLOR
 ## The newest bruise's tint, or zero for teal: what the self lobe turns while
 ## the bruise leads the thrust and the shear.
@@ -681,15 +714,6 @@ var _shear := 0.0
 var _shear_bearing := 0.0
 
 var _taste_c := 0.0
-## The nose's own arc on this body, posted with the level. It moves only when
-## the player moves the gene, and all it decides is which side of the ring is
-## the bright one.
-var _taste_bearing := 0.0
-## The taste ring's `z`, solved once from [constant SMELL_RING_FLOOR]. A member
-## rather than a constant because a `const` cannot call a function, and solved
-## rather than written down so the ring and the floor cannot drift apart by
-## somebody editing one of two numbers.
-var _ring_z := _ring_edge(SMELL_RING_FLOOR)
 
 ## **This node's own generator, and it must stay its own.** Every other random
 ## draw in the project comes off the global stream, which is what makes a run
@@ -761,7 +785,6 @@ var _ingest_hue := NUTRIENT_COLOR
 
 # Last values announced on [signal sensation], for the gate above.
 var _said_taste := -1.0
-var _said_taste_bearing := 0.0
 var _said_shear := 0.0
 var _said_dread := 0.0
 var _said_light := -1.0
@@ -845,6 +868,39 @@ func _push_hollow(hollow: float) -> void:
 
 static func _rgba(rgb: Vector3, a: float) -> Vector4:
 	return Vector4(rgb.x, rgb.y, rgb.z, a)
+
+
+## **The hue of the organ that drives [param channel]**, as the shader takes it: the
+## first live organ on it. A channel nothing drives -- every organ on it retired --
+## never lights, and its slot keeps the self colour.
+static func _hue_on(channel: StringName) -> Vector3:
+	return _rgb_of(Catalogue.first_on(channel), SELF_COLOR)
+
+
+## [param key]'s hue -- its family's shade -- as the shader takes it, [param otherwise]
+## for a key with none.
+static func _rgb_of(key: StringName, otherwise: Vector3) -> Vector3:
+	var tone := Catalogue.hue_of(key)
+	if tone.a <= 0.0:
+		return otherwise
+	return Vector3(tone.r, tone.g, tone.b)
+
+
+## [member STRAIN_COLORS]: each kind of load in the hue of the first live form that
+## delivers it, and in the self colour while none does.
+static func _strain_colors() -> Array[Vector3]:
+	var out: Array[Vector3] = []
+	for _kind in Doses.Kind.size():
+		out.append(SELF_COLOR)
+	var found := {}
+	for key: StringName in Catalogue.live():
+		var kind := Doses.kind_of(Catalogue.dose_of(key))
+		if kind < 0 or kind >= out.size() or found.has(kind):
+			continue
+		found[kind] = true
+		out[kind] = _rgb_of(key, out[kind])
+	out.make_read_only()
+	return out
 
 
 ## The ping's arc pool, at construction.
@@ -1052,18 +1108,18 @@ func sense_organs(ocellus: int, chemocyte: int = 0, ampulla: int = 0) -> void:
 # Sensations. Everything gameplay is allowed to say to the membrane.
 # ---------------------------------------------------------------------------
 
-## Chemistry soaking through the band. Continuous: post it every frame with the
-## current level, 0 for "nothing out there".
+## Chemistry reaching the nose. Continuous: post it every frame with the current
+## level, 0 for "nothing out there". **The membrane draws none of it**
+## (three-senses.md §2.6): the nose glows on the body, by [method smell_glow].
 ##
-## **[param bearing] is not a direction to food.** It is the arc the nose is
-## worn on, and it is the same number every frame of a run unless the player
-## moves the gene: all it does here is decide which side of the ring is the
-## bright one. What the sense actually says is [param concentration], and
-## three-senses.md §2 is the whole argument for why that is the better sense.
+## What the sense says is [param concentration] alone, and it is already
+## weighted about the arc the nose is worn on, by the field: it is strongest
+## when that arc points at food. three-senses.md §2 is the whole argument for
+## why a level is the better sense.
 ##
 ## **A cell with no `chemocyte` smells nothing**, enforced here as well as at
 ## the call site, exactly the way [method light] is gated on the `stigma`. This
-## was innate for five phases and is not any more: the green band is the one
+## was innate for five phases and is not any more: the glowing nose is the one
 ## signal that says *food is near*, and a sense that is handed out for free is a
 ## sense that can never be a decision.
 ##
@@ -1072,17 +1128,39 @@ func sense_organs(ocellus: int, chemocyte: int = 0, ampulla: int = 0) -> void:
 ## dread's suppression and the level's own flatness in evenly-fed water. What
 ## the tier buys is reach, and reach is applied before this: food.gd weights
 ## only what is inside the nose.
-func taste(bearing: float, concentration: float) -> void:
+func taste(concentration: float) -> void:
 	var smelt := _senses[SENSE_CHEMOCYTE] > 0
-	_taste_bearing = bearing if smelt else 0.0
 	_taste_c = clampf(concentration, 0.0, 1.0) if smelt else 0.0
 	# Continuous signals are posted every frame; only tell subscribers when
 	# something actually moved, or this allocates sixty dictionaries a second.
-	if absf(_taste_c - _said_taste) > POST_EPSILON \
-			or absf(angle_difference(_taste_bearing, _said_taste_bearing)) > POST_ANGLE_EPSILON:
+	if absf(_taste_c - _said_taste) > POST_EPSILON:
 		_said_taste = _taste_c
-		_said_taste_bearing = _taste_bearing
-		sensation.emit(&"taste", {"bearing": _taste_bearing, "strength": _taste_c})
+		sensation.emit(&"taste", {"strength": _taste_c})
+
+
+## **How brightly the nose glows**, 0..1 (three-senses.md §2.6): what this cell
+## smells, from dark at [constant GLOW_FROM] to full at [constant TASTE_FULL] along
+## a smoothstep, and dimmed by dread, since a hunted cell smells at 40%. 0 for a
+## cell with no `chemocyte`. The level is already weighted about the nose's arc,
+## so this is brightest with the nose on food. The run reads it once a frame and
+## hands it to both views as the nose's glow; nothing on the membrane draws it.
+func smell_glow() -> float:
+	return smoothstep(GLOW_FROM, TASTE_FULL, _taste_c) \
+		* (1.0 - TASTE_DREAD_SUPPRESS * _dread)
+
+
+## **How brightly the eyespot glows**, 0..1 (three-senses.md §2.7): the shadow it
+## is under, weighted by how squarely the eyespot, worn at [param facing] (a body
+## bearing), faces it -- [constant SIGHT_AWAY] dead astern of it, 1.0 straight off
+## it -- from dark at [constant SIGHT_GLOW_FROM] to full at [constant SIGHT_FULL].
+## Dread does not dim it, as it does not muffle [method light]: light is another
+## organ. 0 for a cell with no `stigma`, which [method light] already enforces.
+func sight_glow(facing: float) -> float:
+	if _light <= 0.0:
+		return 0.0
+	var squarely := 0.5 + 0.5 * cos(angle_difference(_light_bearing, facing))
+	return smoothstep(SIGHT_GLOW_FROM, SIGHT_FULL,
+		_light * lerpf(SIGHT_AWAY, 1.0, squarely))
 
 
 ## A pressure wave: the contour dents physically inward at one bearing.
@@ -1373,7 +1451,7 @@ static func death_shut_at(loud: bool) -> float:
 ##
 ## [param tint] lights the close in a hue other than teal: **a death by a dose
 ## is the quiet close, lit in its strain's hue** (dna-slots-ux.md §6) -- a white
-## slam at a bearing, a teal sink, a lime close. Zero is teal.
+## slam at a bearing, a teal sink, a close in the toxin's orange. Zero is teal.
 ##
 ## **Either one closes from where the membrane had fallen** ([member _faint]),
 ## not from where it would have been fed: a starving cell's aperture is already
@@ -1511,7 +1589,6 @@ func _end_collapse() -> void:
 	_faint_target = 0.0
 	_said_faint = 0.0
 	_taste_c = 0.0
-	_taste_bearing = 0.0
 	_light = 0.0
 	_light_bearing = 0.0
 	_beam = 0.0
@@ -1624,31 +1701,16 @@ func _compose_lobes() -> void:
 		if _bruise_tint != Vector3.ZERO:
 			hue = _bruise_tint
 	_glow_lobes[LOBE_SELF] = _lobe(bearing, halfwidth, level)
-	# The lobe's colour goes with whichever sensation is leading it: a lime
+	# The lobe's colour goes with whichever sensation is leading it: a dose's
 	# bruise turns teal again the moment a thrust outshines what is left of it.
 	if hue != _self_hue:
 		_self_hue = hue
 		_push_colors()
 
-	# The nose. A **ring**, not a lobe: an intensity with no bearing in it needs
-	# a shape the player cannot mistake for a direction, and this one is welded
-	# to the body -- it does not move when the water does. The one misreading it
-	# permits is not wrong: with the nose in slot 0 the top brightens when food
-	# is ahead, and *turn until the top is bright* is still the correct play.
-	if _taste_c > TASTE_FLOOR:
-		# The whole of TASTE_PEAK is spent over the levels a forager actually
-		# sees, because this is the only channel left. Still fades on from the
-		# floor rather than popping, and still suppressed rather than deleted by
-		# dread: a hunted cell can smell, badly.
-		var intensity := pow(clampf(
-			(_taste_c - TASTE_FLOOR) / (TASTE_FULL - TASTE_FLOOR), 0.0, 1.0),
-			TASTE_CURVE) * TASTE_PEAK \
-			* smoothstep(TASTE_FLOOR, TASTE_FLOOR + TASTE_FADE, _taste_c) \
-			* (1.0 - TASTE_DREAD_SUPPRESS * _dread)
-		_glow_lobes[LOBE_NUTRIENT] = Vector4(sin(_taste_bearing),
-			-cos(_taste_bearing), _ring_z, intensity)
-	else:
-		_glow_lobes[LOBE_NUTRIENT] = IDLE_LOBE
+	# **The nose is not drawn here** (three-senses.md §2.6): it glows on the body,
+	# by smell_glow(). Its lobe stays in the shader, idle, so the uniform and
+	# every block keep their shape.
+	_glow_lobes[LOBE_NUTRIENT] = IDLE_LOBE
 
 	# The stigma. No low-pass on the bearing and no jitter added to it: the
 	# whole of what this gene sells is that direction can be certain. And no
@@ -1699,25 +1761,6 @@ func _compose_lobes() -> void:
 	# was retired. It stays idle rather than leaving the shader, so the uniform
 	# and every lobe block keep their shape.
 	_press_lobes[1] = IDLE_LOBE
-
-
-## The lobe `z` for which the shader's `smoothstep(z, 1.0, dot)` equals [param
-## ratio] at `dot = -1` -- that is, the `z` that makes the drawn ring's dimmest
-## point sit at the same fraction of its brightest that the simulation's own
-## floor sits at. Newton on the smoothstep polynomial `3t^2 - 2t^3`, then
-## `z = (t + 1) / (t - 1)` out of `t = (-1 - z) / (1 - z)`.
-##
-## 0.22 solves to about -1.87. Static and called once, at construction.
-static func _ring_edge(ratio: float) -> float:
-	var t := clampf(ratio, 0.001, 0.999)
-	var x := 0.5
-	for _i in 12:
-		var f := 3.0 * x * x - 2.0 * x * x * x - t
-		var d := 6.0 * x - 6.0 * x * x
-		if absf(d) < 1e-5:
-			break
-		x = clampf(x - f / d, 0.001, 0.999)
-	return (x + 1.0) / (x - 1.0)
 
 
 ## One ping arc as a lobe, or an idle one for a slot with nothing in it.

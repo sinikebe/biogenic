@@ -33,6 +33,15 @@ extends RefCounted
 ## game/net/ -- see the note at the top of signal_bus.gd.
 
 const CellBody := preload("res://game/normal/cell.gd")
+## **The genes, and the stats they buy** (docs/design/gene-catalogue.md §11.1):
+## the gift's senses are the catalogue's `gift` tag, and who may call is whoever
+## provides `ping_range`. Read, never copied: a host judges by its own catalogue.
+## Neither preloads anything of game/net, so there is no cycle.
+const Catalogue := preload("res://game/genes/catalogue.gd")
+const Stats := preload("res://game/genes/stats.gd")
+## What a guest wears in its genes' own slots, and what is wrong with it
+## (docs/design/gene-sockets.md §6). It preloads only the catalogue.
+const Riders := preload("res://game/genes/riders.gd")
 const FoodField := preload("res://game/normal/food.gd")
 ## The rim's arithmetic (ocean.md §10.5): a guest's body is held inside the
 ## host's drop as everything in it is.
@@ -69,6 +78,13 @@ const WEIGHT_DIED := 2.0
 ## a cheat that lies on every one of twenty state frames a second is struck
 ## twice a second, not twenty times.
 const FOUL_EVERY := 0.5
+## **The ledger the weights are counted against** (A.4): a guest is cut at ten
+## points, and forgets one a second. `net_session.gd`'s ledger keeps every strike
+## by these -- its own `STRIKE_CUT` and `STRIKE_DECAY` are these two -- and since
+## they turn the weights above into a cut, a host judges a guest by them as by the
+## weights: they are rules, in the text the handshake carries (game/net/rules.gd).
+const STRIKE_CUT := 10.0
+const STRIKE_DECAY := 1.0
 
 # --- Movement: the path the guest claims ---------------------------------------
 ## **1,100 units a second, 1.5 s of it held, and 100 of slack.** Every speed-up
@@ -156,10 +172,6 @@ const RADIUS_EPSILON := 0.01
 ## one each time a meal widens the layout.
 const PERSON_RATE := 2.0
 const PERSON_BANK := 6.0
-## **The four senses the free gift is drawn from**, normal_mode.gd's
-## FIRST_SENSES, written out for the reason SISTER_DISTANCE is. The one change a
-## worn body ever makes: one of these, at tier 1, once.
-const FIRST_SENSES: Array[StringName] = [&"ocellus", &"ampulla", &"chemocyte", &"stigma"]
 ## **After a death, a guest describes its dead body once more** -- every
 ## protocol-4 build does it, +104 to +108: `pond.gd`'s `_watch_worn` compares
 ## the dead cell's genome with the born one it has just announced and sends the
@@ -311,6 +323,14 @@ var _meals := 0
 var _meals_at_out := 0
 ## The tiers the host applied, and the ones the arrival said.
 var worn: Dictionary = {}
+## **The slots [member worn] is worn in**, as the guest last said them and the host
+## applied them: where a mechanic with a place acts from (stats.gd's `SEATED`). Its
+## call's reach and period are its first radar's in them, as its own run reads them
+## (stats.gd's `seated`) -- never the best of two.
+var worn_order: Array = []
+## **What [member worn] wears in its genes' own slots** (gene-sockets.md §6), as the
+## guest said them at its new body: fixed for a life.
+var worn_riders: Dictionary = {}
 var _arrival_worn: Dictionary = {}
 var _gift_used := false
 var _stale_until := -INF
@@ -355,7 +375,7 @@ func _init(now: float) -> void:
 	turn = Budget.new(TURN_RATE, TURN_HOLD, TURN_SLACK, now)
 	_follow = Budget.new(MOVE_RATE, MOVE_HOLD, MOVE_SLACK, now)
 	_swing = Budget.new(TURN_RATE, TURN_HOLD, TURN_SLACK, now)
-	shouts = Budget.new(_shout_rate(0), SHOUT_BANK, 0.0, now)
+	shouts = Budget.new(_shout_rate({}), SHOUT_BANK, 0.0, now)
 	enters = Budget.new(1.0 / ENTER_EVERY, ENTER_BANK, 0.0, now)
 	bodies = Budget.new(PERSON_RATE, PERSON_BANK, 0.0, now)
 	_grant = [true, 0.0, FoodField.FIRST_DELAY, now]
@@ -539,10 +559,11 @@ func arrive(now: float, at: Vector2, radius: float) -> Array:
 ## A new body is legal with no body in the water -- the PERSON that comes just
 ## before an ENTER -- or with one that has not arrived, or once after a SISTER,
 ## which is a birth. Otherwise the worn tiers must be the ones the host already
-## has, but for the gift: one of [constant FIRST_SENSES] at tier 1, once a body.
+## has, but for the gift: one of the gift's senses -- the genes tagged `gift`, the
+## one change a worn body ever makes -- at tier 1, once a body.
 ## Whatever the tiers, every slot must name a gene it wears, once.
 func judge_person(now: float, new_body: bool, tiers: Dictionary, order: Array,
-		present: bool) -> Array:
+		present: bool, riders: Dictionary = {}) -> Array:
 	judged["person"] = int(judged["person"]) + 1
 	if bodies.take(1.0, now) < 1.0:
 		_foul(BODY, WEIGHT_BODY_RATE, "body: more than %d said at once, then %d a second"
@@ -552,6 +573,12 @@ func judge_person(now: float, new_body: bool, tiers: Dictionary, order: Array,
 		_foul(BODY, WEIGHT_BODY, "body: its slots name a gene it does not wear, or one"
 			+ " twice", now)
 		return []
+	# **Its genes' own slots, as its slots are** (gene-sockets.md §6): each host worn,
+	# each slot one the host has, each rider one the slot takes, at 1 to 3 copies.
+	var problem := Riders.problem(riders, tiers)
+	if not problem.is_empty():
+		_foul(BODY, WEIGHT_BODY, "body: " + problem, now)
+		return []
 	var fouled := false
 	if new_body:
 		var birth := _birth_open and now <= _birth_until
@@ -560,6 +587,8 @@ func judge_person(now: float, new_body: bool, tiers: Dictionary, order: Array,
 			_reach_before = _reach()
 			_reach_before_until = now + SHOUT_PAST
 			worn = tiers.duplicate()
+			worn_order = order.duplicate()
+			worn_riders = Riders.copy(riders)
 			_arrival_worn = worn.duplicate()
 			_gift_used = false
 			_new_shout_rate(now)
@@ -575,7 +604,15 @@ func judge_person(now: float, new_body: bool, tiers: Dictionary, order: Array,
 		_foul(BODY, WEIGHT_BODY, "body: a new one out of turn -- taken as the one it"
 			+ " has", now)
 		fouled = true
+	# **Its riders are fixed for a life**, as what it wears is: only a new body
+	# changes them, and no gift is one.
+	if not Riders.same(riders, worn_riders):
+		if not fouled:
+			_foul(BODY, WEIGHT_BODY, "body: its genes' own slots changed -- kept the old"
+				+ " ones", now)
+		return []
 	if tiers == worn:
+		_reseat(now, order)
 		if _stale(now) and tiers == _arrival_worn:
 			_stale_until = -INF
 		return [false]
@@ -583,6 +620,7 @@ func judge_person(now: float, new_body: bool, tiers: Dictionary, order: Array,
 		# **The born body, said again after the stale one**: it is the body. Any
 		# gift the stale one looked like was not one.
 		worn = _arrival_worn.duplicate()
+		worn_order = order.duplicate()
 		_gift_used = false
 		_stale_until = -INF
 		_new_shout_rate(now)
@@ -590,6 +628,7 @@ func judge_person(now: float, new_body: bool, tiers: Dictionary, order: Array,
 	if not _gift_used and _is_gift(worn, tiers):
 		var had := _reach()
 		worn = tiers.duplicate()
+		worn_order = order.duplicate()
 		_gift_used = true
 		_new_shout_rate(now)
 		if had <= 0.0 and _reach() > 0.0:
@@ -740,7 +779,7 @@ func judge_shout(now: float, at: Vector2, radius: float, reach: float,
 	# water or out of it (#102). A listener holds a call's mark for as long as
 	# its caller's size says, so a call from a guest with no body here is held
 	# to the numbers no honest call passes.
-	var reach_max: float = CellBody.PING_RANGE_BY_TIER[CellBody.PING_RANGE_BY_TIER.size() - 1]
+	var reach_max := Stats.top(&"ping_range")
 	if radius > CellBody.DIVIDE_RADIUS + RADIUS_SLACK or reach > reach_max + RADIUS_SLACK:
 		_foul(SHOUT, WEIGHT_SHOUT, "shout: at r%.2f reaching %.0f, where no body is over"
 			% [radius, reach] + " r%.0f and no organ calls past %.0f" % [
@@ -972,12 +1011,17 @@ static func _is_gift(before: Dictionary, after: Dictionary) -> bool:
 			added = gene
 		else:
 			return false
-	return added != null and FIRST_SENSES.has(StringName(added)) \
+	return added != null and Catalogue.has_tag(StringName(added), Catalogue.GIFT) \
 		and int(after[added]) == 1
 
 
 ## Every slot names a gene the body wears, and none twice. A worn gene may have
 ## no slot: a gift placed over a slot another organ is still worn in.
+##
+## **It counts no slot.** How long an order may be is the body plan's
+## (docs/design/gene-catalogue.md §10.2), and the wire bounds it before this reads
+## it -- `Wire.ORDER_MAX`, the plan's outside slots -- so a plan with more slots or
+## fewer is judged here as today's is.
 static func _order_fits(tiers: Dictionary, order: Array) -> bool:
 	var seen := {}
 	for gene: Variant in order:
@@ -990,22 +1034,49 @@ static func _order_fits(tiers: Dictionary, order: Array) -> bool:
 	return true
 
 
-## How far what the body wears calls: 0 with no `ampulla`.
+## **How far what the body wears calls**, from the radar it calls with -- the first
+## in its slots, as its own run reads it (stats.gd's `seated`): 0 with no organ that
+## calls.
 func _reach() -> float:
-	return CellBody.PING_RANGE_BY_TIER[clampi(int(worn.get(&"ampulla", 0)), 0,
-		CellBody.PING_RANGE_BY_TIER.size() - 1)]
+	return Stats.seated(worn_order, worn, &"ping_range")
 
 
-## One call each ping period less a second, for the worn organ -- the fastest,
-## tier 1's, when there is none to go by.
-static func _shout_rate(tier: int) -> float:
-	var at := clampi(tier, 1, CellBody.PING_PERIOD_BY_TIER.size() - 1)
-	return 1.0 / maxf(CellBody.PING_PERIOD_BY_TIER[at] - SHOUT_EARLY, 1.0)
+## **The same tiers in other slots**, [param order]: the PERSON a guest says when it
+## moves an organ, which the host applies. Where that moves the radar it calls with
+## (stats.gd's `SEATED`), its reach and its period move with it: the reach it had
+## stays good for [constant SHOUT_PAST], for a call already on its way, as across a
+## new body, and its calls are counted at the new period from now.
+func _reseat(now: float, order: Array) -> void:
+	if order == worn_order:
+		return
+	var calling := Stats.organ(worn_order, worn, &"ping_range")
+	var had := _reach()
+	worn_order = order.duplicate()
+	if Stats.organ(worn_order, worn, &"ping_range") == calling:
+		return
+	_reach_before = had
+	_reach_before_until = now + SHOUT_PAST
+	_new_shout_rate(now)
+
+
+## **One call each ping period less a second**: the period [param tiers] worn in
+## [param order] calls at, read as the guest's own run reads it (`cell.gd`'s
+## `ping_period`: its first radar's in slot order, stats.gd's `seated`) -- or, when
+## it wears no organ that calls, the fastest the first organ that calls makes, its
+## tier 1's. **Never from an empty table**: with no organ that calls at all, a call a
+## second, the most this ever allows.
+static func _shout_rate(tiers: Dictionary, order: Array = []) -> float:
+	var period := Stats.seated(order, tiers, &"ping_period")
+	if period <= 0.0:
+		period = Stats.value(Catalogue.first_provider(&"ping_range"), &"ping_period", 1)
+	if period <= 0.0:
+		return 1.0
+	return 1.0 / maxf(period - SHOUT_EARLY, 1.0)
 
 
 func _new_shout_rate(now: float) -> void:
 	shouts.refill(now)
-	shouts.rate = _shout_rate(int(worn.get(&"ampulla", 0)))
+	shouts.rate = _shout_rate(worn, worn_order)
 
 
 ## A new body, an arrival or an organ gained zeroes the organ's clock, and it

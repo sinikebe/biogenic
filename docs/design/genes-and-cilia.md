@@ -948,6 +948,12 @@ tier 1 against tier 3 is unmistakable in every arc.
 
 ### 4.4 Hues
 
+> **Superseded by `gene-looks.md`** (genes as data, phase 6, 2026-10-05): a gene's
+> colour is its family's -- eating, moving, sensing, defending, metabolism, each a
+> band of three measured shades -- and its organ is told by a kind's shape, never
+> by its own hue or a stroke count. The hue rule below and `EARNED_COUNT` are gone;
+> the shape rule at the end of this section is the one that carried over.
+
 | gene | `Color(r, g, b, a)` | wheel |
 | --- | --- | --- |
 | **`cytostome`** *eat* | `Color(0.62, 1.00, 0.38, 1)` | 95° |

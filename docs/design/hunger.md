@@ -194,7 +194,11 @@ frame.
 
 ## 3. The thresholds, and why
 
-- **Half a tank (`HUNGRY_FROM` 0.5).** At the usual pace that is 20 s from
+- **Half a tank (`HUNGRY_FROM` 0.5)**, and **a quarter left (0.75) since the tank
+  doubled** (energy.md §9, 2026-10-15). Twenty seconds from death is the reason,
+  so the share moved with the tank: at half of the doubled tank the beat would
+  race for thirty seconds before a death. What follows is the reasoning, made on
+  the thirty-six-second tank. At the usual pace that is 20 s from
   death. That is a good forager's gap between meals (median 12.5 s, energy.md
   §7.3), with margin to spare.
   - It is late enough that a forager who eats on time is not warned all the
@@ -349,6 +353,12 @@ Change the pose for each frame:
 - **On the phone:** a never-eating run, outdoors.
 
 ## 8. Later steps
+
+> **Steps 2 and 3 are built** (sound-and-touch.md, 2026-10-16, binary 8). At the
+> owner's word they are on every beat rather than only in the last chance, and very
+> light: a soft lub-dub, and two ticks in the hand while the cell is in the water.
+> Both switches are on the settings sheet, on by default. The racing beat is what
+> makes them say hunger.
 
 - **Step 2, haptics.** This would be the real fix for a player whose eyes are on
   the food: a heartbeat felt in the hand during the last chance.

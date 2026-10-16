@@ -39,6 +39,8 @@ extends CanvasLayer
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
 const CellBody := preload("res://game/normal/cell.gd")
+const Stats := preload("res://game/genes/stats.gd")
+const Catalogue := preload("res://game/genes/catalogue.gd")
 const MotesField := preload("res://game/normal/motes.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
@@ -113,16 +115,16 @@ const RING_ARC_MIN := 0.22
 const RING_ARC_MAX := 0.95
 const RING_STEPS := 64
 
-# --- The wave (`ampulla`) ---------------------------------------------------
-## Points on each half of the wavefront, matching `returns.gd`'s `WAVE_STEPS`:
-## the two views draw one picture at two scales and the segment count is part
-## of the picture.
-const PING_STEPS := Cilia.WAVE_STEPS
-## Half the angle between two of those points, taken off both ends of the far
-## half so the two arcs do not share a vertex with the near one. A vertex drawn
-## by two draw calls composites twice; measured in point of view, the ring's
-## 257 and 150 summed sRGB above base met in a 407 bead at each seam.
-const PING_SEAM := Cilia.WAVE_SEAM
+# --- The ping (`ampulla`) ---------------------------------------------------
+## **What the ping placed** (ping-as-outline.md §13), in canvas pixels: a point
+## the size of a sweep's held hit and as bright, since it is the same kind of
+## claim; a thin outline.
+const ECHO_FIX_HALO := 9.0
+const ECHO_FIX_HALO_ALPHA := 0.16
+const ECHO_FIX_CORE := 3.4
+const ECHO_FIX_CORE_ALPHA := 0.88
+const ECHO_OUTLINE_WIDTH := 2.4
+const ECHO_OUTLINE_ALPHA := 0.80
 
 # --- The other player -------------------------------------------------------
 ## **How far past the newest frame the friend is carried: a fifth of a second,
@@ -295,6 +297,11 @@ var _fr_last: Dictionary = {}
 ## After a departure the field has to be seen without them once before a body
 ## there is an arrival: the body and the reason take different routes.
 var _fr_need_absence := false
+## **How long since the friend was last heard, as a recording says it**
+## (shared-pond.md §5, Phase 3): what [method _presence] reads on the replay's
+## screen, which draws the friend out of a recording and has no session to ask.
+## Written every frame by the replay; never read while a session is handed over.
+var friend_quiet := 0.0
 ## Frames this view has run since it came on: a friend there on the first one
 ## is in the first frame, not arriving.
 var _fr_frames := 0
@@ -338,8 +345,8 @@ const IMPACT_TINT := Color(0.90, 1.0, 0.97)
 const MATTER_TINT := Color(0.46, 0.72, 0.62)
 ## The water's own structure, and the cull boundary drawn in it.
 const WATER_TINT := Color(0.10, 0.62, 0.52)
-## Food, in exactly the green the taste lobe uses, so "the green on my rim" and
-## "the green thing out there" are visibly one substance.
+## Food, in exactly the green the nose's band was drawn in until it moved onto
+## the nose itself (three-senses.md §2.6): the colour of the substance.
 const FOOD_TINT := Color(0.35, 0.88, 0.42)
 ## The colour of the thing that can eat you. Full vision only, never on the
 ## membrane -- which is the whole point of it. It no longer belongs to a species:
@@ -392,6 +399,20 @@ var slack := 0.0
 ## `dose` (dna-slots-ux.md §4, §5). Every other body's loads are read off the
 ## field, because every body's are drawn. Empty carries nothing.
 var dose := {}
+## **Which of the player's organs glow with what they sense**, written once a
+## frame by the run; same contract as soma.gd's, and cilia.gd's `lit`
+## (three-senses.md §2.6): the nose, brighter the more food it smells. Drawn on
+## the player's own cell, at [constant FADE_LIT] of the body's fade. Empty lights
+## nothing.
+var lit := {}
+## **The glow's share of the body's fade.** This world is drawn additively
+## (vision.tscn's material), so an organ painted again over itself at the body's
+## full fade sums its violet to white and the glow stops saying which organ it
+## is. At this share it is the same organ, lighter, inside a haze of its own
+## colour, and dim against lit still reads on a phone-shaped frame, where the
+## world is zoomed out and the organ is a few pixels. Judged off renders at both
+## shapes.
+const FADE_LIT := 0.65
 
 ## How far apart the two of them are seated, in world units. Rendered at 1:1
 ## with 160 between them, two r28 bodies read -- so no camera zoom, which would
@@ -457,6 +478,9 @@ var _ghosts: Array[Array] = []
 var _meals: Array[Array] = []
 ## [[world position, world direction, strength, age], ...] -- reported wakes.
 var _wakes: Array[Array] = []
+## [[mark, age], ...] -- what the ping placed as each echo landed
+## (ping-as-outline.md §13), each held for its `life`, one call.
+var _echo_marks: Array[Array] = []
 
 
 func _ready() -> void:
@@ -508,9 +532,11 @@ func bind(cell: CellBody, motes: MotesField, food: FoodField,
 ## `net_session.gd` has a static `current`, so this file could find one for
 ## itself -- and then the two-pane replay screen, which instances a second copy
 ## of this view and binds it to a recording, would draw a live friend swimming
-## through last week's water. A recording has no peer in it. So the handle
-## arrives from the one node that knows whether what it is showing is happening
-## now, and `panes.gd` simply never calls this.
+## through last week's water. So the handle arrives from the one node that knows
+## whether what it is showing is happening now, and `panes.gd` simply never
+## calls this. **A recording's friend is a body in its field instead**
+## (shared-pond.md §5, Phase 3), drawn as this view draws every friend in a pond,
+## and their silence arrives as a number, [member friend_quiet].
 ##
 ## The second count is the direction of the arrow. Nothing here writes to the
 ## session and nothing here can: it is read three times a frame for a track, a
@@ -568,6 +594,7 @@ func forget() -> void:
 	_ghosts.clear()
 	_meals.clear()
 	_wakes.clear()
+	_echo_marks.clear()
 
 
 func is_active() -> bool:
@@ -636,6 +663,7 @@ func _process(delta: float) -> void:
 	_age(_ghosts, 1, delta, GHOST_LIFE)
 	_age(_meals, 2, delta, GHOST_LIFE)
 	_age(_wakes, 3, delta, WAKE_LIFE)
+	_age_echo_marks(delta)
 	_catch_beam_hits(delta)
 
 	if _water.size.x > 1.0:
@@ -743,8 +771,7 @@ func _step_peer(delta: float) -> void:
 	# **How far they could have got since, at the fastest a cell swims.** Read
 	# off the ladder rather than written down, so a tuning pass on the drive
 	# cannot leave a circle here claiming a speed the game no longer has.
-	var ladder := CellBody.IMPULSE_SPEED_BY_TIER
-	var top: float = ladder[ladder.size() - 1]
+	var top := Stats.top(&"impulse_speed")
 	_peer = {
 		"at": at,
 		"heading": wrapf(float(body[1]) + _peer_twist, -PI, PI),
@@ -927,6 +954,7 @@ func _step_friend(delta: float) -> void:
 		"double": smoothstep(CellBody.DIVIDE_WARN_RADIUS, CellBody.DIVIDE_RADIUS, drawn),
 		"tiers": pb.genome,
 		"order": pb.order,
+		"riders": pb.riders,
 		"gape": _food_node.gape_at(FoodField.PERSON_SLOT),
 		"wound": float(pb.wound),
 		"felt": _food_node.felt_at(FoodField.PERSON_SLOT),
@@ -939,11 +967,14 @@ func _step_friend(delta: float) -> void:
 
 ## **Presence** (UX §0.2): #50's confidence curve on the silence, squared, down
 ## to [constant PEER_FLOOR] -- for the halo, the trail and the edge mark, never
-## the body.
+## the body. The silence is the session's, or, on the replay's screen, which has
+## none, the one the recording kept ([member friend_quiet]).
 func _presence() -> float:
-	if _session == null or not is_instance_valid(_session):
+	var quiet := friend_quiet
+	if _session != null and is_instance_valid(_session):
+		quiet = float(_session.quiet_for())
+	elif quiet <= PEER_FRESH:
 		return 1.0
-	var quiet := float(_session.quiet_for())
 	var doubt := maxf(quiet - PEER_FRESH, 0.0)
 	var slip := 1.0 - clampf(doubt / maxf(PEER_LOST - PEER_FRESH, 0.001), 0.0, 1.0)
 	return PEER_FLOOR + (1.0 - PEER_FLOOR) * slip * slip
@@ -1139,7 +1170,7 @@ func _on_eaten(nutrition: float, gene: StringName, at: Vector2) -> void:
 	# smallest drifter swallowed by the largest cell. Adding a fourth argument
 	# to a signal three files forward it would cost more than a pixel is worth.
 	var r := clampf(nutrition * _cell.radius,
-		FoodField.DRIFTER_MIN, FoodField.ARRIVAL_RADIUS_MAX)
+		FoodField.DRIFTER_MIN, CellBody.DIVIDE_RADIUS)
 	_meals.append([at, r, 0.0, Cilia.hue(gene) if gene != &"" else FOOD_TINT])
 
 
@@ -1157,6 +1188,25 @@ func mark_struck(at: Vector2) -> void:
 
 func mark_meal(nutrition: float, gene: StringName, at: Vector2) -> void:
 	_on_eaten(nutrition, gene, at)
+
+
+## **What the ping placed as an echo landed** (ping-as-outline.md §13), from the
+## run as it happens and from the replay as it was recorded: a place at two
+## copies, the side of a body the call reached at three. Held for the mark's own
+## `life`, one call, fading.
+func mark_echo(mark: Dictionary) -> void:
+	if not _active:
+		return
+	_echo_marks.append([mark, 0.0])
+
+
+## Each placed mark aged, and let go at the end of its own life.
+func _age_echo_marks(delta: float) -> void:
+	for i in range(_echo_marks.size() - 1, -1, -1):
+		var held: Array = _echo_marks[i]
+		held[1] = float(held[1]) + delta
+		if float(held[1]) >= float((held[0] as Dictionary).get("life", 0.0)):
+			_echo_marks.remove_at(i)
 
 
 ## A body-relative bearing turned back into a world direction. The one place
@@ -1311,8 +1361,7 @@ func _draw_hits(a: float) -> void:
 ## body only when that far from it is still off the frame.
 ##
 ## Measured off the drawing rather than chosen. The widest thing a body draws
-## is its scent haze, a [constant HAZE_OUTER] `3 r` bloom whose texture corners
-## are transparent -- `3.05 r` counting the filter's last texel. Everything
+## was its scent haze, a `3 r` bloom, gone since 2026-10-14; everything
 ## cilia.gd draws lies inside `mouth_reach` at the widest gape in the game,
 ## `1.24 r + 1.3 x 1.40 r = 3.06 r`; searched over every tier-3 organ, clock
 ## and steer, the lip tips reach `1.87 r`, the flagellum `2.18 r` and the oral
@@ -1327,11 +1376,6 @@ const CULL_MARGIN := 32.0
 ## drawing paths would drift, and the thing the player reads off a body would
 ## stop being true of their own.
 ##
-## What this file still owns is the **scent haze**, because the haze is not a
-## property of the cell -- it is the drawn form of the scent field the
-## membrane's green band is reading, and it is therefore a property of the
-## relationship between that cell and this one.
-##
 ## Only bodies that can reach the frame are drawn: see [constant CULL_REACH].
 ## The rings, wakes, meals and ghosts are other functions and are not culled.
 func _draw_cells(a: float) -> void:
@@ -1343,7 +1387,7 @@ func _draw_cells(a: float) -> void:
 	# A body is skipped only when nothing it draws can reach the frame: the
 	# test is against the circle round the whole frame, so it holds at any
 	# camera spin, and against the body's drawn extent rather than its centre,
-	# so a haze or a mouth hanging into the frame from a body just outside it
+	# so a mouth hanging into the frame from a body just outside it
 	# is still drawn. The circle is found through `$World`'s own transform, the
 	# one these draws are about to be placed by, rather than off `_camera`.
 	var frame := _frame.size
@@ -1386,20 +1430,6 @@ func _draw_cells(a: float) -> void:
 		var ab := a
 		if _fade_in.has(i):
 			ab = a * clampf(float(_fade_in[i]) / SignalBus.DEATH_RETURN, 0.0, 1.0)
-		# The scent as a soft haze rather than a ring: a ring here would be a
-		# boundary, and the cell cannot perceive a boundary.
-		#
-		# **Gene-blind, and it stays gene-blind** -- always FOOD_TINT, never the
-		# body's colour -- but weighted by exactly what the taste field weights
-		# the body by, so a cell too big to fit in the mouth fades out of the
-		# drawn scent as it fades out of the smelled one. If it were gene
-		# coloured, full vision would be showing a distinction point of view
-		# cannot make, in the one channel where the two views must agree.
-		# food.gd owns the curve; this reads it. §4.5, last paragraph.
-		var smell := smoothstep(FoodField.EDIBLE_FADE_OUT, FoodField.EDIBLE_FADE_IN,
-			r / maxf(_cell.gape(), 0.001))
-		_draw_scent(p, r, smell * ab)
-
 		# The wound is drawn here and nowhere else in the game: full vision is
 		# entitled to ground truth, and point of view finds out by biting and
 		# by being bitten.
@@ -1428,12 +1458,12 @@ func _dose_felt(felt: Vector3) -> Dictionary:
 ## then held to the same exact cull as today's water. A cell is drawn by the one
 ## routine every cell is; a floc is not a cell and is drawn as the clump it is.
 ##
-## **The bloom weighs a body by the size its mouth measures** (ocean.md §14.1),
-## `pellicle` counted, through the same curve the taste field does -- so it says
-## what the membrane's green band says, and never more.
+## **No scent haze round anything** (the owner, 2026-10-14; three-senses.md §2.6):
+## the green bloom round every edible cell, floc and friend, which said what your
+## mouth could take whether or not you had a nose, is gone. Smell shows on your
+## nose alone, and in no other mark on screen.
 func _draw_drop_cells(a: float, middle: Vector2, half: float) -> void:
 	var bodies := _food_node.bodies()
-	var gape := _cell.gape()
 	var margin := CULL_MARGIN / ZOOM
 	var widest := CellBody.DIVIDE_RADIUS * CULL_REACH
 	for i: int in _food_node.bodies_near(middle, half + widest + margin):
@@ -1444,13 +1474,8 @@ func _draw_drop_cells(a: float, middle: Vector2, half: float) -> void:
 		if p.distance_squared_to(middle) > reach * reach:
 			continue
 		if bool(b.inert):
-			var settle := float(b.settle)
-			# The bloom round a floc and never over it, as round a friend: a
-			# clump that does not hide its middle glowed like a lamp (§7.6).
-			_draw_scent_ring(p, r, FoodField.taste_weight(r, gape) * settle * a)
-			_draw_floc(p, r, settle, int(b.id), a)
+			_draw_floc(p, r, float(b.settle), int(b.id), a)
 			continue
-		_draw_scent(p, r, FoodField.taste_weight(_food_node.swallow_size_of(i), gape) * a)
 		# **A division coming** (lineage.md §6.4): every cell's nucleus doubles
 		# from DIVIDE_WARN_RADIUS as yours does, read off the radius -- which the
 		# wire and the replay already carry -- since every body at forty divides.
@@ -1459,7 +1484,7 @@ func _draw_drop_cells(a: float, middle: Vector2, half: float) -> void:
 		Cilia.draw_cell(_world, p, float(b.heading), r, b.genome, _food_node.gape_at(i),
 			_cell.radius, false, _clock, a, 0.0, 0.0, float(i) * 1.9, 1.0 / ZOOM, [],
 			float(b.wound), double, 0.0, 0.0, false, Cilia.NO_EYE, Cilia.NO_TAIL,
-			0.0, _dose_of(i))
+			0.0, _dose_of(i), Cilia.NO_LIT, b.riders)
 
 
 ## **A floc of detritus** (ocean.md §7.6): a clump of five rounded fragments in
@@ -1501,121 +1526,12 @@ func _draw_floc(at: Vector2, r: float, settle: float, id: int, a: float) -> void
 			true)
 
 
-## **"I can eat it", drawn loudly enough to be seen.** This is the only mark
-## full vision has for the commonest decision in the game, and as shipped it was
-## not a weak mark, it was no mark: measured off the render, the haze ring
-## around an edible cell came out **0.5 of 255 greener than empty water**, while
-## the water shader's own organic wash swings through ±25 in the same channel.
-## The three defects were all arithmetic and all in one line:
-##
-## - the outermost of the three rings was drawn at alpha exactly zero, every
-##   frame, for every cell -- `(1 - t)` with `t` reaching 1;
-## - the largest ring was the faintest, so what ink there was got spread from
-##   2.9 to 6.0 body radii, a cloud twelve bodies wide and dense nowhere;
-## - the peak alpha, 0.0093, was a third of what the dithering can even carry.
-##
-## **Nothing about what it means has changed, and nothing may.** It is still
-## `FOOD_TINT` on every edible cell whatever gene it carries, still weighted by
-## exactly `food.gd`'s taste curve, so it still says precisely what the
-## membrane's green band says and never more. What changed is that it is now a
-## bloom that hugs the body -- brightest at the rim, gone by three radii --
-## instead of a wash spread so thin it fell under the water's own texture.
-## Hugging the body is also what keeps it from being mistaken for that texture:
-## the wash is hundreds of pixels across and attached to nothing, and this is
-## concentric with a cell and the size of that cell.
-##
-## **One texture, not a stack of discs**, and the reason is the sentence the old
-## code wrote and then broke: *a ring here would be a boundary, and the cell
-## cannot perceive a boundary.* Six concentric `draw_circle`s at a visible alpha
-## are six boundaries -- built that way first, rendered, and it banded at
-## 1280x720 and worse at 2400x1080, where the canvas scale makes each band half
-## again as wide. A radial `GradientTexture2D` drawn once per cell has no edge
-## anywhere, costs one `draw_texture_rect` instead of six polygons, and is plain
-## `ImageTexture` under GL Compatibility.
-##
-## The ramp holds flat out to 0.42 and then falls away, so the brightest part of
-## the bloom is the annulus **just outside the rim** rather than the middle --
-## the middle is behind the body and cannot be seen anyway. Measured after, in
-## median green of 255 out from a r18 edible cell: **99** at the rim, 36 at
-## 1.3 r, 24 at 1.65 r, water by 2.7 r. An inedible cell of any size stays flat
-## at 10-12, which is the water.
-const HAZE_OUTER := 3.0
-## Alpha at the plateau, before the edibility weight.
-const HAZE_PEAK := 0.24
-const HAZE_TEXTURE_SIZE := 128
-
-var _haze: GradientTexture2D = null
-
-
-## Built once. A run draws it four times a frame and never changes it.
-func _build_haze() -> GradientTexture2D:
-	var ramp := Gradient.new()
-	ramp.offsets = PackedFloat32Array([0.0, 0.42, 0.62, 0.82, 1.0])
-	ramp.colors = PackedColorArray([
-		Color(1, 1, 1, 1.00), Color(1, 1, 1, 0.90), Color(1, 1, 1, 0.42),
-		Color(1, 1, 1, 0.12), Color(1, 1, 1, 0.0)])
-	var tex := GradientTexture2D.new()
-	tex.gradient = ramp
-	tex.fill = GradientTexture2D.FILL_RADIAL
-	tex.fill_from = Vector2(0.5, 0.5)
-	tex.fill_to = Vector2(1.0, 0.5)
-	tex.width = HAZE_TEXTURE_SIZE
-	tex.height = HAZE_TEXTURE_SIZE
-	return tex
-
-
-func _draw_scent(at: Vector2, r: float, strength: float) -> void:
-	if strength <= 0.0:
-		return
-	if _haze == null:
-		_haze = _build_haze()
-	var reach := r * HAZE_OUTER
-	_world.draw_texture_rect(_haze,
-		Rect2(at - Vector2(reach, reach), Vector2(reach, reach) * 2.0), false,
-		Color(FOOD_TINT, HAZE_PEAK * strength))
-
-
-## **The friend's scent** (shared-pond-ux.md §0.1): the same bloom at the same
-## strength with its middle taken out to the rim, so the smell sits round a
-## person and never over one. Laid over the body, the haze tinted an edible
-## friend the green of an edible water cell -- rendered beside one of their size,
-## the two were the same object but for the trail -- and the untinted body is the
-## only person mark a still frame has.
-var _haze_ring: GradientTexture2D = null
-
-
-func _draw_scent_ring(at: Vector2, r: float, strength: float) -> void:
-	if strength <= 0.0:
-		return
-	if _haze_ring == null:
-		var rim := 1.0 / HAZE_OUTER
-		var ramp := Gradient.new()
-		ramp.offsets = PackedFloat32Array([0.0, rim * 0.92, rim * 1.12, 0.42, 0.62, 0.82, 1.0])
-		ramp.colors = PackedColorArray([
-			Color(1, 1, 1, 0.0), Color(1, 1, 1, 0.0), Color(1, 1, 1, 0.90),
-			Color(1, 1, 1, 0.90), Color(1, 1, 1, 0.42), Color(1, 1, 1, 0.12),
-			Color(1, 1, 1, 0.0)])
-		_haze_ring = GradientTexture2D.new()
-		_haze_ring.gradient = ramp
-		_haze_ring.fill = GradientTexture2D.FILL_RADIAL
-		_haze_ring.fill_from = Vector2(0.5, 0.5)
-		_haze_ring.fill_to = Vector2(1.0, 0.5)
-		_haze_ring.width = HAZE_TEXTURE_SIZE
-		_haze_ring.height = HAZE_TEXTURE_SIZE
-	var reach := r * HAZE_OUTER
-	_world.draw_texture_rect(_haze_ring,
-		Rect2(at - Vector2(reach, reach), Vector2(reach, reach) * 2.0), false,
-		Color(FOOD_TINT, HAZE_PEAK * strength))
-
-
 ## A meal, held where it was long enough that the interior flood has something
 ## to be checked against.
 ##
-## **In the gene's hue, and this is not the scent haze.** The haze is gene-blind
-## because it is the drawn form of something point of view genuinely cannot
-## resolve. The instant of swallowing is the opposite case: §2.2 makes the
-## interior flood the gene's colour, which is `perception.md`'s one licensed
-## exception, and this ring is the only thing that flood can be checked
+## **In the gene's hue.** The instant of swallowing is a fact both views know:
+## §2.2 makes the interior flood the gene's colour, which is `perception.md`'s one
+## licensed exception, and this ring is the only thing that flood can be checked
 ## against. Drawing it green while the membrane floods amber would leave the
 ## one breach in the rule unverifiable by the view that exists to verify.
 func _draw_meals(a: float) -> void:
@@ -1667,7 +1583,7 @@ func _draw_wakes(a: float) -> void:
 func _draw_beams(a: float) -> void:
 	if _food_node == null:
 		return
-	var tone := Cilia.hue(&"ocellus")
+	var tone := Cilia.hue_on(Catalogue.BEAM)
 	var origin := _cell.position
 	for beam: Array in _food_node.beams:
 		var dir := _ray(float(beam[0]))
@@ -1713,74 +1629,40 @@ func _catch_beam_hits(delta: float) -> void:
 				k, float(beam[0]))
 
 
-## **The `ampulla`.** Every wavefront currently in flight, as a half-ring
-## expanding out of **the organ's own point on the membrane** and fading as it
-## goes -- and every echo on its way back, as a short arc contracting onto the
-## same point.
-##
-## The same two-register agreement the beam has: point of view gets a run of
-## marks on the contour as each body answers, and here the thing that produced
-## them is on screen -- so "the blips stopped because nothing is within reach"
-## is visible rather than deduced. The bodies the echoes came off need no mark
-## of their own, because full vision draws them already.
-##
-## **This is where the round trip gets checked.** Full vision exists to prove
-## point of view is telling the truth, and the claim to check is that the skin
-## lights at the same instant, at the same bearing, over the same span, that an
-## echo lands on the organ. Both are drawn here off the same four numbers, so a
-## disagreement is visible in one frame rather than inferred.
-##
-## The half is the hull: a source on the skin radiates into the hemisphere it
-## faces and the rest goes into the body. Where the gene has grown enough to
-## hear through a body, the other half is drawn at `ping_through` of the lit
-## one -- which is the same picture point of view gets, in world space instead
-## of at the figure's scale, and it is drawn off the same two numbers.
+## **The `ampulla`.** What two and three copies place of each answer, fading over
+## one call. **No wave is drawn** (ping-as-outline.md §14; the owner, 2026-10-15:
+## *"Remove the waves. They're buggy anyway."*): the call leaves unseen, and each
+## echo is the organ lighting on the body as it lands and the skin's mark -- the
+## same moment, in both views.
 func _draw_ping(a: float) -> void:
-	if _food_node == null:
+	if _food_node == null or _food_node.ping_range <= 0.0:
 		return
-	var reach: float = _food_node.ping_range
-	if reach <= 0.0:
-		return
-	var dir := _ray(_food_node.ping_bearing)
-	var origin := _cell.position + dir * _cell.radius
-	var mid := dir.angle()
-	var tone := Cilia.hue(&"ampulla")
-	var through := clampf(_food_node.ping_through, 0.0, 1.0)
-	# **All of them, not just the newest.** Up to eleven pulses are in this
-	# water at once at tier 3, and drawing one while the skin reported another
-	# was the contradiction ping-as-outline.md §7 photographed.
-	for front: float in _food_node.ping_fronts:
-		if front <= 0.0:
+	_draw_echo_marks(a, Cilia.hue_on(Catalogue.PING))
+
+
+## **What the ping placed** (ping-as-outline.md §13), where the call met it and
+## fading over one call: a plain point at two copies, the same for a meal, a
+## hunter or the rim, because nothing in an echo says which; at three, the side
+## of the body the call reached, drawn through the points the field worked out
+## on its rim.
+func _draw_echo_marks(a: float, tone: Color) -> void:
+	for held: Array in _echo_marks:
+		var mark: Dictionary = held[0]
+		var life := maxf(float(mark.get("life", 0.0)), 0.001)
+		var fade := (1.0 - clampf(float(held[1]) / life, 0.0, 1.0)) * a
+		if fade <= 0.0:
 			continue
-		# Off the top of the screen long before it reaches its range, so the
-		# fade is the thing that has to sell "it is still going".
-		var fade := 1.0 - clampf(front / reach, 0.0, 1.0)
-		# Brighter than a threshold ring, because those are measuring
-		# instruments and this is a thing the cell actually did.
-		_world.draw_arc(origin, front, mid - PI * 0.5, mid + PI * 0.5,
-			PING_STEPS, Color(tone, 0.46 * fade * a), 1.8 / ZOOM, true)
-		if through > 0.0:
-			# Inset by half a step at both ends, the same half step
-			# `returns.gd` takes off its own far half and for the same reason:
-			# two arcs meeting at a shared vertex composite that vertex twice,
-			# and the bead it makes is brighter than either half of the ring.
-			_world.draw_arc(origin, front, mid + PI * 0.5 + PING_SEAM,
-				mid + PI * 1.5 - PING_SEAM, PING_STEPS,
-				Color(tone, 0.46 * fade * a * through), 1.8 / ZOOM, true)
-	# The echoes. Brighter and thicker than the front that started them: the
-	# front is the question going out and this is the answer coming back, and
-	# the moment the mechanic becomes legible is the moment one of these lands.
-	for echo: Array in _food_node.ping_echoes:
-		var r: float = float(echo[0])
-		if r <= 0.0:
+		var lines: Array = mark.get("lines", [])
+		if lines.is_empty():
+			var at: Vector2 = mark.get("at", Vector2.ZERO)
+			_world.draw_circle(at, ECHO_FIX_HALO / ZOOM,
+				Color(tone, ECHO_FIX_HALO_ALPHA * fade), true, -1.0, true)
+			_world.draw_circle(at, ECHO_FIX_CORE / ZOOM,
+				Color(tone, ECHO_FIX_CORE_ALPHA * fade), true, -1.0, true)
 			continue
-		var level := clampf(float(echo[3]), 0.0, 1.0)
-		if level <= 0.0:
-			continue
-		var span := deg_to_rad(clampf(float(echo[2]), 1.0, 180.0))
-		var at := float(echo[1]) - PI * 0.5
-		_world.draw_arc(origin, r, at - span, at + span, PING_STEPS,
-			Color(tone, 0.80 * level * a), 2.6 / ZOOM, true)
+		for line: PackedVector2Array in lines:
+			_world.draw_polyline(line, Color(tone, ECHO_OUTLINE_ALPHA * fade),
+				ECHO_OUTLINE_WIDTH / ZOOM, true)
 
 
 ## Threshold rings, drawn only while the cell is within RING_WINDOW of crossing
@@ -1907,7 +1789,7 @@ func _draw_cell(a: float) -> void:
 		_world.draw_circle(p, r * (1.05 + 1.75 * k),
 			Color(SELF_TINT, 0.013 * (1.0 - k) * lift * ca), true, -1.0, true)
 
-	var tiers := _genome_node.tiers() if _genome_node != null else GenomeNode.BORN
+	var tiers := _genome_node.tiers() if _genome_node != null else Catalogue.born()
 	# `is_self` is what keeps the player's own body pure SELF_TINT and its own
 	# lip bow green: you are the one cell in the water whose identity you do not
 	# have to read, and your own mouth cannot swallow you.
@@ -1915,13 +1797,24 @@ func _draw_cell(a: float) -> void:
 		r, true, _clock, ca, _cell.steer, beat, 0.0, 1.0 / ZOOM,
 		_genome_node.body_layout() if _genome_node != null else [], _cell.wound,
 		float(division.get("double", 0.0)), float(division.get("pinch", 0.0)),
-		0.0, false, eye, _tail, slack, dose)
+		0.0, false, eye, _tail, slack, dose, _lit(ca),
+		_genome_node.body_riders() if _genome_node != null else {})
 	_draw_held_sample(p, r, beat, ca)
 
 	_draw_heading(p, fwd, stb, r, ca)
 	# Held, the cell is going nowhere, and a plume would be the last one it had.
 	if not _held:
 		_draw_velocity(p, r, ca)
+
+
+## The run's [member lit] at [constant FADE_LIT] of the body's [param fade], or
+## nothing.
+func _lit(fade: float) -> Dictionary:
+	if lit.is_empty():
+		return Cilia.NO_LIT
+	var out := lit.duplicate()
+	out["fade"] = FADE_LIT * fade
+	return out
 
 
 ## The two of them, at world scale and at their own brightness. Both are
@@ -1945,7 +1838,7 @@ func _draw_daughters(p: Vector2, beat: float) -> void:
 		var tiers: Dictionary = one["tiers"]
 		var seat := p + across * (spread * (-1.0 if side == 0 else 1.0))
 		Cilia.draw_cell(_world, seat, _cell.heading, r, tiers,
-			CellBody.gape_of(int(tiers.get(&"cytostome", 0)), r), r, true,
+			CellBody.gape_of(tiers, r), r, true,
 			_clock, float(one["fade"]), 0.0, beat, float(side) * 2.7,
 			1.0 / ZOOM, one["order"], 0.0, 0.0, 0.0, float(one["shed"]))
 
@@ -2107,11 +2000,10 @@ func _draw_peer(a: float) -> void:
 ## gape, their wound, the nucleus doubling from r32 -- with `is_self` false, so
 ## the red toothed bow shows whenever their gape exceeds your radius, and
 ## `untinted` true, so the body stays SELF_TINT: no cell the water makes is.
-## The scent haze on the same curve as anything you could swallow. The person
-## marks stay as shipped -- halo, trail, edge mark -- and carry presence.
+## The person marks stay as shipped -- halo, trail, edge mark -- and carry presence.
 ##
 ## **A ghost out of the water** (§0.3): body, halo and edge mark at 0.34, no
-## threat bow, no haze and no new trail points, because nothing can reach it.
+## threat bow and no new trail points, because nothing can reach it.
 func _draw_friend(a: float) -> void:
 	var at: Vector2 = _peer["at"]
 	var r := float(_peer["radius"])
@@ -2125,9 +2017,6 @@ func _draw_friend(a: float) -> void:
 		var k := 1.0 - float(i) / float(HALO_STEPS)
 		_world.draw_circle(at, r * (1.05 + 1.75 * k),
 			Color(SELF_TINT, 0.013 * (1.0 - k) * 0.6 * presence * a), true, -1.0, true)
-	if not ghost:
-		_draw_scent_ring(at, r, smoothstep(FoodField.EDIBLE_FADE_OUT,
-			FoodField.EDIBLE_FADE_IN, r / maxf(_cell.gape(), 0.001)) * alpha * a)
 	# The viewer's radius decides the threat bow; a ghost's mouth can reach
 	# nobody, so it is measured against a radius nothing exceeds.
 	Cilia.draw_cell(_world, at, float(_peer["heading"]), r, _peer["tiers"],
@@ -2135,15 +2024,15 @@ func _draw_friend(a: float) -> void:
 		alpha * a, 0.0, 0.0, PEER_PHASE, 1.0 / ZOOM, _peer["order"],
 		float(_peer["wound"]), float(_peer["double"]), float(_peer["pinch"]), 0.0,
 		true, Cilia.NO_EYE, Cilia.NO_TAIL, 0.0,
-		_dose_felt(_peer.get("felt", Vector3.ZERO)))
+		_dose_felt(_peer.get("felt", Vector3.ZERO)), Cilia.NO_LIT, _peer.get("riders", {}))
 
 
 ## **Broken, and that is the whole of what it says.** Every other ring in this
 ## view is solid and every one of them is a measurement -- a threshold, a cull
 ## boundary, a shock front -- and this is the opposite of a measurement. A solid
 ## circle here would be read as a boundary something is inside, which is the
-## same mistake `_draw_scent` was written to avoid one function up; a broken one
-## cannot be read as a boundary at all.
+## mistake a ringed scent would have made; a broken one cannot be read as a
+## boundary at all.
 ##
 ## A fixed number of dashes rather than a fixed dash length, so it stays one
 ## object as it grows instead of turning into a dotted line.

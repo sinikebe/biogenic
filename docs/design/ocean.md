@@ -1135,6 +1135,10 @@ within 1,500 of that player.
 
 ### 6.4 What
 
+**Superseded on 2026-10-14 by `water-evolves.md`**: the water reads nobody's senses
+or size any more. It keeps one composition, 457 drifters and a floor of 96 others, and
+everything with a mouth it makes from nothing is a newborn. Below is what it did before.
+
 The spawner makes **what is short**:
 
 - **Drifter or peer** by the drifter share your senses call for today
@@ -1568,6 +1572,10 @@ games it loses 40 % against today's 36 % (the first table).
 
 ### 8.4 How difficulty moves
 
+**Superseded on 2026-10-14 by `water-evolves.md`**: the water reads nobody's senses
+or size any more. It keeps one composition, 457 drifters and a floor of 96 others, and
+everything with a mouth it makes from nothing is a newborn. Below is what it did before.
+
 - **What is made is tuned to you**, exactly as today's arrivals are: the drifter
   share your senses call for, peers your size ±34 %, no mouth made past 40. It
   shapes what the drop *becomes* over the next minutes, not what is in front of
@@ -1650,10 +1658,13 @@ drop, and a device keeps one of each kind at most:
   they could tell -- a drop is at its steady state within about five minutes of
   play (§5.9), so a frozen one is as alive as a caught-up one the moment it
   wakes.
-- **Your cell is in it when you come back** (row 17, answered). Leaving the
+- **Your cell is in it when you come back** (row 17, answered; from `cells.md` on,
+  built 2026-10-04, your cell is kept in a slot of its own and remembers its place in
+  this water). Leaving the
   app in the middle of a run saves your cell with the drop -- where it is, its
   size, its genes in their order, its generation and its hunger -- and the next
   launch carries on from there, behind the same beat a return from a pond has.
+  **One cell for each view** (§9.5): the next launch in the same view.
   Today a run is one session (genes-and-cilia.md §9 item 4: "the arc is one
   session"); with yes, a run can span several, and a death is still the only
   clean restart. The replay is not saved (§11): after a resume it holds only
@@ -1809,6 +1820,74 @@ with what it trimmed and contained. A file that is not a drop this build can
 read -- one it cannot decode, or one that does not hold what its format says --
 is treated as an unknown format: kept as `.old`, never half-loaded.
 
+### 9.5 A cell per view
+
+> **Superseded by `cells.md`** (built 2026-10-04). The owner then asked for cells to
+> leave the worlds' files. A cell is now a save of its own, in slots, three for each
+> view, and a world keeps only its water. The per-view rule below stands. The rest of
+> this section is what a world's file held before, which the migration of `cells.md`
+> §4 moves out of it the first time it runs.
+
+The owner, 2026-10-04: *"Split the saved cells between full vision and point of
+view. Cells grown in full vision should not be usable in point of view, since it's
+not the same difficulty and gameplay."*
+
+**One cell per view, per world.** A world keeps a full-vision cell and a
+point-of-view cell, each the one left mid-run in that view, or none. **The water
+is shared**: a world is still one drop, and only your cell is split. Opening a
+world in a view resumes that view's cell, or brings a new cell into the water at a
+quiet place (§8.1), as a death does. The other view's cell is kept aside, out of
+the water and untouched, and a death clears only the dying view's cell.
+
+**A cell kept aside keeps its place in the water.** A quiet start moves the whole
+drop under the cell that comes in -- in the probe's world, 7,112 units -- so a cell
+out of the water has to move with it, or it would come back that far from where it
+was left, past the rim as often as not. Every keep moves each cell set aside by
+as much as the drop's rim has moved since the run read it (`normal_mode.gd`'s
+`_cells_kept_aside`), so every place in a file is in the frame of the drop kept
+with it.
+
+**An old cell is full vision's.** Where a cell kept before the split was grown
+cannot be told, and the rule is there to protect point of view: an old file's
+`cell` loads as full vision's, and point of view starts a new cell in every world.
+
+**In the file** (`drop_save.gd`'s `CELLS`): `cell` stays full vision's, and point
+of view's sits beside it in `cells`, a dictionary from a view's name to its cell,
+written only while some other view keeps one -- so a world with only a full-vision
+cell is laid out exactly as before. **`FORMAT` stays 1**: like `cell.loads`, it is
+an optional key, checked as `cell` is when it is there, which a build before it
+loads past and never asks for (and drops the next time it writes). The views are
+named once, in `run_state.gd`'s `CELL_KEYS`: full vision's is `""`, which is
+`cell`, and point of view's `pov`. The file and the worlds' index know a view only
+by that name.
+
+**The worlds' index** (`drops.cfg`, settings.md §6.2) keeps a generation for each
+view: `generation`, full vision's, as it always was, and `generation_pov` beside
+it while a point-of-view cell waits. A keep writes its own view's and leaves the
+other's, and a world's line in the menu names each view's cell (settings.md §4.3).
+
+**`V` flips the view in the editor only** (`normal_mode.gd`'s `view_flip`, which is
+`OS.has_feature("editor")`): the developer's comparison tool it was written as. In
+an exported build -- the dev app's included -- the mode select is the only way to
+choose a view, so no cell crosses views. **A run whose view was flipped keeps
+nothing from then on**: its cell has been played in both, so it goes into
+neither, and what was kept before the flip stands. Every tool that forces a view
+-- `tools/drive.gd --mode=`, the probes -- sets `mode` before the run opens, so it
+opens on that view's cell.
+
+**Ponds follow the same rule.** A guest's cell comes from its own world's place
+for the view it plays in and goes back to it -- `elsewhere` included (§9.1) -- and
+a host's own cell likewise. Nothing on the wire changes: `Wire.PROTOCOL` stays 7
+and `Wire.RULES` with it, because a host judges the body a guest brings, never
+where it was kept.
+
+**What carries over is the water, doing what it was doing.** A hunter mid-chase
+of the cell one view left goes on chasing whichever cell is in the water next, as
+one chasing a cell that dies goes on after the tap brings a new one: single player
+freezes the water on the black and never ends that run. A new cell's quiet start
+clears dread's reach round it either way; a resumed cell gets no clearing, as
+ever.
+
 ---
 
 ## 10. The shared pond and the dedicated server
@@ -1954,7 +2033,10 @@ entries on its serials under the same cap.
 - **A graze is not a meal to the referee**: `pond.gd` calls `referee.ate()` only
   for ATE, never for GRAZED, so a guest that ate flocs is still expected at the
   radius its live meals give it. `drop.FLOC_GROWTH` = 0 goes in the fingerprint,
-  so a pack that let flocs grow a body changes the protocol.
+  so a pack that let flocs grow a body changes the protocol. *(2026-10-10: since
+  protocol 8, gene-catalogue.md §11.3, such a pack moves `Wire.RULES`' pin, which
+  the handshake carries, and keeps older builds apart by itself; `PROTOCOL` moves
+  only when a message's format does.)*
 - **The eating rule a guest is held to changes**: swallowed without a run (row
   15) and armoured prey (row 5); venom stays today's (row 12). The host decides
   both and tells the guest; the referee judges neither, since a guest never
@@ -2041,6 +2123,10 @@ replay wrote them back onto the run's own `Food` (`replay.md` §3). A drop has
   kept nothing; it would now overwrite the drop the player returns to. This is
   the private-node binding `shared-pond.md`'s Phase 3 planned for the pond, done
   in 1a for single player; 1a-2's stash of what a replay wrote over went with it.
+  **Phase 3 did the rest in a session** (`shared-pond.md` §5): the cell, the
+  genome and the grit are the replay's own there too, since the wire reads the
+  run's on the black, and the friend is a body in the replay's field, in its
+  person slot and out of its grid.
 - **Today's water is recorded the same way**, and comes out as it did: a run with
   a session plays it in 1a, its 34 bodies are always the nearest, and taking
   slots in the field's own order puts each in the slot of its own index, with the

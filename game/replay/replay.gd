@@ -27,11 +27,23 @@ extends Node
 ## The run's field is the drop, which outlives the run and which the player
 ## swims back into after watching, so nothing here ever writes to it.
 ##
+## **In a shared pond, so is everything else** (docs/design/shared-pond.md §5,
+## Phase 3). The friend plays on while you watch -- the host's water keeps
+## stepping and keeps being sent, dead host or not -- and the wire reads this
+## run's own cell and genome on the black: what this cell wears, for PERSON, and
+## where it died, for where a returning friend lands. So in a session the
+## recording is written onto a cell, a genome and grit of this screen's own
+## ([member private_nodes]), and the run's are never touched. The friend is in
+## the water it shows, a body in the field's person slot, drawn as the live view
+## draws them.
+##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
 const Panes := preload("res://game/replay/panes.gd")
 const RecorderNode := preload("res://game/replay/recorder.gd")
 const CellBody := preload("res://game/normal/cell.gd")
+## The genes (docs/design/gene-catalogue.md): which organ calls, by its stat.
+const Catalogue := preload("res://game/genes/catalogue.gd")
 const RayFan := preload("res://game/mechanics/ray_fan.gd")
 const MotesField := preload("res://game/normal/motes.gd")
 const FoodField := preload("res://game/normal/food.gd")
@@ -88,6 +100,13 @@ const SPEED_TEXT: Array[String] = ["1x", "2x", "4x", "1/4x", "1/2x"]
 
 ## Set by the run before this scene enters the tree.
 var recorder: RecorderNode = null
+## **Whether the run's own cell, genome and grit are off limits**, set by the run
+## before this scene enters the tree: true in a session (shared-pond.md §5,
+## Phase 3), where the wire reads them on the black and this screen writes onto
+## nodes of its own instead ([method _make_own]). False is single player, where
+## a run keeps nothing and scribbling on its nodes is free -- and is exactly what
+## this screen always did.
+var private_nodes := false
 
 var _panes: Panes = null
 var _cell: CellBody = null
@@ -139,11 +158,15 @@ var _view := Vector2(1280.0, 720.0)
 ## the start of the window, so the world view forgets its history there and not
 ## at the death it has just left.
 var _forget := false
+## The nodes [method _make_own] made, never in the tree, freed with this screen.
+var _own: Array[Node] = []
 
 
 func _ready() -> void:
 	_frame.resize(RecorderNode.STRIDE)
 	_find(get_parent())
+	if private_nodes:
+		_make_own()
 	_food = _water()
 	_panes = Panes.new()
 	_panes.name = "Panes"
@@ -175,6 +198,16 @@ func _process(delta: float) -> void:
 		_panes.rewound()
 
 
+## **The nodes of this screen's own go with it.** Never in the tree, so nothing
+## frees them but this -- called after every child has left, so no view is
+## reading them by then.
+func _exit_tree() -> void:
+	for node: Node in _own:
+		if is_instance_valid(node):
+			node.free()
+	_own.clear()
+
+
 # ---------------------------------------------------------------------------
 # Playback. The recorded per-frame delta paces this, so a stretch the phone
 # rendered at 30 fps replays at the speed it happened.
@@ -194,8 +227,9 @@ func _seek() -> void:
 
 ## The recorded state, written straight onto the run's own frozen cell, genome
 ## and grit, which are not simulating and never will again -- *a run keeps
-## nothing* of its cell, and `_wake_up()` builds every one of them afresh -- and
-## onto this screen's own field, which is the water as the cell had it.
+## nothing* of its cell, and `_wake_up()` builds every one of them afresh -- or,
+## in a session, onto this screen's own ([member private_nodes]); and onto this
+## screen's own field, which is the water as the cell had it, the friend in it.
 func _write_state() -> void:
 	if _cell != null:
 		_cell.position = Vector2(_frame[0], _frame[1])
@@ -216,13 +250,12 @@ func _write_state() -> void:
 			_food.restore_body(i, Vector2(_frame[at], _frame[at + 1]),
 				_frame[at + 2], _frame[at + 3], _frame[at + 4])
 			_food.restore_loads(i, _frame[at + RecorderNode.BODY_LOADS])
+		_write_friend()
 		_write_flocs()
 		_food.beams = _read_beams()
-		_food.ping_fronts = _read_ping_fronts()
-		_food.ping_echoes = _read_ping_echoes()
 		_food.ping_range = _frame[RecorderNode.AT_PING_RANGE]
 		# **Where the organ was**, off the body layout the PLAYER delta now
-		# carries. The wavefront leaves the membrane at the `ampulla`'s own arc
+		# carries. The ping calls and hears at the `ampulla`'s own arc
 		# and both panes read that bearing off the field, so what this needs is
 		# the slot the organ was *worn* in -- which is recorded, because it
 		# cannot be worked back out of the DNA once a move has parted the two.
@@ -250,9 +283,48 @@ func _write_state() -> void:
 	_panes.set_division(_read_division())
 	# How slack the body was: the body's half of hunger, as the run drew it.
 	_panes.set_slack(_frame[RecorderNode.AT_SLACK])
+	# How brightly the nose, the eyespot and the ping's organ glowed, on the
+	# organs the restored genome wears.
+	_panes.set_lit(_lit_organs(_frame[RecorderNode.AT_SMELL],
+		_frame[RecorderNode.AT_SIGHT], _frame[RecorderNode.AT_ECHO]))
 	# The same question the run asks of its genome, asked of the one restored.
 	_panes.set_eye(Run.eye_of(_genome, _eye_gene, _eye_flare.value()))
 	_panes.push_block(_frame, RecorderNode.AT_MEMBRANE)
+
+
+## **The nose, the eyespot and the ping's organ, lit as the run lit them**
+## (docs/design/three-senses.md §2.6, §2.7; ping-as-outline.md §14): cilia.gd's
+## `lit` for the organ the restored genome smells with, at [param smelt], the one
+## it sees shadows with, at [param seen], and the one it calls with, at
+## [param heard]. Empty for no glow, or no such organ.
+func _lit_organs(smelt: float, seen: float, heard: float = 0.0) -> Dictionary:
+	if _genome == null:
+		return {}
+	var glows := {}
+	var nose := Catalogue.worn_provider(_genome.tiers(), &"smell_range")
+	if smelt > 0.0 and nose != &"":
+		glows[nose] = smelt
+	var eye := Catalogue.worn_on(_genome.tiers(), Catalogue.LIGHT)
+	if seen > 0.0 and eye != &"":
+		glows[eye] = maxf(seen, float(glows.get(eye, 0.0)))
+	var caller := Catalogue.worn_on(_genome.tiers(), Catalogue.PING)
+	if heard > 0.0 and caller != &"":
+		glows[caller] = maxf(heard, float(glows.get(caller, 0.0)))
+	return {} if glows.is_empty() else {"glow": glows}
+
+
+## **The friend, where the recording has them** (shared-pond.md §5, Phase 3):
+## their body in the field's person slot, nobody when the recording says so, and
+## their silence for the world view to fade their presence by. Nothing in a
+## recording with no friend in it, which is every single player's.
+func _write_friend() -> void:
+	if not _food.pond_open():
+		return
+	var at := RecorderNode.AT_PERSON
+	_food.restore_person(Vector2(_frame[at], _frame[at + 1]), _frame[at + 2],
+		_frame[at + 3], _frame[at + 4], _frame[at + RecorderNode.PERSON_LOADS],
+		_frame[at + RecorderNode.PERSON_WET] > 0.5)
+	_panes.set_friend_quiet(_frame[at + RecorderNode.PERSON_QUIET])
 
 
 ## **Every floc the recording has settled, where it lies and as far as it has
@@ -268,16 +340,23 @@ func _write_flocs() -> void:
 			float(floc[2]), float(floc[3]), t - float(row[0])))
 
 
-## Which way the `ampulla` was pointing on the body being watched. The slot is
-## the arc and the arc is the bearing, exactly as `normal_mode.gd` resolves it,
-## and it is the slot the organ was **worn** in: a gene dropped over the
-## `ampulla`'s locus takes it out of the DNA and leaves the organ on the body,
-## so a body slot survives a DNA that no longer mentions the gene at all.
+## Which way the organ that calls -- the provider of `ping_range`, the
+## `ampulla` -- was pointing on the body being watched. The slot is the arc and
+## the arc is the bearing, exactly as `normal_mode.gd` resolves it, and it is the
+## slot the organ was **worn** in: a gene dropped over its locus takes it out of
+## the DNA and leaves the organ on the body, so a body slot survives a DNA that
+## no longer mentions the gene at all.
 ##
 ## Dead ahead for a run that never wore one -- which also never drew a wave,
-## because a cell with no `ampulla` has no reach and no pulse in flight.
+## because a cell with no organ that calls has no reach and no pulse in flight.
+## Of several, the one the run called from: the first in slot order
+## (gene-catalogue.md §5.2).
 func _ping_bearing() -> float:
-	return Cilia.bearing_of(_genome, &"ampulla")
+	if _genome == null:
+		return 0.0
+	var caller := Catalogue.seated_provider(_genome.body_layout(), _genome.tiers(),
+		&"ping_range")
+	return Cilia.bearing_of(_genome, caller) if caller != &"" else 0.0
 
 
 ## The revisit time of the beam being watched, 0 for a fan that does not sweep
@@ -285,7 +364,8 @@ func _ping_bearing() -> float:
 func _beam_hold() -> float:
 	if _cell == null:
 		return 0.0
-	var shape := CellBody.beam_shape(_cell.beam_level(), _cell.beam_path())
+	var shape := CellBody.beam_shape(_cell.beam_level(), _cell.beam_path(),
+		_cell.provider(&"beam_range"))
 	return RayFan.revisit_of(int(shape[0]), deg_to_rad(float(shape[1])),
 		deg_to_rad(float(shape[2])))
 
@@ -297,37 +377,6 @@ func _read_beams() -> Array:
 		if _frame[at + 1] <= 0.0 and _frame[at + 2] <= 0.0:
 			continue
 		out.append([_frame[at], _frame[at + 1], _frame[at + 2] > 0.5])
-	return out
-
-
-## **The wave going out**, as radii from the organ. Recorded newest-first and
-## handed back that way: both views only iterate, and the field's own "oldest
-## first" is about which one is about to expire, which a replay never asks.
-func _read_ping_fronts() -> Array:
-	var out: Array = []
-	for slot in RecorderNode.PING_FRONTS:
-		var r := _frame[RecorderNode.AT_PING_FRONTS + slot]
-		if r <= 0.0:
-			continue
-		out.append(r)
-	return out
-
-
-## **The echoes coming home**, exactly the four scalars the live field hands the
-## views: `[radius, bearing, halfwidth_deg, level]`. A radius of -1 or a level of
-## 0 is an empty slot.
-##
-## These four are **stepped** between recorded frames rather than lerped, and
-## [method RecorderNode.sample] is where that is enforced and why: an echo slot
-## is not an identity, so slot 2 in two consecutive frames is routinely two
-## different bodies.
-func _read_ping_echoes() -> Array:
-	var out: Array = []
-	for slot in RecorderNode.PING_ECHOES:
-		var at := RecorderNode.AT_PING_ECHOES + slot * RecorderNode.ECHO_FLOATS
-		if _frame[at] <= 0.0 or _frame[at + 3] <= 0.0:
-			continue
-		out.append([_frame[at], _frame[at + 1], _frame[at + 2], _frame[at + 3]])
 	return out
 
 
@@ -390,13 +439,15 @@ func _apply_deltas() -> void:
 					# `ampulla`'s wave both drawn on an arc nothing was ever
 					# worn on. docs/design/replay.md §4.1.
 					_genome.express(state["dna"], state["order"],
-						state["body"], state["worn"])
+						state["body"], state["worn"], null, state.get("riders"),
+						state.get("body_riders"))
 					_genome.restore_levels(state.get("levels", {}))
 					_genome.bonus_slots = int(state["bonus"])
 					_genome.held_sample = state["sample"]
 			RecorderNode.Delta.BODY:
 				if _food != null:
-					_food.restore_genome(int(row[2]), row[3])
+					_food.restore_genome(int(row[2]), row[3],
+						row[5] if row.size() > 5 else {})
 			RecorderNode.Delta.DAUGHTERS:
 				_daughters = row[3]
 			RecorderNode.Delta.RIM:
@@ -418,6 +469,12 @@ func _apply_deltas() -> void:
 				if _cell != null:
 					_cell.restore_held(bool(_acts[1]))
 				_panes.set_acts(_acts)
+			RecorderNode.Delta.PERSON:
+				# **What the friend wears**: their fringe, and the mouth their
+				# threat bow is measured by.
+				var worn: Array = row[3]
+				if _food != null:
+					_food.restore_person_genome(worn[0], worn[1])
 			_:
 				pass
 	_watch_levels()
@@ -458,6 +515,14 @@ func _fire_events() -> void:
 		_mark_at += 1
 		if row[1] == &"struck":
 			_panes.mark_struck(row[2])
+		elif row[1] == &"echo":
+			# What the ping placed as an echo landed (ping-as-outline.md §13),
+			# the whole mark kept after the usual four.
+			_panes.mark_echo(row[5])
+		elif row[1] == &"gone":
+			# How the friend left, as the run told its view: the recorder keeps
+			# it where a meal keeps its nutrition.
+			_panes.friend_gone(int(row[3]), row[2])
 		else:
 			_panes.mark_meal(float(row[3]), row[4], row[2])
 
@@ -643,12 +708,48 @@ func _water() -> FoodField:
 	water.name = "Water"
 	water.process_mode = Node.PROCESS_MODE_DISABLED
 	water.open_replay(_cell, RecorderNode.BODIES)
+	# **And the friend's slot**, when the recording has a friend in it: a pond's
+	# field, so the world view draws them as it does in a live one.
+	if recorder != null and recorder.holds_person():
+		water.open_replay_person()
 	add_child(water)
 	water.set_process(false)
 	var rim: Array = recorder.rim() if recorder != null else []
 	if rim.size() == 2:
 		water.restore_rim(rim[0], float(rim[1]))
 	return water
+
+
+## **A cell, a genome and grit of this screen's own**, in a session
+## ([member private_nodes]): copies of the run's as they lie on the black, which
+## the recording is then written onto exactly as it would be onto the run's --
+## so the panes draw the same thing either way, and the run's are left as the
+## death left them. While this screen is up a dead host's guest can come back,
+## and lands by where the host's cell died; and the pond tells the other player
+## what this cell wears whenever it changes, which a replay of an earlier body
+## would otherwise change every loop -- PERSONs a host's referee holds a guest to.
+##
+## **Never in the tree.** A node that enters it runs its `_ready`, and cell.gd's
+## draws from the random stream -- the one the live water is seeded from, which
+## goes on stepping under this screen. Freed in [method _exit_tree].
+func _make_own() -> void:
+	var cell := CellBody.new()
+	var genome := GenomeNode.new()
+	var motes := MotesField.new()
+	_own = [cell, genome, motes]
+	cell.genome = genome
+	if _cell != null:
+		cell.restore_body(_cell.body_state())
+		cell.restore_loads(_cell.loads)
+		cell.restore_held(_cell.tail_held())
+		cell.steer = _cell.steer
+	genome.setup(cell)
+	if _genome != null:
+		genome.set_state(_genome.to_state())
+	motes.open_replay(_motes.points() if _motes != null else PackedVector2Array())
+	_cell = cell
+	_genome = genome
+	_motes = motes
 
 
 func _walk(node: Node) -> void:

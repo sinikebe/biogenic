@@ -89,9 +89,9 @@ layout_mode = 1
 anchor_left = 0.5
 anchor_right = 0.5
 offset_left = -420.0
-offset_top = 602.0
+offset_top = 598.0
 offset_right = 420.0
-offset_bottom = 658.0
+offset_bottom = 662.0
 grow_horizontal = 2
 mouse_filter = 2
 theme_override_constants/separation = 24
@@ -99,15 +99,74 @@ alignment = 1
 
 [node name="First" type="Button" parent="Buttons"]
 layout_mode = 2
+size_flags_vertical = 4
+clip_contents = true
 text = "call"
+
+[node name="Lines" type="VBoxContainer" parent="Buttons/First"]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 14.0
+offset_right = -14.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/separation = 0
+alignment = 1
+
+[node name="View" type="Label" parent="Buttons/First/Lines"]
+layout_mode = 2
+auto_translate_mode = 2
+theme_override_font_sizes/font_size = 20
+horizontal_alignment = 1
+
+[node name="Cell" type="Label" parent="Buttons/First/Lines"]
+layout_mode = 2
+auto_translate_mode = 2
+theme_override_colors/font_color = Color(0.482, 0.686, 0.643, 1)
+theme_override_font_sizes/font_size = 15
+horizontal_alignment = 1
 
 [node name="Second" type="Button" parent="Buttons"]
 layout_mode = 2
+size_flags_vertical = 4
+clip_contents = true
 text = "answer"
+
+[node name="Lines" type="VBoxContainer" parent="Buttons/Second"]
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 14.0
+offset_right = -14.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/separation = 0
+alignment = 1
+
+[node name="View" type="Label" parent="Buttons/Second/Lines"]
+layout_mode = 2
+auto_translate_mode = 2
+theme_override_font_sizes/font_size = 20
+horizontal_alignment = 1
+
+[node name="Cell" type="Label" parent="Buttons/Second/Lines"]
+layout_mode = 2
+auto_translate_mode = 2
+theme_override_colors/font_color = Color(0.482, 0.686, 0.643, 1)
+theme_override_font_sizes/font_size = 15
+horizontal_alignment = 1
 
 [node name="Third" type="Button" parent="Buttons"]
 layout_mode = 2
 visible = false
+size_flags_vertical = 4
 
 [node name="Hint" type="Label" parent="."]
 layout_mode = 1

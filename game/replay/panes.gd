@@ -2,8 +2,8 @@ extends Node
 ## **The two panes**: what you felt on the left, what was actually there on the
 ## right, side by side, drawn by the two shipped views over one body.
 ##
-## The value of a replay is precisely the gap between them -- the green band
-## pointing one way and the food sitting the other -- so this file is the whole
+## The value of a replay is precisely the gap between them -- the nose glowing
+## at one meal and the hunter sitting astern of it -- so this file is the whole
 ## feature and the transport bolted underneath it is not. It is built and
 ## photographed on its own before anything records anything, because it is the
 ## only part of docs/design/replay.md that can fail for reasons a document
@@ -23,6 +23,12 @@ extends Node
 ## and wiring; the state arrives through [method push_block] and the writers on
 ## the simulation nodes, from the replay driver or -- while this was being
 ## rendered -- straight off the live run.
+##
+## **In a pond the friend is in the panes too** (shared-pond.md §5, Phase 3): a
+## body in the replay's own field, which the world view draws as it draws every
+## friend. The view is still handed no session -- a recording is not happening
+## now -- so what a session would have said, the friend's silence and how they
+## left, arrives through [method set_friend_quiet] and [method friend_gone].
 ##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
@@ -274,6 +280,32 @@ func mark_meal(nutrition: float, gene: StringName, at: Vector2) -> void:
 		_vision.mark_meal(nutrition, gene, at)
 
 
+## **What the ping placed as an echo landed** (ping-as-outline.md §13), into
+## both panes' own marks, as the run hands it to both of its views.
+func mark_echo(mark: Dictionary) -> void:
+	if _vision != null:
+		_vision.mark_echo(mark)
+	if _returns != null:
+		_returns.mark_echo(mark)
+
+
+## **The friend left the water for good, and how** (shared-pond-ux.md §3, §5),
+## as the run told its own view: a meal ring where they were, a faint, or the
+## arrival fade reversed -- which a body leaving its slot cannot say alone.
+## Straight into the world view, as a meal is.
+func friend_gone(how: int, at: Vector2) -> void:
+	if _vision != null:
+		_vision.friend_gone(how, at)
+
+
+## **How long since the friend was last heard**, as the recording says: what the
+## world view fades their halo, trail and edge mark by, here where it has no
+## session to ask (shared-pond-ux.md §0.2).
+func set_friend_quiet(seconds: float) -> void:
+	if _vision != null:
+		_vision.friend_quiet = seconds
+
+
 ## What the two views draw this frame when the body is becoming two. Same
 ## contract as the run's: empty is an ordinary body.
 func set_division(division: Dictionary) -> void:
@@ -392,6 +424,16 @@ func set_slack(slack: float) -> void:
 		_vision.slack = slack
 
 
+## **Which organs glowed with what they sensed** (three-senses.md §2.6): the
+## nose, lit on the figure in both panes. Same contract as the run's: empty
+## lights nothing.
+func set_lit(lit: Dictionary) -> void:
+	if _soma != null:
+		_soma.lit = lit
+	if _vision != null:
+		_vision.lit = lit
+
+
 ## **What the body carried**, felt (docs/design/dna-slots-ux.md §6): the stain
 ## on the figure in both panes, from the recorded loads. The seep and the
 ## flares are the run's moments and are not recorded; the loads are.
@@ -416,6 +458,7 @@ func _process(_delta: float) -> void:
 		set_division(_run_soma.division)
 		set_eye(_run_soma.eye)
 		set_slack(_run_soma.slack)
+		set_lit(_run_soma.lit)
 		# What the body carries, as a real replay draws it: the felt loads alone,
 		# since the seep and the flares are the run's moments and not recorded.
 		set_dose((_run_soma.dose as Dictionary).get("felt", Vector3.ZERO))

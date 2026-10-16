@@ -21,8 +21,9 @@ extends Node
 ## **Starving is an alarm, said three ways** (docs/design/hunger.md; the owner,
 ## 2026-10-03: "I often die of hunger without noticing anything"). The beat it
 ## replaces slowed and dimmed as death came, and a warning that gets quieter as
-## the danger rises read as nothing at all. Now, from half a tank, the beat
-## races at full strength ([method beat_period]) and the body goes slack
+## the danger rises read as nothing at all. Now, from a quarter of a tank left
+## ([constant HUNGRY_FROM], twenty seconds from death), the beat races at full
+## strength ([method beat_period]) and the body goes slack
 ## ([method hungry], which the run draws as creases); when the tank empties the
 ## membrane falls in, and closes further through the grace ([method faint]). A
 ## meal undoes all three. No words, and no balance moved: these are thresholds
@@ -45,11 +46,16 @@ signal hunger_changed(hunger: float)
 
 ## Beat period when fed. The rest state of the whole game.
 const REST_PERIOD := 2.4
-## **Where the warning starts: half a tank.** At the usual pace that is twenty
-## seconds from death, longer than a good forager's gap between meals (median
-## 12.5 s, energy.md §7.3), so a cell that eats on time meets it only on its
-## way to the next meal. hunger.md §3.
-const HUNGRY_FROM := 0.5
+## **Where the warning starts: a quarter of the tank left.** At the usual pace
+## that is twenty seconds from death, longer than a good forager's gap between
+## meals (median 12.5 s, energy.md §7.3), so a cell that eats on time meets it
+## only on its way to the next meal. hunger.md §3.
+##
+## **It was half a tank, the same twenty seconds**, until the tank doubled
+## (energy.md §9). Twenty seconds is the reason, so the share moved with the tank:
+## at half of seventy-two the beat would race for thirty seconds before a death,
+## and an alarm that sounds that long is not one.
+const HUNGRY_FROM := 0.75
 ## Seconds between beats when the tank is empty: twice the rest rate. The beat
 ## quickens toward it in a straight line from [constant HUNGRY_FROM].
 const EMPTY_PERIOD := 1.2
@@ -71,27 +77,30 @@ const FULL_AMPLITUDE := 1.0
 ## every stroke and every turn is paid on top ([method spend],
 ## docs/design/energy.md).
 ##
-## **Thirty-six, so a born cell that never eats dies at thirty seconds.** The
-## owner, 2026-09-29: "starve after 30 seconds with spawn gear". Steering a
-## third of the time, a born cell burns 1.78 times a resting one, so it is empty
-## at 20 s, and [constant STARVE_GRACE] is the last ten. Drifting, it dies at
-## 34 s; turning all the time, at 26 s. It was 420, seven minutes at rest. What
-## moving costs is priced in seconds of rest, so it came down with this and kept
-## its share.
+## **Seventy-two, so a born cell that never eats dies at fifty seconds.** The
+## owner, 2026-10-15: *"Double the base energy storage. We die too soon."*
+## Steering a third of the time, a born cell burns 1.78 times a resting one, so it
+## is empty at 40 s, and [constant STARVE_GRACE] is the last ten. Drifting, it
+## dies at 58 s; turning all the time, at 41 s.
 ##
-## **This is the pace, and [constant MEAL] moves with it**: a meal has to buy
-## enough of the tank to reach the next one (energy.md §7). cell.gd's
+## **Only the tank moved** (energy.md §9). Every cost is priced in seconds of rest
+## and kept them; a meal is worth the seconds it was ([constant MEAL]); and the
+## warning is as far from death as it was ([constant HUNGRY_FROM]). What the
+## bigger tank buys is the stretch with no food in sight that used to outlast a
+## full one (energy.md §7.3).
+##
+## It was 36 from 2026-09-29 (the owner: "starve after 30 seconds with spawn
+## gear"; **owner's call 1**, energy.md §7.6: dead at thirty, twenty to empty and
+## ten of grace), and 420, seven minutes at rest, before that. cell.gd's
 ## `STROKE_COST` and `TURN_COST` are how much of the pace moving takes.
+const HUNGER_SECONDS := 72.0
+## What a meal your own size is worth: **half the bar** since the tank doubled
+## (energy.md §9) -- thirty-six seconds of rest, exactly what it was worth when it
+## was the whole of a thirty-six-second bar. A drifter a born cell can swallow is
+## worth half to four-fifths of that. The owner doubled the storage, not the food.
 ##
-## **Owner's call 1** (energy.md §7.6), answered on 2026-09-29 with the
-## recommended option: dead at thirty, twenty to empty and ten of grace. The
-## other two were 45 with a grace of 5, and 53 with 10 (empty at thirty, dead
-## at forty).
-const HUNGER_SECONDS := 36.0
-## What a meal your own size is worth: **the whole bar**. A drifter a born cell
-## can swallow is worth half to four-fifths of it.
-##
-## It was half a bar, "so a single meal is felt and two are needed", while the
+## **Before the tank doubled it was the whole bar**, and before that half a bar,
+## "so a single meal is felt and two are needed", while the
 ## bar lasted seven minutes. At thirty seconds half a bar is ten seconds of
 ## life, and a cell steered at every meal it could see on the screen, one every
 ## twelve seconds, starved in about half of its three-minute games. A whole bar
@@ -99,7 +108,7 @@ const HUNGER_SECONDS := 36.0
 ## lost to stretches with no food on the screen that outlast a full tank, which
 ## no meal bridges (energy.md §7). **Owner's call 2** (energy.md §7.6),
 ## answered on 2026-09-29 with the recommended option: the whole bar, over three
-## quarters and half.
+## quarters and half. That call was a meal's worth, and its worth is kept.
 ##
 ## **This stays a const.** §3.2 took it off the tier table: if `cytostome` tier
 ## raised the value of a meal as well as the gape, every tier of it would
@@ -107,10 +116,10 @@ const HUNGER_SECONDS := 36.0
 ## a strictly dominant gene with no reason ever to put anything else in a slot.
 ## The meal is scaled by what the prey weighed instead, at the call site --
 ## food.gd measures it against your body, not against your gape.
-const MEAL := 1.0
+const MEAL := 0.5
 ## Seconds at full hunger before the cell dies. It exists so that food ten
-## seconds away is still worth swimming for, and now it is exactly that: ten of
-## the thirty seconds a born cell has. It was forty while the tank was seven
+## seconds away is still worth swimming for: ten of the fifty seconds a born
+## cell has (it was ten of thirty before the tank doubled, energy.md §9). It was forty while the tank was seven
 ## minutes (energy.md §7). The other half of **owner's call 1**, with
 ## [constant HUNGER_SECONDS].
 const STARVE_GRACE := 10.0
@@ -125,10 +134,11 @@ const ABSORB := 1.0
 const RESERVE_MIN := 0.05
 
 ## **What the metabolism gives a body's rules** (docs/design/behaviour.md §3.2),
-## in the shape of `genome.gd`'s DECLARES: its `hunger`, the tank as a level,
-## which the player feels as the beat; and `fed`, the seconds since its last
-## meal -- a cell, a floc or you -- which a body knows because it is digesting.
-## No bearing in either: they are the body's own state.
+## in the shape the genes declare theirs in (game/genes/gene.gd's `declares`):
+## its `hunger`, the tank as a level, which the player feels as the beat; and
+## `fed`, the seconds since its last meal -- a cell, a floc or you -- which a
+## body knows because it is digesting. No bearing in either: they are the body's
+## own state.
 const DECLARES := {
 	&"metabolism": {"in": [
 		{"name": &"hunger", "bearing": false, "values": {&"level": &"level"}},
@@ -218,6 +228,29 @@ var burn := 1.0
 ## of the grace without waiting it out.
 var starve_seconds := 0.0
 
+## **What the tank pays a second, measured over this long** (docs/design/
+## energy-gauge.md §3): being alive, every stroke and turn, a dash. What the energy
+## gauge reads as its rate, and nothing else: the tank itself never reads it.
+##
+## **Five seconds, so one stroke does not make it jump.** A born tail beats every
+## 2.65 s on average, each beat a lump of 1.3 s of rest, so a window shorter than
+## two beats swings by most of a beat's price between them; over five a beat moves
+## it by a quarter of a second a second, and steering harder for a moment shows up
+## inside a breath. It is also the horizon the gauge draws its burn on, so the
+## number and the picture are the same five seconds.
+const PAYING_WINDOW := 5.0
+## The window's buckets, so a stroke falls out of it in steps this long rather than
+## all at once.
+const PAYING_STEP := 0.25
+## Seconds of rest paid in each bucket, oldest first after [member _paying_at].
+var _paying := PackedFloat64Array()
+var _paying_at := 0
+## How far into the current bucket, in seconds.
+var _paying_clock := 0.0
+## How much of the window has been measured since [method reset]: a newborn's
+## first seconds are a rate over what it has lived, not over five.
+var _paying_age := 0.0
+
 
 ## Being alive, at [method rest_rate]: `plastid`'s light is this body's income.
 ## Written `delta * rate / HUNGER_SECONDS`, in that order, as it always was, and
@@ -225,11 +258,15 @@ var starve_seconds := 0.0
 ## by 1a-1's build and again by its review. The fingerprints cannot see it: no
 ## fingerprint run eats, and a hunger pinned at full hides a reordered sum. What
 ## CI holds is this node against the static functions to 1e-6 (drop_probe) and
-## the thirty-second death to within two frames (levels_probe).
+## the fifty-second death to within two frames (levels_probe).
 func _process(delta: float) -> void:
 	if HUNGER_SECONDS > 0.0:
 		set_hunger(hunger + delta * rest_rate(upkeep, photosynthesis, reserve)
 			/ HUNGER_SECONDS)
+	# The same second of being alive, in seconds of rest, on the meter: the rate
+	# times the tank it is a share of.
+	_pay(delta * maxf(upkeep - photosynthesis, 0.0))
+	_tick_paying(delta)
 	if hunger >= 1.0:
 		starve_seconds += delta
 	else:
@@ -269,6 +306,60 @@ func spend(rest_seconds: float) -> void:
 	if rest_seconds <= 0.0 or HUNGER_SECONDS <= 0.0:
 		return
 	set_hunger(hunger + effort_cost(rest_seconds, burn, reserve))
+	_pay(rest_seconds * burn)
+
+
+## **What the tank holds when full**, in seconds of rest: a born cell's
+## [constant HUNGER_SECONDS], times its [member reserve]. The unit every cost in
+## this file is paid in, and the one the gauge counts in.
+func capacity() -> float:
+	return HUNGER_SECONDS * maxf(reserve, RESERVE_MIN)
+
+
+## **What is in it now**, in the same seconds of rest.
+func stored() -> float:
+	return (1.0 - hunger) * capacity()
+
+
+## **What it pays a second**, in seconds of rest a second, over the last
+## [constant PAYING_WINDOW] seconds (or what has been lived of them): 1.0 for a
+## born cell doing nothing, more for every stroke, turn and dash, less for a
+## better `crista` or more `plastid`. Never a meal: what comes in is not paid.
+func paying() -> float:
+	if _paying_age <= 0.0:
+		return maxf(upkeep - photosynthesis, 0.0)
+	var total := 0.0
+	for one: float in _paying:
+		total += one
+	# Over what the buckets hold: every full one and the part of the newest that
+	# has run, which is a quarter of a second short of the window between steps.
+	var span := float(_paying.size() - 1) * PAYING_STEP + _paying_clock
+	return total / maxf(minf(_paying_age, span), 0.001)
+
+
+## **Seconds left of the grace**, once the tank is empty; the whole grace before.
+func grace_left() -> float:
+	return maxf(STARVE_GRACE - starve_seconds, 0.0)
+
+
+func _pay(rest_seconds: float) -> void:
+	if _paying.is_empty():
+		_paying.resize(int(ceilf(PAYING_WINDOW / PAYING_STEP)))
+		_paying.fill(0.0)
+	_paying[_paying_at] += rest_seconds
+
+
+## Moves the meter's clock on by [param delta]: a bucket a [constant PAYING_STEP],
+## each one emptied as it comes round again.
+func _tick_paying(delta: float) -> void:
+	if _paying.is_empty():
+		return
+	_paying_age = minf(_paying_age + delta, PAYING_WINDOW)
+	_paying_clock += delta
+	while _paying_clock >= PAYING_STEP:
+		_paying_clock -= PAYING_STEP
+		_paying_at = (_paying_at + 1) % _paying.size()
+		_paying[_paying_at] = 0.0
 
 
 # --- The tank's arithmetic (docs/design/ocean.md §5.2) ------------------------
@@ -309,6 +400,10 @@ func reset() -> void:
 	reserve = 1.0
 	photosynthesis = 0.0
 	burn = 1.0
+	_paying.clear()
+	_paying_at = 0
+	_paying_clock = 0.0
+	_paying_age = 0.0
 	set_hunger(0.0)
 
 
@@ -329,11 +424,17 @@ func starved() -> bool:
 ## quickens on it and the body goes slack on it -- normal_mode.gd eases the
 ## drawn slack toward it, so a meal fills the body out rather than popping it.
 func hungry() -> float:
-	return clampf((hunger - HUNGRY_FROM) / (1.0 - HUNGRY_FROM), 0.0, 1.0)
+	return hungry_at(hunger)
+
+
+## [method hungry] at a [member hunger] of [param level], for a body kept in a
+## file (docs/design/cells.md §6.6): the slack its figure is drawn with.
+static func hungry_at(level: float) -> float:
+	return clampf((level - HUNGRY_FROM) / (1.0 - HUNGRY_FROM), 0.0, 1.0)
 
 
 ## THE mapping, half one. Seconds between beats: [constant REST_PERIOD] above
-## half a tank, **quicker as the tank empties** to [constant EMPTY_PERIOD], then
+## [constant HUNGRY_FROM], **quicker as the tank empties** to [constant EMPTY_PERIOD], then
 ## quicker again through the grace to [constant LAST_PERIOD]. **Hunger alone.**
 ## The water's richness used to multiply this down to 0.55 s beside food
 ## (food-and-predators.md §2.1); the owner took it off on 2026-09-29, because

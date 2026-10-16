@@ -1,4 +1,4 @@
-[gd_scene load_steps=15 format=3]
+[gd_scene load_steps=16 format=3]
 
 [ext_resource type="Script" path="res://game/normal/normal_mode.gd" id="1_normal"]
 [ext_resource type="PackedScene" path="res://game/perception/membrane.tscn" id="2_membrane"]
@@ -14,6 +14,7 @@
 [ext_resource type="Script" path="res://game/normal/controls.gd" id="12_controls"]
 [ext_resource type="PackedScene" path="res://game/menu/corner.tscn" id="13_corner"]
 [ext_resource type="Script" path="res://game/normal/programs_page.gd" id="14_programs"]
+[ext_resource type="Script" path="res://game/normal/gauge.gd" id="15_gauge"]
 
 [node name="NormalMode" type="Node"]
 process_mode = 3
@@ -127,9 +128,24 @@ visible = false
 custom_minimum_size = Vector2(0, 38)
 mouse_filter = 2
 
-[node name="Hint" type="Label" parent="Hud/Choosing/Says"]
+[node name="Hint" type="HBoxContainer" parent="Hud/Choosing/Says"]
 custom_minimum_size = Vector2(0, 19)
 mouse_filter = 2
+theme_override_constants/separation = 6
+alignment = 1
+
+[node name="Rarity" type="Label" parent="Hud/Choosing/Says/Hint"]
+visible = false
+custom_minimum_size = Vector2(0, 19)
+mouse_filter = 2
+auto_translate_mode = 2
+theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.45)
+theme_override_font_sizes/font_size = 14
+
+[node name="Text" type="Label" parent="Hud/Choosing/Says/Hint"]
+custom_minimum_size = Vector2(0, 19)
+mouse_filter = 2
+size_flags_horizontal = 3
 theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.38)
 theme_override_font_sizes/font_size = 14
 horizontal_alignment = 1
@@ -142,6 +158,20 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 script = ExtResource("12_controls")
+
+[node name="Gauges" type="HBoxContainer" parent="Hud"]
+offset_left = 116.0
+offset_top = 48.0
+offset_right = 332.0
+offset_bottom = 104.0
+mouse_filter = 2
+theme_override_constants/separation = 12
+
+[node name="Energy" type="Control" parent="Hud/Gauges"]
+custom_minimum_size = Vector2(216, 56)
+layout_mode = 2
+mouse_filter = 2
+script = ExtResource("15_gauge")
 
 [node name="PauseTap" type="Control" parent="Hud"]
 offset_left = 48.0
@@ -237,21 +267,6 @@ horizontal_alignment = 1
 [node name="Toggle" type="Button" parent="Hud/Pause/Center/Columns/Side/Settings/View/Box"]
 text = "north up"
 
-[node name="Feel" type="PanelContainer" parent="Hud/Pause/Center/Columns/Side/Settings"]
-
-[node name="Box" type="VBoxContainer" parent="Hud/Pause/Center/Columns/Side/Settings/Feel"]
-theme_override_constants/separation = 6
-
-[node name="Caption" type="Label" parent="Hud/Pause/Center/Columns/Side/Settings/Feel/Box"]
-mouse_filter = 2
-theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.45)
-theme_override_font_sizes/font_size = 15
-text = "controls"
-horizontal_alignment = 1
-
-[node name="Toggle" type="Button" parent="Hud/Pause/Center/Columns/Side/Settings/Feel/Box"]
-text = "anywhere"
-
 [node name="Resume" type="Button" parent="Hud/Pause/Center/Columns/Side"]
 size_flags_horizontal = 4
 text = "resume"
@@ -334,6 +349,12 @@ offset_top = 41.0
 offset_right = 420.0
 offset_bottom = 331.0
 
+[node name="Sockets" type="Control" parent="Hud/Pause/Center/Columns/Genome"]
+visible = false
+custom_minimum_size = Vector2(420, 372)
+mouse_filter = 2
+size_flags_horizontal = 4
+
 [node name="Lines" type="Control" parent="Hud/Pause/Center/Columns/Genome"]
 custom_minimum_size = Vector2(0, 82)
 mouse_filter = 2
@@ -374,6 +395,14 @@ custom_minimum_size = Vector2(0, 20)
 mouse_filter = 2
 theme_override_constants/separation = 6
 alignment = 1
+
+[node name="Rarity" type="Label" parent="Hud/Pause/Center/Columns/Genome/Lines/Stack/Hint"]
+visible = false
+custom_minimum_size = Vector2(0, 19)
+mouse_filter = 2
+auto_translate_mode = 2
+theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.45)
+theme_override_font_sizes/font_size = 14
 
 [node name="Level" type="Label" parent="Hud/Pause/Center/Columns/Genome/Lines/Stack/Hint"]
 visible = false

@@ -1,8 +1,13 @@
 extends RefCounted
 ## **A drop, kept** (docs/design/ocean.md §9): the file a drop lives in between
 ## two launches, and what a build does with one that another build wrote. A
-## personal drop and a room are the same file (§9.1, §10.3) -- a drop, and the
-## cell of whoever left it mid-run, if anyone did.
+## personal drop and a room are the same file (§9.1, §10.3). **A world keeps only
+## its water** (docs/design/cells.md §3.3): your cells have files of their own
+## (cell_save.gd), and `cell` is written `{}`. A file a build before them wrote
+## may still hold its cells -- **one for each view** (ocean.md §9.5), `cell` and
+## [constant CELLS] -- which this still reads, checks and composes, for the
+## migration that moves them into slots (cells.gd) and for the run that has to
+## carry one it could not move.
 ##
 ## **The file** (§9.3): one `store_var` of plain types -- Dictionaries, Arrays
 ## and Packed arrays, never an object -- through `open_compressed`, written to a
@@ -32,6 +37,13 @@ const CellBody := preload("res://game/normal/cell.gd")
 const Genome := preload("res://game/normal/genome.gd")
 const Metabolism := preload("res://game/normal/metabolism.gd")
 const Drop := preload("res://game/normal/drop.gd")
+## The genes (docs/design/gene-catalogue.md): what [method rules_text] lists of
+## them, the order and every table any organ provides.
+const Catalogue := preload("res://game/genes/catalogue.gd")
+## The body plan (gene-catalogue.md §10): the slot ladder [method rules_text]
+## lists, under the names it had when it was `cell.gd`'s.
+const BodyPlan := preload("res://game/genes/body_plan.gd")
+const Stats := preload("res://game/genes/stats.gd")
 
 ## **How the file is laid out.** Bumped only when [constant SHAPE] changes; a
 ## content pack that changes a number changes [method rules] instead.
@@ -46,7 +58,9 @@ const PATH := "user://drop.save"
 ## **What a file of this format holds**, key by key, and each value's type. A
 ## nested Dictionary is a Dictionary that must hold its own keys; `cell` is
 ## checked against [constant CELL] unless it is empty -- a drop left after a
-## death, or by nobody, has no cell in it (§9.2).
+## death, or by nobody, has no cell in it (§9.2). `cell` is the cell of the
+## first view, the one every file kept before there was a cell per view; every
+## other view's is in [constant CELLS], beside it.
 ##
 ## `drop.bodies` is **one column a field**, every column one entry a body, in
 ## slot order: a Packed array compresses a column of clocks that are mostly
@@ -116,7 +130,12 @@ const SHAPE := {
 ## this one -- it comes back into this drop at a quiet place, as a guest does
 ## that leaves the pond. **And `fed`** (pack 4, docs/design/automation.md §9.2):
 ## the seconds since it last ate, for its instincts, absent for one that never
-## has. Your programs are not here: they are the device's (`library.gd`).
+## has. Your programs are not here: they are the device's (`library.gd`). **And
+## `genome.plan`** (docs/design/gene-catalogue.md §10.3): the body plan's slot ids
+## its two layouts are kept under, absent from a file kept before there was one.
+##
+## **This is every view's cell** ([constant CELLS]): what a view keeps is the
+## same whichever view it is.
 const CELL := {
 	"body": {
 		"at": TYPE_VECTOR2,
@@ -155,6 +174,20 @@ const CELL := {
 	},
 }
 
+## **Every other view's cell** (ocean.md §9.5): beside `cell`, a file may hold
+## `cells`, a Dictionary from a view's name to that view's cell -- each as
+## [constant CELL] says, and checked as `cell` is. A world keeps one cell for
+## each view, and never plays one in another: `cell` is the first view's, the
+## only one a file held before there were more, and every other view's is here,
+## under the name the views are kept by (run_state.gd's `CELL_KEYS`, where the
+## views are named; this file knows none). A view with no cell -- never played
+## in, or its last cell dead -- is not in it, and a file with no other view's
+## cell has no `cells` at all: it is laid out as one written before them, which
+## every build reads. **No new format**, as `cell.loads` was none: a build before
+## them loads `cell` and never asks for `cells` -- and keeps only `cell` the next
+## time it writes.
+const CELLS := "cells"
+
 ## **What a file of this format may also hold** (1b-2 on), and a file without
 ## them loads as 1b-1's did -- every body drifting, the floor counted again, the
 ## grid filed by place -- so no drop kept before them is set aside. With them, a
@@ -164,7 +197,14 @@ const CELL := {
 ## and two points -- the genes the floor is short of, the grid as `[ids,
 ## buckets]`, the census's counts and whose turn it is. Each is checked as
 ## [constant SHAPE] is when it is there: one that does not hold what it says
-## makes the file unreadable, never half-loaded.
+## makes the file unreadable, never half-loaded. **And, since the floor took turns
+## within a budget** (docs/design/gene-rarity.md §3.3), its queue and its budget:
+## `gene_queue`, every gene the floor found short at its last count in the order it
+## gives them back -- `gene_short` is those due and not given yet, in the same order; a
+## peer-borne one the one-a-count rule holds back is in `gene_queue` alone -- and
+## `gene_since`, the drifters made since the floor's last. A file without them
+## loads with its short genes queued in the order kept and the budget full; a build
+## before them reads `gene_short` alone, as it always has.
 const RUNS := {
 	"state": TYPE_PACKED_BYTE_ARRAY,
 	"target": TYPE_PACKED_INT64_ARRAY,
@@ -174,6 +214,8 @@ const RUNS := {
 }
 const EXTRA := {
 	"gene_short": TYPE_PACKED_STRING_ARRAY,
+	"gene_queue": TYPE_PACKED_STRING_ARRAY,
+	"gene_since": TYPE_INT,
 	"grid": TYPE_ARRAY,
 	"stats": TYPE_DICTIONARY,
 	"turn": TYPE_INT,
@@ -274,7 +316,10 @@ const BEHAVIOURS_VERSION := 1
 
 ## One of the two daughters a division offers, by gene name: the DNA she is
 ## made of, its layout, the body that expressed, and the mutation that made her
-## -- empty for the faithful one.
+## -- empty for the faithful one. **And, since the body plan, `plan`**: the slot
+## ids her layout is kept under (gene-catalogue.md §10.3), checked when it is
+## there, as the genome's is ([method bad_cell]). **And `riders`**, her DNA's
+## (gene-sockets.md §7), absent from a file kept before them.
 const DAUGHTER := {
 	"tiers": TYPE_DICTIONARY,
 	"order": TYPE_PACKED_STRING_ARRAY,
@@ -287,8 +332,20 @@ const DAUGHTER := {
 ## wrong, not a drop, and is not allocated.
 const SLOTS_MAX := 1 << 16
 
-## [method rules], worked out once a process: the constants cannot change under it.
+## [method rules], worked out once a process: the constants cannot change under it,
+## and the body plan changes only when a tool swaps one in -- which forgets it
+## ([method _read_plan]).
 static var _rules := ""
+
+
+static func _static_init() -> void:
+	BodyPlan.listen(_read_plan)
+
+
+## **Another plan means other rules**: the slot ladder is in [method rules_text], so
+## a plan a tool swaps in is worked out again on the next [method rules].
+static func _read_plan() -> void:
+	_rules = ""
 
 
 # --- What the bodies mean (§9.4) ---------------------------------------------------
@@ -304,30 +361,59 @@ static func rules() -> String:
 
 ## **Every value a body is read by**, one a line, where it is defined, written
 ## the way `tools/net_probe.gd` writes the lines `Wire.RULES` fingerprints: the
-## gene list and the tiers, **every tier table cell.gd has** -- found by name, so
-## a table added later is in it without anyone remembering -- the slot ladder,
+## gene list and the tiers, **every table any gene provides** -- found by stat,
+## so a table added later is in it without anyone remembering, each under the
+## name it had when it was `cell.gd`'s (stats.gd's `label`) -- the slot ladder,
 ## growth and division, the metabolism every body runs, and the rim.
 static func rules_text() -> String:
 	var lines := PackedStringArray()
 	var put := func(name: String, value: Variant) -> void:
 		lines.append("%s=%s" % [name, _rule_value(value)])
-	put.call("genome.GENE_ORDER", Genome.GENE_ORDER)
+	put.call("genome.GENE_ORDER", Catalogue.live())
 	put.call("genome.TIER_MAX", Genome.TIER_MAX)
 	put.call("genome.UPKEEP_PER_TIER", Genome.UPKEEP_PER_TIER)
-	# **Every name a String before anything is sorted.** The map's keys are
-	# StringNames, and Godot orders two StringNames by where they happen to sit
-	# in memory, not by name: sorted as they came, the same constants
-	# fingerprinted differently from one process to the next, and a launch could
-	# have read its own drop as converted.
+	# **And each gene's share of it** (gene.gd's `upkeep_share`), for those that pay
+	# other than all of it: a gene at the usual share writes nothing, so a drop kept
+	# before shares existed reads the same rules for every other gene.
+	for key: StringName in Catalogue.keys():
+		var share := Catalogue.upkeep_share(key)
+		if share != 1.0:
+			put.call("genome.UPKEEP_SHARE." + String(key), share)
+	# One line a provider, sorted by label: a stat's first provider under the
+	# stat's own label, any other after it with its key, so two providers of one
+	# stat are two lines. **Every label a String before anything is sorted**:
+	# Godot orders two StringNames by where they happen to sit in memory, not by
+	# name, and sorted as they came the same tables would fingerprint differently
+	# from one process to the next, and a launch could read its own drop as
+	# converted.
 	var cell := {}
 	var constants: Dictionary = (CellBody as Script).get_script_constant_map()
 	for key: Variant in constants:
 		cell[String(key)] = constants[key]
-	var tables: Array = cell.keys().filter(
-		func(name: String) -> bool: return name.ends_with("_BY_TIER"))
-	tables.sort()
-	for name: String in tables:
-		put.call("cell." + name, cell[name])
+	var tables := {}
+	for stat: StringName in Stats.ROWS:
+		var providers := Catalogue.providers(stat)
+		for k in providers.size():
+			var label := Stats.label(stat) + ("" if k == 0 else "." + String(providers[k]))
+			tables[label] = Catalogue.table(providers[k], stat)
+	# And any table by tier cell.gd still has of its own, found by name as every
+	# one used to be: none today, and one added there later is in it without anyone
+	# remembering.
+	for name: String in cell:
+		if name.ends_with("_BY_TIER") and not tables.has("cell." + name):
+			tables["cell." + name] = cell[name]
+	var labels: Array = tables.keys()
+	labels.sort()
+	for label: String in labels:
+		put.call(label, tables[label])
+	# **The slot ladder is the body plan's** (gene-catalogue.md §10.2), written
+	# under the names it had as `cell.gd`'s constants, so today's plan writes the
+	# lines it always did: `cell.SLOT_RADIUS` the radius one more slot costs --
+	# 3.5, or every rung for a plan whose ladder is not even -- and the fewest and
+	# the most slots outside.
+	cell["SLOT_RADIUS"] = BodyPlan.ladder()
+	cell["SLOT_MIN"] = BodyPlan.SLOT_MIN
+	cell["SLOT_MAX"] = BodyPlan.SLOT_MAX
 	for name: String in ["BASE_RADIUS", "SLOT_RADIUS", "SLOT_MIN", "SLOT_MAX",
 			"GROWTH_PER_MEAL", "DIVIDE_RADIUS", "STROKE_COST", "TURN_COST"]:
 		put.call("cell." + name, cell[name])
@@ -364,19 +450,52 @@ static func _rule_value(value: Variant) -> String:
 
 # --- The file (§9.3) ----------------------------------------------------------------
 
-## **A file's worth**: [param drop] as food.gd's `drop_state` gives it, and
-## [param cell] -- empty after a death, or with nobody in it -- under this
-## build's format, rules, content version and commit.
-static func compose(drop: Dictionary, cell: Dictionary) -> Dictionary:
-	var build := _build()
-	return {
+## **A file's worth**: [param drop] as food.gd's `drop_state` gives it, under
+## this build's format, rules, content version and commit, **with no cell in it**
+## (cells.md §3.3): `cell` is `{}` and there is no [constant CELLS]. [param cells]
+## is for the one case that still writes some -- **cells a migration could not
+## move yet** (§4), a view's name to its cell, the first view's under "", which a
+## run carries aside and writes back so that nothing is lost.
+static func compose(drop: Dictionary, cells: Dictionary = {}) -> Dictionary:
+	var stamp := build()
+	var data := {
 		"format": FORMAT,
 		"rules": rules(),
-		"content": int(build[0]),
-		"commit": str(build[1]),
+		"content": int(stamp[0]),
+		"commit": str(stamp[1]),
 		"drop": drop,
-		"cell": cell,
+		"cell": cells.get("", {}),
 	}
+	var others := {}
+	for view: String in cells:
+		if not view.is_empty() and not (cells[view] as Dictionary).is_empty():
+			others[view] = cells[view]
+	if not others.is_empty():
+		data[CELLS] = others
+	return data
+
+
+## **[param view]'s cell in [param data]** -- a file as [method read] gives it,
+## the first view's for "" -- or an empty Dictionary for none.
+static func cell_of(data: Dictionary, view: String) -> Dictionary:
+	if view.is_empty():
+		return data.get("cell", {})
+	var others: Dictionary = data.get(CELLS, {})
+	return others.get(view, {})
+
+
+## **Every cell [param data] keeps, by view**: the first view's under "", and
+## only the views that left one.
+static func cells_of(data: Dictionary) -> Dictionary:
+	var out := {}
+	var first: Dictionary = data.get("cell", {})
+	if not first.is_empty():
+		out[""] = first
+	var others: Dictionary = data.get(CELLS, {})
+	for view: String in others:
+		if not (others[view] as Dictionary).is_empty():
+			out[view] = others[view]
+	return out
 
 
 ## **Keeps [param data] at [param path]** (§9.3): written to the `.tmp` beside
@@ -428,25 +547,39 @@ static func read(path: String) -> Dictionary:
 
 
 ## **What the drop at [param path] would say about itself, read and never
-## moved** (docs/design/settings.md §6.3): `{lived, generation}` -- the drop's
-## age in seconds, and its cell's generation, 0 when no cell was left in it --
-## or an empty Dictionary for none, and for one this build cannot use. Decoded
-## and checked as [method read] does, but **a file it cannot use stays where it
-## is**: only a run that is about to play a drop may set its file aside, and
-## the drop menu, which asks this of a drop its index does not name, is not one.
+## moved** (docs/design/settings.md §6.3): `{lived, seed, generations}` -- the
+## drop's age in seconds, its number, and the generation of each cell a build
+## before cells.md left in it, by view, a view that left none not in it -- or an
+## empty Dictionary for none, and for one this build cannot use. Decoded and
+## checked as [method read] does, but **a file it cannot use stays where it is**:
+## only a run that is about to play a drop may set its file aside, and the drop
+## menu, which asks this of a drop its index does not name, is not one.
 ## It costs a whole decode -- 2 ms on a desktop for a drop of 600 bodies, more on
-## a phone -- so it is asked only of a file the index does not name, and the
-## index keeps the answer from its next write on.
+## a phone -- so it is asked only of a file the index does not name, or whose
+## number it does not hold, and the index keeps the answer from its next write on.
 static func peek(path: String) -> Dictionary:
+	var data := look(path)
+	if data.is_empty():
+		return {}
+	var drop: Dictionary = data["drop"]
+	var generations := {}
+	var cells := cells_of(data)
+	for view: String in cells:
+		generations[view] = int(cells[view]["generation"])
+	return {"lived": float(drop["age"]), "seed": int(drop["seed"]),
+		"generations": generations}
+
+
+## **The drop at [param path], read and never moved**: the file as [method read]
+## gives it, or an empty Dictionary for none and for one this build cannot use,
+## which stays where it is. What the chooser's migration reads a world by
+## (cells.md §4): it is no run, and only a run about to play a drop sets a file
+## aside.
+static func look(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
 		return {}
 	var data: Variant = _decoded(path)
-	if not unusable(data).is_empty():
-		return {}
-	var drop: Dictionary = data["drop"]
-	var cell: Dictionary = data["cell"]
-	return {"lived": float(drop["age"]),
-		"generation": int(cell["generation"]) if not cell.is_empty() else 0}
+	return data if unusable(data).is_empty() else {}
 
 
 ## The one value the file at [param path] holds, or null when it would not open.
@@ -463,7 +596,8 @@ static func _decoded(path: String) -> Variant:
 ## **Why [param data] cannot be loaded by this build**, or "" when it can: the
 ## format, then [constant SHAPE], then what a type cannot say -- every column as
 ## long as the others, every slot inside the count and used once, every genome
-## a gene name to a tier.
+## a gene name to a tier -- and every view's cell, `cell` and [constant CELLS]
+## alike.
 static func unusable(data: Variant) -> String:
 	if not data is Dictionary:
 		return "not a drop this build can read"
@@ -473,21 +607,47 @@ static func unusable(data: Variant) -> String:
 	if int(file["format"]) != FORMAT:
 		return "format %d, which this build (format %d) does not know" % [
 			int(file["format"]), FORMAT]
-	var bad := _misfit(file, SHAPE)
+	var bad := misfit(file, SHAPE)
 	if bad.is_empty() and not (file["cell"] as Dictionary).is_empty():
-		bad = _misfit(file["cell"], CELL, "cell.")
+		bad = misfit(file["cell"], CELL, "cell.")
 	if bad.is_empty():
 		bad = _bad_bodies(file["drop"])
 	if bad.is_empty():
 		bad = _bad_extra(file["drop"])
 	if bad.is_empty() and not (file["cell"] as Dictionary).is_empty():
-		bad = _bad_cell(file["cell"])
+		bad = bad_cell(file["cell"], "cell.")
+	if bad.is_empty():
+		bad = _bad_cells(file)
 	return "" if bad.is_empty() else "format %d but unreadable (%s)" % [FORMAT, bad]
 
 
+## What a cell per view added, when it is there ([constant CELLS]): a Dictionary
+## from a view's name -- never "", which is `cell` -- to a cell, each checked as
+## `cell` is, and an empty one taken for none.
+static func _bad_cells(file: Dictionary) -> String:
+	if not file.has(CELLS):
+		return ""
+	if not file[CELLS] is Dictionary:
+		return "cells is not a dictionary"
+	var cells: Dictionary = file[CELLS]
+	for view: Variant in cells:
+		if typeof(view) != TYPE_STRING or (view as String).is_empty():
+			return "cells holds a view that is not a name"
+		if not cells[view] is Dictionary:
+			return "cells.%s is not a cell" % view
+		var cell: Dictionary = cells[view]
+		if cell.is_empty():
+			continue
+		var bad := bad_cell(cell, "cells.%s." % view)
+		if not bad.is_empty():
+			return bad
+	return ""
+
+
 ## The first key of [param shape] that [param value] does not hold as the type
-## it says, by its path; "" when every one is.
-static func _misfit(value: Dictionary, shape: Dictionary, at := "") -> String:
+## it says, by its path; "" when every one is. cell_save.gd checks its own file
+## with it too.
+static func misfit(value: Dictionary, shape: Dictionary, at := "") -> String:
 	for key: String in shape:
 		if not value.has(key):
 			return at + key + " missing"
@@ -495,7 +655,7 @@ static func _misfit(value: Dictionary, shape: Dictionary, at := "") -> String:
 		if want is Dictionary:
 			if not value[key] is Dictionary:
 				return at + key + " is not a dictionary"
-			var inner := _misfit(value[key], want, at + key + ".")
+			var inner := misfit(value[key], want, at + key + ".")
 			if not inner.is_empty():
 				return inner
 		elif typeof(value[key]) != int(want):
@@ -530,7 +690,35 @@ static func _bad_bodies(drop: Dictionary) -> String:
 		bad = _bad_behaviour(drop, bodies, n)
 	if bad.is_empty():
 		bad = _bad_doses(bodies, n)
+	if bad.is_empty():
+		bad = _bad_riders(bodies, n)
 	return bad
+
+
+## **What `drop.bodies` may also hold** (docs/design/gene-sockets.md §7): every
+## body's riders, the worn and the DNA's, each riders as a file keeps them -- empty
+## for none, which is most of the water. A file without them has none anywhere.
+const RIDERS := {
+	"riders": TYPE_ARRAY,
+	"dna_riders": TYPE_ARRAY,
+}
+
+
+## The riders' columns, when they are there: each an array, one entry a body, and
+## every entry riders by name ([method is_riders]).
+static func _bad_riders(bodies: Dictionary, n: int) -> String:
+	for key: String in RIDERS:
+		if not bodies.has(key):
+			continue
+		if typeof(bodies[key]) != int(RIDERS[key]):
+			return "drop.bodies.%s is the wrong type" % key
+		if (bodies[key] as Array).size() != n:
+			return "drop.bodies.%s has %d entries for %d bodies" % [key,
+				(bodies[key] as Array).size(), n]
+		for one: Variant in bodies[key]:
+			if not is_riders(one):
+				return "a body's %s is not hosts to their slots" % key
+	return ""
 
 
 ## What the toxin's doses added, when it is there: each column the type it says,
@@ -588,7 +776,7 @@ static func _bad_behaviour(drop: Dictionary, bodies: Dictionary, n: int) -> Stri
 		if not drop["behaviours"] is Dictionary:
 			return "drop.behaviours is not a dictionary"
 		var kept: Dictionary = drop["behaviours"]
-		var bad := _misfit(kept, BEHAVIOURS, "drop.behaviours.")
+		var bad := misfit(kept, BEHAVIOURS, "drop.behaviours.")
 		if not bad.is_empty():
 			return bad
 		unread = int(kept["version"]) != BEHAVIOURS_VERSION
@@ -648,7 +836,7 @@ static func _bad_extra(drop: Dictionary) -> String:
 		if not drop["runs"] is Dictionary:
 			return "drop.runs is not a dictionary"
 		var runs: Dictionary = drop["runs"]
-		var bad := _misfit(runs, RUNS, "drop.runs.")
+		var bad := misfit(runs, RUNS, "drop.runs.")
 		if not bad.is_empty():
 			return bad
 		if (runs["state"] as PackedByteArray).size() != n \
@@ -670,48 +858,85 @@ static func _bad_extra(drop: Dictionary) -> String:
 	return ""
 
 
-static func _bad_cell(cell: Dictionary) -> String:
+## **Why [param cell] is not a cell this build can load**, or "" when it is:
+## [constant CELL], key by key, then what a type cannot say -- `elsewhere`, `fed`,
+## the record, the loads, two daughters by gene name, a genome of gene names to
+## tiers, its waiting genes and its levels. A world's `cell` and [constant CELLS]
+## are checked with it, and so is a slot's (cell_save.gd), so a cell is one thing
+## wherever it is kept. [param at] is where it sits, for the reason given.
+static func bad_cell(cell: Dictionary, at := "cell.") -> String:
+	var bad := misfit(cell, CELL, at)
+	if not bad.is_empty():
+		return bad
 	if cell.has("elsewhere") and typeof(cell["elsewhere"]) != TYPE_BOOL:
-		return "cell.elsewhere is the wrong type"
+		return at + "elsewhere is the wrong type"
 	# **Seconds since the cell last ate** (docs/design/automation.md §9.2), for its
 	# instincts' `fed`: since pack 4's programs, and absent for a cell that never
 	# ate. A build before them loads the rest and never asks.
 	if cell.has("fed") and (typeof(cell["fed"]) != TYPE_FLOAT or not is_finite(float(cell["fed"]))):
-		return "cell.fed is not seconds"
+		return at + "fed is not seconds"
 	for key: String in CELL_LINEAGE:
 		if cell.has(key) and typeof(cell[key]) != int(CELL_LINEAGE[key]):
-			return "cell.%s is the wrong type" % key
+			return at + "%s is the wrong type" % key
 	# **The cell's own loads** (the toxin's doses): three counts of stacks.
 	if cell.has("loads") and (typeof(cell["loads"]) != TYPE_PACKED_FLOAT64_ARRAY
 			or (cell["loads"] as PackedFloat64Array).size() != LOADS
 			or not _are_stacks(cell["loads"])):
-		return "cell.loads is not three counts of stacks"
+		return at + "loads is not three counts of stacks"
 	var pair: Array = cell["daughters"]
 	if not pair.is_empty() and pair.size() != 2:
-		return "cell.daughters is not two daughters"
+		return at + "daughters is not two daughters"
 	for one: Variant in pair:
-		if not one is Dictionary or not _misfit(one, DAUGHTER).is_empty() \
-				or not _is_genes(one["tiers"]) or not _is_genes(one["body"]):
-			return "cell.daughters is not two daughters by gene name"
+		if not one is Dictionary or not misfit(one, DAUGHTER).is_empty() \
+				or not _is_genes(one["tiers"]) or not _is_genes(one["body"]) \
+				or (one.has("plan") and not BodyPlan.is_stamp(one["plan"])) \
+				or (one.has("riders") and not is_riders(one["riders"])):
+			return at + "daughters is not two daughters by gene name"
 	var genome: Dictionary = cell["genome"]
 	if not _is_genes(genome["dna"]) or not _is_genes(genome["body"]):
-		return "cell.genome is not gene names to tiers"
+		return at + "genome is not gene names to tiers"
+	# **The body plan's slot ids, beside every layout** (gene-catalogue.md §10.3),
+	# the genome's and each daughter's: absent from a file kept before them, which
+	# was kept under today's plan. A build before them never asks -- a shape is
+	# checked key by key, and a key it does not name is not looked at.
+	if genome.has("plan") and not BodyPlan.is_stamp(genome["plan"]):
+		return at + "genome.plan is not slot ids"
+	# **The genes in genes' own slots** (gene-sockets.md §7), the DNA's and the
+	# body's: absent from a file kept before them, which had none.
+	for key: String in ["riders", "body_riders"]:
+		if genome.has(key) and not is_riders(genome[key]):
+			return at + "genome.%s is not hosts to their slots" % key
 	for one: Variant in genome["waiting"]:
 		if not one is Array or (one as Array).size() != 3 \
 				or typeof(one[0]) != TYPE_STRING or typeof(one[1]) != TYPE_INT \
 				or typeof(one[2]) != TYPE_FLOAT:
-			return "cell.genome.waiting is not gene, copies and seconds"
+			return at + "genome.waiting is not gene, copies and seconds"
 	var levels: Dictionary = genome["levels"]
 	for gene: Variant in levels:
 		var level: Variant = levels[gene]
 		if typeof(gene) != TYPE_STRING or not level is Array \
 				or (level as Array).size() != 2 or typeof(level[0]) != TYPE_FLOAT \
 				or typeof(level[1]) != TYPE_STRING:
-			return "cell.genome.levels is not gene names to experience and path"
+			return at + "genome.levels is not gene names to experience and path"
 	return ""
 
 
 ## Whether [param value] is a genome as the file keeps one: gene names to tiers.
+## **Whether [param value] is riders as a file keeps them** (riders.gd's
+## `by_name`): host names to their slots, each a rider's name and its copies.
+static func is_riders(value: Variant) -> bool:
+	if not value is Dictionary:
+		return false
+	for host: Variant in value:
+		if typeof(host) != TYPE_STRING or not value[host] is Array:
+			return false
+		for one: Variant in value[host]:
+			if not one is Array or (one as Array).size() != 2 \
+					or typeof(one[0]) != TYPE_STRING or typeof(one[1]) != TYPE_INT:
+				return false
+	return true
+
+
 static func _is_genes(value: Variant) -> bool:
 	if not value is Dictionary:
 		return false
@@ -730,15 +955,18 @@ static func converted(data: Dictionary) -> bool:
 
 
 ## **What a load says in the log**, so a tester can tell a converted drop from a
-## resumed one: the drop's age and bodies, whether a cell came back with it, and
-## under other rules what the conversion did -- [param done] is what food.gd's
-## `load_drop` returns. Content and commit are the build that wrote it.
+## resumed one: the drop's age and bodies, the cells a build before cells.md
+## still keeps in it -- none once they are in slots (cells.md §4) -- and under
+## other rules what the conversion did: [param done] is what food.gd's
+## `load_drop` returns. Content and commit are the build that wrote it. **Your
+## cell is cells.gd's to say**: it is no longer in this file.
 static func note(data: Dictionary, done: Dictionary) -> String:
 	var drop: Dictionary = data["drop"]
-	var line := "[drop-save] your drop, %d bodies, %.0f s old, %s" % [
+	var kept := cells_of(data).size()
+	var line := "[drop-save] your drop, %d bodies, %.0f s old%s" % [
 		int(done.get("bodies", 0)), float(drop["age"]),
-		"and your cell in it" if not (data["cell"] as Dictionary).is_empty()
-			else "and a new cell"]
+		"" if kept == 0 else (", a cell from before the slots still in it" if kept == 1
+			else ", %d cells from before the slots still in it" % kept)]
 	if not converted(data):
 		return line + ", as you left it"
 	return line + (", CONVERTED: written by content %d (%s) under rules %s, read under %s;"
@@ -749,8 +977,9 @@ static func note(data: Dictionary, done: Dictionary) -> String:
 
 
 ## `[content version, commit]` of this build, from the launcher's BuildInfo --
-## `[0, ""]` with none to ask, as in a tool's run.
-static func _build() -> Array:
+## `[0, ""]` with none to ask, as in a tool's run. cell_save.gd stamps a cell
+## with it too.
+static func build() -> Array:
 	var tree := Engine.get_main_loop() as SceneTree
 	var info: Node = tree.root.get_node_or_null(^"BuildInfo") if tree != null else null
 	if info == null:

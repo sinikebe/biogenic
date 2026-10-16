@@ -20,13 +20,13 @@ extends Node
 ##                           every press landing on nothing. Pass it whenever
 ##                           this harness is booted directly rather than through
 ##                           shot.tscn, which sets the window itself
-##   --mode=0|1              force the view: 0 point of view, 1 full vision
-##   --scheme=0|1|2          force the control scheme: 0 anywhere (the one that
-##                           ships), 1 stick, 2 pads. The choice lives in
-##                           `user://`, so without this a scheme cannot be
-##                           photographed without writing one the next run --
-##                           and every other render in this project -- would
-##                           inherit
+##   --mode=0|1              force the view: 0 point of view, 1 full vision --
+##                           and so which view's slots a `--cells=` run plays
+##                           its cell from, each view keeping its own (docs/
+##                           design/cells.md §1.2). `--tap=<seconds>:v` still flips the
+##                           view mid-run, as every run of the editor's binary
+##                           can and no exported build does; a run flipped so
+##                           keeps nothing after it
 ##   --numbers=0|1           pin a gene's numbers off or on (gene-stats.md
 ##                           §2.2). Remembered in `user://` too, and for the same
 ##                           reason a pinned run never writes it: a tap on the
@@ -62,8 +62,10 @@ extends Node
 ##   --key-down=<seconds>:<key>
 ##   --key-up=<seconds>:<key>
 ##                           press a key and leave it down, then let it go; the
-##                           same key names as --tap=, repeatable. --tap= is a
-##                           press and its release in one frame, which cannot
+##                           same key names as --tap= -- and `q`, `f` and `c`,
+##                           the genes' buttons (haptonema.md §4) --
+##                           repeatable. --tap= is a press and its release in
+##                           one frame, which cannot
 ##                           pose a gesture that *is* the hold: `E` opens the
 ##                           body to place a gene, `A` / `D` walk the lit slot
 ##                           while it stays down, and letting go is what places
@@ -95,9 +97,9 @@ extends Node
 ##                           a read and not a lean* -- cannot be posed with it
 ##                           at all. `finger` is the touch index and defaults to
 ##                           0; a second one is the only way to pose two
-##                           controls held at once, which is exactly what `pads`
-##                           exists for -- `port` and `push` together, or a dash
-##                           fired while the stick is over. Same convention as
+##                           controls held at once -- the turn and the push
+##                           together, or a dash fired while the turn is over
+##                           (docs/design/gene-controls.md). Same convention as
 ##                           `--touch=`: seconds first, canvas coordinates,
 ##                           unscaled.
 ##   --slide=<seconds>:<x>,<y>[,<finger>]
@@ -148,6 +150,13 @@ extends Node
 ##                           stretch transform on the way in, so this one must
 ##                           not. Either way the number you write is the canvas
 ##                           coordinate and nothing else.
+##   --specimens=1           file tools/looks_specimens.gd's variants before the run
+##                           is built -- an eye with a ring and one with a diamond
+##                           (`ocellusb`, `ocellusc`), the toxin's paralysing and
+##                           sleeping strains (`paraneux`/`paracyst`,
+##                           `hypnoneux`/`hypnocyst`) and the rest -- so the pause
+##                           screen and the tray can be shot holding a variant,
+##                           which today's content has none of (gene-looks.md §9.4)
 ##   --sample=<gene>[:copies][,<gene>[:copies]...]
 ##                           put genes in the genome's waiting queue, the state
 ##                           the body draws and §5.2 gives the strip.
@@ -277,6 +286,12 @@ extends Node
 ##                           1 starboard flank, 2 astern, 3 and 4 the forward
 ##                           diagonals, 5 and 6 the rear ones. That is how a
 ##                           beam gets aimed.
+##   --riders=<host:slot:g:copies,...>
+##                           pose genes in genes' own slots (docs/design/
+##                           gene-sockets.md), e.g. trichocyst:0:toxicyst:2 for a
+##                           sting with venom at two copies in its slot: into the
+##                           DNA, and the body for a host it wears. Applied after
+##                           --genome=, --dna= and --body=.
 ##   --level=<g:level[:path],...>
 ##                           pose a levelled gene's level and the path it took
 ##                           at its fork (docs/design/beam-levels.md), e.g.
@@ -389,7 +404,8 @@ extends Node
 ##   --rects=<seconds>       print `get_global_rect()` for the pause screen's two
 ##                           columns and each of their groups, every slot chip
 ##                           and every waiting gene, and the choosing screen's
-##                           lines (gene-stats.md §3.2), once, at that time. The
+##                           lines (gene-stats.md §3.2) -- the two hint rows' parts,
+##                           the rarity words included -- once, at that time. The
 ##                           column is the one thing in this game measured in
 ##                           canvas pixels rather than judged by eye --
 ##                           docs/design/dna-body.md section 7 -- and a render
@@ -397,8 +413,8 @@ extends Node
 ##                           nothing
 ##   --controls=<seconds>    print what the drawn controls are being told to do
 ##                           on that interval: which of them is held, by which
-##                           pointer, the steer they derive and whether they are
-##                           asking for thrust. The pads and the stick have no
+##                           pointer, the steer they derive and how hard they
+##                           push. The controls have no
 ##                           other output -- `axoneme` thrust is a velocity add
 ##                           and never reaches the bus -- so this is the only
 ##                           way to check two fingers at once from a log
@@ -600,14 +616,13 @@ extends Node
 ##   --desert=<units>        everything alive within it of the start taken away
 ##   --age=<seconds>         the drop lives alone that long before the cell
 ##                           arrives, then the start is chosen in it
-##   --sensed=<0..1>         the water made for a player this sighted, whatever
-##                           the cell carries
 ##   --hunter-genome=<g:t,...>
 ##                           what --hunt= and --stalk= pose, default
 ##                           cytostome:3,flagellum:2. In the drop the hunter is
 ##                           a body of its own, in a slot nothing else uses
 ##   --census=<seconds>      print the drop's census line on that interval, and
-##                           its lineage line after it (lineage.md §4) and its
+##                           its lineage line after it (lineage.md §4), its
+##                           rarity line (gene-rarity.md §11.1) and its
 ##                           behaviour line (behaviour.md §12.1)
 ##   --keep=<path>           keep the drop at that file, the way the game keeps
 ##                           yours at `user://drop.save` (§9): read as the run
@@ -617,7 +632,18 @@ extends Node
 ##                           drop another run left behind, and none leaves one.
 ##                           With it, the run prints the cell and the drop's
 ##                           census sum as it opens, which is what a relaunch
-##                           is compared by
+##                           is compared by. **The cell is kept apart**, with
+##                           `--cells=` (docs/design/cells.md): without it a
+##                           relaunch opens the same water on a new cell
+##   --cells=<folder>        keep the cell in that folder's slots, the way the
+##                           game keeps yours in `user://cells/`: the view's
+##                           selected slot there (`cells.cfg`) is read as the
+##                           run opens and written at every save point, the
+##                           cell before the water. Only with `--keep=`: a cell
+##                           is kept with a world. **Without it this harness
+##                           keeps no cell**, so no render opens on a cell
+##                           another run left, or leaves one (`--cell=` is a
+##                           posed water cell, and another thing)
 ##   --leave-at=<seconds>    leave the app at that time, as a phone does: the
 ##                           window loses focus and the activity pauses
 ##                           (NOTIFICATION_APPLICATION_FOCUS_OUT, then _PAUSED),
@@ -695,8 +721,15 @@ extends Node
 const DEFAULT_SCENE := "res://game/normal/normal_mode.tscn"
 const FoodField := preload("res://game/normal/food.gd")
 const CellBody := preload("res://game/normal/cell.gd")
+## Only for the born body, which every newborn the water makes is
+## (docs/design/water-evolves.md §1): what `--check` quotes a newborn's mouth at.
+const Catalogue := preload("res://game/genes/catalogue.gd")
+## Every gene's numbers, by stat: what a posed friend or a posed dose is quoted at.
+const Stats := preload("res://game/genes/stats.gd")
 ## For places and forms: the inside slot, and what a gene becomes there.
 const GenomeNode := preload("res://game/normal/genome.gd")
+## The genes in genes' own slots (docs/design/gene-sockets.md), for --riders=.
+const Riders := preload("res://game/genes/riders.gd")
 ## Only for `MEAL`, so the `[meal]` line says how much of the bar a meal gave
 ## back at whatever the meal is worth.
 const Metabolism := preload("res://game/normal/metabolism.gd")
@@ -715,6 +748,8 @@ const NetSession := preload("res://game/net/net_session.gd")
 ## For its Life and Split numbering only, which --pond-trace prints and
 ## --friend= reads.
 const NormalMode := preload("res://game/normal/normal_mode.gd")
+## --specimens=1: variants of shipped organs, wearing their accents.
+const Specimens := preload("res://tools/looks_specimens.gd")
 
 var _clock := 0.0
 ## Where each finger was last put, so a slide can carry the `relative` the
@@ -787,13 +822,10 @@ var _trace_clock := 0.0
 ## How often to print what the `ampulla` has in the water, or -1 for never.
 var _pings_trace := -1.0
 var _pings_clock := 0.0
-## The most fronts and the most echoes seen live at one instant, over the whole
-## run. The overlap ping-as-outline.md section 7 is about is a maximum, not an
-## average: it is the worst instant that decides whether a mark is ambiguous.
-var _pings_peak_fronts := 0
+## The most echoes due at one instant, over the whole run. The overlap
+## ping-as-outline.md section 7 is about is a maximum, not an average: it is the
+## worst instant that decides whether a mark is ambiguous.
 var _pings_peak_echoes := 0
-## Which control scheme to force, or -1 to take whatever user:// remembers.
-var _scheme := -1
 ## Whether to pin a gene's numbers, 0 off or 1 on, or -1 to take user://'s.
 var _numbers := -1
 var _hunter_gape := 1.40
@@ -809,6 +841,9 @@ var _census := -1.0
 var _census_clock := 0.0
 ## `--keep=`: where the run keeps its drop, or "" for a run that keeps none.
 var _keep := ""
+## `--cells=`: the folder the run keeps its cell in, or "" for a run that keeps
+## none (docs/design/cells.md §6.2).
+var _cells := ""
 ## `--leave-at=`: when the app is left, or -1.
 var _leave_at := -1.0
 ## The slot the posed hunter is in: 0 in today's water, as it always was; in
@@ -829,6 +864,7 @@ var _sister_radius := 0.0
 var _genome_spec := ""
 var _dna_spec := ""
 var _body_spec := ""
+var _riders_spec := ""
 var _level_spec := ""
 ## --earn=: [[seconds, gene, xp], ...], consumed as the clock passes each one.
 var _earns: Array = []
@@ -874,6 +910,8 @@ var _finger: Dictionary = {}
 ## The same, for the cursor.
 var _cursor := Vector2.ZERO
 var _sample: StringName = &""
+## --specimens=1: whether the specimen variants are filed before the run is built.
+var _specimens := false
 ## --sample=: every gene to queue, as `[gene, copies]`, head first.
 var _samples: Array = []
 var _sample_left := -1.0
@@ -1047,7 +1085,7 @@ const FINGERPRINT_BODY: Array[StringName] = [
 const FINGERPRINT_FIELD: Array[StringName] = [
 	&"concentration", &"dread_level", &"threat", &"shadow", &"shadow_bearing",
 	&"taste_level", &"touch_level", &"touch_bearing", &"beams", &"pings",
-	&"ping_fronts", &"ping_echoes", &"ping_listen", &"_echoes", &"_pulses",
+	&"ping_listen", &"_echoes",
 	&"_ping_clock", &"_ping_age", &"_dart_clock", &"_bite_clock",
 	&"_first_pending", &"_first_hunt", &"_serial"]
 ## The cell: its body, its motion, and every clock its drive runs on.
@@ -1149,8 +1187,6 @@ func _ready() -> void:
 			_freeze_after = float(text.trim_prefix("--freeze-after="))
 		elif text.begins_with("--mode="):
 			_mode = int(text.trim_prefix("--mode="))
-		elif text.begins_with("--scheme="):
-			_scheme = int(text.trim_prefix("--scheme="))
 		elif text.begins_with("--numbers="):
 			_numbers = clampi(int(text.trim_prefix("--numbers=")), 0, 1)
 		elif text.begins_with("--hunger="):
@@ -1207,6 +1243,8 @@ func _ready() -> void:
 			_census = float(text.trim_prefix("--census="))
 		elif text.begins_with("--keep="):
 			_keep = text.trim_prefix("--keep=")
+		elif text.begins_with("--cells="):
+			_cells = text.trim_prefix("--cells=")
 		elif text.begins_with("--leave-at="):
 			_leave_at = float(text.trim_prefix("--leave-at="))
 		elif text.begins_with("--start="):
@@ -1244,18 +1282,22 @@ func _ready() -> void:
 					float(earn[2])])
 		elif text.begins_with("--body="):
 			_body_spec = text.trim_prefix("--body=")
+		elif text.begins_with("--riders="):
+			_riders_spec = text.trim_prefix("--riders=")
 		elif text.begins_with("--check-seeding="):
 			_check_seeding = int(text.trim_prefix("--check-seeding="))
 		elif text.begins_with("--cell="):
 			_posed.append(_parse_pose(text.trim_prefix("--cell=")))
 		elif text.begins_with("--sample-left="):
 			_sample_left = float(text.trim_prefix("--sample-left="))
+		elif text == "--specimens=1":
+			_specimens = true
 		elif text.begins_with("--sample="):
 			_samples.clear()
 			for spec: String in text.trim_prefix("--sample=").split(",", false):
 				var bits := spec.split(":", false)
 				_samples.append([StringName(bits[0]),
-					clampi(int(bits[1]), 1, 3) if bits.size() > 1 else 1])
+					clampi(int(bits[1]), 1, GenomeNode.TIER_MAX) if bits.size() > 1 else 1])
 			_sample = StringName(_samples[0][0]) if not _samples.is_empty() else &""
 		elif text.begins_with("--wound="):
 			_wound = float(text.trim_prefix("--wound="))
@@ -1474,6 +1516,10 @@ func _ready() -> void:
 	elif _peer_dist >= 0.0:
 		_open_peer()
 
+	# **The specimens are filed before anything reads the catalogue's genomes**: the
+	# run's figure, chips and tray are built from what the catalogue holds.
+	if _specimens:
+		print("[drive] specimens filed: %s" % str(Specimens.file_variants()))
 	var scene: PackedScene = load(scene_path)
 	var run := scene.instantiate()
 	# **Which water, and the drop's switches**, set before the scene enters the
@@ -1489,6 +1535,11 @@ func _ready() -> void:
 	# open on nor write.
 	if &"keep" in run:
 		run.set("keep", _keep)
+	# **And no cell** unless told where (docs/design/cells.md §6.2): the game's
+	# default is the player's own cells, which a render must neither open on nor
+	# write. The folder is a run's marker for its selected slots.
+	if &"cells_at" in run:
+		run.set("cells_at", NormalMode.Cells.selected_in(_cells) if _cells != "" else "")
 	# **And no library** unless told where (automation.md §9.1): the game's
 	# default is the device's own file, which a render must neither open on nor
 	# write.
@@ -1504,14 +1555,9 @@ func _ready() -> void:
 		# Set before the scene enters the tree, which is where it is read.
 		run.set("mode", _mode)
 		print("[drive] mode forced to ", _mode)
-	if _scheme >= 0:
-		# Same, and for a sharper reason: the scheme is remembered in user://,
-		# so cycling the pause button to photograph one would leave it behind.
-		run.set("scheme", _scheme)
-		print("[drive] scheme forced to ", _scheme)
 	if _numbers >= 0:
-		# And the numbers, for the scheme's reason: a pinned run never writes
-		# the key, so a tapped switch is not inherited by the next render.
+		# And the numbers, for the mode's reason: a pinned run never writes the
+		# key, so a tapped switch is not inherited by the next render.
 		run.set("numbers", _numbers)
 		print("[drive] numbers pinned to ", _numbers)
 	add_child(run)
@@ -1556,6 +1602,8 @@ func _ready() -> void:
 	# levels are put back in step with them before anything reads a level.
 	if (_dna_spec != "" or _body_spec != "") and _genome != null:
 		_genome.call("_tend_levels")
+	if _riders_spec != "" and _genome != null:
+		_force_riders(_riders_spec)
 	if _level_spec != "" and _genome != null:
 		_force_levels(_level_spec)
 	if _sample != &"" and _genome != null:
@@ -1836,7 +1884,6 @@ func _open_far_seat(scene: PackedScene) -> void:
 	_far_view.render_target_update_mode = SubViewport.UPDATE_DISABLED
 	var far := scene.instantiate()
 	far.set("mode", 0)
-	far.set("scheme", 0)
 	# **In this run's water, keeping nothing** (ocean.md §9, §10.2): the game's
 	# default is the player's own file, which the far seat must neither open on
 	# nor write -- whatever `--keep=` gives this one.
@@ -1844,6 +1891,7 @@ func _open_far_seat(scene: PackedScene) -> void:
 		far.set("drop", _drop_flag)
 	if &"keep" in far:
 		far.set("keep", "")
+		far.set("cells_at", "")
 		far.set("library_at", "")
 	_far_view.add_child(far)
 	NetSession.current = _seat_session(far_seat)
@@ -2122,7 +2170,7 @@ func _step_peer_events() -> void:
 			continue
 		_free_peer()
 		var nose := Vector2(sin(_peer_heading), -cos(_peer_heading))
-		_peer_vel += nose * CellBody.DASH_SPEED_BY_TIER[1]
+		_peer_vel += nose * Stats.at(&"dash_speed", 1)
 		print("[peer]  %5.2f  the friend dashes from (%.0f, %.0f)"
 			% [_clock, _peer_pos.x, _peer_pos.y])
 		_peer_dashes.remove_at(i)
@@ -2143,8 +2191,8 @@ func _free_peer() -> void:
 ## drift and no involuntary impulse, so a shot repeats -- and so nothing here
 ## draws on the global random stream the player's own cell is seeded from.
 func _swim_peer(delta: float) -> void:
-	var rate: float = CellBody.TURN_RATE_BY_TIER[1]
-	var response: float = CellBody.TURN_RESPONSE_BY_TIER[1]
+	var rate: float = Stats.at(&"turn_rate", 1)
+	var response: float = Stats.at(&"turn_response", 1)
 	_peer_omega = lerpf(_peer_omega, _peer_demand * rate,
 		1.0 - exp(-delta / response))
 	_peer_heading = wrapf(_peer_heading + _peer_omega * delta, -PI, PI)
@@ -2593,7 +2641,8 @@ func _step_shift() -> void:
 
 ## `--census=`: the drop's census line, on the interval, while it runs -- and
 ## its lineage line after it, with this cell's own record: its id, its mother's
-## and its line's, and its generation -- and its behaviour line.
+## and its line's, and its generation -- its rarity line (docs/design/
+## gene-rarity.md §11.1) and its behaviour line.
 func _step_census(delta: float) -> void:
 	if _census <= 0.0 or _food == null or not _food.is_processing():
 		return
@@ -2607,6 +2656,7 @@ func _step_census(delta: float) -> void:
 		you = "  | you: id %d parent %d lineage %d generation %d" % [int(_run.get("_id")),
 			int(_run.get("_parent")), int(_run.get("_lineage")), int(_run.get("_generation"))]
 	print("[drive] %6.2f  %s%s" % [_clock, _food.call(&"lineage_line"), you])
+	print("[drive] %6.2f  %s" % [_clock, _food.call(&"rarity_line")])
 	print("[drive] %6.2f  %s" % [_clock, _food.call(&"behaviour_line")])
 
 
@@ -2634,6 +2684,8 @@ func _kept_text() -> String:
 	if _genome != null:
 		line += " dna %s body %s waiting %s" % [_genome.call(&"layout"),
 			_genome.call(&"body_layout"), _waiting_text()]
+	if _cells != "":
+		line += " | cell slot %d" % int(_run.get("_cell_slot"))
 	return line + " | drop sum %s" % str(_food.call(&"census_line")).get_slice("| sum ", 1)
 
 
@@ -2663,11 +2715,11 @@ func _step_toxins() -> void:
 			"hit":
 				var bearing := float(event[2])
 				_food.call(&"_dose", FoodField.TARGET_PLAYER, 0,
-					CellBody.VENOM_STACKS_BY_TIER[3], -1, bearing, false)
+					Stats.at(&"venom_stacks", 3), -1, bearing, false)
 				_food.bitten.emit(bearing, 1.0)
 			"meal":
 				_food.call(&"_dose", FoodField.TARGET_PLAYER, 0,
-					CellBody.SWALLOW_STACKS_BY_TIER[1], -1, 0.0, true)
+					Stats.at(&"swallow_stacks", 1), -1, 0.0, true)
 				_food.eaten.emit(FoodField.MEAL_MIN, &"",
 					cell.position if cell != null else Vector2.ZERO)
 			"fangs":
@@ -2992,52 +3044,42 @@ func _membrane_text() -> String:
 	if lobes.size() < 3 or organs.size() < 4:
 		return "membrane: unavailable"
 	var me: Vector4 = lobes[0]
-	var taste: Vector4 = lobes[1]
 	var light: Vector4 = lobes[2]
-	# **The nutrient lobe is a ring now and a width cannot describe it.** Its
-	# `z` is under -1, so `acos` is meaningless; what the number means is how
-	# dim the ring's far side is against its near one, which is the shader's own
-	# `smoothstep(z, 1, -1)`. Printed beside the field's raw level, because the
-	# whole of three-senses.md §2 is that those two are one channel.
-	var far := smoothstep(taste.z, 1.0, -1.0) if taste.z < 1.0 else 0.0
+	# **The nose is not on the membrane** (three-senses.md §2.6): it glows on the
+	# body. Printed as the glow both views light it by, beside the field's raw
+	# level, because the whole of three-senses.md §2 is that those two are one
+	# channel.
 	return ("membrane: organs cyt%d cir%d fla%d sti%d  self lobe %.3f at %4.0f deg wide"
-		+ "  taste %.3f ring far/near %.2f from level %.3f (raw %.3f)"
+		+ "  nose glow %.3f from level %.3f (raw %.3f)"
 		+ "  light %.3f at %4.0f deg wide  flood decay %.1fs") % [
 		organs[0], organs[1], organs[2], organs[3],
 		me.w, rad_to_deg(acos(clampf(me.z, -1.0, 1.0))),
-		taste.w, far, _food.taste_level if _food != null else 0.0, _smell_sum(),
+		_bus.smell_glow(), _food.taste_level if _food != null else 0.0, _smell_sum(),
 		light.w, rad_to_deg(acos(clampf(light.z, -1.0, 1.0))),
 		_bus.INGEST_DECAY_BY_TIER[organs[0]]]
 
 
-## **What the pulse actually has in the water**, which is arithmetic off three
-## constants until something counts it. `--pings=<seconds>` prints how many
-## outgoing fronts and returning echoes are live, the running maxima, and where
-## the nearest echoes have got to.
-##
-## The maxima are the numbers that matter: ping-as-outline.md section 7 is about
-## whether a player can tell which pulse a mark belongs to, and that is decided
-## by the worst instant and not by the mean.
+## **What the pulse has still to come**, which is arithmetic off three constants
+## until something counts it. `--pings=<seconds>` prints how many echoes are due,
+## the running maximum, and the soonest four: seconds until each lands and how
+## loud it will be. No wave travels (ping-as-outline.md §14), so an echo is its
+## latency and nothing else.
 func _step_pings_trace(delta: float) -> void:
 	if _pings_trace <= 0.0 or _food == null:
 		return
-	var fronts: Array = _food.ping_fronts
-	var echoes: Array = _food.ping_echoes
-	_pings_peak_fronts = maxi(_pings_peak_fronts, fronts.size())
-	_pings_peak_echoes = maxi(_pings_peak_echoes, echoes.size())
+	var due: Array = (_food.get("_echoes") as Array).duplicate()
+	_pings_peak_echoes = maxi(_pings_peak_echoes, due.size())
 	_pings_clock += delta
 	if _pings_clock < _pings_trace:
 		return
 	_pings_clock = 0.0
+	due.sort_custom(func(a: Array, b: Array) -> bool: return float(a[0]) < float(b[0]))
 	var near := ""
-	for i in mini(echoes.size(), 4):
-		var echo: Array = echoes[i]
-		near += "  [r%6.1f  %+6.1fdeg  w%4.1f  lv%4.2f]" % [
-			float(echo[0]), rad_to_deg(float(echo[1])), float(echo[2]),
-			float(echo[3])]
-	print("[pings] %6.2f  fronts %2d (peak %2d)  echoes %2d (peak %2d)  listen %4.2f%s" % [
-		_clock, fronts.size(), _pings_peak_fronts, echoes.size(),
-		_pings_peak_echoes, _food.ping_listen, near])
+	for i in mini(due.size(), 4):
+		var echo: Array = due[i]
+		near += "  [in %5.2fs  lv%4.2f]" % [float(echo[0]), float(echo[2])]
+	print("[pings] %6.2f  echoes due %2d (peak %2d)  listen %4.2f%s" % [
+		_clock, due.size(), _pings_peak_echoes, _food.ping_listen, near])
 
 
 func _step_trace(delta: float) -> void:
@@ -3114,7 +3156,6 @@ func _step_rects() -> void:
 		"Settings": base + "/Side/Settings",
 		"Light": base + "/Side/Settings/Light",
 		"View": base + "/Side/Settings/View",
-		"Feel": base + "/Side/Settings/Feel",
 		"Resume": base + "/Side/Resume",
 		"Leave": base + "/Side/Leave",
 		"Genome": base + "/Genome",
@@ -3129,9 +3170,11 @@ func _step_rects() -> void:
 		"Explain": base + "/Genome/Lines/Stack/Explain",
 		"Numbers": base + "/Genome/Lines/Stack/Numbers",
 		"Hint": base + "/Genome/Lines/Stack/Hint",
-		# The row's three parts (beam-levels.md §8.2): the level and its gauge
-		# show only for a gene that levels, and a hidden one prints its rect
-		# all the same -- read `visible` beside it.
+		# The row's parts (beam-levels.md §8.2): the level and its gauge show
+		# only for a gene that levels, and the rarity word only where a gene is
+		# named (rarity-word-ux.md §1.3); a hidden one prints its rect all the
+		# same -- read `visible` beside it.
+		"Rarity": base + "/Genome/Lines/Stack/Hint/Rarity",
 		"Level": base + "/Genome/Lines/Stack/Hint/Level",
 		"Gauge": base + "/Genome/Lines/Stack/Hint/Gauge",
 		"Text": base + "/Genome/Lines/Stack/Hint/Text",
@@ -3149,6 +3192,9 @@ func _step_rects() -> void:
 		"SaysExplain": "Hud/Choosing/Says/Explain",
 		"SaysNumbers": "Hud/Choosing/Says/Numbers",
 		"SaysHint": "Hud/Choosing/Says/Hint",
+		# Its hint is a row of two: the rarity word, and the words.
+		"SaysRarity": "Hud/Choosing/Says/Hint/Rarity",
+		"SaysText": "Hud/Choosing/Says/Hint/Text",
 	}
 	for name: String in paths:
 		var node := _run.get_node_or_null(paths[name])
@@ -3178,9 +3224,9 @@ func _step_rects() -> void:
 
 
 ## What the drawn controls are being told, straight off the node that owns
-## them. The pads and the stick post nothing to the membrane bus -- `axoneme`
-## thrust is a velocity add and a turn is a steer -- so a log is the only way to
-## see two fingers holding two controls at the same instant.
+## them. They post nothing to the membrane bus -- `axoneme` thrust is a velocity
+## add and a turn is a steer -- so a log is the only way to see two fingers
+## holding two controls at the same instant.
 func _step_controls(delta: float) -> void:
 	if _controls_trace <= 0.0 or _run == null:
 		return
@@ -3193,18 +3239,17 @@ func _step_controls(delta: float) -> void:
 		print("[ctl]  %6.2f  no controls node" % _clock)
 		return
 	var owners: Dictionary = node.get("_owner")
-	var names := ["stick", "port", "starboard", "push", "dash", "hold"]
 	var held := PackedStringArray()
 	for pointer: int in owners:
 		var id: int = owners[pointer]
-		held.append("%s#%d" % [
-			names[id] if id >= 0 and id < names.size() else "?", pointer])
+		var named: String = "turn" if id == node.TURN else String(node.name_of(id))
+		held.append("%s#%d" % [named if named != "" else "?", pointer])
 	var cell := _find_node_with(_run, &"bearing_to")
-	print(("[ctl]  %6.2f  scheme %d  drawn %s  held [%s]  steer %+5.2f  pushing %s  cell.steer"
+	print(("[ctl]  %6.2f  drawn %s  held [%s]  steer %+5.2f  push %4.2f  cell.steer"
 		+ " %+5.2f  holding %s  tail held %s") % [
-		_clock, node.scheme, "yes" if node.visible else "no ",
-		", ".join(held), node.steer(), "yes" if node.pushing() else "no ",
-		cell.steer if cell != null else 0.0, "yes" if node.holding() else "no ",
+		_clock, "yes" if node.visible else "no ",
+		", ".join(held), node.steer(), node.lever(&"push"),
+		cell.steer if cell != null else 0.0, "yes" if node.holds(&"hold") else "no ",
 		"yes" if cell != null and bool(cell.call(&"tail_held")) else "no "])
 
 
@@ -3464,7 +3509,7 @@ func _grow_posed() -> void:
 ## then set on the run's field before the run enters the tree.
 func _drop_switch(text: String) -> bool:
 	const FLOATS := {"--edge-gap=": &"edge_gap", "--desert=": &"desert",
-		"--age=": &"age_first", "--sensed=": &"sensed_override", "--absorb=": &"absorb",
+		"--age=": &"age_first", "--absorb=": &"absorb",
 		"--first-delay=": &"grace", "--mutate=": &"mutate", "--floor=": &"floor_share",
 		"--floor-tau=": &"floor_tau", "--newborn-grace=": &"newborn_grace"}
 	# `--drifter-venom=` is read as `--drifter-toxin=` as well: the switch kept its
@@ -3695,6 +3740,11 @@ func _keycode(name: String) -> Key:
 		"n": return KEY_N
 		# The autopilot's key (automation-ux.md §5.2), read raw as `N` is.
 		"r": return KEY_R
+		# The genes' buttons, in their order (haptonema.md §4): the first a body
+		# has, the second, the third.
+		"q": return KEY_Q
+		"f": return KEY_F
+		"c": return KEY_C
 		_: return KEY_NONE
 
 
@@ -3919,7 +3969,7 @@ func _make_hunter(index: int, at: Vector2) -> void:
 	b.set("stroke", 0.2)
 	b.set("heading", atan2((cell.position - at).x, -(cell.position - at).y))
 	# Scale the radius so the gape comes out at exactly the multiple asked for.
-	var tier_gape: float = CellBody.GAPE_BY_TIER[3]
+	var tier_gape: float = Stats.at(&"gape", 3)
 	b.set("radius", cell.radius * _hunter_gape / tier_gape)
 	if in_drop:
 		# What its organs buy, read again for the body written here: its own
@@ -4052,6 +4102,27 @@ func _force_body(spec: String) -> void:
 	_genome.set("_body_slots", seats)
 	print("[drive] body forced to %s at %s (dna stays %s)" % [
 		_genome_text(tiers), seats, _genome_text(_genome.dna())])
+
+
+## **Genes in genes' own slots, posed** (docs/design/gene-sockets.md):
+## `host:slot:gene:copies`, into the DNA's riders and, for a host the body wears,
+## the body's -- through riders.gd's own `put`, so a gene a slot does not take is
+## refused here as the pause screen refuses it.
+func _force_riders(spec: String) -> void:
+	var riders := {}
+	for one in spec.split(",", false):
+		var bits := str(one).split(":")
+		if bits.size() < 4:
+			print("[drive] --riders= needs host:slot:gene:copies, not %s" % one)
+			continue
+		if Riders.put(riders, StringName(bits[0].strip_edges()), int(bits[1]),
+				StringName(bits[2].strip_edges()), int(bits[3])) == Riders.Put.NOTHING:
+			print("[drive] --riders=: %s does not fit" % one)
+	_genome.set("_riders", Riders.kept(riders, _genome.dna()))
+	_genome.set("_body_riders", Riders.kept(riders, _genome.tiers()))
+	_genome.body_version += 1
+	print("[drive] riders forced to %s (worn %s)" % [Riders.by_name(_genome.riders()),
+		Riders.by_name(_genome.body_riders())])
 
 
 ## **A level and a path, posed** (beam-levels.md): `gene:level[:path]`. The
@@ -4211,8 +4282,8 @@ func _run_seeding_check(rounds: int) -> void:
 	print("[check] drifters %.1f%%  cytostome tiers 0/1/2/3: %d/%d/%d/%d" % [
 		100.0 * float(drifters) / float(maxi(seeds, 1)),
 		tier_counts[0], tier_counts[1], tier_counts[2], tier_counts[3]])
-	print("[check] max radius %.2f  max gape %.2f  (ARRIVAL_GAPE_MAX %.1f)" % [
-		max_radius, max_gape, FoodField.ARRIVAL_GAPE_MAX])
+	print("[check] max radius %.2f  max gape %.2f  (a newborn's %.1f)" % [
+		max_radius, max_gape, CellBody.gape_of(Catalogue.born(), CellBody.BASE_RADIUS)])
 	for bucket: int in [26, 33, 40]:
 		if not buckets.has(bucket):
 			continue

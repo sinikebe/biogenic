@@ -7,13 +7,15 @@ extends CanvasLayer
 ## recorded there rather than left as a contradiction between a document and a
 ## build. It is principled and not a convenience: an `ocellus` beam that is
 ## *stopped* by a surface has genuinely measured where that surface is, and an
-## `ampulla` pulse is a thing this cell emitted, so this cell knows where its own
-## wavefront has got to.
+## `ampulla` call is a thing this cell emitted, so it knows when the call left, and
+## an echo's delay is the distance to what answered.
 ##
 ## **Nothing else follows them in.** No bodies, no silhouettes, no scent bloom,
 ## no wounds, no threat colour, nothing a sense did not touch. Only the returns
 ## themselves, and only while the sense is actually returning them. If this file
-## ever draws a cell, it has gone past the line.
+## ever draws a cell, it has gone past the line. The one outline it draws is a
+## return too: at three copies the ping draws the side of a body its call
+## reached, and nothing the call did not (ping-as-outline.md §13).
 ##
 ## **A drawing change, not a simulation change.** Everything here is read out of
 ## `food.gd` exactly as it stands, the same way `vision.gd` reads it, and nothing
@@ -54,6 +56,8 @@ extends CanvasLayer
 const CellBody := preload("res://game/normal/cell.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const Cilia := preload("res://game/vision/cilia.gd")
+## The membrane's channels, whose organs' hues the marks are drawn in.
+const Catalogue := preload("res://game/genes/catalogue.gd")
 const SomaLayer := preload("res://game/perception/soma.gd")
 const Afterglow := preload("res://game/mechanics/afterglow.gd")
 ## How far a sweeping ray turns between two of the marks it holds: 2 degrees,
@@ -105,67 +109,26 @@ const POINT_CORE_ALPHA := 0.86
 const POINT_SKIN := 1.0
 const POINT_CLEAR := 1.3
 
-# --- The wave (`ampulla`) ---------------------------------------------------
-## Half a ring rather than a whole one, so 64 points where the circle had 96 --
-## the same spacing on half the arc.
-const WAVE_STEPS := Cilia.WAVE_STEPS
-## Half the angle between two of those points. The far half is inset by it at
-## both ends so that the two arcs do not **share** their endpoints: a vertex
-## drawn by two draw calls composites twice, and measured on a tier-3 frame the
-## ring's two plateaus of 257 and 150 summed sRGB above base met in a bead of
-## 407 -- brighter than the lit half, at the one place on the picture that is
-## supposed to say *here is where the wave stops being loud*.
-##
-## It leaves a notch instead, and a notch is the better artefact: a bright dot
-## on the wavefront reads as a *mark*, which in this layer means a body. An
-## angle rather than a distance, so the notch grows with the ring -- 5 canvas px
-## at r212, about 10 by the radius at which the arc is fading into the band
-## anyway. Rendered at three radii and at both shapes; it reads as the boundary
-## between the loud half and the quiet one.
-const WAVE_SEAM := Cilia.WAVE_SEAM
-## Quieter than the pointer on purpose: the pointer is an answer and this is the
-## question going out. Measured on a frame with a taste band and dread present,
-## low-passed at sigma 6 against the local level -- band 96, soma figure 52,
-## pointer 46, the beat's own contour 33, this ring 8. Everything the membrane
-## does beats it, which is the order it has to be in. **Those five numbers were
-## taken on the full ring this arc replaced**; the width and the alpha are
-## unchanged, so the order still holds, but the ring's own 8 is the circle's and
-## has not been re-measured on the arc.
-const WAVE_WIDTH := 2.2
-const WAVE_ALPHA := 0.52
-## **The echo coming home**, and the reason this layer draws anything new.
-##
-## Brighter than the outgoing front, because the front is the question and this
-## is the answer arriving: the membrane lights at the instant this collapses
-## onto the organ, and a player who watched it walk in never has to work out
-## which pulse the mark belongs to. That is the whole of the bounce, drawn.
-##
-## Short, not a half-ring: an echo comes off one body over one span of bearings,
-## and drawing it any wider would say the whole hemisphere answered.
-const ECHO_WIDTH := 2.6
-const ECHO_ALPHA := 0.74
-## Points on one returning arc. Fewer than [constant WAVE_STEPS] because an echo
-## spans tens of degrees where the front spans 180, and the spacing is what
-## keeps a polyline from looking polygonal.
-const ECHO_STEPS := 18
-## **How many echoes this layer will draw at once**, nearest home first, off
-## screen ones skipped before any of them counts against it.
-##
-## There is no hard cap in the field -- at tier 3 eleven pulses are in the water
-## at once and each answers for five bodies -- and a screen with fifty
-## contracting arcs on it is not a sense, it is weather. Measured on the tier-3
-## ambiguity pose: at any instant three or four are inside the frame, so this
-## cuts a tail that is mostly off screen anyway.
-const ECHO_DRAWN := 6
+# --- The ping (`ampulla`) ---------------------------------------------------
+## **What the ping placed as an echo landed** (ping-as-outline.md §13): at two
+## copies a point, the pointer's size and a little quieter, because it says where
+## something was and not what; at three the side of the body the call reached, a
+## thin outline. Both in the ping's hue, whatever answered.
+const FIX_HALO := 11.0
+const FIX_HALO_ALPHA := 0.14
+const FIX_CORE := 3.4
+const FIX_CORE_ALPHA := 0.80
+const OUTLINE_WIDTH := 2.4
+const OUTLINE_ALPHA := 0.78
 
 ## **Whether something other than the field is stepping the water.** Left false
 ## by the run, where [method FoodField.is_processing] and the cell being in the
 ## water are the whole answer -- a division and a death both stop the field or,
-## in a pond, take the cell out of it, and then its beams and wavefront are last
+## in a pond, take the cell out of it, and then its beams and echoes are last
 ## frame's claims about a place that is no longer true.
 ##
 ## The replay screen sets it, because there the field is stepped from a
-## recording instead of from its own `_process`: the beams and the front are as
+## recording instead of from its own `_process`: the beams and the echoes are as
 ## live as they ever were, they are simply being written by something else.
 ## docs/design/replay.md §4.5.
 var driven := false
@@ -174,6 +137,8 @@ var _cell: CellBody = null
 var _food: FoodField = null
 ## A sweep's hits, held and fading (beam-levels.md §4.3).
 var _glow := _new_glow()
+## [[mark, age], ...] -- what the ping placed (§13), each held for its `life`.
+var _echo_marks: Array = []
 @onready var _marks: Control = $Marks
 
 
@@ -201,6 +166,16 @@ func set_active(on: bool) -> void:
 		# Held marks are claims about a moment; one that was hidden through a
 		# pause or full vision is stale when it comes back.
 		_glow.clear()
+		_echo_marks.clear()
+
+
+## **What the ping placed as an echo landed** (ping-as-outline.md §13), from the
+## run as it happens and from the replay as it was recorded. Held for the mark's
+## own `life`, one call, fading; not taken while the layer is off.
+func mark_echo(mark: Dictionary) -> void:
+	if not visible:
+		return
+	_echo_marks.append([mark, 0.0])
 
 
 ## **Which part of the screen the marks are drawn in.** The whole viewport in
@@ -219,6 +194,11 @@ func _process(delta: float) -> void:
 	if not visible:
 		return
 	_catch_hits(delta)
+	for i in range(_echo_marks.size() - 1, -1, -1):
+		var held: Array = _echo_marks[i]
+		held[1] = float(held[1]) + delta
+		if float(held[1]) >= float((held[0] as Dictionary).get("life", 0.0)):
+			_echo_marks.remove_at(i)
 	_marks.queue_redraw()
 
 
@@ -227,7 +207,7 @@ func _draw_marks() -> void:
 		return
 	# **Only while the water is actually being stepped.** A division and a death
 	# both stop the field without pausing the tree, and a field that has stopped
-	# keeps last frame's beams and last frame's wavefront -- which would leave a
+	# keeps last frame's beams and last frame's echoes -- which would leave a
 	# frozen pointer sitting over the division beat, claiming a place that is no
 	# longer true. This is the same silence `normal_mode._hush()` puts on the
 	# bus, said in the one register that does not go through the bus.
@@ -240,8 +220,7 @@ func _draw_marks() -> void:
 	if not (driven or (_food.is_processing() and _food.in_water)):
 		return
 	var centre := _marks.size * 0.5
-	_draw_wave(centre)
-	_draw_echoes(centre)
+	_draw_echo_marks(centre)
 	_draw_pointers(centre)
 
 
@@ -257,7 +236,7 @@ func _draw_marks() -> void:
 ## beams; three beams that each stopped on something have each measured a place,
 ## and this is the register with room to say so.
 func _draw_pointers(centre: Vector2) -> void:
-	var tone := Cilia.hue(&"ocellus")
+	var tone := Cilia.hue_on(Catalogue.BEAM)
 	# **A sweep draws what it has held** (beam-levels.md §4.3): every hit of the
 	# last pass, where the body was when the ray crossed it, fading until the
 	# ray comes back. This frame's hits are the newest of them.
@@ -313,160 +292,64 @@ func _catch_hits(delta: float) -> void:
 			+ _cell.starboard() * sin(bearing)) * float(beam[1]), k, bearing)
 
 
-## **The wave.** The wavefront of the pulse currently in flight, expanding out of
-## the organ, exactly as full vision draws it -- a thing the cell emitted, so the
-## cell knows where it has got to.
-##
-## **A half-ring centred on the organ's own point on the membrane**, not a circle
-## centred on the cell, because that is where the pulse left from and the hull
-## takes the other half. Its centre lands on the violet tuft the soma figure
-## already draws for the `ampulla`, for free: both are read off the same arc.
-## That is the mechanic taught with no text at all -- the water behind your own
-## body is not being asked, and the way to ask it is to turn.
-##
-## **On, not exactly on.** The wave leaves a circle of `cell.radius` and the
-## figure is an ovoid ([constant Cilia.OVOID_ALONG] 1.18 against
-## [constant Cilia.OVOID_ACROSS] 0.94), so the two agree to about a pixel on the
-## four diagonals -- 1.3 canvas px at slot 3, r26 -- and part by up to 8 px at
-## the nose and astern, where the ovoid is longest and the origin sits that far
-## inside the drawn rim. The eye reads one place; the arithmetic does not, and
-## it is the arithmetic that would have to change to make it.
-##
-## Where the gene has grown enough to hear through a body the far half is drawn
-## too, at `alpha x ping_through`. The picture is the constant: the dim half is
-## exactly as much of the lit half as the simulation lets through -- measured on
-## the tier-3 frame, 150 against 257 summed sRGB above base, a ratio of 0.584
-## against a constant of 0.58.
-##
-## **The drawn boundary is a step and the simulation's is not.** `PING_GRAZE`
-## gives the hull shadow a 27.8-degree fade -- `acos(-0.24)` is 103.9 degrees --
-## and [constant FoodField.PING_SILENT] cuts what is left of it at about 101, so
-## at tier 1 the field still answers for a body ten degrees behind the tangent
-## while this arc has stopped dead at 90. The arc is where the pulse is *loud*,
-## not where it is *zero*, and it is drawn the same way in both views --
-## `vision.gd` uses `draw_arc`, which takes one colour and cannot carry a fade.
-## Softening it is a change to both files and to §1.4 of the spec, not a
-## constant.
-##
-## Per-vertex alpha rather than one colour, so the arc dissolves into the
-## membrane band as it passes out through it instead of being clipped at a
-## rectangle. The corners hold it a moment longer than the top edge does, which
-## is what the screen actually is.
-##
-## The bodies the wave finds are *not* drawn: their marks stay on the contour. A
-## return is a body somewhere out there, and a body is the first thing on the
-## list this layer may not draw. What [method _draw_echoes] adds is the pulse's
-## **own** echo walking home, which is the same class of thing as the front --
-## the cell emitted it and knows where it has got to.
-##
-## **Every live front, not just the newest.** A pulse is in the water for up to
-## 7.6 s and fires again after 1.4, so one scalar drew the new front over the
-## old one's returns -- a picture saying *the wave has just left* over a skin
-## saying *something is out there*. ping-as-outline.md §7 photographed exactly
-## that; this is the half of the fix that lives in a view. Only one or two are
-## ever on screen: a front leaves the frame in under a second.
-func _draw_wave(centre: Vector2) -> void:
-	var reach: float = _food.ping_range
-	if reach <= 0.0:
+## **What the ping placed** (ping-as-outline.md §13), where the call met it and
+## fading over one call: a plain point at two copies -- the same for a meal, a
+## hunter or the rim, because nothing in an echo says which -- and at three the
+## side of the body the call reached, through the points the field worked out on
+## its rim.
+func _draw_echo_marks(centre: Vector2) -> void:
+	if _echo_marks.is_empty():
 		return
-	var origin := centre + _ray(_food.ping_bearing) * _cell.radius * SCALE
-	# Once the whole arc is past the far corner there is none of it left to
-	# see, and a 64-point arc three screens wide is drawn for nobody.
-	var horizon := _marks.size.length() * 0.5 + origin.distance_to(centre)
-	# Screen angle of the organ's own ray. `_ray` is (sin, -cos), which is
-	# `bearing - PI/2` once atan2 has it, and the lit half is the hemisphere
-	# either side of it.
-	var mid := _food.ping_bearing - PI * 0.5
-	var through := clampf(_food.ping_through, 0.0, 1.0)
-	for front: float in _food.ping_fronts:
-		if front <= 0.0:
+	var tone := Cilia.hue_on(Catalogue.PING)
+	for held: Array in _echo_marks:
+		var mark: Dictionary = held[0]
+		var life := maxf(float(mark.get("life", 0.0)), 0.001)
+		var fade := 1.0 - clampf(float(held[1]) / life, 0.0, 1.0)
+		if fade <= 0.0:
 			continue
-		var r := front * SCALE
-		if r > horizon:
+		var lines: Array = mark.get("lines", [])
+		if lines.is_empty():
+			_draw_fix(centre, mark.get("at", Vector2.ZERO), tone, fade)
 			continue
-		# Fades with how much of its reach it has spent, the same way full
-		# vision fades it: the arc is off the screen long before it is out of
-		# range, so this is the only thing that can say *it is still going*.
-		var carry := 1.0 - clampf(front / reach, 0.0, 1.0)
-		_wave_arc(origin, r, mid - PI * 0.5, mid + PI * 0.5, carry)
-		if through > 0.0:
-			# Inset by [constant WAVE_SEAM] at both ends: flush, the two arcs
-			# share a vertex at each seam and it composites twice.
-			_wave_arc(origin, r, mid + PI * 0.5 + WAVE_SEAM,
-				mid + PI * 1.5 - WAVE_SEAM, carry * through)
+		for line: PackedVector2Array in lines:
+			_draw_outline(centre, line, tone, fade)
 
 
-## **The echoes coming home.** One short arc per return still in flight, at the
-## bearing it will land on and over the span the membrane is about to open to,
-## contracting onto the organ at the instant the mark appears on the skin.
-##
-## This is what "it bounces" buys, and it is the answer to the ambiguity §7
-## photographs. Under a round trip a mark lands at `2d / PING_SPEED` while the
-## drawn front is out at `2d` -- twice the body's distance -- so arrival time on
-## its own no longer tells a player which pulse answered. It does not have to:
-## the echo is *visible* for the last second of its journey, so the mark arrives
-## attached to something the player has been watching walk in.
-##
-## **It is not the outline drawn at its place**, which is §10 row 3 and the next
-## gene's to sell. It is a wavelet collapsing onto the organ: it is only ever at
-## the body's own distance for the instant it leaves, it carries no shape, and
-## it is gone the moment it lands. What stays on the skin is still a bearing.
-func _draw_echoes(centre: Vector2) -> void:
-	if _food.ping_echoes.is_empty():
+## One placed point, at [param fade]: hidden inside the skin, as a pointer is.
+func _draw_fix(centre: Vector2, point: Vector2, tone: Color, fade: float) -> void:
+	var at := _on_screen(centre, point)
+	var vis := fade * _edge_fade(at) * smoothstep(_cell.radius * POINT_SKIN,
+		_cell.radius * POINT_CLEAR, point.distance_to(_cell.position))
+	if vis <= 0.0:
 		return
-	var tone := Cilia.hue(&"ampulla")
-	var origin := centre + _ray(_food.ping_bearing) * _cell.radius * SCALE
-	var horizon := _marks.size.length() * 0.5 + origin.distance_to(centre)
-	var drawn := 0
-	for echo: Array in _food.ping_echoes:
-		if drawn >= ECHO_DRAWN:
-			break
-		var r: float = float(echo[0]) * SCALE
-		if r > horizon:
-			continue
-		var level := clampf(float(echo[3]), 0.0, 1.0)
-		if level <= 0.0:
-			continue
-		drawn += 1
-		var span := deg_to_rad(clampf(float(echo[2]), 1.0, 180.0))
-		var mid := float(echo[1]) - PI * 0.5
-		var points := PackedVector2Array()
-		var colors := PackedColorArray()
-		points.resize(ECHO_STEPS + 1)
-		colors.resize(ECHO_STEPS + 1)
-		var seen := false
-		for i in ECHO_STEPS + 1:
-			var t := mid + lerpf(-span, span, float(i) / float(ECHO_STEPS))
-			var p := origin + Vector2(cos(t), sin(t)) * r
-			var vis := _edge_fade(p) * level
-			points[i] = p
-			colors[i] = Color(tone, ECHO_ALPHA * vis)
-			seen = seen or vis > 0.0
-		if seen:
-			_marks.draw_polyline_colors(points, colors, ECHO_WIDTH, true)
+	_marks.draw_circle(at, FIX_HALO, Color(tone, FIX_HALO_ALPHA * vis), true, -1.0, true)
+	_marks.draw_circle(at, FIX_CORE, Color(tone, FIX_CORE_ALPHA * vis), true, -1.0, true)
 
 
-## One half of the wavefront, from [param from] to [param to] in screen angles,
-## at [param level] of the wave's own alpha. Per-vertex, so the edge fade is
-## taken at each point rather than at the arc.
-func _wave_arc(origin: Vector2, r: float, from: float, to: float, level: float) -> void:
-	if level <= 0.0:
-		return
-	var tone := Cilia.hue(&"ampulla")
+## One run of an outline, points in the water's own coordinates, carried to this
+## screen point by point -- so it stays where the body was while this cell turns
+## and moves -- and faded at each point by the membrane's edge, as a pointer is.
+func _draw_outline(centre: Vector2, line: PackedVector2Array, tone: Color,
+		fade: float) -> void:
 	var points := PackedVector2Array()
 	var colors := PackedColorArray()
-	points.resize(WAVE_STEPS + 1)
-	colors.resize(WAVE_STEPS + 1)
+	points.resize(line.size())
+	colors.resize(line.size())
 	var seen := false
-	for i in WAVE_STEPS + 1:
-		var t := lerpf(from, to, float(i) / float(WAVE_STEPS))
-		var p := origin + Vector2(cos(t), sin(t)) * r
-		var vis := _edge_fade(p) * level
+	for i in line.size():
+		var p := _on_screen(centre, line[i])
+		var vis := _edge_fade(p) * fade
 		points[i] = p
-		colors[i] = Color(tone, WAVE_ALPHA * vis)
+		colors[i] = Color(tone, OUTLINE_ALPHA * vis)
 		seen = seen or vis > 0.0
 	if seen:
-		_marks.draw_polyline_colors(points, colors, WAVE_WIDTH, true)
+		_marks.draw_polyline_colors(points, colors, OUTLINE_WIDTH, true)
+
+
+## A place in the water, on this screen: at its bearing from the cell and its
+## distance, at the figure's scale -- front up, as every mark here is.
+func _on_screen(centre: Vector2, point: Vector2) -> Vector2:
+	return centre + _ray(_cell.bearing_to(point)) * point.distance_to(_cell.position) * SCALE
 
 
 ## A body-relative bearing as a direction on this screen. **Front is up**, the

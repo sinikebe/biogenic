@@ -36,8 +36,16 @@ extends RefCounted
 ## agree on *why* they are hanging up. Three bytes buys that forever.
 ##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
+##
+## **It loads one file, the body plan** (`game/genes/body_plan.gd`, which loads
+## nothing): how many genes and slots a genome crosses with are the plan's
+## (docs/design/gene-catalogue.md §10.2), and follow it. Everything else it needs
+## of the game is written out here, and the probe holds each copy to its source.
 
-## **Bumped by hand, whenever the meaning of any byte below changes.**
+## **Bumped by hand, whenever the meaning of any byte below changes** -- and,
+## since protocol 8, for nothing else: what a host judges a guest by and decides a
+## contact by is the rules' fingerprint's to tell apart, on the handshake's tail
+## ([constant RULES]).
 ##
 ## Never derived from `content_version`, which is `git rev-list --count HEAD`
 ## and moves on a docs-only merge -- two identical builds would refuse each
@@ -112,31 +120,54 @@ extends RefCounted
 ## owns the guest's wound and decides its death. `Cause.POISONED` and
 ## `Contact.STUNG`'s number are kept for the same reason.
 ##
-## **Rule, until the ladder hash lands (shared-pond.md §7): any content change to
-## `cell.gd`'s `GAPE_BY_TIER`, `ARMOR_BY_TIER`, the bite tables (`BITE_BY_TIER`,
-## `BITE_GAP`, `bite_damage`) or the dose tables (`VENOM_STACKS_BY_TIER`,
-## `POISON_STACKS_BY_TIER`, `SWALLOW_STACKS_BY_TIER`, `VENOM_ARC_DEG`,
-## `VENOM_SIDES`, `HARM_PER_STACK`, `DOSE_TAU_BY_KIND`, `DOSE_GONE`, `DOSE_SIZE`)
-## must bump this number**, or a host on one pack and a guest on another share a
-## pond whose contacts one of them misjudges.
-const PROTOCOL := 7
-## **The rules a host's referee judges a guest by, fingerprinted**
-## (net-hardening.md B.2, B.6): SHA-256 of every value in the game that
-## `referee.gd` judges a guest's word by or derives a limit from -- the radii,
-## growth per meal, mending, the grace, the causes of death, the ping tables,
-## the sister's ring, the free senses and their tier, the speed and turn tables
-## its caps sit over -- and of the referee's own limits.
+## **8: the handshake carries the rules** (docs/design/gene-catalogue.md §11.3;
+## the ladder hash shared-pond.md §7 planned). Every handshake frame gains a tail
+## after its three frozen bytes: the fingerprint of the rules its sender judges and
+## decides contacts by -- `game/net/rules.gd`'s, written from the catalogue: every
+## judged and contact table, by every organ, the referee's limits, the contact
+## rules and the body plan -- and its content version, which says which of two
+## builds is older. Two builds on one protocol whose rules differ refuse each other
+## at the handshake, with the sentence that names the update, by themselves. A 7
+## reads a tail as nothing, as it reads anything up to [constant HANDSHAKE_MAX], and
+## refuses an 8 by its prefix, as 1 to 6 are refused. **`RULES` moves with it**, for
+## the lines the tail made room for: the contact tables and rules that a hand rule
+## here bumped this number for until now, and the body plan.
+##
+## **So, from protocol 8, a change to what the referee judges, what the host decides
+## a contact by, or the body plan bumps nothing here**: it moves the rules, and the
+## handshake keeps builds on other rules apart. Move [constant RULES]' pin in the
+## same commit, as `tools/net_probe.gd` says. This number moves only when a
+## message's format does.
+##
+## **9: a gene's own slots** (docs/design/gene-sockets.md §6). PERSON carries the
+## guest's worn riders, SISTER her DNA's, and GENOME a water body's worn riders,
+## each after what it carried before ([method _riders_bytes]). An 8 would refuse
+## all three as frames no writer of its own produces, so it is refused at HELLO by
+## name, as 1 to 7 are. **`RULES` moves with it**: what a host's slots give it is a
+## contact rule the host decides by.
+const PROTOCOL := 9
+## **The rules a host's referee judges a guest by, and the host decides every
+## contact by, fingerprinted -- pinned** (net-hardening.md B.2, B.6;
+## docs/design/gene-catalogue.md §11.3): SHA-256 of `game/net/rules.gd`'s text,
+## which the game writes out from the catalogue -- every table a stat row marks
+## judged or contact, by every organ, the run's numbers the referee judges by, the
+## contact rules no table holds, the referee's own limits and the body plan.
 ##
 ## **A host judges its guests by its own copy of these.** A guest on other rules
-## is fouled, then cut and barred: a later content that grows five units a meal
-## instead of four is cut 1.05 s after its first meal by a host on this one,
-## measured. So **change any of them only with [constant PROTOCOL] bumped and
-## this updated, in the same commit**: two builds on different rules are then
-## refused at the handshake, with the sentence that names the update, instead
-## of cut in the middle of a game. `tools/net_probe.gd` recomputes this from the
-## real constants (`_rules_text`, run by `_referee_rules` in its `referee`
-## section) and fails until both are done.
-const RULES := "46913eab9d0b76a01b5ee460f0eb534b3692698553b4be378046e2620f576c8e"
+## would be fouled, then cut and barred: a later content that grows five units a
+## meal instead of four was cut 1.05 s after its first meal by a host on the old
+## one, measured. **Since protocol 8 that cannot happen**: the handshake carries the
+## fingerprint the game works out ([method tail]), and a host refuses a guest on
+## other rules before it is in the water, with the sentence that names the update.
+##
+## **This is the pin, not the value on the wire**: the game never reads it. It is
+## here so that a change to the rules is made on purpose -- `tools/net_probe.gd`
+## writes the text again from the real constants (`_rules_text`, run by
+## `_referee_rules` in its `referee` section), holds the game's to it, and fails
+## until this is moved, saying that no [constant PROTOCOL] bump goes with it. A build
+## on new rules plays every build on its own rules, and none on the old ones until
+## they update: that is what moving it means.
+const RULES := "dcaa5126c1bbad4499e5b75958936c6512ea000187d2324f110960b4cfd0cb8c"
 
 # --- Frame kinds. Byte 0 of every frame. ------------------------------------
 ## Guest to host, first thing after the transport connects: *this is what I
@@ -220,8 +251,11 @@ const EVENT_SETTLE := 0x09
 const EVENT_CLEAR := 0x0A
 
 # --- Why a host hangs up. Byte 3 of a refusal. ------------------------------
-## The two builds do not speak the same protocol. The one case that matters,
-## and the reason the handshake exists at all.
+## The two builds do not speak the same protocol -- or, since protocol 8, speak it
+## by other rules: the tail's fingerprints differ ([method rules_of]). The one case
+## that matters, and the reason the handshake exists at all. Either way the two are
+## different versions, and the one that is older takes the update: the prefix says
+## which by protocol, and the tail by content ([method content_of]).
 const REFUSE_PROTOCOL := 0x01
 ## Somebody is already here. This game is two cells.
 const REFUSE_FULL := 0x02
@@ -241,11 +275,23 @@ const REFUSE_BROKEN := 0x04
 ## Only ever sent on the internet listener, which no protocol-4 build reaches.
 const REFUSE_INVITE := 0x05
 
+## **The three bytes that never move**, a HELLO's whole length before protocol 8.
+## Since then a HELLO is these and the [constant TAIL_SIZE] of its tail, 39 bytes.
 const HELLO_SIZE := 3
-## `kind | protocol | host id`. The id is four bytes because peer ids are random
-## 32-bit values -- measured in this container, a guest came up as 694971552 --
-## and the only id that is ever a small number is an accident of ENet that a
-## WebSocket or relay transport is under no obligation to repeat.
+## **The tail of every handshake frame since protocol 8**, after its fixed part:
+## the rules the sender judges a guest and decides a contact by, as
+## `game/net/rules.gd` fingerprints them ([constant RULES_SIZE] bytes), then its
+## content version, a u32 (BuildInfo's), which says which of two builds is older.
+## A build before 8 sends none, and a reader of 8 finds none in its frames. **A
+## refusal to a stranger** -- a caller on the internet listener that has proved no
+## invite -- carries zeros for the rules and a content version that says only which
+## game is older (net_session.gd's `_refuse_tail`).
+const RULES_SIZE := 32
+const TAIL_SIZE := RULES_SIZE + 4
+## `kind | protocol | host id`, then the tail. The id is four bytes because peer ids
+## are random 32-bit values -- measured in this container, a guest came up as
+## 694971552 -- and the only id that is ever a small number is an accident of ENet
+## that a WebSocket or relay transport is under no obligation to repeat.
 const WELCOME_SIZE := 7
 const REFUSE_SIZE := 4
 ## The internet handshake's pieces (net-hardening.md C): a nonce each way, the
@@ -366,7 +412,8 @@ const POND_HEADER := 10
 ## Stacks per step of a POND load byte.
 const POND_LOAD_SCALE := 4.0
 ## How many loads the header carries: doses.gd's KINDS, written out because this
-## file loads nothing, and the probe holds the two equal.
+## file loads nothing of the game but the body plan and a gene's shape, and the probe
+## holds the two equal.
 const POND_LOADS := 3
 ## One body: `id(u32) | meals(u8) | flags(u8) | x(f32) | y(f32) | heading(u8)
 ## | radius(u16, /64) | wound(u8, /255) | speed(u8, x2 u/s)`.
@@ -389,8 +436,9 @@ const POND_BODY := 19
 const POND_PERSON := POND_BODY + 12
 ## **The send set: the sixty water bodies nearest the guest, and every one
 ## hunting it wherever it is** (ocean.md §10.4) -- `food.gd`'s SEND_MAX, written
-## out because this file loads nothing. 58 lie within 1,940 units on average at
-## the drop's density, more in a thick patch.
+## out because this file loads nothing of the game but the body plan and a gene's
+## shape. 58 lie within 1,940 units on average at the drop's density, more in a
+## thick patch.
 const SEND_MAX := 60
 ## How many bodies one snapshot may carry: the send set and the person.
 const POND_BODIES_MAX := SEND_MAX + 1
@@ -422,10 +470,10 @@ const POND_SPEED_STEP := 2.0
 ## **One body of a snapshot, as an Array indexed by these.** The same order as
 ## `food.gd`'s `Entry` enum, so a snapshot goes from `pond_entries()` to these
 ## bytes and from these bytes to `apply_pond()` with no copy in between. This
-## file loads nothing, so the order is written out and the probe checks the two
-## agree. `VELOCITY` and `TURNING` read zero for a water cell. An entry may carry
-## more after `TURNING` -- the host's own slot for the body -- and none of it is
-## written.
+## file loads nothing of the game but the body plan and a gene's shape, so the order
+## is written out and the probe checks the two agree. `VELOCITY` and `TURNING` read
+## zero for a water cell. An entry may carry more after `TURNING` -- the host's own
+## slot for the body -- and none of it is written.
 enum Entry { ID, MEALS, FLAGS, AT, HEADING, RADIUS, WOUND, SPEED,
 	VELOCITY, TURNING }
 
@@ -435,22 +483,43 @@ enum Entry { ID, MEALS, FLAGS, AT, HEADING, RADIUS, WOUND, SPEED,
 ## version-proof by construction: an unknown one draws in the fallback hue and
 ## is inert in every rule, which is the shipped retirement behaviour.
 ##
-## The decoder refuses the whole message on more genes than [constant
-## GENES_MAX] -- seven slots outside, one inside, and a held sample, or a gift
-## worn over an organ still worn -- on a name outside 1 to [constant NAME_MAX]
-## bytes of `a-z`, or on an order longer than [constant ORDER_MAX]: the order is
-## the worn layout, outside only, because an inside form is inside by its name.
-## Tiers clamp to 0..[constant TIER_TOP]. Nine since protocol 7, and every bound
-## after it follows (docs/design/dna-slots.md §14.2).
-const GENES_MAX := 9
-const ORDER_MAX := 7
+## The decoder refuses the whole message on more genes than [member GENES_MAX]
+## -- every slot the body plan has, today seven outside and one inside, and one
+## more: a held sample, or a gift worn over an organ still worn -- on a name
+## outside 1 to [constant NAME_MAX] bytes of `a-z`, or on an order longer than
+## [member ORDER_MAX], the slots outside: the order is the worn layout, outside
+## only, because an inside form is inside by its name. Tiers clamp to
+## 0..[constant TIER_TOP]. Nine since protocol 7, and every bound after it follows
+## (docs/design/dna-slots.md §14.2).
+##
+## **The two counts are the body plan's** (docs/design/gene-catalogue.md §10.2),
+## worked out from it and read again whenever it changes ([method _read_plan]): a
+## plan with one more slot sends and takes one more gene, one more outside slot
+## one more in an order, and every size below that holds a genome follows. **A
+## build on another plan is on other rules**: the plan's fingerprint is in the
+## rules the handshake carries (§11.3), so two such builds refuse each other there,
+## before either sends a genome the other's sizes do not fit.
+const BodyPlan := preload("res://game/genes/body_plan.gd")
+static var GENES_MAX: int = BodyPlan.SLOTS + 1
+static var ORDER_MAX: int = BodyPlan.SLOT_MAX
 const NAME_MAX := 16
-const TIER_TOP := 3
+## **The most slots of its own a gene has** (docs/design/gene-sockets.md §6): the
+## catalogue's `SOCKETS_MAX`, written out because this file loads nothing of the
+## game but the body plan and a gene's shape, and the probe holds the two equal. A
+## host with more is refused whole, as a genome past [member GENES_MAX] is; at most
+## [member GENES_MAX] hosts cross, each once.
+const SOCKETS_MAX := 4
+## **The shape of a gene** (game/genes/gene.gd), which loads nothing: its most copies.
+const Gene := preload("res://game/genes/gene.gd")
+## **The highest tier that crosses**: a gene's most copies, gene.gd's TIER_MAX --
+## which genome.gd's is -- read from the one file that holds it, so the wire loads
+## nothing of the game but the body plan and a gene's shape, and copies nothing.
+const TIER_TOP := Gene.TIER_MAX
 
 # --- A list of rules, by line (protocol 6, docs/design/automation.md §10.3) ----
 ## **The most rules a list holds**: `drop.gd`'s MOST_RULES, eight, written out
-## because this file loads nothing, and the probe holds the two equal. A SISTER
-## carrying more is refused whole.
+## because this file loads nothing of the game but the body plan and a gene's shape,
+## and the probe holds the two equal. A SISTER carrying more is refused whole.
 const MOST_RULES := 8
 ## **The longest line one rule may be**, in bytes. The longest line today's
 ## vocabulary can write is under ninety -- `net_probe` measures it -- so a later
@@ -507,78 +576,129 @@ const CLEAR_SIZE := EVENT_HEADER + 4
 ## sentence instead of a shrug.
 ##
 ## **So a later protocol's HELLO must stay within these 64 bytes** to be told
-## why a host of this build refuses it. Longer, and the host hangs up before
-## the handshake with no sentence at all; longer than [constant GUEST_OTHER_MAX]
-## (290), and it is the oversize cut, which bars the caller's address for a
+## why a host of this build refuses it. Protocol 8's is 39: the prefix and the
+## rules' tail ([constant TAIL_SIZE]). Longer, and the host hangs up before
+## the handshake with no sentence at all; longer than [member GUEST_OTHER_MAX]
+## (1,101), and it is the oversize cut, which bars the caller's address for a
 ## minute (net-hardening.md A.2).
 const HANDSHAKE_MAX := 64
-## A worn genome at its longest: the count, then [constant GENES_MAX] genes of
+## **Every size that holds a genome or an order is a static var**, worked out in
+## [method _read_plan] from the two counts above, which are the plan's: they are
+## constants in all but name, and change only with the plan.
+##
+## A worn genome at its longest: the count, then [member GENES_MAX] genes of
 ## `len | a name of NAME_MAX letters | tier`. 163 bytes. An unknown name is
 ## legal and inert, so the bound follows the format and not today's longest
 ## gene, which has ten letters.
-const TIERS_MAX := 1 + GENES_MAX * (1 + NAME_MAX + 1)
-## A slot order at its longest: the count, then [constant ORDER_MAX] slots of
+static var TIERS_MAX := 0
+## A slot order at its longest: the count, then [member ORDER_MAX] slots of
 ## `len | name`. 120 bytes.
-const ORDER_BYTES_MAX := 1 + ORDER_MAX * (1 + NAME_MAX)
-## PERSON: the header, the new-body byte, a genome and an order -- 9 bytes with
-## nothing worn, 290 at the most the format holds. A real one is at most 194.
-const PERSON_MIN := EVENT_HEADER + 1 + 1 + 1
-const PERSON_MAX := EVENT_HEADER + 1 + TIERS_MAX + ORDER_BYTES_MAX
-## GENOME: the body's id and meals, then a genome. 12 to 174.
-const GENOME_MIN := EVENT_HEADER + 5 + 1
-const GENOME_MAX := EVENT_HEADER + 5 + TIERS_MAX
+static var ORDER_BYTES_MAX := 0
+## **Riders at their longest** (docs/design/gene-sockets.md §6): the count, then
+## [member GENES_MAX] hosts of `len | name | slots`, and [constant SOCKETS_MAX]
+## slots of `len | name | copies` each. 811 bytes. A real body has a handful.
+static var RIDERS_BYTES_MAX := 0
+## PERSON: the header, the new-body byte, a genome, an order and since protocol 9
+## the riders -- 10 bytes with nothing worn, 1,101 at the most the format holds. A
+## real one is at most 194 and its riders.
+const PERSON_MIN := EVENT_HEADER + 1 + 1 + 1 + 1
+static var PERSON_MAX := 0
+## GENOME: the body's id and meals, a genome and its riders. 13 to 985.
+const GENOME_MIN := EVENT_HEADER + 5 + 1 + 1
+static var GENOME_MAX := 0
 ## CONTACT: an ATE carries its gene's name, a KILLED its cause. 20 to 37.
 const CONTACT_MAX := CONTACT_SIZE + 1 + NAME_MAX
 ## SISTER: a place, a heading, a radius and a genome -- and since protocol 6 a
 ## second genome, her DNA, and her list: a count of rules to [constant
-## MOST_RULES], then each line as `len | ASCII`. 22 bytes with nothing worn,
-## carried or run; 1,378 at the most the format holds, two genomes of nine
-## sixteen-letter genes and eight lines of [constant RULE_BYTES_MAX]. A real one
-## is under a kilobyte: a DNA holds eight genes of ten letters at most, and
-## today's longest line is under ninety bytes.
-const SISTER_MIN := EVENT_HEADER + 13 + 1 + 1 + 1
-const SISTER_MAX := EVENT_HEADER + 13 + 2 * TIERS_MAX + 1 \
-	+ MOST_RULES * (1 + RULE_BYTES_MAX)
+## MOST_RULES], then each line as `len | ASCII` -- and since protocol 9 her DNA's
+## riders. 23 bytes with nothing worn, carried, run or riding; 2,189 at the most the
+## format holds, two genomes of nine sixteen-letter genes, eight lines of
+## [constant RULE_BYTES_MAX] and the longest riders. A real one is under a
+## kilobyte: a DNA holds eight genes of ten letters at most, and today's longest
+## line is under ninety bytes.
+const SISTER_MIN := EVENT_HEADER + 13 + 1 + 1 + 1 + 1
+static var SISTER_MAX := 0
 ## **The most either side ever writes in one frame**: a guest's longest SISTER
-## -- since protocol 6, longer than its longest PERSON, [constant PERSON_MAX] --
+## -- since protocol 6, longer than its longest PERSON, [member PERSON_MAX] --
 ## and a host's POND. A receiver reads no byte past the first of anything
 ## longer.
-const GUEST_FRAME_MAX := SISTER_MAX
+static var GUEST_FRAME_MAX := 0
 const HOST_FRAME_MAX := POND_MAX
 ## **The most a guest writes in any frame but a SISTER**: its longest PERSON,
 ## which was every guest frame's cap before protocol 6. Only a SISTER needs
 ## more -- her list rides in it -- so a guest frame of any other kind past this
 ## is still the oversize cut that bars an address (net-hardening.md A.2), and
 ## not a strike on the ledger. [method guest_cap] says which applies.
-const GUEST_OTHER_MAX := PERSON_MAX
+static var GUEST_OTHER_MAX := 0
+
+
+static func _static_init() -> void:
+	_read_plan()
+	BodyPlan.listen(_read_plan)
+
+
+## **Every size that follows the body plan, worked out from it**: at load, and
+## again whenever a tool swaps a plan in (body_plan.gd's `use`).
+static func _read_plan() -> void:
+	GENES_MAX = BodyPlan.SLOTS + 1
+	ORDER_MAX = BodyPlan.SLOT_MAX
+	TIERS_MAX = 1 + GENES_MAX * (1 + NAME_MAX + 1)
+	ORDER_BYTES_MAX = 1 + ORDER_MAX * (1 + NAME_MAX)
+	RIDERS_BYTES_MAX = 1 + GENES_MAX * (1 + NAME_MAX + 1 + SOCKETS_MAX * (1 + NAME_MAX + 1))
+	PERSON_MAX = EVENT_HEADER + 1 + TIERS_MAX + ORDER_BYTES_MAX + RIDERS_BYTES_MAX
+	GENOME_MAX = EVENT_HEADER + 5 + TIERS_MAX + RIDERS_BYTES_MAX
+	SISTER_MAX = EVENT_HEADER + 13 + 2 * TIERS_MAX + 1 + MOST_RULES * (1 + RULE_BYTES_MAX) \
+		+ RIDERS_BYTES_MAX
+	GUEST_FRAME_MAX = SISTER_MAX
+	GUEST_OTHER_MAX = PERSON_MAX
+
 
 # ---------------------------------------------------------------------------
 # Writing.
 # ---------------------------------------------------------------------------
 
-static func hello(protocol: int) -> PackedByteArray:
+## **A handshake frame's tail** ([constant TAIL_SIZE]): [param rules], the
+## fingerprint (written as zeros unless it is [constant RULES_SIZE] bytes), then
+## [param content], the sender's content version.
+static func tail(rules: PackedByteArray, content: int) -> PackedByteArray:
+	var out := _exactly(rules, RULES_SIZE).duplicate()
+	out.resize(TAIL_SIZE)
+	_put_u32(out, RULES_SIZE, maxi(content, 0))
+	return out
+
+
+## HELLO: the frozen prefix, then [param rest] -- a [method tail], or none, as a
+## build before protocol 8 sends it and as a tool may.
+static func hello(protocol: int, rest: PackedByteArray = PackedByteArray()) -> PackedByteArray:
 	var out := PackedByteArray()
 	out.resize(HELLO_SIZE)
 	out[0] = KIND_HELLO
 	_put_u16(out, 1, protocol)
+	out.append_array(rest)
 	return out
 
 
-static func welcome(protocol: int, host_id: int) -> PackedByteArray:
+## WELCOME: `kind | protocol | host id`, then [param rest], a [method tail].
+static func welcome(protocol: int, host_id: int,
+		rest: PackedByteArray = PackedByteArray()) -> PackedByteArray:
 	var out := PackedByteArray()
 	out.resize(WELCOME_SIZE)
 	out[0] = KIND_WELCOME
 	_put_u16(out, 1, protocol)
 	_put_u32(out, 3, host_id)
+	out.append_array(rest)
 	return out
 
 
-static func refuse(protocol: int, reason: int) -> PackedByteArray:
+## REFUSE: `kind | protocol | reason`, then [param rest], a [method tail].
+static func refuse(protocol: int, reason: int,
+		rest: PackedByteArray = PackedByteArray()) -> PackedByteArray:
 	var out := PackedByteArray()
 	out.resize(REFUSE_SIZE)
 	out[0] = KIND_REFUSE
 	_put_u16(out, 1, protocol)
 	out[3] = reason & 0xFF
+	out.append_array(rest)
 	return out
 
 
@@ -811,22 +931,27 @@ static func arrive_payload(at: Vector2, heading: float,
 
 ## PERSON: whether this is a new body, what it wears and in which slots.
 ## [param order] is the worn layout, slot by slot, `&""` for an empty slot.
+## [param riders] are what it wears in its genes' own slots (gene-sockets.md §6).
 static func person_payload(new_body: bool, tiers: Dictionary,
-		order: Array) -> PackedByteArray:
+		order: Array, riders: Dictionary = {}) -> PackedByteArray:
 	var out := PackedByteArray([1 if new_body else 0])
 	out.append_array(_tiers_bytes(tiers))
 	out.append_array(_order_bytes(order))
+	out.append_array(_riders_bytes(riders))
 	return out
 
 
 ## GENOME: one water body's genome, keyed by the version the mirror's book
-## files it under: the body's id, as POND carries it, and its meals.
-static func genome_payload(id: int, meals: int, tiers: Dictionary) -> PackedByteArray:
+## files it under: the body's id, as POND carries it, and its meals -- and its
+## [param riders], which a mirror draws (gene-sockets.md §5.3).
+static func genome_payload(id: int, meals: int, tiers: Dictionary,
+		riders: Dictionary = {}) -> PackedByteArray:
 	var out := PackedByteArray()
 	out.resize(5)
 	_put_u32(out, 0, id)
 	out[4] = clampi(meals, 0, 255)
 	out.append_array(_tiers_bytes(tiers))
+	out.append_array(_riders_bytes(riders))
 	return out
 
 
@@ -895,7 +1020,8 @@ static func died_payload(cause: int, by: int, at: Vector2) -> PackedByteArray:
 ## she is and what she wears -- and since protocol 6 the DNA she was made of,
 ## [param dna] (`{gene: copies}`), and the list her cell ran, [param lines]: a
 ## rule a line as `rulebook.gd`'s `lines_of` writes them, none for the founders'
-## (docs/design/automation.md §10.3).
+## (docs/design/automation.md §10.3) -- and since protocol 9 her DNA's
+## [param riders] (gene-sockets.md §6), of which she wears those whose host she wears.
 ##
 ## **The writer never sends what the reader refuses**: a DNA gene the wire
 ## cannot name is left out as a worn one is, and so is one at no copies, which
@@ -905,7 +1031,8 @@ static func died_payload(cause: int, by: int, at: Vector2) -> PackedByteArray:
 ## the library's file is kept there as it came, whatever it holds.
 static func sister_payload(at: Vector2, heading: float, radius: float,
 		tiers: Dictionary, dna: Dictionary = {},
-		lines: PackedStringArray = PackedStringArray()) -> PackedByteArray:
+		lines: PackedStringArray = PackedStringArray(),
+		riders: Dictionary = {}) -> PackedByteArray:
 	var out := PackedByteArray()
 	out.resize(13)
 	out.encode_float(0, at.x if is_finite(at.x) else 0.0)
@@ -919,6 +1046,7 @@ static func sister_payload(at: Vector2, heading: float, radius: float,
 			carried[gene] = dna[gene]
 	out.append_array(_tiers_bytes(carried))
 	out.append_array(_lines_bytes(lines))
+	out.append_array(_riders_bytes(riders))
 	return out
 
 
@@ -955,6 +1083,40 @@ static func refuse_reason(frame: PackedByteArray) -> int:
 	if frame.size() < REFUSE_SIZE or frame[0] != KIND_REFUSE:
 		return 0
 	return frame[3]
+
+
+## **The rules out of a handshake frame's tail** ([constant RULES_SIZE] bytes), or
+## empty for a frame with no whole tail -- a build's before protocol 8, or one cut
+## short. Two builds on one protocol play only when theirs are the same.
+static func rules_of(frame: PackedByteArray) -> PackedByteArray:
+	var at := _tail_at(frame)
+	if at < 0 or frame.size() < at + TAIL_SIZE:
+		return PackedByteArray()
+	return frame.slice(at, at + RULES_SIZE)
+
+
+## **The content version out of a handshake frame's tail**, or -1 for a frame with
+## no whole tail. Only ever compared, to say which of two builds is older.
+static func content_of(frame: PackedByteArray) -> int:
+	var at := _tail_at(frame)
+	if at < 0 or frame.size() < at + TAIL_SIZE:
+		return -1
+	return _take_u32(frame, at + RULES_SIZE)
+
+
+## Where a handshake frame's tail starts -- after its fixed part -- or -1 for a frame
+## that is not one.
+static func _tail_at(frame: PackedByteArray) -> int:
+	if frame.is_empty():
+		return -1
+	match frame[0]:
+		KIND_HELLO:
+			return HELLO_SIZE
+		KIND_WELCOME:
+			return WELCOME_SIZE
+		KIND_REFUSE:
+			return REFUSE_SIZE
+	return -1
 
 
 ## The nonce out of a CHALLENGE, or empty for anything that is not exactly one.
@@ -1065,9 +1227,9 @@ static func size_ok(kind: int, type: int, size: int, from_host: bool) -> bool:
 	return span.x >= 0 and size >= span.x and size <= span.y
 
 
-## **The cap a guest's [param frame] is held to**: [constant SISTER_MAX] for a
-## SISTER event, and [constant GUEST_OTHER_MAX] for every other frame. Of a
-## frame past [constant GUEST_OTHER_MAX] it reads byte 0 and the event's type,
+## **The cap a guest's [param frame] is held to**: [member SISTER_MAX] for a
+## SISTER event, and [member GUEST_OTHER_MAX] for every other frame. Of a
+## frame past [member GUEST_OTHER_MAX] it reads byte 0 and the event's type,
 ## byte 5 -- which a frame that long has -- only to find the one kind allowed
 ## past it; of any other frame it reads nothing.
 static func guest_cap(frame: PackedByteArray) -> int:
@@ -1230,7 +1392,7 @@ static func take_arrive(frame: PackedByteArray) -> Array:
 	return [Vector2(x, y), _take_bearing(frame, EVENT_HEADER + 8), rim, reach]
 
 
-## `[new_body, tiers, order]` out of a PERSON, or empty.
+## `[new_body, tiers, order, riders]` out of a PERSON, or empty.
 static func take_person(frame: PackedByteArray) -> Array:
 	if frame.size() < EVENT_HEADER + 1 or frame[0] != KIND_EVENT \
 			or frame[5] != EVENT_PERSON:
@@ -1239,20 +1401,27 @@ static func take_person(frame: PackedByteArray) -> Array:
 	if tiers.is_empty():
 		return []
 	var order := _take_order(frame, int(tiers[1]))
-	if order.is_empty() or int(order[1]) != frame.size():
+	if order.is_empty():
 		return []
-	return [frame[EVENT_HEADER] != 0, tiers[0], order[0]]
+	var riders := _take_riders(frame, int(order[1]))
+	if riders.is_empty() or int(riders[1]) != frame.size():
+		return []
+	return [frame[EVENT_HEADER] != 0, tiers[0], order[0], riders[0]]
 
 
-## `[id, meals, tiers]` out of a GENOME, or empty.
+## `[id, meals, tiers, riders]` out of a GENOME, or empty.
 static func take_genome(frame: PackedByteArray) -> Array:
 	if frame.size() < EVENT_HEADER + 5 or frame[0] != KIND_EVENT \
 			or frame[5] != EVENT_GENOME:
 		return []
 	var tiers := _take_tiers(frame, EVENT_HEADER + 5)
-	if tiers.is_empty() or int(tiers[1]) != frame.size():
+	if tiers.is_empty():
 		return []
-	return [_take_u32(frame, EVENT_HEADER), int(frame[EVENT_HEADER + 4]), tiers[0]]
+	var riders := _take_riders(frame, int(tiers[1]))
+	if riders.is_empty() or int(riders[1]) != frame.size():
+		return []
+	return [_take_u32(frame, EVENT_HEADER), int(frame[EVENT_HEADER + 4]), tiers[0],
+		riders[0]]
 
 
 ## `[id, at, radius, settle, life]` out of a SETTLE, or empty.
@@ -1331,7 +1500,7 @@ static func take_died(frame: PackedByteArray) -> Array:
 ## none, whom a host makes of her body as before; `lines` is her list, a rule a
 ## line, empty for the founders'.
 ##
-## **Refused whole**, as a genome is: a DNA past [constant GENES_MAX] genes or
+## **Refused whole**, as a genome is: a DNA past [member GENES_MAX] genes or
 ## naming one the wire cannot ([method _name_ok]); more than [constant
 ## MOST_RULES] lines; a line that is empty, longer than [constant
 ## RULE_BYTES_MAX] or holds a byte outside [constant RULE_BYTES]; or a byte past
@@ -1352,14 +1521,17 @@ static func take_sister(frame: PackedByteArray) -> Array:
 	if dna.is_empty():
 		return []
 	var lines := _take_lines(frame, int(dna[1]))
-	if lines.is_empty() or int(lines[1]) != frame.size():
+	if lines.is_empty():
+		return []
+	var riders := _take_riders(frame, int(lines[1]))
+	if riders.is_empty() or int(riders[1]) != frame.size():
 		return []
 	var carried := {}
 	for gene: StringName in dna[0]:
 		if int(dna[0][gene]) >= 1:
 			carried[gene] = dna[0][gene]
 	return [Vector2(x, y), _take_bearing(frame, EVENT_HEADER + 8), radius, tiers[0],
-		carried, lines[0]]
+		carried, lines[0], riders[0]]
 
 
 ## **The short heading a refusal is told as**, on the screen of the phone that was
@@ -1453,7 +1625,7 @@ static func _name_ok(name: String) -> bool:
 
 
 ## `u8 count`, then per gene `u8 len | name | u8 tier`. A gene whose name would
-## be refused is not written, and past [constant GENES_MAX] the rest are not:
+## be refused is not written, and past [member GENES_MAX] the rest are not:
 ## the writer never sends what the reader refuses.
 static func _tiers_bytes(tiers: Dictionary) -> PackedByteArray:
 	var out := PackedByteArray([0])
@@ -1473,7 +1645,7 @@ static func _tiers_bytes(tiers: Dictionary) -> PackedByteArray:
 
 
 ## `u8 count`, then per slot `u8 len | name`, length 0 for an empty slot. Past
-## [constant ORDER_MAX] slots the rest are not written; a name that would be
+## [member ORDER_MAX] slots the rest are not written; a name that would be
 ## refused is written as an empty slot.
 static func _order_bytes(order: Array) -> PackedByteArray:
 	var out := PackedByteArray([0])
@@ -1573,6 +1745,100 @@ static func _take_lines(from: PackedByteArray, at: int) -> Array:
 		lines.append(from.slice(i + 1, i + 1 + length).get_string_from_ascii())
 		i += 1 + length
 	return [lines, i]
+
+
+## **Riders** (docs/design/gene-sockets.md §6): `u8 hosts`, then per host `u8 len
+## | name | u8 slots`, then per slot `u8 len | name | u8 copies` -- length 0 and no
+## copies for an empty slot. A host or a rider whose name would be refused is not
+## written, nor a host past [member GENES_MAX] or a slot past [constant
+## SOCKETS_MAX]: the writer never sends what the reader refuses.
+static func _riders_bytes(riders: Dictionary) -> PackedByteArray:
+	var out := PackedByteArray([0])
+	var hosts := 0
+	for host: Variant in riders:
+		if hosts >= GENES_MAX:
+			break
+		var name := String(host)
+		var slots: Variant = riders[host]
+		if not _name_ok(name) or not slots is Array:
+			continue
+		out.append(name.length())
+		out.append_array(name.to_ascii_buffer())
+		var count := mini((slots as Array).size(), SOCKETS_MAX)
+		out.append(count)
+		for at in count:
+			var one: Variant = slots[at]
+			var rider := String(one[0]) if one is Array and (one as Array).size() >= 2 \
+				else ""
+			var copies := clampi(int(one[1]), 0, TIER_TOP) if not rider.is_empty() else 0
+			if rider.is_empty() or not _name_ok(rider) or copies < 1:
+				out.append(0)
+				continue
+			out.append(rider.length())
+			out.append_array(rider.to_ascii_buffer())
+			out.append(copies)
+		hosts += 1
+	out[0] = hosts
+	return out
+
+
+## `[riders, next offset]` read at [param at], or empty for a refusal: more than
+## [member GENES_MAX] hosts, a host twice, more than [constant SOCKETS_MAX] slots,
+## a name the wire cannot carry, or copies outside 1 to [constant TIER_TOP]. Riders
+## as riders.gd keeps them, a host with nothing in it left out.
+static func _take_riders(from: PackedByteArray, at: int) -> Array:
+	if at >= from.size():
+		return []
+	var count: int = from[at]
+	if count > GENES_MAX:
+		return []
+	var riders := {}
+	var i := at + 1
+	for _n in count:
+		var host := _take_name(from, i)
+		if host.is_empty() or riders.has(host[0]) or int(host[1]) >= from.size():
+			return []
+		i = int(host[1])
+		var slots: int = from[i]
+		if slots > SOCKETS_MAX:
+			return []
+		i += 1
+		var held: Array = []
+		var any := false
+		for _s in slots:
+			if i >= from.size():
+				return []
+			if from[i] == 0:
+				held.append([&"", 0])
+				i += 1
+				continue
+			var rider := _take_name(from, i)
+			if rider.is_empty() or int(rider[1]) >= from.size():
+				return []
+			i = int(rider[1])
+			var copies: int = from[i]
+			if copies < 1 or copies > TIER_TOP:
+				return []
+			held.append([rider[0], copies])
+			any = true
+			i += 1
+		if any:
+			riders[host[0]] = held
+	return [riders, i]
+
+
+## `[name, next offset]`: one `u8 len | name` at [param at], 1 to [constant
+## NAME_MAX] letters the wire can carry, or empty for a refusal.
+static func _take_name(from: PackedByteArray, at: int) -> Array:
+	if at >= from.size():
+		return []
+	var length: int = from[at]
+	if length < 1 or length > NAME_MAX or at + 1 + length > from.size():
+		return []
+	var name := from.slice(at + 1, at + 1 + length).get_string_from_ascii()
+	if name.length() != length or not _name_ok(name):
+		return []
+	return [StringName(name), at + 1 + length]
 
 
 ## `[order, next offset]` read at [param at], or empty for a refusal. An empty

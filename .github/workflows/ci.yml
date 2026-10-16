@@ -218,8 +218,14 @@ jobs:
         # positive assertion -- that the division actually commits -- because a
         # step that only greps for errors goes green if the harness quietly
         # stops driving anything. Measured against the two faults it exists for:
-        # the stale constant fails it under all three schemes, and so does the
-        # input gate that used to ignore every press for the 1.5s of the pinch.
+        # the stale constant fails it, and so does the input gate that used to
+        # ignore every press for the 1.5s of the pinch.
+        #
+        # One layout since docs/design/gene-controls.md: the turn's slider at the
+        # bottom left (48..240), the push's lever inboard on the right (1016..1112,
+        # y 480..672), the dash in the corner (1136..1232). The presses below
+        # hold the turn and push the lever, fire the dash, slide the turn over,
+        # and then hold the turn hard to starboard through the division.
         #
         # `--size=` is load-bearing. Canvas coordinates are converted through
         # `get_screen_transform()`, and a headless run with no window of its own
@@ -228,55 +234,51 @@ jobs:
         # testing nothing at all.
         #
         # `tools/` is excluded from export on every preset, so none of this
-        # reaches a player. About fifteen seconds for all three schemes.
+        # reaches a player. About five seconds.
         run: |
           set -uo pipefail
           fail=0
           genome="cytostome:1,cirrus:1,flagellum:1,axoneme:1,myoneme:1"
-          for scheme in 0 1 2; do
-            echo "--- driving scheme $scheme"
-            if ! out=$(~/godot/godot --headless --path . --fixed-fps 60 \
-                         --quit-after 660 res://tools/drive.tscn -- \
-                         --size=1280x720 --seed=12345 --scheme="$scheme" \
-                         --radius=40 --genome="$genome" --trace=2.0 \
-                         --press=1.0:144,624,0 --press=1.2:1064,624,1 \
-                         --touch=1.6:1184,624 --slide=1.8:200,624,0 \
-                         --lift=2.0:0 --lift=2.1:1 \
-                         --press=3.0:216,624,0 --lift=8.0:0 \
-                         --mouse-press=9.0:96,624 --mouse-slide=9.2:640,400 \
-                         --mouse-lift=9.4 2>&1); then
-              printf '%s\n' "$out"
-              echo "::error::scheme $scheme exited non-zero"
-              fail=1
-              continue
-            fi
-            if printf '%s\n' "$out" \
-                 | grep -E "SCRIPT ERROR|Parse Error|Failed to load|Cannot open file"; then
-              echo "::error::scheme $scheme reported script errors under input"
-              fail=1
-            fi
-            # The cell is forced to DIVIDE_RADIUS, so it splits at once and the
-            # press at 3.0s is a held lean -- the port half under `anywhere`,
-            # the stick hard over under `stick`, the starboard pad under
-            # `pads`. A daughter is half the area, so r40 becomes r28.28: any
-            # r2x in the trace is a division that was answered.
-            if ! grep -qE "^\[trace\].*me r2[0-9]\." <<< "$out"; then
-              printf '%s\n' "$out" | grep -E "^\[trace\]" || true
-              echo "::error::scheme $scheme never committed a daughter -- a held lean did not reach the division"
-              fail=1
-            fi
-          done
+          if ! out=$(~/godot/godot --headless --path . --fixed-fps 60 \
+                       --quit-after 660 res://tools/drive.tscn -- \
+                       --size=1280x720 --seed=12345 \
+                       --radius=40 --genome="$genome" --trace=2.0 \
+                       --press=1.0:144,624,0 --press=1.2:1064,540,1 \
+                       --press=1.6:1184,624,2 --lift=1.7:2 --slide=1.8:200,624,0 \
+                       --lift=2.0:0 --lift=2.1:1 \
+                       --press=3.0:216,624,0 --lift=8.0:0 \
+                       --mouse-press=9.0:96,624 --mouse-slide=9.2:640,400 \
+                       --mouse-lift=9.4 2>&1); then
+            printf '%s\n' "$out"
+            echo "::error::the drive exited non-zero"
+            exit 1
+          fi
+          if printf '%s\n' "$out" \
+               | grep -E "SCRIPT ERROR|Parse Error|Failed to load|Cannot open file"; then
+            echo "::error::script errors under input"
+            fail=1
+          fi
+          # The cell is forced to DIVIDE_RADIUS, so it splits at once and the
+          # press at 3.0s is a held lean -- the turn hard over to starboard. A
+          # daughter is half the area, so r40 becomes r28.28: any r2x in the
+          # trace is a division that was answered.
+          if ! grep -qE "^\[trace\].*me r2[0-9]\." <<< "$out"; then
+            printf '%s\n' "$out" | grep -E "^\[trace\]" || true
+            echo "::error::no daughter was committed -- a held lean did not reach the division"
+            fail=1
+          fi
           exit "$fail"
 
       - name: Check an empty library changes nothing
         # automation.md §18.3, check 8. With no programs, pack 4's autopilot
-        # must leave the game exactly as phase 4-1 left it: three seeded runs
-        # of tools/drive.tscn -- seed 1, sixty seconds at a fixed 60 fps, under
-        # each scheme, `--trace=0.5` -- hashed over their trace and compared
-        # with the hash 4-1's tree printed (dev at 2a761a5), pinned here as
-        # drop_probe pins pack 2's lines in DEV_LINES. The same hash under all
-        # three schemes: with no hand on it the scheme draws differently and
-        # moves nothing.
+        # must leave the game exactly as phase 4-1 left it: a seeded run of
+        # tools/drive.tscn -- seed 1, sixty seconds at a fixed 60 fps,
+        # `--trace=0.5` -- hashed over its trace and compared with the hash
+        # 4-1's tree printed (dev at 2a761a5), pinned here as drop_probe pins
+        # pack 2's lines in DEV_LINES. It ran once under each of three control
+        # schemes until docs/design/gene-controls.md left one layout; with no
+        # hand on it a layout draws and moves nothing, so the hash never told
+        # them apart.
         #
         # The autopilot's key, R, is pressed twenty seconds in by the real
         # input path. With nothing to run it must do nothing: the hash says it
@@ -296,42 +298,106 @@ jobs:
         # both, its poison by the coin -- and the next body seeded after it is the
         # first to differ. Venom's bite, poison's and doses move the rest.
         #
-        # Each run prints about ten megabytes, so it goes to a file rather than
-        # a variable. About twenty seconds a scheme.
+        # **Re-pinned at gene-rarity phase 7-2** (docs/design/gene-rarity.md
+        # §11.2; gene-catalogue.md §15.8), from 7397a410...: the water's draws
+        # changed on purpose. Every draw of the water is a float draw by
+        # `water_weight` now, so a seeded run differs from dev's from the first
+        # body the water seeds; `stigma` and `ampulla` weigh 2, not 3; and drift
+        # is weighted. Measured against phase 7-1 (4c029f7): the trace is 7-1's
+        # for its first two lines, the cell's own, and differs from its first look
+        # at the water, 0.52 s in -- cell 0, the first body seeded, has the radius
+        # it had and another gene, and the run starts at another quiet point,
+        # since where a run starts is chosen by the water round it. 69,549 lines,
+        # from 69,349, the same hash under all three schemes.
+        #
+        # **Re-pinned at the sonar rework** (docs/design/ping-as-outline.md §13),
+        # from 701cc268...: the water changed on purpose. Nothing passes a body
+        # now, so a water cell with two or three copies of the ping no longer
+        # hears behind a body, and the water round the cell moves with it.
+        # 69,441 lines, from 69,549, the same hash under all three schemes.
+        #
+        # **Re-pinned at the sonar playtest** (ping-as-outline.md §13.5), from
+        # 167a5ccd...: the water changed on purpose. A body is heard by how much
+        # of it the nearer bodies leave in sight, so one wholly behind another is
+        # silent where it was heard through its edge, and the water's choices
+        # move with it. 69,441 lines, as before, the same hash under all three
+        # schemes.
+        #
+        # **Re-pinned with the haptonema** (docs/design/haptonema.md §2), from
+        # 77258a82...: the water changed on purpose. The haptonema is common and
+        # a drifter, a fourth common organ in every draw, so the water round the
+        # cell differs from the first body it seeds. 69,471 lines, from 69,441,
+        # the same hash under all three schemes.
+        #
+        # **Re-pinned with the glowing nose** (docs/design/three-senses.md §2.6),
+        # from e636a790...: the harness's words changed, not the water. The
+        # membrane line under each trace now prints the nose's glow where it
+        # printed the taste ring, which is gone. Diffed against dev at f8c9fc8,
+        # the 116 membrane lines are the only lines that differ out of 69,471,
+        # the same hash under all three schemes.
+        #
+        # **Re-pinned when the water stopped reading senses**
+        # (docs/design/water-evolves.md), from 5e30e177...: the water changed on
+        # purpose. Everything with a mouth it makes from nothing is a newborn, in
+        # one composition whoever is in it, and a new drop's founders are given
+        # the toxin, so the drop differs from its first fill. 70,197 lines, from
+        # 69,471, the same hash under all three schemes.
+        #
+        # **Re-pinned when the sting became a touch and the chase's aim an
+        # instinct** (docs/design/sting.md), from c5d5a002...: the water changed
+        # on purpose. Diffed against dev at 0b64b12, the traces part at 1.03 s,
+        # where dev's dart stunned a body coming for a trichocyst from a distance
+        # and that body now swims on; with the ranged dart taken out of dev too, and
+        # the stings left out here, the two agree to 37.2 s, the first daughter
+        # whose division nudged a "turn toward"'s aim. 70,074 lines, from 70,197.
+        #
+        # **Re-pinned when the tank doubled** (docs/design/energy.md §9), from
+        # f7e09406...: every body's tank holds seventy-two seconds of rest where it
+        # held thirty-six, at the same costs and meals, so the water's hunters
+        # starve later and the player's beat races later. With the tank, the meal
+        # and the dash put back as they were, this branch printed 49611ed8... to
+        # the byte. 68,616 lines, from 70,074.
+        #
+        # **Re-pinned when the ping lost its waves and narrowed**
+        # (docs/design/ping-as-outline.md §14), from f7e09406...: a call hears 45
+        # degrees either side of the way its organ faces, where it heard the whole
+        # half circle, so the water's hunters with a ping hear fewer bodies. With
+        # the half circle put back, this branch printed f7e09406... to the byte, so
+        # taking the waves out moved nothing. 68,435 lines, from 68,616.
+        #
+        # The run prints about ten megabytes, so it goes to a file rather than a
+        # variable. About twenty seconds.
         run: |
           set -uo pipefail
-          pinned="7397a410a51b14203ccdd58c040346c3fd72e975c0c50e4d1baf8684c8b83bf4"
+          pinned="0c666c1109ed869288514b8a5f6f43e043c1164805098e2d5d863822a4af9aad"
           log=$(mktemp)
           fail=0
-          for scheme in 0 1 2; do
-            echo "--- scheme $scheme, seed 1, sixty seconds, R pressed at 20 s"
-            if ! ~/godot/godot --headless --path . --fixed-fps 60 \
-                   --quit-after 3600 res://tools/drive.tscn -- \
-                   --size=1280x720 --seed=1 --scheme="$scheme" --trace=0.5 \
-                   --autopilot-at=20 > "$log" 2>&1; then
-              tail -n 40 "$log"
-              echo "::error::scheme $scheme exited non-zero"
-              fail=1
-              continue
-            fi
-            if grep -E "SCRIPT ERROR|Parse Error|Failed to load|Cannot open file" "$log"; then
-              echo "::error::scheme $scheme reported script errors"
-              fail=1
-            fi
-            lines=$(grep -cE '^(\[trace\]|        )' "$log" || true)
-            hash=$(grep -E '^(\[trace\]|        )' "$log" | sha256sum | cut -d' ' -f1)
-            echo "$lines trace lines, sha256 $hash"
-            if [ "$hash" != "$pinned" ]; then
-              grep -E "^\[trace\]" "$log" | tail -n 20 || true
-              echo "::error::scheme $scheme: with an empty library the trace is not the one 4-1 left (pinned $pinned)"
-              fail=1
-            fi
-            grep -E "^\[instincts\]" "$log" || true
-            if ! grep -qE "^\[instincts\] +20\.[0-9]+  after R: drives no, icon hidden$" "$log"; then
-              echo "::error::scheme $scheme: with nothing to run, R switched something on or drew the icon"
-              fail=1
-            fi
-          done
+          echo "--- seed 1, sixty seconds, R pressed at 20 s"
+          if ! ~/godot/godot --headless --path . --fixed-fps 60 \
+                 --quit-after 3600 res://tools/drive.tscn -- \
+                 --size=1280x720 --seed=1 --trace=0.5 \
+                 --autopilot-at=20 > "$log" 2>&1; then
+            tail -n 40 "$log"
+            echo "::error::the run exited non-zero"
+            exit 1
+          fi
+          if grep -E "SCRIPT ERROR|Parse Error|Failed to load|Cannot open file" "$log"; then
+            echo "::error::the run reported script errors"
+            fail=1
+          fi
+          lines=$(grep -cE '^(\[trace\]|        )' "$log" || true)
+          hash=$(grep -E '^(\[trace\]|        )' "$log" | sha256sum | cut -d' ' -f1)
+          echo "$lines trace lines, sha256 $hash"
+          if [ "$hash" != "$pinned" ]; then
+            grep -E "^\[trace\]" "$log" | tail -n 20 || true
+            echo "::error::with an empty library the trace is not the one 4-1 left (pinned $pinned)"
+            fail=1
+          fi
+          grep -E "^\[instincts\]" "$log" || true
+          if ! grep -qE "^\[instincts\] +20\.[0-9]+  after R: drives no, icon hidden$" "$log"; then
+            echo "::error::with nothing to run, R switched something on or drew the icon"
+            fail=1
+          fi
           rm -f "$log"
           exit "$fail"
 
@@ -375,6 +441,64 @@ jobs:
             exit 1
           fi
 
+      - name: Check the genes
+        # docs/design/gene-catalogue.md §12.1: every gene's numbers, lists, tags,
+        # rules, look, words and stats lines live in its organ's file under
+        # game/genes/, and everything that reads one asks the catalogue. A gene
+        # that is half there -- a key the wire refuses, a table one entry short,
+        # a live gene with no weight in the water, a sense no channel carries,
+        # an organ file the index forgot, a look with no shape, a gene with no
+        # word or no lines, a colour too close to another -- works alone and
+        # fails somewhere else: in a shared pond, a seeded water, a save, a
+        # screen. Static, a few seconds. Grepped, not trusted to the exit
+        # code, for the reason the Back probe gives.
+        run: |
+          set -uo pipefail
+          # timeout: a parse error leaves Godot running rather than exiting,
+          # and a job that waits on it waits for GitHub's six hours.
+          out=$(timeout 120 ~/godot/godot --headless --path . res://tools/gene_probe.tscn 2>&1) || true
+          grep -E "^\[gene-probe\]" <<< "$out" || true
+          if ! grep -q "^\[gene-probe\] ALL PASS$" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error|ERROR:" <<< "$out" || true
+            echo "::error::a gene is missing something a player or another system needs -- see the probe lines above"
+            exit 1
+          fi
+          if grep -qE "SCRIPT ERROR|Parse Error" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error" <<< "$out"
+            echo "::error::the gene probe hit a script error -- checks after it did not run"
+            exit 1
+          fi
+
+      - name: Check the gene names
+        # docs/design/gene-catalogue.md §12.2: no gene is named in game/ outside
+        # game/genes/. A mechanic asks the catalogue for an organ by its stat,
+        # its tag or its channel, so a gene added, varied or retired is one
+        # entry in its organ's file and nothing else moves -- and a name written
+        # anywhere else is a place it silently does not reach. Fails on any key,
+        # organ or qualified part name the catalogue knows, in either quote or
+        # as a dictionary key, in a script or a text resource (.tscn, .tres,
+        # .gdshader) under game/ outside game/genes/; comment text and tools/
+        # are exempt, and a name built by concatenation is past any static
+        # gate (game/genes/README.md). The gene probe in its --names mode,
+        # static, a second. Grepped, not trusted to the exit code, for the
+        # reason the Back probe gives.
+        run: |
+          set -uo pipefail
+          # timeout: a parse error leaves Godot running rather than exiting,
+          # and a job that waits on it waits for GitHub's six hours.
+          out=$(timeout 120 ~/godot/godot --headless --path . res://tools/gene_probe.tscn -- --names 2>&1) || true
+          grep -E "^\[gene-names\]" <<< "$out" || true
+          if ! grep -q "^\[gene-names\] ALL PASS$" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error|ERROR:" <<< "$out" || true
+            echo "::error::a gene is named in game/ outside game/genes/ -- ask the catalogue for its organ by stat, tag or channel (see the lines above)"
+            exit 1
+          fi
+          if grep -qE "SCRIPT ERROR|Parse Error" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error" <<< "$out"
+            echo "::error::the gene names gate hit a script error -- the files after it were not looked in"
+            exit 1
+          fi
+
       - name: Check the levels
         # docs/design/beam-levels.md: the arithmetic and the bookkeeping of a
         # gene's level -- the curve, the fork, what a daughter inherits, what a
@@ -400,6 +524,31 @@ jobs:
             exit 1
           fi
 
+      - name: Check the heartbeat's sound and touch
+        # docs/design/sound-and-touch.md §7: the heartbeat is low, quiet and
+        # clean, its two parts land inside one beat at any pace, a buzz is short
+        # and weak and comes only in the water with vibration on, and the two
+        # switches are kept and mute the mix. And the ping (§9): its call and its
+        # echoes sit above the heart, an echo is as loud as it is strong, and a
+        # run with a ping hears every call and echo and fills its scope. Nothing
+        # of the sound is drawn, so no render can catch a fault in it. It plays to
+        # the dummy driver here.
+        run: |
+          set -uo pipefail
+          out=$(timeout 300 ~/godot/godot --headless --path . --fixed-fps 60 \
+                  res://tools/feel_probe.tscn 2>&1) || true
+          grep -E "^\[feel-probe\]" <<< "$out" || true
+          if ! grep -q "^\[feel-probe\] ALL PASS$" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error|ERROR:" <<< "$out" || true
+            echo "::error::the heartbeat's sound or touch is wrong -- see the probe lines above"
+            exit 1
+          fi
+          if grep -qE "SCRIPT ERROR|Parse Error" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error" <<< "$out"
+            echo "::error::the feel probe hit a script error -- checks after it did not run"
+            exit 1
+          fi
+
       - name: Check the drop
         # docs/design/ocean.md §14.3: what the finite water is built on. The
         # grid against brute force over 10,000 queries, the basin's rim against
@@ -419,17 +568,21 @@ jobs:
         # it shows in a render -- a grid that misses one body in ten thousand
         # is a hunter that never sees you -- and a player would find it an
         # hour into a run. About three and a half minutes here since pack 3's
-        # rules (3-1), which read every hunter's senses, and about four since
-        # pack 4's tail (4-1), which runs a pack-3 drop of its own beside the
-        # new water: 235 s here at 4-1 and 192 s at 4-2's programs, and 319 to
-        # 329 s on a quiet local machine, against the 600 s timeout below.
+        # rules (3-1), which read every hunter's senses, about four since pack
+        # 4's tail (4-1), which runs a pack-3 drop of its own beside the new
+        # water, and a minute or two more since gene-rarity phase 7-2's own
+        # section -- the draw, drift and a crowded drop of a hundred genes:
+        # 292 to 332 s here at 7-1, and 432 s against 7-1's 340 s on one
+        # local machine at 7-2, so about 370 to 425 s here. Against the 900 s
+        # timeout below, raised from 600 at 7-2 so that the gene pass's genes
+        # have room.
         # Grepped, not trusted to the exit code, for the reason the Back probe
         # gives.
         run: |
           set -uo pipefail
           # timeout: a parse error leaves Godot running rather than exiting,
           # and a job that waits on it waits for GitHub's six hours.
-          out=$(timeout 600 ~/godot/godot --headless --path . res://tools/drop_probe.tscn 2>&1) || true
+          out=$(timeout 900 ~/godot/godot --headless --path . res://tools/drop_probe.tscn 2>&1) || true
           grep -E "^\[drop-probe\]" <<< "$out" || true
           if ! grep -q "^\[drop-probe\] ALL PASS$" <<< "$out"; then
             grep -E -A2 "SCRIPT ERROR|Parse Error|ERROR:" <<< "$out" || true
@@ -510,14 +663,15 @@ jobs:
         # field rules (`pond-field`): two players in one food.gd, the eating
         # rule both ways, the per-player water, and a mirror that must perceive
         # exactly what the field does. Then, also with no socket, the host's
-        # referee (`referee`, net-hardening.md part B): the fingerprint of every
-        # rule it judges a guest by against wire.gd's RULES -- a rule changed
-        # without PROTOCOL fails here -- and each of its rules at its edge.
+        # referee (`referee`, net-hardening.md part B): the rules the handshake
+        # carries, as the game writes them, against the probe's own and against
+        # wire.gd's RULES pin -- a rule changed without moving the pin fails
+        # here -- and each of its rules at its edge.
         # Then two real runs in one pond, and straight after them `pond
         # referee`: a guest driven by hand, as a modified client is, in a real
         # host's water, breaking each rule and then cut. Then the dedicated
         # server (`game/server/`) with two real guests on this build's own
-        # PROTOCOL 4 guest code, and its update decisions against a fake release
+        # guest code, and its update decisions against a fake release
         # feed and a loopback HTTP server -- no network. Then `invites`
         # (net-hardening.md part C): the invite line and the kept invite, calls
         # by invite over DTLS on loopback and each way one ends, hostile callers

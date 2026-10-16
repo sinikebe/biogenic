@@ -67,7 +67,8 @@ extends Node
 ## placeholders says what goes in them**, `# ROOM: 560 px at 14 px with word, 99`:
 ## the text is measured with the widest gene word the catalog has in place of the
 ## first `%s` and `99` in place of the `%d`. A `with` word is the name of a table of
-## words (FILL_TABLES) or the text itself, which has a digit in it. And where several
+## words (FILL_TABLES), of the genes' own words, which the catalogue lists
+## (CATALOGUE_FILLS), or the text itself, which has a digit in it. And where several
 ## messages are drawn as one line -- a gene's numbers, the pause caption, a world's line
 ## in the world menu -- no one of them has the room, so `--lint-all` builds those lines
 ## with the game's own code, in the language being checked, and measures them (see
@@ -84,6 +85,10 @@ extends Node
 ## other way round: a constant marked with `TRANSLATORS:` that no `tr()` names is
 ## listed for a translator and shown in English -- the commonest way to miss one. (A
 ## catalog's `get_message()` names one too: it looks a message up as `tr()` does.)
+## **An organ's words are named by the catalogue** (game/genes/gene.gd, "Its words"):
+## a marked constant in an organ's file under a name the catalogue reads (its
+## KEY_WORDS, WAY_WORDS and PART_WORDS) is read by it and translated by the screen
+## it hands the words to, so no `tr()` names it, and none has to.
 ##
 ## Excluded from export (`tools/*` on every preset), so none of it ships.
 
@@ -98,6 +103,8 @@ const LAUNCHER_PO_DIR := "res://game/i18n/launcher"
 const CONFIG_PATH := "res://launcher_config.tres"
 const CONFIG_TEXT := ["play_text", "quit_text", "tagline"]
 const ROOT := "res://game"
+## The organs' own files (game/genes/organs/), whose word tables the catalogue reads.
+const ORGANS_DIR := "res://game/genes/organs/"
 ## Text that is not shown to a player: the dev app's frame readout, and the
 ## dedicated server, whose log is the owner's and stays in English.
 const SKIP_DIRS: Array[String] = ["res://game/dev", "res://game/server"]
@@ -125,9 +132,16 @@ const LIST_AT_MOST := 40
 ## English where the catalog has not translated it), and when it fills two placeholders of
 ## one message, its two widest, because one line never names the same gene twice. Any other
 ## word after `with` is the text itself and has a digit in it: `99`, `80%`.
-const FILL_TABLES := {"word": "WORDS", "way": "PATH_TITLES", "copies": "COPIES",
-	"sense": "GENE_SENSES", "action": "GENE_SAYS", "body": "BODY_SAYS", "ref": "REFERENCE_SAYS",
-	"trigger": "TRIGGER_SAYS", "already": "ALREADY", "always": "ALWAYS_DOES"}
+const FILL_TABLES := {"copies": "COPIES", "body": "BODY_SAYS", "ref": "REFERENCE_SAYS",
+	"trigger": "TRIGGER_SAYS", "already": "ALREADY", "always": "ALWAYS_DOES",
+	"name": "CELL_NAMES", "world": "DEFAULT_NAMES"}
+## **And the words that are the genes' own** (game/genes/catalogue.gd): not one constant's
+## strings but the words every live gene has of that name, read from the catalogue -- a
+## key's ([method words]: its chip word, its ways' names) or a declared part's ([method
+## part_words]: a sense's word, an action's) -- so a new organ's words are measured with the
+## rest without being named here. Ranked as a table's are.
+const CATALOGUE_FILLS := {"word": [&"words", &"word"], "way": [&"words", &"way_titles"],
+	"sense": [&"part_words", &"sense"], "action": [&"part_words", &"says"]}
 ## How the template says each table's entry, the first time and when it comes again.
 const FILL_SAYS := {
 	"word": ["your widest gene word", "your second widest"],
@@ -141,6 +155,8 @@ const FILL_SAYS := {
 		"your second widest"],
 	"already": ["your widest \"already steers\" phrase", "your second widest"],
 	"always": ["your widest \"always swims\" phrase", "your second widest"],
+	"name": ["your widest default name of a cell", "your second widest"],
+	"world": ["your widest default name of a world", "your second widest"],
 }
 
 ## **The lines the game composes from several messages and draws as one** (SCREENS):
@@ -155,13 +171,26 @@ const NUMBERS_ROOM := 650
 const NUMBERS_SIZE := 14
 const CAPTION_ROOM := 560
 const CAPTION_SIZE := 15
-## **A world's line in "your worlds"** (docs/design/settings.md §4.3, §7): its generation
-## and its age joined with a middle dot (game/normal/drops.gd's `line`, where a world is a
-## drop), under the world's name at 15 px. The menu is 640 px; less its margins, the row's two 112 px buttons and
-## their gaps, and the row's 52 px for the mark and 16 at the right, 280 are left, and a
-## longer line ends in "…".
+## **A world's line in "your worlds"** (docs/design/settings.md §4.3; cells-ux.md §5): its
+## age, alone (game/normal/drops.gd's `lines_of`, where a world is a drop), under the
+## world's name at 15 px. The menu is 640 px; less its margins, the row's two 112 px
+## buttons and their gaps, and the row's 52 px for the mark and 16 at the right, 280 are
+## left, and a longer line ends in "…".
 const STATS_ROOM := 280
 const STATS_SIZE := 15
+## **A cell's lines** (docs/design/cells-ux.md §1.2, §2.2, §3.2, §6), built with the game's
+## own game/normal/cells.gd: the line under a view's name on its button has 420 px at 15
+## -- the button's 460 less its margins -- and its name alone may give way to "…", so the
+## line is measured with every default name and has to fit; a row's two lines in "your
+## cells" have the worlds' row's 280 plus the 112 of the missing button and its gap, 402;
+## the detailed view's `Then` wraps, in a column 280 px wide, onto two lines and no more;
+## and the sheet's caption, `your cells · <view>`, has the sheet's 592 at 16.
+const CELL_LINE_ROOM := 420
+const CELL_ROW_ROOM := 402
+const CELL_THEN_ROOM := 280
+const CELL_THEN_LINES := 2
+const CELL_CAPTION_ROOM := 592
+const CELL_CAPTION_SIZE := 16
 ## **An instinct's row on the programs page** (docs/design/automation-ux.md §8,
 ## `ROW_ROOM`): for every sense, its widest test on each value it carries and the
 ## widest action, laid out as the page lays them at 1280 -- a row 856 px wide --
@@ -171,15 +200,55 @@ const STATS_SIZE := 15
 ## Both are measured by the page's own code (`programs_page.gd`).
 const ROW_ROOM := 40
 const TRIGGER_LINE_ROOM := 230
+## **The pause screen's hint row, built whole** (docs/design/rarity-word-ux.md §1.4, §7):
+## the row under a gene's line -- how rare the gene is, then a level and its gauge for a
+## gene that levels, then the words (figure.gd's `lay_hint_row`) -- at 14 px, in the
+## 560 px column and 8 px more on each side: wider, it reaches the `numbers` switch at its
+## right, and a cell's detailed view lays the same row out the same way. Built with the
+## language's widest rarity word, its widest level (`level_text` at 99) and the gauge where
+## a level shares the row, and each of the row's texts with the widest words its ROOM
+## names in its placeholders, laid out by figure.gd's own `hint_row_width`. The texts are
+## the row's own, by their English: HINT_ROW_LEVELLED share it with a level -- the odds,
+## the numbers' odds and the fork's lines -- and HINT_ROW_PLAIN with the word alone -- the
+## mouth's and the warnings of a tap that writes over a gene. `--check` fails on one the
+## source no longer says, so a sentence reworded in the game is reworded here.
+const HINT_ROW_ROOM := 576
+const HINT_ROW_SIZE := 14
+const HINT_ROW_LEVELLED: Array[String] = [
+	"one copy · a daughter may not wear it",
+	"two copies · a daughter probably wears it",
+	"three copies · a daughter always wears it",
+	"%s · a daughter always wears it",
+	"%s · %s of daughters wear it",
+	"works as level %d until you choose",
+	"both ways start at the next level",
+	"costs the same to keep as %s",
+	"costs more to keep than %s",
+	"costs less to keep than %s",
+]
+const HINT_ROW_PLAIN: Array[String] = [
+	"the mouth · a daughter always wears it",
+	"%s leaves your dna · your body keeps it",
+	"%s leaves your dna",
+	"%s leaves your dna · level %d ends with this body",
+	"%s leaves your dna · its level %d is lost",
+]
+## The level a levelled row is measured at: the widest a level is said, as `HINT_LEVEL`'s
+## own ROOM measures it.
+const HINT_ROW_LEVEL := 99
 ## The scripts that build those lines, loaded only when a game catalog is being checked.
 const SCREEN_SCRIPTS := {
 	"stats": "res://game/normal/gene_stats.gd",
 	"readout": "res://game/mechanics/readout.gd",
 	"genome": "res://game/normal/genome.gd",
 	"cell": "res://game/normal/cell.gd",
+	"catalogue": "res://game/genes/catalogue.gd",
 	"i18n": "res://game/i18n/i18n.gd",
 	"drops": "res://game/normal/drops.gd",
+	"cells": "res://game/normal/cells.gd",
 	"programs": "res://game/normal/programs_page.gd",
+	"figure": "res://game/normal/figure.gd",
+	"rarity": "res://game/genes/rarity.gd",
 }
 
 enum K { IDENT, STR, NAME, NUM, PUNCT }
@@ -233,8 +302,10 @@ var _named_in_calls := {}
 ## The strings of every constant marked with `TRANSLATORS:`, by its name, in the order
 ## they are written: the tables a ROOM's `with` words name (FILL_TABLES).
 var _const_ids := {}
-## The same for a table with keys (`WORDS`): `{name: {key: first string}}`.
+## The same for a table with keys (`COPIES`): `{name: {key: first string}}`.
 var _const_pairs := {}
+## The English of each of CATALOGUE_FILLS, read from the catalogue once.
+var _catalogue_fills := {}
 
 
 func _ready() -> void:
@@ -330,10 +401,14 @@ func _collect() -> void:
 			_read_scene(path)
 	_files += 1
 	_read_config()
+	var by_catalogue := _catalogue_tables()
 	for name: String in _marked:
-		if not _named_in_calls.has(name):
-			_problems.append(("%s: `%s` is marked with TRANSLATORS: but no tr() names it,"
-				+ " so it is listed and never translated") % [_marked[name], name])
+		if _named_in_calls.has(name):
+			continue
+		if String(_marked[name]).begins_with(ORGANS_DIR) and by_catalogue.has(name):
+			continue
+		_problems.append(("%s: `%s` is marked with TRANSLATORS: but no tr() names it,"
+			+ " so it is listed and never translated") % [_marked[name], name])
 	for named: Array in _named:
 		var key := "\u0004" + String(named[0])
 		if not _entries.has(key):
@@ -342,6 +417,39 @@ func _collect() -> void:
 		elif not named[1] in _entries[key]["notes"]:
 			_entries[key]["notes"].append(named[1])
 	_check_rooms()
+	_check_hint_row()
+
+
+## **The hint row's texts are the game's** (HINT_ROW_LEVELLED, HINT_ROW_PLAIN): each one
+## a message the source says, and one with placeholders a ROOM that names what goes in
+## them, or the row would be measured with a sentence nobody is shown.
+func _check_hint_row() -> void:
+	for id: String in HINT_ROW_LEVELLED + HINT_ROW_PLAIN:
+		var e: Dictionary = _entries.get("\u0004" + id, {})
+		if e.is_empty():
+			_problems.append(("tools/i18n_pot.gd: the pause hint row is measured with \"%s\", which"
+				+ " the source no longer says: list the row's texts in HINT_ROW_LEVELLED and"
+				+ " HINT_ROW_PLAIN as the game says them now") % id)
+		elif _count_holes(id) > 0 and (not e.has("room") or (e["room"][2] as Array).is_empty()):
+			_problems.append(("%s: \"%s\" is said in the pause hint row, and its ROOM does not say"
+				+ " what goes in its placeholders, so the row cannot be measured with it") % [
+				e["refs"][0], _short(id)])
+
+
+## **The names of the word tables the catalogue reads out of an organ's file**: its
+## KEY_WORDS, WAY_WORDS, PART_WORDS and SOCKET_WORDS. Empty when the catalogue will not load, which
+## leaves every organ's table unnamed, and so a problem: words nobody can show.
+func _catalogue_tables() -> Dictionary:
+	var out := {}
+	var catalogue := _script("catalogue")
+	if catalogue == null:
+		return out
+	for table: String in ["KEY_WORDS", "WAY_WORDS", "PART_WORDS", "SOCKET_WORDS"]:
+		var names: Variant = _script_const(catalogue, table)
+		if names is Dictionary:
+			for name: Variant in names:
+				out[String(name)] = true
+	return out
 
 
 func _walk(dir: String, gd: Array[String], scenes: Array[String]) -> void:
@@ -1052,7 +1160,7 @@ func _fills_say(fills: Array) -> String:
 	var said: Array[String] = []
 	var seen := {}
 	for fill: String in fills:
-		if FILL_TABLES.has(fill):
+		if _is_table(fill):
 			var nth := int(seen.get(fill, 0))
 			seen[fill] = nth + 1
 			said.append(String(FILL_SAYS[fill][mini(nth, 1)]))
@@ -1072,23 +1180,68 @@ func _fill_values(fills: Array, size: int, texts: Dictionary) -> Array:
 	var taken := {}
 	var out: Array = []
 	for fill: String in fills:
-		if not FILL_TABLES.has(fill):
+		if not _is_table(fill):
 			out.append(fill)
 			continue
-		var ranked := _ranked_words(String(FILL_TABLES[fill]), size, texts)
+		var ranked := _ranked_words(fill, size, texts)
 		var nth := int(taken.get(fill, 0))
 		taken[fill] = nth + 1
 		out.append("" if ranked.is_empty() else String(ranked[mini(nth, ranked.size() - 1)]))
 	return out
 
 
-## The entries of the table [param table], widest first at [param size].
-func _ranked_words(table: String, size: int, texts: Dictionary) -> Array:
+## The words [param fill] stands for, widest first at [param size], and two as wide in
+## the order of their letters: what fills a message is then the same whatever order the
+## words were written in, or listed by the catalogue.
+func _ranked_words(fill: String, size: int, texts: Dictionary) -> Array:
 	var words: Array = []
-	for id: String in _const_ids.get(table, []):
+	for id: String in _fill_ids(fill):
 		words.append(String(texts.get(id, id)))
-	words.sort_custom(func(a: String, b: String) -> bool: return _width_of(a, size) > _width_of(b, size))
+	words.sort_custom(func(a: String, b: String) -> bool:
+		var wa := _width_of(a, size)
+		var wb := _width_of(b, size)
+		return wa > wb or (wa == wb and a < b))
 	return words
+
+
+## Whether [param fill] is a word that stands for words: a table's, or the genes'.
+func _is_table(fill: String) -> bool:
+	return FILL_TABLES.has(fill) or CATALOGUE_FILLS.has(fill)
+
+
+## **The English words [param fill] stands for**, in order, each once: its table's strings
+## (FILL_TABLES), or every live gene's words of its name in the catalogue (CATALOGUE_FILLS)
+## -- each key's, then each part every gene declares; a table of words, a way's name to
+## its title, gives each of its words.
+func _fill_ids(fill: String) -> Array:
+	if not CATALOGUE_FILLS.has(fill):
+		return _const_ids.get(String(FILL_TABLES.get(fill, "")), [])
+	if _catalogue_fills.has(fill):
+		return _catalogue_fills[fill]
+	var out: Array = []
+	var catalogue := _script("catalogue")
+	if catalogue != null:
+		var asked: StringName = CATALOGUE_FILLS[fill][0]
+		var name: StringName = CATALOGUE_FILLS[fill][1]
+		var said: Array = []
+		if asked == &"words":
+			for key: StringName in catalogue.call(&"live"):
+				said.append((catalogue.call(&"words", key) as Dictionary).get(name))
+		else:
+			var declared: Dictionary = catalogue.call(&"declares")
+			for key: StringName in declared:
+				for side: String in ["in", "out"]:
+					for part: Dictionary in (declared[key] as Dictionary).get(side, []):
+						var words: Dictionary = catalogue.call(&"part_words",
+							StringName("%s.%s" % [key, part["name"]]))
+						said.append(words.get(name))
+		for one: Variant in said:
+			var each: Array = (one as Dictionary).values() if one is Dictionary else [one]
+			for word: Variant in each:
+				if word is String and not (word as String).is_empty() and not out.has(word):
+					out.append(word)
+	_catalogue_fills[fill] = out
+	return out
 
 
 ## [param text] with its placeholders replaced by [param values]: plain ones in order,
@@ -1143,14 +1296,20 @@ func _check_rooms() -> void:
 		var fills: Array = room[2]
 		var fine := true
 		for fill: String in fills:
-			if FILL_TABLES.has(fill):
+			if CATALOGUE_FILLS.has(fill):
+				if _fill_ids(fill).is_empty():
+					_problems.append(("%s: ROOM says `with %s`, but no live gene has words for it"
+						+ " in the catalogue (%s)") % [where, fill, CATALOGUE_FILLS[fill][1]])
+					fine = false
+			elif FILL_TABLES.has(fill):
 				if not _const_ids.has(FILL_TABLES[fill]):
 					_problems.append("%s: ROOM says `with %s`, but no constant %s is marked with TRANSLATORS:" % [
 						where, fill, FILL_TABLES[fill]])
 					fine = false
 			elif not _has_digit(fill):
 				_problems.append(("%s: ROOM says `with %s`, which is not a table (%s) and has no digit"
-					+ " in it, so it is not a text") % [where, fill, ", ".join(FILL_TABLES.keys())])
+					+ " in it, so it is not a text") % [where, fill,
+						", ".join(FILL_TABLES.keys() + CATALOGUE_FILLS.keys())])
 				fine = false
 		var holes := _count_holes(id)
 		if holes != fills.size():
@@ -1662,6 +1821,9 @@ func _lint_screens(result: Dictionary, shown: String, locale: String, translatio
 		_problem(result, shown, ("a world's line in \"your worlds\" is %d px wide in %d px type; the room is"
 			+ " %d px, and a longer line ends in \"…\": \"%s\"") % [ceili(float(line[0])), STATS_SIZE,
 				STATS_ROOM, _short(String(line[1]))], true)
+	var cells: Dictionary = now["cells"]
+	for problem: String in _cell_problems(cells):
+		_problem(result, shown, problem, true)
 	var row: Array = now["row"]
 	if float(row[0]) < ROW_ROOM:
 		_problem(result, shown, ("an instinct's row on the programs page leaves %d px of arc on %s"
@@ -1672,13 +1834,21 @@ func _lint_screens(result: Dictionary, shown: String, locale: String, translatio
 		_problem(result, shown, ("a line of the programs inspector's triggers is %d px wide in 14 px"
 			+ " type; the room is %d px: \"%s\"") % [ceili(float(trigger[0])), TRIGGER_LINE_ROOM,
 			_short(String(trigger[1]))], true)
+	var hint: Array = now["hint"]
+	if float(hint[0]) > HINT_ROW_ROOM:
+		_problem(result, shown, ("the pause screen's hint row is %d px wide in %d px type, built with"
+			+ " the widest rarity word and level; the room is %d px, and a wider row reaches the"
+			+ " numbers switch: \"%s\"") % [ceili(float(hint[0])), HINT_ROW_SIZE, HINT_ROW_ROOM,
+			_short(String(hint[1]))], true)
 	var rows: Array = now["numbers"]
 	var tightest := String((rows[0] as Array)[2]) if not rows.is_empty() else "none"
 	return ("built with the game's own code: numbers lines at most %d px of %d (%s), the pause caption"
-		+ " at most %d px of %d, a world's line at most %d px of %d, an instinct's row %d px of arc"
-		+ " (%s, at least %d), the inspector's trigger lines at most %d px of %d") % [ceili(widest),
+		+ " at most %d px of %d, a world's line at most %d px of %d, %s, an instinct's row %d px of"
+		+ " arc (%s, at least %d), the inspector's trigger lines at most %d px of %d, the pause"
+		+ " hint row at most %d px of %d") % [ceili(widest),
 		NUMBERS_ROOM, tightest, ceili(caption), CAPTION_ROOM, ceili(float(line[0])), STATS_ROOM,
-		floori(float(row[0])), row[1], ROW_ROOM, ceili(float(trigger[0])), TRIGGER_LINE_ROOM]
+		_cells_said(cells), floori(float(row[0])), row[1], ROW_ROOM, ceili(float(trigger[0])),
+		TRIGGER_LINE_ROOM, ceili(float(hint[0])), HINT_ROW_ROOM]
 
 
 ## The composed lines in English, measured once, with the line that says so; a line that
@@ -1712,6 +1882,10 @@ func _english_screens() -> Dictionary:
 		print("[i18n] PROBLEM English: a world's line is %d px wide in %d px type; the room is %d px: \"%s\"" % [
 			ceili(float(line[0])), STATS_SIZE, STATS_ROOM, String(line[1])])
 		_english_problems += 1
+	var cells: Dictionary = now["cells"]
+	for problem: String in _cell_problems(cells):
+		print("[i18n] PROBLEM English: %s" % problem)
+		_english_problems += 1
 	var row: Array = now["row"]
 	if float(row[0]) < ROW_ROOM:
 		print("[i18n] PROBLEM English: an instinct's row leaves %d px of arc on %s; it needs %d" % [
@@ -1722,18 +1896,26 @@ func _english_screens() -> Dictionary:
 		print("[i18n] PROBLEM English: a trigger line is %d px wide; the room is %d px: \"%s\"" % [
 			ceili(float(trigger[0])), TRIGGER_LINE_ROOM, String(trigger[1])])
 		_english_problems += 1
+	var hint: Array = now["hint"]
+	if float(hint[0]) > HINT_ROW_ROOM:
+		print("[i18n] PROBLEM English: the pause hint row is %d px wide; the room is %d px: \"%s\"" % [
+			ceili(float(hint[0])), HINT_ROW_ROOM, String(hint[1])])
+		_english_problems += 1
 	print(("[i18n] the lines the game composes, in English: numbers lines at most %d px of %d,"
-		+ " the pause caption at most %d px of %d, a world's line at most %d px of %d, an instinct's"
-		+ " row %d px of arc (%s, at least %d), the inspector's trigger lines at most %d px of %d") % [
-		ceili(widest), NUMBERS_ROOM, ceili(caption), CAPTION_ROOM, ceili(float(line[0])), STATS_ROOM,
-		floori(float(row[0])), row[1], ROW_ROOM, ceili(float(trigger[0])), TRIGGER_LINE_ROOM])
+		+ " the pause caption at most %d px of %d, a world's line at most %d px of %d, %s, an"
+		+ " instinct's row %d px of arc (%s, at least %d), the inspector's trigger lines at most %d px"
+		+ " of %d, the pause hint row at most %d px of %d") % [ceili(widest), NUMBERS_ROOM,
+		ceili(caption), CAPTION_ROOM, ceili(float(line[0])), STATS_ROOM, _cells_said(cells),
+		floori(float(row[0])), row[1], ROW_ROOM, ceili(float(trigger[0])), TRIGGER_LINE_ROOM,
+		ceili(float(hint[0])), HINT_ROW_ROOM])
 	return _english
 
 
 ## **Builds every line the game composes**, in the language the TranslationServer is set to,
 ## and returns the widest of each kind: `numbers`, one `[width, text, label]` per gene and
 ## line, widest first; `lead`, the widest `genome · <generation>`; `rest`, the widest
-## numbers clause after it; `line`, the widest world's line ([method _widest_drop_line]).
+## numbers clause after it; `line`, the widest world's line ([method _widest_drop_line]);
+## and `hint`, the pause screen's widest hint row ([method _widest_hint_row]).
 ## They are made by the game's own functions (gene_stats.gd, drops.gd) for
 ## every gene at every copy count, every level and way of a levelled gene, and every body
 ## that changes a number -- so a new gene, or a new tier, is covered without being named.
@@ -1743,41 +1925,51 @@ func _measure_screens() -> Dictionary:
 	var readout := _script("readout")
 	var genome := _script("genome")
 	var cell := _script("cell")
-	if stats == null or readout == null or genome == null or cell == null:
+	var catalogue := _script("catalogue")
+	if stats == null or readout == null or genome == null or cell == null or catalogue == null:
 		return {}
-	var genes: Array = _script_const(genome, "GENE_ORDER") if _script_const(genome, "GENE_ORDER") != null else []
-	var levelled: Dictionary = _script_const(cell, "LEVELLED") if _script_const(cell, "LEVELLED") != null else {}
+	# Every live gene in the catalogue's order, and the ones that earn levels
+	# (game/genes/catalogue.gd): what the game's own screens can show.
+	var genes: Array = catalogue.call(&"live")
+	var levelled: Array = catalogue.call(&"levelled")
 	var tier_max := int(_script_const(genome, "TIER_MAX"))
 	var divide := float(_script_const(cell, "DIVIDE_RADIUS"))
 	var sep := String(_script_const(readout, "SEP"))
 	if genes.is_empty() or tier_max < 1 or not _const_ids.has("GENERATIONS"):
 		return {}
 	var font := ThemeDB.fallback_font
-	var words: Dictionary = _const_pairs.get("WORDS", {})
-	var ways: Array[StringName] = [&""]
-	for way: String in (_const_pairs.get("PATH_TITLES", {}) as Dictionary):
-		ways.append(StringName(way))
-	# The bodies that change a number: how much `crista` leaves of every cost, how big
-	# `vacuole` makes the tank, what `plastid` makes. A levelled gene has many more rows, and
-	# they depend on those less, so it is read in three bodies only.
+	# The bodies that change a number, by the organs that provide what changes it
+	# (`crista`, `vacuole` and `plastid` today): how much the burn leaves of every
+	# cost, how big the store makes the tank, what the sun makes. A levelled gene has
+	# many more rows, and they depend on those less, so it is read in three bodies only.
+	var burn: StringName = catalogue.call(&"first_provider", &"burn")
+	var store: StringName = catalogue.call(&"first_provider", &"store")
+	var sun: StringName = catalogue.call(&"first_provider", &"sun")
 	var all_bodies: Array[Dictionary] = []
-	for crista in tier_max + 1:
-		for vacuole in tier_max + 1:
-			for plastid in tier_max + 1:
-				all_bodies.append({&"crista": crista, &"vacuole": vacuole, &"plastid": plastid})
-	var few_bodies: Array[Dictionary] = [{}, {&"vacuole": tier_max},
-		{&"crista": tier_max, &"vacuole": tier_max, &"plastid": tier_max}]
+	for burns in tier_max + 1:
+		for stores in tier_max + 1:
+			for suns in tier_max + 1:
+				all_bodies.append({burn: burns, store: stores, sun: suns})
+	var few_bodies: Array[Dictionary] = [{}, {store: tier_max},
+		{burn: tier_max, store: tier_max, sun: tier_max}]
 	# **And every slot**: a gene's numbers may depend on where it is worn -- venom
 	# at the front and on a side or the stern are three rows (dna-slots.md §3.3) --
 	# so a gene that does not level is read in each outside slot, and with none.
-	var slot_max := int(_script_const(cell, "SLOT_MAX")) if _script_const(cell, "SLOT_MAX") != null else 0
+	# The outside slots are the body plan's (gene-catalogue.md §10.2): `cell.gd`'s
+	# SLOT_MAX follows it as a static var, which a script answers by name as it does
+	# a constant.
+	var slot_max := int(cell.get("SLOT_MAX")) if cell.get("SLOT_MAX") != null else 0
 	var all_slots: Array = range(-1, slot_max)
 	var worst := {}
 	for gene: StringName in genes:
 		var grows := levelled.has(gene)
 		var bodies := few_bodies if grows else all_bodies
 		var levels: Array = range(1, 100) if grows else [0]
-		var paths: Array = ways if grows else [&""]
+		# A levelled gene down no way yet, and down each of its own (gene.gd's `levels`).
+		var paths: Array = [&""]
+		if grows:
+			paths.append_array((catalogue.call(&"levels", gene) as Dictionary).get("paths", []))
+		var word := String((catalogue.call(&"words", gene) as Dictionary).get(&"word", gene))
 		var slots: Array = [-1] if grows else all_slots
 		for copies in range(1, tier_max + 1):
 			for body: Dictionary in bodies:
@@ -1804,7 +1996,7 @@ func _measure_screens() -> Dictionary:
 									about = "level %d, %s" % [level, ("way " + String(way)) if way != &"" else "no way chosen"]
 								worst[tag] = [wide, String(readout.call(&"plain", items)),
 									"the %s numbers line of %s (%s), at %s" % [
-										"first" if i == 0 else "second", words.get(String(gene), String(gene)), gene, about]]
+										"first" if i == 0 else "second", word, gene, about]]
 	var numbers: Array = worst.values()
 	numbers.sort_custom(func(a: Array, b: Array) -> bool: return float(a[0]) > float(b[0]))
 	# The caption: the widest generation, and the widest clause the numbers add to it.
@@ -1820,13 +2012,14 @@ func _measure_screens() -> Dictionary:
 		var wide := _width_of(text, CAPTION_SIZE)
 		if wide > float(lead[0]):
 			lead = [wide, text]
+	# And the tail, which sets how fast drifting spends the tank.
+	var swim: StringName = catalogue.call(&"first_provider", &"impulse_speed")
 	var rest: Array = [0.0, ""]
-	for crista in tier_max + 1:
-		for vacuole in tier_max + 1:
-			for plastid in tier_max + 1:
-				for flagellum in tier_max + 1:
-					var body := {&"crista": crista, &"vacuole": vacuole, &"plastid": plastid,
-						&"flagellum": flagellum}
+	for burns in tier_max + 1:
+		for stores in tier_max + 1:
+			for suns in tier_max + 1:
+				for swims in tier_max + 1:
+					var body := {burn: burns, store: stores, sun: suns, swim: swims}
 					for radius: float in [divide, 6.0]:
 						for upkeep: float in [0.0, 0.1, 0.5, 1.0, 2.0]:
 							var text := sep + String(readout.call(&"plain",
@@ -1837,23 +2030,88 @@ func _measure_screens() -> Dictionary:
 	var line := _widest_drop_line()
 	if line.is_empty():
 		return {}
+	var cells := _widest_cell_lines()
+	if cells.is_empty():
+		return {}
 	var page := _script("programs")
 	if page == null:
 		return {}
 	var row: Array = page.call(&"row_room", ThemeDB.fallback_font)
 	var trigger: Array = page.call(&"trigger_line_room", ThemeDB.fallback_font)
+	var hint := _widest_hint_row()
+	if hint.is_empty():
+		return {}
 	return {"numbers": numbers, "lead": lead, "rest": rest, "line": line, "row": row,
-		"trigger": trigger}
+		"trigger": trigger, "cells": cells, "hint": hint}
 
 
 ## **The widest line a world's row can say** (STATS_ROOM), `[width, text]`, built with the
-## game's own `Drops.line`: every generation phrase -- none, the ten, and the counted one at
-## 99 -- with the widest age it says, found over every count of minutes, hours and days
-## (to 999) the game uses. Empty when drops.gd will not load.
+## game's own `Drops` (docs/design/settings.md §4.3; cells-ux.md §5): the world's age, over
+## every count of minutes, hours and days (to 999) the game uses, and "not swum in yet".
+## Empty when drops.gd will not load.
 func _widest_drop_line() -> Array:
 	var drops := _script("drops")
 	if drops == null:
 		return []
+	var lines: Array[String] = []
+	for seconds: float in _ages():
+		lines.append(String(drops.call(&"age_text", seconds)))
+	lines.append_array(Array(drops.call(&"lines_of", {"empty": false, "file": false})))
+	return _widest(lines, STATS_SIZE)
+
+
+## **The widest the pause screen's hint row can be** (HINT_ROW_ROOM), `[width, text]`, in
+## the language of the moment: its widest rarity word (rarity.gd's `WORDS`, under their
+## context), and its widest level (figure.gd's `level_text`) and the gauge where a level
+## shares the row, with each of the row's texts at its widest ([method _said_now]), laid
+## out by figure.gd's own `hint_row_width`. Empty when a script will not load.
+func _widest_hint_row() -> Array:
+	var figure := _script("figure")
+	var rarity := _script("rarity")
+	if figure == null or rarity == null:
+		return []
+	var words: Variant = _script_const(rarity, "WORDS")
+	if not words is Dictionary or (words as Dictionary).is_empty():
+		return []
+	var word := ""
+	for english: Variant in (words as Dictionary).values():
+		var said := String(TranslationServer.translate(String(english), &"rarity"))
+		if _width_of(said, HINT_ROW_SIZE) > _width_of(word, HINT_ROW_SIZE):
+			word = said
+	var level := String(figure.call(&"level_text", HINT_ROW_LEVEL))
+	var widest: Array = [0.0, ""]
+	for levelled: bool in [true, false]:
+		var at_level := level if levelled else ""
+		var texts: Array[String] = HINT_ROW_LEVELLED if levelled else HINT_ROW_PLAIN
+		for id: String in texts:
+			var text := _said_now(id, HINT_ROW_SIZE)
+			var wide := float(figure.call(&"hint_row_width", ThemeDB.fallback_font, word,
+				at_level, text))
+			if wide > float(widest[0]):
+				widest = [wide, "%s · %s%s" % [word, (at_level + " ▬ · ") if levelled else "",
+					text]]
+	return widest
+
+
+## **[param id] as the language of the moment says it, at its widest**: translated, and its
+## placeholders filled with the widest words its ROOM names, in that language too -- as
+## [method _room_width] fills them for a catalog.
+func _said_now(id: String, size: int) -> String:
+	var said := String(TranslationServer.translate(id))
+	var e: Dictionary = _entries.get("\u0004" + id, {})
+	if _count_holes(id) == 0 or not e.has("room"):
+		return said
+	var fills: Array = e["room"][2]
+	var texts := {}
+	for fill: String in fills:
+		if _is_table(fill):
+			for one: String in _fill_ids(fill):
+				texts[one] = String(TranslationServer.translate(one))
+	return _filled(said, _fill_values(fills, size, texts))
+
+
+## Every age the game says, a second past each count of minutes, hours and days to 999.
+func _ages() -> Array[float]:
 	var ages: Array[float] = []
 	for minutes in range(1, 60):
 		ages.append(minutes * 60.0 + 30.0)
@@ -1861,22 +2119,127 @@ func _widest_drop_line() -> Array:
 		ages.append(hours * 3600.0 + 60.0)
 	for days in range(2, 1000):
 		ages.append(days * 86400.0 + 60.0)
-	var widest_age := 0.0
-	var lived := ages[0]
-	for seconds: float in ages:
-		var wide := _width_of(String(drops.call(&"age_text", seconds)), STATS_SIZE)
-		if wide > widest_age:
-			widest_age = wide
-			lived = seconds
-	var generations: Array = range(0, 11)
-	generations.append(99)
+	return ages
+
+
+## `[width, text]` of the widest of [param lines] at [param size].
+func _widest(lines: Array, size: int) -> Array:
 	var widest: Array = [0.0, ""]
-	for generation: int in generations:
-		var text := String(drops.call(&"line", generation, lived))
-		var wide := _width_of(text, STATS_SIZE)
+	for text: String in lines:
+		var wide := _width_of(text, size)
 		if wide > float(widest[0]):
 			widest = [wide, text]
 	return widest
+
+
+## **The widest lines a cell can say** (cells-ux.md §6), built with the game's own
+## game/normal/cells.gd and drops.gd, in the language of the moment: `button`, the line
+## under a view's name, for every default name, every generation phrase (and the
+## counted one at 99) and every way it says where the cell comes from -- none, a friend's
+## water, and every default world's name -- and over a record; `row`, a row's two lines in
+## "your cells", the widest generation, a cell's widest age and its widest hunger on the
+## first, and every way it says where it is on the second; `then`, the most lines the
+## detailed view's `Then` wraps to in its column, with every default world's name; and
+## `caption`, the sheet's caption with each view. Empty when a script will not load.
+func _widest_cell_lines() -> Dictionary:
+	var cells := _script("cells")
+	var drops := _script("drops")
+	if cells == null or drops == null:
+		return {}
+	var run_state := _script_const(drops, "RunState") as GDScript
+	if run_state == null or _script_const(run_state, "VIEW_ORDER") == null:
+		return {}
+	var sep := String(_script_const(_script("readout"), "SEP"))
+	var names: Array[String] = []
+	for which in (_script_const(cells, "CELL_NAMES") as Array).size():
+		names.append(String(cells.call(&"default_name", which)))
+	var worlds: Array[String] = []
+	for which in (_script_const(drops, "DEFAULT_NAMES") as Array).size():
+		worlds.append(String(drops.call(&"default_name", which)))
+	var generations: Array[String] = []
+	for generation: int in range(1, 11) + [99]:
+		generations.append(String(drops.call(&"generation_text", generation)))
+	var froms: Array[String] = [""]
+	froms.append(sep + String(TranslationServer.translate("from a friend's water")))
+	for world: String in worlds:
+		froms.append(sep + String(TranslationServer.translate("from %s")) % String(
+			cells.call(&"quoted", world)))
+	var buttons: Array[String] = []
+	var widest_generation := String(_widest(generations, CELL_LINE_SIZE)[1])
+	for name: String in names:
+		for from: String in froms:
+			buttons.append(name + sep + widest_generation + from)
+		buttons.append(String(TranslationServer.translate("a new cell · %s died")).replace("%s", name))
+	buttons.append(String(TranslationServer.translate("a new cell")))
+	var ages: Array[String] = []
+	for seconds: float in _ages():
+		ages.append(String(cells.call(&"age_text", seconds)))
+	var hungers: Array[String] = [String(cells.call(&"hunger_text", 1.0)),
+		String(cells.call(&"hunger_text", 0.6))]
+	var rows: Array[String] = [widest_generation + sep + String(_widest(ages, CELL_LINE_SIZE)[1])
+		+ sep + String(_widest(hungers, CELL_LINE_SIZE)[1])]
+	rows.append(String(cells.call(&"friends_water")))
+	rows.append(String(cells.call(&"gone_world")))
+	rows.append(String(cells.call(&"died_line", 3, "")))
+	rows.append(String(cells.call(&"died_line", 4, "")))
+	var thens: Array[String] = [String(TranslationServer.translate("where you left it"))]
+	for world: String in worlds:
+		rows.append(String(TranslationServer.translate("world")) + sep + world)
+		rows.append(String(cells.call(&"died_line", 1, world)))
+		thens.append(String(TranslationServer.translate("comes into %s at a quiet place"))
+			% String(cells.call(&"quoted", world)))
+		thens.append(String(cells.call(&"died_line", 1, world)))
+	var most: Array = [0, ""]
+	var font := ThemeDB.fallback_font
+	for text: String in thens:
+		var tall := font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT,
+			float(CELL_THEN_ROOM), CELL_LINE_SIZE).y
+		var count := roundi(tall / font.get_height(CELL_LINE_SIZE))
+		if count > int(most[0]):
+			most = [count, text]
+	var captions: Array[String] = []
+	var words: Dictionary = _script_const(run_state, "VIEW_WORDS")
+	for mode: int in _script_const(run_state, "VIEW_ORDER"):
+		captions.append(String(TranslationServer.translate("your cells")) + sep
+			+ String(TranslationServer.translate(String(words[mode]))))
+	return {"button": _widest(buttons, CELL_LINE_SIZE), "row": _widest(rows, CELL_LINE_SIZE),
+		"then": most, "caption": _widest(captions, CELL_CAPTION_SIZE)}
+
+
+## A cell's lines are drawn in 15 px type.
+const CELL_LINE_SIZE := 15
+
+
+## What [param cells] ([method _widest_cell_lines]) says is too wide, one sentence each.
+func _cell_problems(cells: Dictionary) -> Array[String]:
+	var out: Array[String] = []
+	var button: Array = cells["button"]
+	if float(button[0]) > CELL_LINE_ROOM:
+		out.append(("a view's cell line is %d px wide in %d px type with a default name; the room is %d"
+			+ " px, and only a name the player typed may give way: \"%s\"") % [ceili(float(button[0])),
+			CELL_LINE_SIZE, CELL_LINE_ROOM, _short(String(button[1]))])
+	var row: Array = cells["row"]
+	if float(row[0]) > CELL_ROW_ROOM:
+		out.append("a cell's row line in \"your cells\" is %d px wide in %d px type; the room is %d px: \"%s\"" % [
+			ceili(float(row[0])), CELL_LINE_SIZE, CELL_ROW_ROOM, _short(String(row[1]))])
+	var then: Array = cells["then"]
+	if int(then[0]) > CELL_THEN_LINES:
+		out.append("a cell's `Then` wraps onto %d lines of %d px in %d px type; it has %d: \"%s\"" % [
+			int(then[0]), CELL_THEN_ROOM, CELL_LINE_SIZE, CELL_THEN_LINES, _short(String(then[1]))])
+	var caption: Array = cells["caption"]
+	if float(caption[0]) > CELL_CAPTION_ROOM:
+		out.append("the cells' sheet caption is %d px wide in %d px type; the room is %d px: \"%s\"" % [
+			ceili(float(caption[0])), CELL_CAPTION_SIZE, CELL_CAPTION_ROOM, _short(String(caption[1]))])
+	return out
+
+
+## The cells' lines, measured, as the report says them.
+func _cells_said(cells: Dictionary) -> String:
+	return ("a cell's line at most %d px of %d, its row lines at most %d px of %d, its `Then` at"
+		+ " most %d of %d lines, the cells' caption at most %d px of %d") % [
+		ceili(float(cells["button"][0])), CELL_LINE_ROOM, ceili(float(cells["row"][0])),
+		CELL_ROW_ROOM, int(cells["then"][0]), CELL_THEN_LINES, ceili(float(cells["caption"][0])),
+		CELL_CAPTION_ROOM]
 
 
 ## [param soft] says the problem is only about how the text looks (too wide, a stray

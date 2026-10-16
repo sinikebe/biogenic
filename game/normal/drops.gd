@@ -1,7 +1,8 @@
 extends RefCounted
 ## **Your drops: three worlds, and the one you are in** (docs/design/settings.md
 ## §4, §6). A drop is one water with everything living in it, kept between
-## launches (ocean.md §9), and the cell left in it. A player keeps up to
+## launches (ocean.md §9). **Your cells are kept apart from it** (docs/design/
+## cells.md): a world keeps its water and nothing else. A player keeps up to
 ## [constant SLOTS] and is in one at a time: the **selected** drop is the one a
 ## run plays in, a host serves to a friend, and a guest's cell comes from and
 ## goes back to.
@@ -12,9 +13,14 @@ extends RefCounted
 ## own content because a pack did not mount -- still finds the player's drop
 ## where it always was. Slots 2 and 3 are `drop_2.save` and `drop_3.save`, in
 ## drop_save.gd's format, untouched. `drops.cfg` beside them says which slot is
-## selected, what each is called, and each drop's line -- its age and its cell's
-## generation at its last keep, which a run reports with [method note_kept] -- so
-## the menu never opens a drop to say how old it is.
+## selected, what each is called, and each drop's age and number at its last
+## keep, which a run reports with [method note_kept] -- so no menu opens a drop to
+## say how old it is, or to tell whether a cell's world is still the one it was
+## kept in (cells.md §1.4). **A world's cells, by view, are only ever a build
+## before cells.md's** (`generation` for the first view, `generation_<view>` for
+## every other, by the names run_state.gd's `CELL_KEYS` gives them): this reads
+## them, so the chooser can tell which worlds still hold a cell to move into a
+## slot (cells.md §4), and keeps them until [method forget_cells] says it has.
 ##
 ## **The index is never trusted over the files** (§6.3). A slot is a drop when
 ## it has a section or a file, and empty when it has neither. A file the index
@@ -40,6 +46,9 @@ const DropSave := preload("res://game/normal/drop_save.gd")
 const Readout := preload("res://game/mechanics/readout.gd")
 ## For [method I18n.catalogs]: a default name's words in every language the game has.
 const I18n := preload("res://game/i18n/i18n.gd")
+## **For the views, and only to say them** ([method cell_line]): the words of
+## each. The index itself knows a view only by the name its cell is kept under.
+const RunState := preload("res://game/run_state.gd")
 
 ## How many drops a player keeps.
 const SLOTS := 3
@@ -51,6 +60,14 @@ const FILES: Array[String] = ["drop.save", "drop_2.save", "drop_3.save"]
 ## The index, and what it is written as before it is renamed over itself.
 const INDEX := "drops.cfg"
 const INDEX_TMP := "drops.tmp"
+## **A drop's generations in the index**: the first view's under this key, as
+## before there was a cell per view, and every other view's under this, `_`, and
+## the view's name.
+const GENERATION := "generation"
+## **A drop's number in the index**, `drop.seed` at its last keep (cells.md §1.4):
+## what a cell's place is checked against, so no menu decodes a world to tell
+## whether it is still the drop a cell was kept in.
+const SEED := "seed"
 
 ## **What a run's `keep` says to mean "the selected drop"** (normal_mode.gd):
 ## this, then the folder the drops are in. [method resolve] turns it into the
@@ -86,17 +103,19 @@ const DEFAULT_NAMES: Array[String] = ["pond water", "rain barrel", "hay infusion
 	"pepper water"]
 
 ## How a cell's generation is said: the pause caption's own phrases, and a
-## drop's line in the menu (§4.3). **Whole phrases and not an ordinal and a
-## noun**, so a language that makes the ordinal agree with the noun can. Past
-## the tenth the line counts ([method generation_text]). Here and not in
-## normal_mode.gd, so the menu never loads a run to say one.
+## cell's lines in the menus (cells-ux.md §1.2, §2.2). **Whole phrases and not an
+## ordinal and a noun**, so a language that makes the ordinal agree with the noun
+## can. Past the tenth the line counts ([method generation_text]). Here and not
+## in normal_mode.gd, so the menu never loads a run to say one.
 ##
 ## TRANSLATORS: Part of the pause screen's caption, in 15 px type: "genome ·
 ## first generation". A "generation" is how many times the cell has divided: the
 ## first cell is the first generation, its chosen daughter the second. The
-## caption's own wording is "genome · %s", translated separately. Also the start
-## of a world's line in the "your worlds" menu, in 15 px type: "fourth generation
-## · 2 hours old", where the whole line has 280 px.
+## caption's own wording is "genome · %s", translated separately. Also part of a
+## cell's lines, in 15 px type: on a view's button, after its name ("slipper ·
+## fourth generation", 420 px for the whole line); at the start of a row in "your
+## cells" ("fourth generation · 2 hours old", 402 px); and after the view in a
+## cell's detailed view ("point of view · fourth generation").
 const GENERATIONS: Array[String] = ["first generation", "second generation",
 	"third generation", "fourth generation", "fifth generation",
 	"sixth generation", "seventh generation", "eighth generation",
@@ -108,10 +127,12 @@ const GENERATIONS: Array[String] = ["first generation", "second generation",
 ## **The drops as they are**, from the index and the files, rebuilt where the
 ## two disagree (§6.3) and never written: `{selected, slots}`, where `selected`
 ## is a slot from 1 and `slots` holds one entry a slot, in order --
-## `{slot, empty, file, name, default, lived, generation}`. `name` is the
-## player's words, or "" while the drop wears its default, `default`; `lived`
-## and `generation` are its age in seconds and its cell's generation, 0 for none,
-## at its last keep; `file` is whether the drop has been swum in and kept.
+## `{slot, empty, file, name, default, lived, seed, generations}`. `name` is the
+## player's words, or "" while the drop wears its default, `default`; `lived` is
+## its age in seconds at its last keep, and `seed` its number, -1 where the index
+## does not hold it; `generations` is the generation of each cell a build before
+## cells.md left in it, by view, a view with none not in it; `file` is whether
+## the drop has been swum in and kept.
 ##
 ## **There is always a selected drop.** When the index names none that exists,
 ## the first drop there is is selected -- slot 1 on a fresh install and on the
@@ -127,7 +148,7 @@ static func read(root := ROOT) -> Dictionary:
 	for slot in range(1, SLOTS + 1):
 		var path := path_of(slot, root)
 		var entry := {"slot": slot, "empty": true, "file": FileAccess.file_exists(path),
-			"name": "", "default": -1, "lived": 0.0, "generation": 0}
+			"name": "", "default": -1, "lived": 0.0, "seed": -1, "generations": {}}
 		var section := str(slot)
 		if indexed and config.has_section(section):
 			entry["empty"] = false
@@ -135,13 +156,18 @@ static func read(root := ROOT) -> Dictionary:
 			entry["default"] = posmod(_int_of(config.get_value(section, "default", 0)),
 				DEFAULT_NAMES.size())
 			entry["lived"] = maxf(_float_of(config.get_value(section, "lived", 0.0)), 0.0)
-			entry["generation"] = maxi(_int_of(config.get_value(section, "generation", 0)), 0)
+			entry["seed"] = _seed_of(config.get_value(section, SEED, -1))
+			entry["generations"] = _generations_in(config, section)
 		elif bool(entry["file"]):
 			# A drop the index does not name: its line from the file itself, once.
 			entry["empty"] = false
 			var summary := DropSave.peek(path)
 			entry["lived"] = maxf(float(summary.get("lived", 0.0)), 0.0)
-			entry["generation"] = maxi(int(summary.get("generation", 0)), 0)
+			entry["seed"] = _seed_of(summary.get("seed", -1))
+			var generations: Dictionary = summary.get("generations", {})
+			for view: String in generations:
+				if int(generations[view]) > 0:
+					entry["generations"][view] = int(generations[view])
 		slots.append(entry)
 	if slots.all(func(entry: Dictionary) -> bool: return bool(entry["empty"])):
 		# Nobody's drop yet: slot 1, which its first keep makes.
@@ -162,6 +188,20 @@ static func read(root := ROOT) -> Dictionary:
 ## The selected slot, from 1.
 static func selected(root := ROOT) -> int:
 	return int(read(root)["selected"])
+
+
+## **The number of the drop [param entry] holds**, as [method read] gives it, or
+## -1 for none: the index's, or -- for a drop kept by a build that did not write
+## it there -- the file's own, peeked and never moved. A slot never swum in has no
+## drop yet, and so no number (cells.md §1.4: a cell kept in the drop that slot
+## held before is in a world that is gone).
+static func seed_in(entry: Dictionary, root := ROOT) -> int:
+	if bool(entry.get("empty", true)) or not bool(entry.get("file", false)):
+		return -1
+	var seed := int(entry.get("seed", -1))
+	if seed >= 0:
+		return seed
+	return _seed_of(DropSave.peek(path_of(int(entry["slot"]), root)).get("seed", -1))
 
 
 ## [param slot]'s entry in [param index], as [method read] gives it.
@@ -217,7 +257,8 @@ static func make(slot: int, typed: String, root := ROOT) -> Error:
 	entry["default"] = _free_default(index["slots"], slot)
 	entry["name"] = _typed_name(typed, int(entry["default"]))
 	entry["lived"] = 0.0
-	entry["generation"] = 0
+	entry["seed"] = -1
+	entry["generations"] = {}
 	index["selected"] = slot
 	return _write(index, root)
 
@@ -257,10 +298,18 @@ static func delete(slot: int, root := ROOT) -> Error:
 	return _write(index, root)
 
 
-## **A run kept [param slot]'s drop** at [param lived] seconds old, with a cell
-## of [param generation] in it, or 0 for none (§6.4): the line the menu says,
-## so it never opens a drop to say it. Writes whatever else had to be rebuilt.
-static func note_kept(slot: int, lived: float, generation: int, root := ROOT) -> Error:
+## **A run kept [param slot]'s drop** at [param lived] seconds old, and its
+## number is [param seed] (§6.4; cells.md §3.3): the line the menu says, and the
+## number a cell's place is checked against, so no menu opens a drop to say
+## either. **It says nothing of a cell**, which is kept apart: whatever a build
+## before cells.md said of the cells in it is left as it was, for the migration
+## to forget once they are in slots ([method forget_cells]). Writes whatever else
+## had to be rebuilt.
+##
+## [param seed] is an int before the folder on purpose: a call written when this
+## took a view and a generation, with the folder fifth, is an error here, and
+## never a keep told to the player's own index.
+static func note_kept(slot: int, lived: float, seed: int, root := ROOT) -> Error:
 	if not _is_slot(slot):
 		return ERR_DOES_NOT_EXIST
 	var index := read(root)
@@ -271,7 +320,24 @@ static func note_kept(slot: int, lived: float, generation: int, root := ROOT) ->
 		entry["default"] = _free_default(index["slots"], slot)
 	entry["file"] = true
 	entry["lived"] = maxf(lived, 0.0)
-	entry["generation"] = maxi(generation, 0)
+	entry["seed"] = seed if seed >= 0 else int(entry["seed"])
+	return _write(index, root)
+
+
+## **[param slot]'s drop keeps no cell any more** (cells.md §4, step 3): its
+## generations go from the index, once its file has been written again without
+## them, and its number, [param seed], is kept while the section is written.
+## Nothing for a slot the index does not name and has no file.
+static func forget_cells(slot: int, seed: int, root := ROOT) -> Error:
+	if not _is_slot(slot):
+		return ERR_DOES_NOT_EXIST
+	var index := read(root)
+	var entry := entry_of(index, slot)
+	if bool(entry["empty"]):
+		return ERR_DOES_NOT_EXIST
+	entry["generations"] = {}
+	if seed >= 0:
+		entry["seed"] = seed
 	return _write(index, root)
 
 
@@ -329,31 +395,38 @@ static func clean(typed: String) -> String:
 	return kept.strip_edges().left(NAME_MAX).strip_edges()
 
 
-## **[param entry]'s line in the menu** (§4.3), in the language of the moment:
-## `<generation> · <age>`, the age alone when its last cell died, and "not swum
-## in yet" for a drop never kept. "" for an empty slot.
+## **[param entry]'s line in the menu** (§4.3; cells-ux.md §5), in the language
+## of the moment: **the drop's age, and only its age** -- a world keeps only its
+## water now -- or "not swum in yet" for a drop never kept. "" for an empty slot.
 static func line_of(entry: Dictionary) -> String:
+	return "\n".join(lines_of(entry))
+
+
+## [method line_of] as its lines, one to each string, for a caller that sizes a
+## row to them: one, or none for an empty slot.
+static func lines_of(entry: Dictionary) -> PackedStringArray:
+	var out := PackedStringArray()
 	if bool(entry.get("empty", true)):
-		return ""
+		return out
 	var lived := float(entry.get("lived", 0.0))
-	var generation := int(entry.get("generation", 0))
-	if not bool(entry.get("file", false)) or (lived <= 0.0 and generation <= 0):
+	if not bool(entry.get("file", false)) or lived <= 0.0:
 		# TRANSLATORS: A world's line in the "your worlds" menu, in 15 px type, for
 		# a world that has never been played in. A "world" is one of the three the
 		# player keeps: a drop of water and everything living in it.
 		# ROOM: 280 px at 15 px
-		return String(TranslationServer.translate("not swum in yet"))
-	return line(generation, lived)
+		out.append(String(TranslationServer.translate("not swum in yet")))
+		return out
+	out.append(age_text(lived))
+	return out
 
 
-## **The line, built whole** (§7): the cell's generation, a middle dot, and the
-## drop's age -- or the age alone for [param generation] 0. tools/i18n_pot.gd
-## builds it with this, in every language, against the room it has.
-static func line(generation: int, lived: float) -> String:
-	var age := age_text(lived)
-	if generation <= 0:
-		return age
-	return generation_text(generation) + Readout.SEP + age
+## **A cell's view and generation, built whole** (cells-ux.md §3.2): the view as
+## the mode select's button names it, a middle dot, and the cell's generation --
+## "point of view · fourth generation" -- the detailed view's line under a cell's
+## name. tools/i18n_pot.gd builds it with this, in every language.
+static func cell_line(mode: int, generation: int) -> String:
+	return String(TranslationServer.translate(RunState.VIEW_WORDS[mode])) \
+		+ Readout.SEP + generation_text(generation)
 
 
 ## **A generation in words**: "fourth generation", and past the tenth
@@ -362,32 +435,35 @@ static func generation_text(generation: int) -> String:
 	if generation >= 1 and generation <= GENERATIONS.size():
 		return String(TranslationServer.translate(GENERATIONS[generation - 1]))
 	# TRANSLATORS: The generation, counted past the tenth: "generation 12". Keep %d.
-	# Also the start of a world's line in the "your worlds" menu.
+	# Used wherever the ten phrases are: "genome · generation 12", "slipper ·
+	# generation 12", "point of view · generation 12".
 	return String(TranslationServer.translate("generation %d")) % generation
 
 
 ## **A drop's age in words** (§4.3): minutes under an hour, hours under 48, then
 ## days -- the drop's own clock, which runs only while it is played. Under a
 ## minute is "1 minute old": a drop that has been swum in is never nothing old.
-## The player's word for it is "world" (§4.1), and so is the translators'.
+## The player's word for it is "world" (§4.1), and so is the translators'. A
+## cell's age is said the same way, in words of its own (cells.gd's `age_text`).
 static func age_text(seconds: float) -> String:
 	var minutes := int(seconds / 60.0)
 	if minutes < 60:
 		minutes = maxi(minutes, 1)
-		# TRANSLATORS: The end of a world's line in the "your worlds" menu, in 15 px
-		# type: how long the world has been played, "fourth generation · 25 minutes
-		# old". A world is one of the three the player keeps. Keep %d.
+		# TRANSLATORS: A world's line in the "your worlds" menu, in 15 px type, under
+		# its name: how long the world has been played, "25 minutes old". A world is
+		# one of the three the player keeps, and "old" agrees with it. A cell's age
+		# is a message of its own, under the context "cell". Keep %d.
 		# ROOM: 280 px at 15 px with 99
 		return String(TranslationServer.translate_plural("%d minute old", "%d minutes old",
 			minutes)) % minutes
 	var hours := int(seconds / 3600.0)
 	if hours < 48:
-		# TRANSLATORS: The same, in hours: "fourth generation · 2 hours old". Keep %d.
+		# TRANSLATORS: The same, in hours: "2 hours old". Keep %d.
 		# ROOM: 280 px at 15 px with 99
 		return String(TranslationServer.translate_plural("%d hour old", "%d hours old",
 			hours)) % hours
 	var days := int(seconds / 86400.0)
-	# TRANSLATORS: The same, in days: "fourth generation · 3 days old". Keep %d.
+	# TRANSLATORS: The same, in days: "3 days old". Keep %d.
 	# ROOM: 280 px at 15 px with 999
 	return String(TranslationServer.translate_plural("%d day old", "%d days old", days)) % days
 
@@ -417,7 +493,18 @@ static func _write(index: Dictionary, root: String) -> Error:
 		config.set_value(section, "name", str(entry["name"]))
 		config.set_value(section, "default", int(entry["default"]))
 		config.set_value(section, "lived", floorf(float(entry["lived"])))
-		config.set_value(section, "generation", int(entry["generation"]))
+		if int(entry.get("seed", -1)) >= 0:
+			config.set_value(section, SEED, int(entry["seed"]))
+		# **The first view's generation always, as it always was** -- a build
+		# before there was a cell per view reads it and nothing else -- and every
+		# other view's only while a cell of it waits, in the views' order by name.
+		var generations: Dictionary = entry["generations"]
+		config.set_value(section, GENERATION, maxi(int(generations.get("", 0)), 0))
+		var views: Array = generations.keys()
+		views.sort()
+		for view: String in views:
+			if not view.is_empty() and int(generations[view]) > 0:
+				config.set_value(section, GENERATION + "_" + view, int(generations[view]))
 	var tmp := root.path_join(INDEX_TMP)
 	var saved := config.save(tmp)
 	if saved != OK:
@@ -469,6 +556,35 @@ static func _typed_name(typed: String, which: int) -> String:
 
 static func _is_slot(slot: int) -> bool:
 	return slot >= 1 and slot <= SLOTS
+
+
+## **Each view's generation in [param section]**, by view: [constant GENERATION]
+## is the first view's and `generation_<view>` every other's -- read by the
+## pattern, so a view a later build adds is kept by this one, not lost on its next
+## write. A cell's only: 0 and below, or what is not a number, is none.
+static func _generations_in(config: ConfigFile, section: String) -> Dictionary:
+	var out := {}
+	for key: String in config.get_section_keys(section):
+		var view := ""
+		if key != GENERATION:
+			if not key.begins_with(GENERATION + "_") or key.length() <= GENERATION.length() + 1:
+				continue
+			view = key.trim_prefix(GENERATION + "_")
+		var generation := _int_of(config.get_value(section, key, 0))
+		if generation > 0:
+			out[view] = generation
+	return out
+
+
+## **A drop's number as the index holds it**, or -1 for none: a drop's number is
+## never below 0 (food.gd draws it with `randi()`).
+static func _seed_of(value: Variant) -> int:
+	match typeof(value):
+		TYPE_INT:
+			return int(value) if int(value) >= 0 else -1
+		TYPE_STRING, TYPE_STRING_NAME:
+			return int(str(value)) if str(value).is_valid_int() and int(str(value)) >= 0 else -1
+	return -1
 
 
 ## A number the index holds, whatever a hand or a later build left there.

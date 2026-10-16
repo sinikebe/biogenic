@@ -41,6 +41,10 @@ extends Node
 ## Loading it registers the game's languages and applies the saved one. Not
 ## unused: do not remove it.
 const I18n := preload("res://game/i18n/i18n.gd")
+## **The sound and vibration switches** (docs/design/sound-and-touch.md §4), applied
+## before the launcher's first frame as the language is: a player who turned the
+## sound off never hears the game start.
+const Feel := preload("res://game/feel/feel.gd")
 ## Loaded only when the sheet is first wanted, so a process that never shows a
 ## launcher never loads the corner.
 const CORNER := "res://game/menu/corner.tscn"
@@ -55,6 +59,7 @@ var _holding_back := false
 
 
 func _ready() -> void:
+	Feel.apply()
 	get_tree().node_added.connect(_on_node_added)
 	for child: Node in get_tree().root.get_children():
 		_watch(child)

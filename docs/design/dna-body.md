@@ -381,8 +381,7 @@ way*: the direction chooses the slot.
 | | |
 | --- | --- |
 | **where** | a press within `max(1.15 r, 56)` canvas px of the body as it is drawn — the soma figure in point of view, the real cell in full vision. Each view answers `self_on_screen()`: centre, heading on the screen, radius |
-| **`anywhere`** | the press is still a steer; it becomes this gesture only if it stays within 14 px for **0.35 s** (past `TAP_SECONDS` 0.28, so a tap on the body is still a dash) |
-| **`stick`, `pads`** | the water is inert there, so the press opens the body at once; the other thumb keeps its control |
+| **when** | at once: open water is inert (`gene-controls.md`, 2026-10-15), so a press on the body means nothing else, and the other thumb keeps its control. Under the old `anywhere` scheme it opened after 0.35 s, so a tap on the body could still dash |
 | **while held** | every free slot blooms outward as the **waiting gene's own organ** (`draw_tile_organ`, scale 1.15, turned to point out) at `max(2.3 r, 118)` canvas px along its bearing, alpha 0.34; the one nearest the finger's body-relative bearing lights (0.95) with a reach line, and the skin's ghost tuft and the vesicle's thread move to it. The aim is taken again every frame, so a still finger over a turning body lights what it points at now |
 | **let go** | outside the body: placed into the lit slot. Inside it: nothing |
 | **which gene** | the head — the one the body is already showing — held by name from the moment the body opens |

@@ -17,7 +17,7 @@ extends RefCounted
 ## **food.gd holds one of these for a run in the drop** (its `setup_drop`),
 ## and asks it every one of those decisions; a run with a session up plays
 ## today's water and never makes one (§10.1). It does not preload food.gd, so
-## food.gd can preload it: a table of food.gd's -- the genes a drifter can
+## food.gd can preload it: a list of the catalogue's -- the genes a drifter can
 ## carry, the senses -- is passed in by the caller.
 ##
 ## No class_name, for the reason signal_bus.gd gives. Preload it by path.
@@ -26,8 +26,11 @@ const Basin := preload("res://game/mechanics/basin.gd")
 const SpaceGrid := preload("res://game/mechanics/space_grid.gd")
 const Replenish := preload("res://game/mechanics/replenish.gd")
 const Snowfall := preload("res://game/mechanics/snowfall.gd")
+const FloorQueue := preload("res://game/mechanics/floor_queue.gd")
 const Rulebook := preload("res://game/mechanics/rulebook.gd")
 const Genome := preload("res://game/normal/genome.gd")
+## The genes there are (docs/design/gene-catalogue.md): the born cell's body plan.
+const Catalogue := preload("res://game/genes/catalogue.gd")
 
 # --- Size and shape (§2) -----------------------------------------------------
 
@@ -116,11 +119,24 @@ const SPAWN_INSET := 80.0
 const VIEW_REACH := 949.0
 ## And past every reach, this much more.
 const HIDE_MARGIN := 100.0
-## Every gene a drifter can carry is carried by at least this many living
-## bodies: short of it, the next drifter carries it (§6.4)...
-const GENE_FLOOR := 2
-## ...counted every this many seconds.
+## **The gene floor** (§6.4; docs/design/gene-rarity.md §3.3): every variety the
+## water's pool holds is carried by at least as many living bodies as its class
+## keeps (the catalogue's `floor_of` -- two for common and uncommon, one for rare);
+## short of it, the next drifter carries it, or the next peer one no drifter may.
+## Counted every this many seconds...
 const GENE_FLOOR_EVERY := 2.0
+## ...and **within a budget**: at most one drifter in this many is the floor's -- one
+## carries a short gene only once three or more have been made since the floor's
+## last, the count starting full -- so three drifters in four are always the draw's,
+## whatever the catalogue. And at most one peer a count ([method count_floor]). A
+## starting value (gene-rarity.md §5.3, §14): its arithmetic binds only past anything
+## the gene pass plans, and today's floor gives no drifter at all in any seeded run
+## the probes pin, so it binds nowhere yet.
+const GENE_FLOOR_GAP := 4
+## **The places of this water a gene may be found more in** (gene-rarity.md §6),
+## each a name, for a gene's `water.habitats` to name. None yet: the seam is kept,
+## and the gene probe holds every gene's habitats to these.
+const HABITATS: Array[StringName] = []
 ## The drifter floor: with no living drifter within a player's hide reach and
 ## this much more, one is made just past its horizon, ahead of it. **The hide
 ## reach for a body with a mouth** -- about 1,500 for a born cell -- although
@@ -189,13 +205,6 @@ const START_FOOD := 1100.0
 ## of the start is moved straight out to that reach and this much more.
 const START_PUSH := 100.0
 
-## **The gene no drifter carries** (row 13, and docs/design/dna-slots.md §9): the
-## toxin, by its variety's name, in either of its forms -- venom outside, poison
-## inside. The drop's defenceless food is never poisonous to eat, and a mouthless
-## drifter's venom would bite nothing anyway; a drop short of it gets it back
-## through the next peer, its place by a coin.
-const TOXIN := &"veneneux"
-
 # --- How its cells behave (docs/design/behaviour.md §5, §6) --------------------
 
 ## **The founders' rules** (behaviour.md §5.1, row 22): what every body this
@@ -203,8 +212,9 @@ const TOXIN := &"veneneux"
 ## that a body knows only what its own senses report. In plain words: *rest for
 ## five seconds after eating, and while less than a third hungry. Otherwise turn
 ## toward an echo of something smaller than my mouth; otherwise toward whatever
-## my laser touches; otherwise, when the smell of food fades, turn at random.
-## Swim, and push at half strength.* A rule for an organ a founder lacks is
+## my laser touches -- aiming ahead of it by 3, the aim every chaser had before it
+## was the instinct's (cell.gd's LEADS); otherwise, when the smell of food fades,
+## turn at random. Swim, and push at half strength.* A rule for an organ a founder lacks is
 ## passed over, and waits, inherited, for a daughter who grows the organ.
 ##
 ## `HUNT_AT` and `REST_MEAL`, today's constants, are the 0.3 and the 5 here:
@@ -214,8 +224,8 @@ const TOXIN := &"veneneux"
 const FOUNDERS: Array[String] = [
 	"metabolism.fed below 5 -> body.rest",
 	"metabolism.hunger below 0.3 -> body.rest",
-	"ampulla.echo size below mouth -> body.turn-toward",
-	"ocellus.beam -> body.turn-toward",
+	"ampulla.echo size below mouth -> body.turn-toward 3",
+	"ocellus.beam -> body.turn-toward 3",
 	"chemocyte.smell level falling -> body.turn-random",
 	"always -> body.swim",
 	"always -> axoneme.push 0.5",
@@ -319,42 +329,75 @@ static func wants_drifter(living: int, drifters: int, share: float) -> bool:
 
 
 ## **The food's count** (lineage.md §5): the drifters the spawner keeps, their
-## [param share] of [method target] -- 457 at a newborn's composition and 354 at
-## a sighted player's -- **whatever the hunters number**. Drifters never divide,
+## [param share] of [method target] -- 457 at food.gd's DRIFTER_SHARE, the one
+## share the water keeps (water-evolves.md §2) -- **whatever the hunters number**. Drifters never divide,
 ## so the spawner makes every one.
 static func food_count(share: float) -> float:
 	return share * float(target())
 
 
 ## **The hunters' floor** (lineage.md §2.2, §5): today's count -- what pack 1's
-## spawner kept, `(1 - share) * target()`, 96.4 at a newborn's composition and
-## 200.5 at a sighted player's -- times [param keep], [constant SPAWN_SHARE] in
+## spawner kept, `(1 - share) * target()`, 96.4 at food.gd's DRIFTER_SHARE --
+## times [param keep], [constant SPAWN_SHARE] in
 ## the game. Under it the spawner makes a peer; over it births decide.
 static func hunter_floor(share: float, keep := SPAWN_SHARE) -> float:
 	return (1.0 - share) * float(target()) * keep
 
 
 ## **The genes the drop is down to its last carriers of**: every one of
-## [param genes] that fewer than [constant GENE_FLOOR] living bodies carry,
-## given [param counts] of carriers by gene, in [param genes]' order.
+## [param genes] that fewer living bodies carry than its class keeps (the
+## catalogue's `floor_of`), given [param counts] of carriers by gene, in
+## [param genes]' order.
 static func short_genes(counts: Dictionary, genes: Array[StringName]) -> Array[StringName]:
 	var out: Array[StringName] = []
 	for gene: StringName in genes:
-		if int(counts.get(gene, 0)) < GENE_FLOOR:
+		if int(counts.get(gene, 0)) < Catalogue.floor_of(gene):
 			out.append(gene)
 	return out
 
 
-## **The gene the next drifter carries for the floor**, taken off
-## [param short]: the last there that is not the toxin, in any form, which comes
-## back through a peer instead. Empty when nothing a drifter may carry is short.
-static func take_drifter_gene(short: Array[StringName]) -> StringName:
-	for i in range(short.size() - 1, -1, -1):
-		if Genome.variety(short[i]) != TOXIN:
-			var gene := short[i]
-			short.remove_at(i)
-			return gene
-	return &""
+## **A new drop's gene floor** (docs/design/gene-rarity.md §3.3): its queue, first
+## come first served, at most one drifter in [constant GENE_FLOOR_GAP] its own.
+static func gene_floor() -> FloorQueue:
+	return FloorQueue.new(GENE_FLOOR_GAP)
+
+
+## **The floor's count** (§6.4): [param counts], the living carriers of each variety,
+## against what each one's class keeps, for every variety the water's pool holds (the
+## catalogue's `drifters()`, the toxin's among them). [param queue] notes which are
+## short, the one short longest first and those found together in the pool's order.
+## **At most one peer a count is the floor's** (gene-rarity.md §3.3): of the varieties
+## only a peer brings back -- `floor_by_peers`, the toxin's every strain -- the one
+## short longest is due, and the others wait for a later count, in their place.
+static func count_floor(queue: FloorQueue, counts: Dictionary) -> void:
+	queue.count(counts, Catalogue.drifters(), Catalogue.floors())
+	var by_peer := false
+	var k := 0
+	while k < queue.due.size():
+		if Catalogue.has_tag(queue.due[k], Catalogue.FLOOR_BY_PEERS):
+			if by_peer:
+				queue.due.remove_at(k)
+				continue
+			by_peer = true
+		k += 1
+
+
+## **The gene the next drifter carries for the floor** -- and a drifter made, which
+## the budget counts either way. The first due in [param queue]'s order that a drifter
+## may carry -- not one tagged `not_on_drifters`, the toxin's every strain, in any
+## form, which comes back through a peer instead (gene-catalogue.md §6.4) -- **while
+## the budget allows** ([constant GENE_FLOOR_GAP]): taken off the queue, and the
+## budget spent. Empty when the budget is spent or nothing a drifter may carry is
+## due, and the drifter is the draw's.
+static func take_drifter_gene(queue: FloorQueue) -> StringName:
+	var gene: StringName = &""
+	if queue.open():
+		var taken: Variant = queue.take(func(kind: Variant) -> bool:
+			return not Catalogue.has_tag(StringName(kind), Catalogue.NOT_ON_DRIFTERS))
+		if taken != null:
+			gene = StringName(taken)
+	queue.made(gene != &"")
+	return gene
 
 
 # --- Whose turn it is (§6.4, §10.2) ------------------------------------------------
@@ -371,35 +414,56 @@ static func next_turn(turn: int, players: int) -> int:
 # --- What a new body is made of (§5.8) ----------------------------------------------
 
 ## **A peer's body plan**: a born cell's -- a mouth, a `cirrus` and a
-## `flagellum` -- at tiers drawn as today, before anything else is drawn into
-## the slots its radius has. A cell made to live, where today's peers are a
-## mouth and whatever the dice give.
+## `flagellum`. What the water makes from nothing is exactly this and the gift
+## (water-evolves.md §1); [method give_back] never takes one of these for the
+## gene it gives back.
 static func peer_plan() -> Array[StringName]:
 	var plan: Array[StringName] = []
-	for gene: StringName in Genome.BORN:
+	for gene: StringName in Catalogue.born():
 		plan.append(gene)
 	return plan
 
 
-## **The gift**: a peer that carries none of [param senses] is given one at
-## tier 1, `senses[pick]`, in a bonus slot -- as the player's newborn is at five
-## seconds. Returns whether it was.
-static func give_sense(tiers: Dictionary, senses: Array[StringName], pick: int) -> bool:
-	if senses.is_empty():
+## **The gift** (docs/design/gene-rarity.md §3.4), **by two tags**: a peer that wears
+## none of [param senses] -- the `sense` tag's genes, any sense at all: whether a body
+## needs the gift -- is given one of [param gifts] -- the `gift` tag's: what the gift
+## is -- at tier 1, in a bonus slot, as the player's newborn is at five seconds: the
+## organ [param pick] names among the gifts', then one of its varieties by its share
+## of the organ (`Catalogue.pick_variety`; gene-catalogue.md §6.1), which with one
+## variety to an organ is `gifts[pick]`. Flat by organ, whatever its class: rarity
+## does not touch the gift. Today both tags name the same four. Returns whether it was.
+static func give_sense(tiers: Dictionary, senses: Array[StringName],
+		gifts: Array[StringName], pick: int) -> bool:
+	if gifts.is_empty():
 		return false
 	for sense: StringName in senses:
 		if int(tiers.get(sense, 0)) > 0:
 			return false
-	tiers[senses[posmod(pick, senses.size())]] = 1
+	var organs := Catalogue.organs_in(gifts)
+	tiers[Catalogue.pick_variety(Catalogue.of_organ(gifts,
+		organs[posmod(pick, organs.size())]))] = 1
 	return true
 
 
-## **What a drifter's one gene is drawn from**: [param genes] without the
-## toxin, in any of its forms (row 13).
+## **What the water's gift is drawn from**: the `gift` tag's genes, in the order the
+## water has always drawn its gift in -- the `sense` list's (catalogue.gd's
+## SHIPPED_ORDERS), which is not the newborn's -- so the same seed gives the same
+## sense it always gave.
+static func water_gifts() -> Array[StringName]:
+	var out: Array[StringName] = []
+	for sense: StringName in Catalogue.tagged(Catalogue.SENSE):
+		if Catalogue.has_tag(sense, Catalogue.GIFT):
+			out.append(sense)
+	return out
+
+
+## **What a drifter's one gene is drawn from**: [param genes] without any tagged
+## `not_on_drifters` -- the toxin, in any of its forms and strains (row 13;
+## gene-catalogue.md §6.4).
 static func drifter_genes(genes: Array[StringName]) -> Array[StringName]:
 	var pool: Array[StringName] = []
 	for gene: StringName in genes:
-		if Genome.variety(gene) != TOXIN:
+		if not Catalogue.has_tag(gene, Catalogue.NOT_ON_DRIFTERS):
 			pool.append(gene)
 	return pool
 
@@ -427,30 +491,54 @@ static func daughter_dna(dna: Dictionary) -> Array:
 ## rulebook.gd's word for the change, empty for a list nothing can change. Draws
 ## from the global stream: a division is the simulation's.
 static func daughter_behaviours(list: Rulebook.Behaviour, vocab: Rulebook.Vocabulary,
-		owners: int) -> Array:
+		owners: PackedInt64Array) -> Array:
 	var rolled: Array = Rulebook.changed(list, vocab, owners, CHANGES, MOST_RULES)
 	return [list, rolled[0], rolled[1]]
 
 
-## **The toxin back through a peer**, when the floor wants it: at tier 1, and
-## [param inside] -- the coin -- as poison, or outside as venom (docs/design/
-## dna-slots.md §9). Poison takes no arc. Venom takes one, as the old gene did: a
-## peer with no room outside gives up a gene for it -- `pick` chooses which --
-## but never one of its body plan or of [param senses], so it stays a cell that
-## can live; with nothing else to give up, it takes a bonus slot. Nothing, for a
-## peer that carries the toxin in either form.
-static func give_toxin(tiers: Dictionary, slots: int, senses: Array[StringName],
-		pick: int, inside: bool) -> void:
-	for form: StringName in Genome.forms_of(TOXIN):
+## **Whether the floor may give [param gene] to a peer wearing [param tiers]**
+## (gene-catalogue.md §6.3, §6.4): not to one that carries it already, in any form;
+## and, for an organ that holds one variant to a body (gene.gd's `one_variant`), not
+## to one that wears another variant of it -- **the floor never gives a body a second
+## strain beside the one it wears**. The gene waits for the next peer. Every organ
+## today holds its variants side by side, so only the first rule ever answers.
+static func takes_back(tiers: Dictionary, gene: StringName) -> bool:
+	for form: StringName in Genome.forms_of(gene):
 		if int(tiers.get(form, 0)) > 0:
-			return
-	var form := Genome.form_in(TOXIN, Genome.INSIDE_PLACE if inside else Genome.OUTSIDE_PLACE)
+			return false
+	var organ := Catalogue.organ_of(gene)
+	if not Catalogue.one_variant(organ):
+		return true
+	var own := Catalogue.variant_of(gene)
+	for key: Variant in tiers:
+		if int(tiers[key]) > 0 and Catalogue.organ_of(StringName(key)) == organ \
+				and Catalogue.variant_of(StringName(key)) != own:
+			return false
+	return true
+
+
+## **A gene the floor gives back through a peer** (`floor_by_peers`, the toxin's
+## every strain; gene-catalogue.md §6.4): [param gene], a variety, at tier 1, and
+## [param inside] -- the coin -- in its inside form, or outside in its outside one
+## (docs/design/dna-slots.md §9); a gene of one place in the one it has. Inside
+## takes no arc. Outside takes one, as the old gene did: a peer with no room
+## outside gives up a gene for it -- `pick` chooses which -- but never one of its
+## body plan or of [param senses], so it stays a cell that can live; with nothing
+## else to give up, it takes a bonus slot. Nothing, for a peer that carries it in
+## any form, or that may not take it ([method takes_back]).
+static func give_back(tiers: Dictionary, gene: StringName, slots: int,
+		senses: Array[StringName], pick: int, inside: bool) -> void:
+	if not takes_back(tiers, gene):
+		return
+	var form := Genome.form_in(gene, Genome.INSIDE_PLACE if inside else Genome.OUTSIDE_PLACE)
+	if form == &"":
+		form = Genome.forms_of(gene)[0]
 	if not Genome.is_inside_form(form) and Genome.count_outside(tiers) >= slots:
 		var plan := peer_plan()
 		var spare: Array[StringName] = []
-		for gene: StringName in tiers:
-			if not plan.has(gene) and not senses.has(gene) and not Genome.is_inside_form(gene):
-				spare.append(gene)
+		for other: StringName in tiers:
+			if not plan.has(other) and not senses.has(other) and not Genome.is_inside_form(other):
+				spare.append(other)
 		if not spare.is_empty():
 			tiers.erase(spare[posmod(pick, spare.size())])
 	tiers[form] = 1

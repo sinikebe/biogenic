@@ -57,7 +57,9 @@ of the daughters -- and what decides who eats whom are `lifecycle.md`,
 - **Energy.** Swimming and turning cost energy, and a cell starves in about
   thirty seconds. `energy.md`.
 - **Gene stats and the replay.** Every gene's numbers on demand, and the run
-  watched back after a death, at up to 4x. `gene-stats.md`, `replay.md`.
+  watched back after a death, at up to 4x -- in a shared pond too, the friend in
+  it as they were drawn, while the pond plays on (`shared-pond.md` Phase 3, on
+  `dev`). `gene-stats.md`, `replay.md`.
 
 ## In hand
 
@@ -91,6 +93,16 @@ menu with a language picker, three named worlds, and the settings reachable from
 the launcher (`settings.md`). Also there is hunger you cannot miss, built
 2026-10-03 (`hunger.md`): from half a tank the beat races and the body
 crumples, and the membrane falls in when the tank empties.
+
+**Your cells, apart from the worlds: built** (`cells.md` for the rules, `cells-ux.md`
+for the screens, each with what the build changed in its "as built" section). A cell is
+a save of its own, in three slots for each view, and is chosen beside its view's
+button. Each cell can be opened in a detailed view: its body and genes as the pause
+screen draws them, its age and where it is. A world keeps only its water. It came in
+two pull requests: the figure drawn from values, which changes nothing a player sees,
+then the slots. The owner's three calls -- what a dead cell's slot shows, whether cells
+have names, and their default names -- were all answered as recommended. It builds on
+the cell per view (`ocean.md` §9.5).
 
 **Before the release: genes that work by where they sit** (`dna-slots.md` for the
 rules, `dna-slots-ux.md` for the screen), to the owner's answers to rows 1 to 15.

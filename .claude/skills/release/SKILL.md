@@ -86,9 +86,10 @@ Only what a bundle can get wrong that no single pull request could:
   addresses, hostnames, emails and keys. Documentation addresses (192.0.2.x,
   198.51.100.x, 203.0.113.x, 2001:db8::), loopback, and the test namespace's
   10.77.0.5 are fine.
-- **The protocol.** If `Wire.PROTOCOL` in `game/net/wire.gd` changed, updated
-  and not-yet-updated players refuse each other until everyone has the release.
-  Say so in the report.
+- **The protocol and the rules.** If `Wire.PROTOCOL` or the `Wire.RULES` pin in
+  `game/net/wire.gd` changed, updated and not-yet-updated players refuse each
+  other at the handshake until everyone has the release. Since protocol 8 a
+  rules change splits them without any protocol bump. Say so in the report.
 
 ## 5. Open the pull request
 

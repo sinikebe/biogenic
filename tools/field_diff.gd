@@ -57,7 +57,7 @@ const BODY_KEYS: Array[StringName] = [
 const FIELD_KEYS: Array[StringName] = [
 	&"concentration", &"dread_level", &"threat", &"shadow", &"shadow_bearing",
 	&"taste_level", &"touch_level", &"touch_bearing", &"beams", &"pings",
-	&"ping_fronts", &"ping_echoes", &"ping_listen", &"_echoes", &"_pulses",
+	&"ping_listen", &"_echoes",
 	&"_ping_clock", &"_ping_age", &"_dart_clock", &"_bite_clock",
 	&"_first_pending", &"_first_hunt", &"_serial"]
 const CELL_KEYS: Array[StringName] = [&"position", &"heading", &"velocity",
@@ -84,6 +84,13 @@ class StubGenome extends Node:
 	func path_of(_g: StringName) -> StringName:
 		return &""
 
+	# cell.gd finds the organ a mechanic with a place acts from in the body's
+	# slots (gene-catalogue.md §5.2); a hand-built cell wears its organs in none
+	# it knows, so the catalogue's order answers, as it did before there were
+	# seats.
+	func body_layout() -> Array[StringName]:
+		return []
+
 var fails := 0
 var checks := 0
 var shown := 0
@@ -102,13 +109,13 @@ var pond_mode := false
 ## What the pond adds to a body, and to the field, and what a person is.
 const POND_BODY_KEYS: Array[StringName] = [&"speed", &"order", &"tuned"]
 const PERSON_KEYS: Array[StringName] = [&"at", &"facing", &"launch", &"turning",
-	&"age", &"velocity", &"swim_speed", &"armour", &"dart_range", &"dart_cooldown",
+	&"age", &"velocity", &"swim_speed", &"armour", &"dart_wound", &"dart_cooldown",
 	&"dart_bearing", &"dart_clock", &"venom_cost", &"first_hunt", &"in_water",
 	&"quiet"]
 const POND_FIELD_KEYS: Array[StringName] = [&"in_water", &"anchored", &"died_of",
 	&"died_by", &"_pond", &"_mirror", &"_water", &"_changes", &"_seeded_for",
 	&"_stamp", &"_anchor_ids", &"_anchor_at", &"_snap_at", &"_snap_age", &"_book",
-	&"smell_bearing", &"ping_bearing", &"dart_bearing", &"dart_range"]
+	&"smell_bearing", &"ping_bearing", &"dart_bearing", &"dart_wound"]
 const PERSON_GENES: Array[StringName] = [&"cytostome", &"cirrus", &"flagellum",
 	&"pellicle", &"veneneux", &"trichocyst", &"axoneme", &"chemocyte", &"ampulla"]
 
@@ -316,7 +323,7 @@ func _make_state(rng: RandomNumberGenerator, kind: String) -> Dictionary:
 	st[&"first_hunt"] = 0.0 if rng.randf() < 0.7 else rng.randf_range(0.0, 42.0)
 	st[&"venom_cost"] = -1.0 if rng.randf() < 0.7 else 0.05
 	st[&"bite_clock"] = 0.0 if rng.randf() < 0.7 else rng.randf_range(0.0, 1.0)
-	st[&"dart_range"] = 0.0 if rng.randf() < 0.7 else rng.randf_range(50.0, 200.0)
+	st[&"dart_wound"] = 0.0 if rng.randf() < 0.7 else rng.randf_range(0.08, 0.16)
 	st[&"dart_bearing"] = rng.randf_range(-PI, PI)
 	st[&"smell_range"] = 0.0 if rng.randf() < 0.5 else 900.0
 	st[&"ping"] = rng.randf() < 0.3
@@ -344,7 +351,7 @@ func _apply(food: Node, cell: Node, st: Dictionary) -> void:
 		food.set("venom_cost", st[&"venom_cost"])
 	food.set("_bite_clock", st[&"bite_clock"])
 	food.set("_dart_clock", 0.0)
-	food.set("dart_range", st[&"dart_range"])
+	food.set("dart_wound", st[&"dart_wound"])
 	food.set("dart_cooldown", 5.0)
 	food.set("dart_bearing", st[&"dart_bearing"])
 	food.set("smell_range", st[&"smell_range"])

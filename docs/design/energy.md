@@ -453,3 +453,175 @@ drive's own `--sniff` with `chemocyte:1`. With none of them it is the drifting
 row. `--seek=800`, the first draft's bot, sees 800 units in every direction,
 past a real screen's top and bottom, and it starved in none of eight games: it
 is there to compare with, not to quote.
+
+## 8. The senses that point pay half
+
+The owner, 2026-10-15, after playing the dev app:
+
+> It's too hard to find food with smell. increase energy storage and energy usage
+> of precise senses (beam, sonar, etc.) the idea is to only reduce the percentage
+> of energy used per second by this gene.
+
+### 8.1 How it is read
+
+**The one thing that changes is the share of the tank such a gene takes a
+second.** "The idea is to only reduce the percentage" is the aim, and "only" rules
+out everything else moving with it: the thirty seconds, a meal, a stroke, a turn,
+a dash.
+
+A bigger tank with every other cost made bigger by the same factor is the same
+game, number for number. It would also have changed every figure a player can
+read -- the 36 s tank, every cost on the pause screen, the gauge's numbers -- for
+nothing. So the tank stays at 36 seconds of rest, and what these genes cost to
+grow is halved. Against the tank that is the same as doubling the tank for them
+alone.
+
+**A sense that points** is every sense that says *where*: the beam (`ocellus`),
+the ping (`ampulla`, the sonar), the eyespot (`stigma`) and the palps (`palp`).
+The nose (`chemocyte`) is the one it is set against. It says *how much*, never
+where, since the owner took its direction away (three-senses.md §2), and it pays
+in full.
+
+### 8.2 What it costs now
+
+**One copy of any gene was free and still is**: genome.gd's upkeep charges each
+copy past the first, and a levelled organ by its level. So a newborn, whose senses
+are one copy each, pays nothing for them before this change or after it. **What
+costs is growing a sense**: a second and third copy of the ping, and every ray and
+every degree a second of sweep a beam earns.
+
+| a sense that points, grown to | before, in seconds of rest a second | now | share of a born tank a second, now |
+| --- | --- | --- | --- |
+| two copies (ping, eyespot, palps) | 0.18 | **0.09** | 0.25 % (was 0.5 %) |
+| three copies | 0.36 | **0.18** | 0.5 % (was 1 %) |
+| beam level 2 or 3 (2 or 3 rays) | 0.18 · 0.36 | **0.09 · 0.18** | 0.25 · 0.5 % |
+| beam level 5, fill · sweep | 0.72 · 0.54 | **0.36 · 0.27** | 1.0 · 0.75 % |
+| beam level 10, fill · sweep | 1.62 · 0.99 | **0.81 · 0.50** | 2.3 · 1.4 % |
+
+A born cell drifting with a three-copy ping burned ×1.86 a resting cell and was
+empty at 19.4 s. It now burns ×1.68 and is empty at 21.4 s. With a level-5 beam
+filling it was ×2.22 and 16.2 s; now it is ×1.86 and 19.4 s.
+
+### 8.3 What moved
+
+- **`gene.gd` has `upkeep_share`**, 1.0 by default: what each copy past the first,
+  or a levelled organ's own price, is multiplied by. `ampulla.gd`, `ocellus.gd`,
+  `stigma.gd` and `palp.gd` set it to **0.5**, a starting value. The catalogue's
+  `upkeep_at` and `upkeep_share` apply it, `genome.gd`'s `upkeep_of` and
+  `upkeep_with_levels` pay it, and the pause screen's costs line and the beam's
+  fork cards say it.
+- **The water pays it too**: a hunter that grew a sense that points starves later.
+  So the drop probe's seeded lines moved, and were re-recorded from its own output.
+  With the share set back to 1.0, this branch printed the old lines to the byte.
+- **A kept drop's rules** gain a `genome.UPKEEP_SHARE.<gene>` line for each gene
+  that pays other than all of it, so a drop saved before this reads as one kept
+  under other rules, and is converted and logged on load (drop_save.gd).
+- **Nothing on the wire.** Upkeep is each body's own: no `Wire.RULES`, no
+  `Wire.PROTOCOL`. A content pack.
+
+### 8.4 What to watch
+
+The owner's complaint was the nose, and this does not touch a newborn: its first
+thirty seconds are what they were, since one copy of anything is free. What it
+changes is the run after that. A lineage that grows a ping or a beam to find food
+pays half of what it did to keep it.
+
+- **Does a grown ping or beam now feel affordable**, read on the new gauge as the
+  rate it adds?
+- **Is the start, on smell alone, still too hard?** If so, this is not the lever
+  for it. The levers there are the tank and the grace (§7.6 row 1), and how fast
+  the free sense arrives and what it can be.
+
+The levers for this change are the share (0.5 on each of the four files),
+`UPKEEP_PER_TIER` (0.18, every gene's), and the beam's own `BEAM_RAY_COST` and
+`BEAM_SWEEP_COST`. Balance waits for players (CLAUDE.md): the share is a starting
+value.
+
+## 9. Seventy-two
+
+The owner, 2026-10-15, after playing the dev app with the gauge:
+
+> Double the base energy storage. We die too soon.
+
+**Read as: the tank doubles, and nothing else.** "Storage" is the tank, and only
+the tank moves. Every cost, a meal and the grace keep the seconds of rest they
+were. So the change is the buffer: a stretch with no food in sight, which §7.3
+found is what kills a forager that eats when it can, now has to outlast
+seventy-two seconds of rest instead of thirty-six.
+
+### 9.1 What moved
+
+| | before | now | why |
+| --- | --- | --- | --- |
+| `HUNGER_SECONDS`, the tank at rest | 36 | **72** | the owner's ask |
+| `MEAL`, a meal your own size | 1.0 (the whole bar) | **0.5** (half the bar) | the same 36 s of rest it was worth: the owner doubled the storage, not the food |
+| `HUNGRY_FROM`, where the warning starts | 0.5 | **0.75** (a quarter left) | the same twenty seconds from death (hunger.md §3); at half of seventy-two the beat would race for thirty seconds before a death |
+| `myoneme`'s `DASH_COST_BY_TIER` | 6, 4.5 and 3.2 % of a born tank | **2.16, 1.62 and 1.152 s of rest** | the same seconds; as a share of the tank it would have doubled with it, and in seconds no tank moves it again |
+
+`STARVE_GRACE` stays ten seconds: it is time, not energy. `STROKE_COST`,
+`TURN_COST`, upkeep, `ABSORB` and the sun were always seconds of rest and did not
+move. The water's bodies run the same arithmetic (§1, ocean.md §5.2), so their
+tanks doubled too: a water cell starves later, and eats what it did.
+
+### 9.2 Dies at
+
+A born cell that never eats, at §7.2's burns:
+
+| play | burn | empty at | dies at | was |
+| --- | --- | --- | --- | --- |
+| drifting, no input | ×1.50 | 48.0 s | **58.0 s** | 34.0 s |
+| steering a third of the time | ×1.78 | 40.4 s | **50.4 s** | 30.3 s |
+| pushing all the time (`axoneme 1`) | ×2.18 | 33.0 s | **43.0 s** | 26.5 s |
+| turning all the time | ×2.31 | 31.2 s | **41.2 s** | 25.6 s |
+| pushing and turning, flat out | ×2.97 | 24.2 s | **34.2 s** | 22.1 s |
+| `crista 2`, drifting | ×1.30 | 55.4 s | **65.4 s** | 37.8 s |
+| `vacuole 2`, drifting | ×1.05 | 68.6 s | **78.6 s** | 44.2 s |
+
+`levels_probe.gd` holds the steering row at fifty from the constants, and the node
+a frame at a time to the same moment, as it held thirty before.
+
+**A meal your size is half the bar now**, and a drifter a born cell can swallow
+a quarter to two fifths of it. On the gauge a meal reads as the same number it did
+(`+36` for one your size); the bar it fills is twice as long.
+
+### 9.3 What it changes, and what to watch
+
+- **The opening.** The first body the water places for a newborn is about 18 s of
+  swimming away (§7.4) and the free sense comes at five seconds: a newborn steering
+  now and then now has thirty seconds to spare where it had ten. Nothing may hunt
+  the player before `FIRST_DELAY`, 42 s, which a newborn that never eats now
+  outlives.
+- **The free sense still lapses at 50 s** if nobody places it, which is now
+  inside a hungry newborn's life rather than after it.
+- **The warning** turns on at a quarter of the tank, so the gauge is amber only in
+  the last quarter, and the beat races only there.
+- **The water** starves less, so it holds more hunters for longer. drop_probe's
+  seeded lines moved with it.
+- **Watch** whether dying of hunger is now rare enough that the slowing tank stops
+  mattering, and whether the opening is now too easy. The levers are
+  `HUNGER_SECONDS` and `STARVE_GRACE` (§7.6 row 1), `MEAL` (row 2) and the costs
+  in §2. Balance waits for players (CLAUDE.md): these are starting values.
+
+### 9.4 The pins it moved
+
+The water runs the same tank, so every seeded run moved with it, and each was
+re-recorded from its own check's output:
+
+- **drop_probe**: `DEV_LINES`, `THREE_ONE_LINES`, `IDENTITY_LINES`, `PACK3_LINES`,
+  `TAIL_LINES`, `DEV_MEMBRANE`, `PACK3_TRACE` and `TAIL_TRACE`;
+- **`ci.yml`'s check 8**: `f7e09406…`, 68,616 lines, from `49611ed8…` and 70,074.
+
+**Only the tank moved them.** On a copy of this branch with `HUNGER_SECONDS`,
+`MEAL`, `HUNGRY_FROM` and the dash put back as they were, everything else
+included (the eyespot's glow too), the drop probe passed against the old pins and
+check 8 printed `49611ed8…` to the byte.
+
+In the game's water at five minutes (the tail check's row 37, seed 1), the
+hunters are 95 against 92 and the swallowed 905 against 963. Starved are 230
+against 428: half as many water cells die of hunger, and about as many live.
+
+Three checks of the drop probe also read the tank's size. The mouthless body is
+empty at 93.6 s, twice §5.3's 46. A floc must feed a hunter a fifth of a meal's
+share of the bar. The save's dosed water body is picked as one with no toxin and
+nothing in its slots, because the first body with a mouth now grows a toxin into
+its mouth's slot.

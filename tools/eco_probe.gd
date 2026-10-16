@@ -5,15 +5,19 @@ extends SceneTree
 ## `--every=` seconds, and the water's own cost a frame over each window.
 ##
 ##   godot --headless --path . -s res://tools/eco_probe.gd -- \
-##       --seed=1 --until=1800 --every=300 --sensed=0.2
+##       --seed=1 --until=1800 --every=300
 ##
-## - `--sensed=<0..1>`: the drop made for a player this sighted -- §5.9's 0.2 is
-##   a newborn's composition and 0.6 a sighted player's. Default 0.2.
+## (`--sensed=` went when the water stopped reading anyone's senses:
+## docs/design/water-evolves.md. Every drop is made the one way.)
 ## - `--empty-room`: nobody at all, not even a ghost to anchor it, so every body
 ##   is on its tick (§10.3); the ghost is otherwise an anchor, so its
 ##   surroundings are stepped every frame and the spawner hides from it.
 ## - `--death-log`: one line per hunter that starves -- its age, meals, radius,
 ##   upkeep, reach and speed (§5.4's table).
+## - `--genes=crowded`: the water of a hundred genes, filed before the drop is made --
+##   the mixed hundred of docs/design/gene-rarity.md table 5.1 (`tools/rarity_specimens.gd`)
+##   -- to watch the floor keep them over a long run in its `[rarity]` lines:
+##   `--genes=crowded --until=1800` (§5.3, §11.3).
 ## - the drop's own switches, as `tools/drive.gd` takes them: `--lod=`,
 ##   `--half-rate=`, `--near-first=`, `--skip-still=`, `--own-speed=`,
 ##   `--notice=senses|fixed`, `--flight=none|all`, `--absorb=`,
@@ -31,7 +35,9 @@ extends SceneTree
 ##
 ## Prints `[census]` lines, each followed by the drop's `[lineage]` line -- its
 ## hunters' generations, families and what they have become
-## (docs/design/lineage.md §4, §6.1) -- and its `[behaviour]` line -- how its
+## (docs/design/lineage.md §4, §6.1) -- its `[rarity]` line -- each class's genes in
+## the drop and what the floor has given back of them (docs/design/gene-rarity.md
+## §11.1) -- and its `[behaviour]` line -- how its
 ## hunters' rules fire and what they are doing, and last how many behaviours
 ## they carry, the share still on the founders' rules and the changes made at
 ## division (behaviour.md §12.1, §7.3) -- `[eco] cost p50 .. p90 ..` for each
@@ -42,6 +48,8 @@ extends SceneTree
 
 const CellBody := preload("res://game/normal/cell.gd")
 const Genome := preload("res://game/normal/genome.gd")
+## The catalogues `--genes=` files (docs/design/gene-rarity.md §11.3).
+const RaritySpecimens := preload("res://tools/rarity_specimens.gd")
 
 
 ## **The field, with one line for every hunter that starves**, when asked.
@@ -68,9 +76,9 @@ var costs := PackedInt32Array()
 
 func _initialize() -> void:
 	var seed_value := 1
-	var sensed := 0.2
 	var empty := false
 	var logged := false
+	var genes := ""
 	var sets := {}
 	for a: String in OS.get_cmdline_user_args():
 		var v := a.get_slice("=", 1)
@@ -80,12 +88,12 @@ func _initialize() -> void:
 			every = float(v)
 		elif a.begins_with("--seed="):
 			seed_value = int(v)
-		elif a.begins_with("--sensed="):
-			sensed = float(v)
 		elif a == "--empty-room":
 			empty = true
 		elif a == "--death-log":
 			logged = true
+		elif a.begins_with("--genes="):
+			genes = v
 		elif a.begins_with("--notice="):
 			sets[&"notice_by_senses"] = v != "fixed"
 		elif a.begins_with("--flight="):
@@ -117,12 +125,16 @@ func _initialize() -> void:
 					"contact-swallow", "armour-swallow"]:
 				if a.begins_with("--%s=" % name):
 					sets[StringName(name.replace("-", "_"))] = v == "1"
+	var filed: Array[StringName] = []
+	if genes == "crowded":
+		filed = RaritySpecimens.file_mixed()
+	elif genes != "":
+		push_error("[eco] --genes=%s: no such catalogue (crowded is the one)" % genes)
 	seed(seed_value)
 	cell = CellBody.new()
 	cell.radius = CellBody.BASE_RADIUS
 	food = LoggedDrop.new()
 	food.log_deaths = logged
-	food.sensed_override = sensed
 	for key: StringName in sets:
 		food.set(key, sets[key])
 	# Stepped by hand below, one fixed frame at a time, and timed.
@@ -131,10 +143,13 @@ func _initialize() -> void:
 	food.setup_drop(cell)
 	food.in_water = false
 	food.anchored = not empty
-	print("[eco] seed %d  sensed %.2f  %s  switches %s" % [seed_value, sensed,
-		"an empty room" if empty else "a ghost player, anchored", sets])
+	print("[eco] seed %d  %s  switches %s%s" % [seed_value,
+		"an empty room" if empty else "a ghost player, anchored", sets,
+		"" if filed.is_empty() else "  genes: the mixed hundred, %d varieties in the water's pool"
+		% food.get(&"_drifter_pool").size()])
 	print(food.census_line())
 	print(food.lineage_line())
+	print(food.rarity_line())
 	print(food.behaviour_line())
 
 
@@ -149,6 +164,7 @@ func _process(_delta: float) -> bool:
 		clock = 0.0
 		print(food.census_line())
 		print(food.lineage_line())
+		print(food.rarity_line())
 		print(food.behaviour_line())
 		var sorted := costs.duplicate()
 		sorted.sort()

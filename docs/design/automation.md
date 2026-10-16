@@ -230,6 +230,8 @@ Designed here as:
   dash: one finger on the water does all three. Reading the row the same way on
   every scheme means a dash pad or a push key takes the cell back too, rather than
   firing under an autopilot that stays on, or doing nothing (§17.3).
+  **Since `gene-controls.md` (2026-10-15)** there are no schemes: every drawn
+  control takes the cell back, and open water never does.
 - **What the instincts held goes with it**: the heading, the random turn, and
   what they remember of the last tick (`memory`). The tail beats on its own clock
   again unless your hand holds it.
@@ -834,6 +836,10 @@ library.
   a library another run wrote.
 
 ### 9.2 The cell's part: in its world's file
+
+> **From `cells.md` on (built 2026-10-04), the cell's part is in its own slot's
+> file** (`cells.md` §3.1): `fed` moves with the cell, unchanged. The library stays the player's, one for
+> every cell (`cells.md` §1.8).
 
 One optional key, checked when present: **`FORMAT` stays 1**.
 

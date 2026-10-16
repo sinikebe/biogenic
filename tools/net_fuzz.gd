@@ -15,7 +15,8 @@ extends Node
 ##   - **guest**: the other end of the handshake -- a guest session, on a LAN
 ##     call or one by invite, fed whatever a host could send it: it greets
 ##     once, and proves an invite only on a call by invite, only once, and
-##     only to a CHALLENGE from its host.
+##     only to a CHALLENGE from its host; and a WELCOME on other rules or with
+##     no tail leaves it refused as different versions, never together.
 ##   - **invite**: pastes, from whole invites to junk behind a check that
 ##     reads.
 ##   - **address**: the LAN door's `is_local_source` and the limiter's
@@ -27,7 +28,8 @@ extends Node
 ## **What must hold**, all of it checked after every step: no script error,
 ## and no engine error in a reader; nothing played before a valid proof on the
 ## internet listener, of an invite the owner holds; no peer the door did not
-## admit, none under an id below 2, none greeted on another protocol; one
+## admit, none under an id below 2, none greeted on another protocol; no guest
+## together after a WELCOME on other rules or with no tail; one
 ## listener's peer never taken for the other's; nothing a real ENet would
 ## refuse -- a frame to an id not held or cut, a peer asked for that is not
 ## there; no bar forgotten early, no call taken from a barred address or /56,
@@ -65,8 +67,13 @@ const Wire := preload("res://game/net/wire.gd")
 const Lan := preload("res://game/net/lan.gd")
 const Invite := preload("res://game/net/invite.gd")
 const NetSession := preload("res://game/net/net_session.gd")
+const Rules := preload("res://game/net/rules.gd")
 const Referee := preload("res://game/net/referee.gd")
 const CellBody := preload("res://game/normal/cell.gd")
+## Every gene's numbers, by stat: the reach an honest call has.
+const Stats := preload("res://game/genes/stats.gd")
+## **Every gene this build knows**, by key: what a genome here is drawn from.
+const Catalogue := preload("res://game/genes/catalogue.gd")
 const CORPUS := "res://tools/net_fuzz_corpus.txt"
 ## **The certificate every invite here carries**: made once, its key thrown
 ## away, so it proves nothing and opens nothing -- it is here so a seed's
@@ -224,13 +231,19 @@ class FuzzHost extends "res://game/net/net_session.gd":
 
 
 ## **A guest session with no transport**: its clock and what it sends are the
-## fuzzer's, and the host is id 1, as a real guest's always is.
+## fuzzer's, and the host is id 1, as a real guest's always is. It counts the
+## WELCOMEs the gate let through to the handshake, so a run knows which it read.
 class FuzzGuest extends "res://game/net/net_session.gd":
 	var now_at := 1000.0
 	var sent: Array = []
+	var welcomes := 0
 
 	func _now() -> float:
 		return now_at
+
+	func _take_welcome(id: int, frame: PackedByteArray) -> void:
+		welcomes += 1
+		super(id, frame)
 
 	func _steady_throttle(_id: int, _via: int = VIA_LAN) -> void:
 		pass
@@ -265,6 +278,9 @@ var _closes := 0
 var _door_counts := {}
 ## Why the last host could not be opened, said.
 var _no_host := ""
+## **This build's handshake tail** (protocol 8): its rules and content version 0,
+## which every HELLO and WELCOME it means to be taken carries.
+var _tail := PackedByteArray()
 
 
 func _ready() -> void:
@@ -281,6 +297,7 @@ func _ready() -> void:
 			replay = arg.trim_prefix("--replay=")
 	_catcher = Catcher.new()
 	OS.add_logger(_catcher)
+	_tail = Wire.tail(Rules.fingerprint(), 0)
 	_identity()
 	await _run(replay)
 	OS.remove_logger(_catcher)
@@ -571,7 +588,7 @@ static func _pond_why(pond: Array) -> String:
 
 ## **A sister, held to what [method Wire.take_sister] promises** (protocol 6):
 ## her body's genes and her DNA's named as the wire names them, at most
-## [constant Wire.GENES_MAX], at tiers inside 0..3 and her DNA's copies inside
+## [member Wire.GENES_MAX], at tiers inside 0..3 and her DNA's copies inside
 ## 1..3; and at most [constant Wire.MOST_RULES] lines, each 1 to
 ## [constant Wire.RULE_BYTES_MAX] bytes of [constant Wire.RULE_BYTES].
 static func _sister_why(sister: Array) -> String:
@@ -619,6 +636,18 @@ static func _finite_why(values: Variant) -> String:
 	return ""
 
 
+## **A handshake frame's tail, mostly this build's** -- its rules, so the frame is
+## taken -- and now and then none, as a build before protocol 8 sends, or other
+## rules, as a build on another catalogue does.
+func _some_tail() -> PackedByteArray:
+	var roll := _rng.randf()
+	if roll < 0.8:
+		return _tail
+	if roll < 0.9:
+		return PackedByteArray()
+	return Wire.tail(_bytes(Wire.RULES_SIZE), _rng.randi_range(0, 9999))
+
+
 ## **A valid frame of any kind** its side could send, with random values
 ## inside what a real body could say.
 func _valid_frame(from_host: bool, next := -1) -> PackedByteArray:
@@ -629,11 +658,11 @@ func _valid_frame(from_host: bool, next := -1) -> PackedByteArray:
 	var choice := _rng.randi_range(0, 15)
 	match choice:
 		0:
-			return Wire.hello(_rng.randi_range(0, 9))
+			return Wire.hello(_rng.randi_range(0, 9), _some_tail())
 		1:
-			return Wire.welcome(Wire.PROTOCOL, _rng.randi_range(2, 0x7FFFFFFF))
+			return Wire.welcome(Wire.PROTOCOL, _rng.randi_range(2, 0x7FFFFFFF), _some_tail())
 		2:
-			return Wire.refuse(Wire.PROTOCOL, _rng.randi_range(0, 8))
+			return Wire.refuse(Wire.PROTOCOL, _rng.randi_range(0, 8), _some_tail())
 		3:
 			return Wire.challenge(_bytes(Wire.NONCE_SIZE))
 		4:
@@ -644,8 +673,8 @@ func _valid_frame(from_host: bool, next := -1) -> PackedByteArray:
 				Vector2(_rng.randf_range(-900.0, 900.0), _rng.randf_range(-900.0, 900.0)),
 				_rng.randf_range(-1.4, 1.4), _rng.randi_range(0, 7))
 		6:
-			return Wire.shout(seq, at, radius, CellBody.PING_RANGE_BY_TIER[
-				_rng.randi_range(1, CellBody.PING_RANGE_BY_TIER.size() - 1)])
+			return Wire.shout(seq, at, radius, Stats.table(&"ping_range")[
+				_rng.randi_range(1, Stats.table(&"ping_range").size() - 1)])
 		7:
 			if from_host:
 				return Wire.pond(seq, _rng.randf(), _pond_bodies(), _pond_loads())
@@ -695,16 +724,28 @@ func _lines() -> PackedStringArray:
 	return out
 
 
-## **A genome a body could wear** -- since protocol 7 the toxin's two forms
-## among its genes, and up to the nine names a genome may hold.
+## **A genome a body could wear, or a newer build's** (gene-catalogue.md §13): every
+## key the catalogue knows -- the retired among them, and since protocol 7 the toxin's
+## two forms -- and, about one gene in seven, a name this build does not know, as a
+## later content update could add one ([method _invented]). Up to two more than the
+## names a genome may hold, each at a tier from none to the wire's top.
 static func _tiers_from(rng: RandomNumberGenerator) -> Dictionary:
-	var genes := [&"cytostome", &"cirrus", &"flagellum", &"ampulla", &"ocellus",
-		&"stigma", &"chemocyte", &"pellicle", &"veneneux", &"toxicyst", &"palp",
-		&"axoneme"]
+	var genes := Catalogue.keys()
 	var out := {}
 	for i in rng.randi_range(1, Wire.GENES_MAX + 2):
-		out[genes[rng.randi_range(0, genes.size() - 1)]] = rng.randi_range(0, 3)
+		var gene: StringName = genes[rng.randi_range(0, genes.size() - 1)] \
+			if rng.randf() < 0.85 else _invented(rng)
+		out[gene] = rng.randi_range(0, Wire.TIER_TOP)
 	return out
+
+
+## **A gene's name this build does not know**: 1 to [constant Wire.NAME_MAX] letters
+## `a-z`, a name the wire carries and every reader keeps.
+static func _invented(rng: RandomNumberGenerator) -> StringName:
+	var name := ""
+	for k in rng.randi_range(1, Wire.NAME_MAX):
+		name += String.chr(97 + rng.randi_range(0, 25))
+	return StringName(name)
 
 
 ## **The loads a snapshot tells its recipient** (protocol 7): none mostly, then
@@ -1043,8 +1084,8 @@ func _guest_frame(next: int, only := "") -> PackedByteArray:
 				_rng.randf_range(-1.4, 1.4), [Wire.STATE_POND, 0, Wire.STATE_OUT
 					| Wire.STATE_POND][_rng.randi_range(0, 2)])
 		4:
-			return Wire.shout(next, at, radius, CellBody.PING_RANGE_BY_TIER[
-				_rng.randi_range(1, CellBody.PING_RANGE_BY_TIER.size() - 1)])
+			return Wire.shout(next, at, radius, Stats.table(&"ping_range")[
+				_rng.randi_range(1, Stats.table(&"ping_range").size() - 1)])
 		5:
 			return Wire.event(next, Wire.EVENT_ENTER, Wire.enter_payload(radius))
 		6:
@@ -1384,7 +1425,7 @@ func _door_step(host: FuzzHost, action: Array, run: Dictionary) -> bool:
 			var good := false
 			match str(what[0]):
 				"hello":
-					frame = Wire.hello(int(what[1]))
+					frame = Wire.hello(int(what[1]), _tail)
 				"proof":
 					var nonce := _nonce_for(host, id, int(began.get(line, 0)))
 					var mine := PackedByteArray()
@@ -1814,12 +1855,14 @@ func _fuzz_guest() -> void:
 	var bad := ""
 	var frames := 0
 	var proofs := 0
+	var foreign := 0
 	for run in runs:
 		var by_invite := run % 2 == 1
 		var steps := _guest_steps(by_invite)
 		var result: Array = await _guest_run(by_invite, steps)
 		frames += steps.size()
 		proofs += int(result[1])
+		foreign += int(result[2])
 		if not str(result[0]).is_empty():
 			var small: Array = await _shrink_guest(by_invite, steps)
 			bad = "run %d: %s -- --replay=\"guest %s\"" % [run, str(result[0]),
@@ -1827,7 +1870,8 @@ func _fuzz_guest() -> void:
 			break
 	_says(bad.is_empty(), "guest: %d runs, %d frames from a host, LAN calls and calls by"
 		% [runs, frames] + " invite alike -- one greeting each, %d proofs, every one on a"
-		% proofs + " call by invite, once, and to its host's CHALLENGE%s"
+		% proofs + " call by invite, once, and to its host's CHALLENGE; %d WELCOMEs on other"
+		% foreign + " rules or with no tail taken, each refused as different versions%s"
 		% ("" if bad.is_empty() else " -- NOT: " + bad))
 
 
@@ -1841,7 +1885,7 @@ func _guest_steps(by_invite: bool) -> Array:
 		match _rng.randi_range(0, 7):
 			0:
 				frame = Wire.welcome(Wire.PROTOCOL if _rng.randf() < 0.8
-					else _rng.randi_range(0, 9), _rng.randi_range(0, 9))
+					else _rng.randi_range(0, 9), _rng.randi_range(0, 9), _some_tail())
 			1:
 				frame = Wire.challenge(_bytes(Wire.NONCE_SIZE))
 			2:
@@ -1858,8 +1902,8 @@ func _guest_steps(by_invite: bool) -> Array:
 
 
 ## **One guest, [param steps] from its host**: `[what went wrong or "",
-## proofs]`. On a call by invite it holds this run's own invite, as a player's
-## guest does once it has pasted one.
+## proofs, WELCOMEs on other rules or with no tail it took]`. On a call by invite
+## it holds this run's own invite, as a player's guest does once it has pasted one.
 func _guest_run(by_invite: bool, steps: Array) -> Array:
 	var guest := FuzzGuest.new()
 	guest.name = "FuzzGuest"
@@ -1867,12 +1911,15 @@ func _guest_run(by_invite: bool, steps: Array) -> Array:
 	if by_invite:
 		guest._invite = Invite.parse(Invite.format("203.0.113.7", Invite.PORT, _key_id,
 			_secret, _der))
-	# Its first frame is not after a stall: the clock stood where it stands.
+	# Its first frame is not after a stall: the clock stood where it stands. And its
+	# rules taken, as a session's are when it calls.
 	guest._frame_at = guest.now_at
+	guest._take_rules()
 	guest._set_link(NetSession.Link.REACHING)
 	guest._on_peer_connected(1)
 	var why := ""
 	var proofs := 0
+	var foreign := 0
 	for step: Array in steps:
 		var errors := _catcher.errors()
 		var from := int(step[0])
@@ -1882,6 +1929,7 @@ func _guest_run(by_invite: bool, steps: Array) -> Array:
 		# brings it, on a call that is still up.
 		var nonce := Wire.challenge_nonce(frame) if from == 1 and guest._peers.has(1) \
 			else PackedByteArray()
+		var welcomes := guest.welcomes
 		guest._on_peer_packet(from, frame)
 		for i in range(before, guest.sent.size()):
 			var sent: PackedByteArray = guest.sent[i][1]
@@ -1902,6 +1950,21 @@ func _guest_run(by_invite: bool, steps: Array) -> Array:
 					proofs += 1
 		if why.is_empty() and proofs > 1:
 			why = "it proved %d times on one call" % proofs
+		# **A WELCOME on other rules, or with none, is refused and never played**
+		# (gene-catalogue.md §11.3): one the gate let through that is not this
+		# build's protocol and rules leaves the guest refused as different versions
+		# -- by invite, in the server's words -- and so never together after it.
+		if why.is_empty() and guest.welcomes > welcomes \
+				and (Wire.protocol_of(frame) != Wire.PROTOCOL
+					or Wire.rules_of(frame) != guest._rules):
+			foreign += 1
+			var told := ["game_older", "server_older"].has(str(guest.trouble_key)) \
+				if by_invite else guest.trouble == "different versions"
+			if int(guest.link) != NetSession.Link.REFUSED or not told:
+				why = "a WELCOME on protocol %d with %s left it %s, '%s'" % [
+					Wire.protocol_of(frame), "no tail" if Wire.rules_of(frame).is_empty()
+					else "other rules", NetSession.Link.keys()[int(guest.link)],
+					guest.trouble_key if by_invite else guest.trouble]
 		if why.is_empty() and _catcher.errors() > errors:
 			why = "an error: " + _catcher.last
 		if why.is_empty() and (guest.pond_events.size() > NetSession.POND_EVENTS_MAX
@@ -1913,7 +1976,7 @@ func _guest_run(by_invite: bool, steps: Array) -> Array:
 	if guest.sent.is_empty() or Wire.kind(guest.sent[0][1]) != Wire.KIND_HELLO:
 		why = "it did not greet its host first" if why.is_empty() else why
 	guest.close()
-	return [why, proofs]
+	return [why, proofs, foreign]
 
 
 static func _guest_code(by_invite: bool, steps: Array) -> String:

@@ -29,6 +29,13 @@ extends Node
 ## same way and comes out as it always did: its 34 bodies are always the nearest,
 ## and take the slots of their own indices.
 ##
+## **And, in a shared pond, the other player as a body** (docs/design/
+## shared-pond.md §5, Phase 3; shared-pond-ux.md §4): the friend is the body in
+## the field's person slot -- a phone host's guest, a guest's host, or the other
+## guest in a server's room -- recorded beside the 48 every frame with what the
+## world view draws them by, so a player the friend ate watches the friend eat
+## them, and not nothing. Single player has nobody there and writes zeros.
+##
 ## **This node is the last child of `NormalMode` on purpose**, so its `_process`
 ## runs after every other node's and it sees the finished frame. Nothing was
 ## added to `normal_mode.gd`'s `_process` to make that happen, and nothing may
@@ -44,17 +51,20 @@ const CellBody := preload("res://game/normal/cell.gd")
 const MotesField := preload("res://game/normal/motes.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
+## The genes in genes' own slots (docs/design/gene-sockets.md).
+const Riders := preload("res://game/genes/riders.gd")
+const Catalogue := preload("res://game/genes/catalogue.gd")
 const SignalBus := preload("res://game/perception/signal_bus.gd")
 const SomaLayer := preload("res://game/perception/soma.gd")
 
 # ---------------------------------------------------------------------------
 # The window, and it is the design rather than an optimisation.
 #
-# 526 float32 a frame is 2,104 bytes, which is 126 KB a second at 60 fps. A
-# four-hundred-second run would be 50 MB and mostly empty water; sixty seconds
-# is 7.6 MB, allocated once here and never grown. Nobody rewatches seven
+# 534 float32 a frame is 2,136 bytes, which is 128 KB a second at 60 fps. A
+# four-hundred-second run would be 51 MB and mostly empty water; sixty seconds
+# is 7.7 MB, allocated once here and never grown. Nobody rewatches seven
 # minutes -- the mistake that killed you is in the last twenty seconds. The
-# constant below is the knob and the arithmetic is 126 KB per second bought.
+# constant below is the knob and the arithmetic is 128 KB per second bought.
 #
 # It was 296 floats and 69 KB/s until the wave bounced. Two more glow lobes and
 # their hollowness are eight and one, and the pulse out and back is eighteen:
@@ -67,7 +77,10 @@ const SomaLayer := preload("res://game/perception/soma.gd")
 # The toxins took it to 526 (docs/design/dna-slots.md §13): this cell's three
 # loads, one float of packed loads for each of the 48 bodies, and the self
 # lobe's colour in the membrane's block, so a dosing bite's bruise plays back in
-# its hue. §3.1 and owner's call 1 in §7.
+# its hue. §3.1 and owner's call 1 in §7. The pond's friend took it to 534:
+# eight floats for the other player's body (shared-pond.md §5, Phase 3), 115 KB
+# more ring -- where the plan before the drop had put 3.0 MB, for recording all
+# sixty-nine slots of a pond rather than the 48 nearest and the person.
 # ---------------------------------------------------------------------------
 
 const SECONDS := 60
@@ -123,25 +136,15 @@ const AT_MEMBRANE := AT_MOTES + MOTES * 2
 ## 24 x (bearing, distance, hit)
 const AT_BEAMS := AT_MEMBRANE + SignalBus.BLOCK_FLOATS
 const BEAM_FLOATS := 3
-## **The ping, out and back.** Two outgoing fronts and four returning echoes,
-## then ping_range, held_remaining, the division's four, the frame's own delta,
-## the beat, the hunter, the killer and the slack.
+## **The tail**: ping_range, held_remaining, the division's four, the frame's own
+## delta, the beat, the hunter, the killer, the slack and the senses' glows.
 ##
-## Two and four, and both numbers were measured rather than chosen. The field
-## can hold eleven fronts and fifty-five echoes at tier 3, and recording all of
-## them would cost 200 floats a frame for a picture that is mostly off screen: a
-## front leaves the frame in under a second against a 1.4 s period, so at most
-## two are ever inside it, and four echoes covers every instant of the tier-3
-## ambiguity pose. `food.gd` sorts the echoes nearest-home first, so the four
-## kept are the four about to land -- which are the ones a viewer is watching.
+## **No wave** (ping-as-outline.md §14): two outgoing fronts and four returning
+## echoes stood here, eighteen floats a frame, until the ping stopped drawing its
+## wave. What an echo shows now is the organ lighting ([constant AT_ECHO]) and the
+## marks it leaves, which the views keep.
 const AT_TAIL := AT_BEAMS + BEAMS * BEAM_FLOATS
-const PING_FRONTS := 2
-const PING_ECHOES := 4
-## `[radius, bearing, halfwidth_deg, level]`.
-const ECHO_FLOATS := 4
-const AT_PING_FRONTS := AT_TAIL
-const AT_PING_ECHOES := AT_TAIL + PING_FRONTS
-const AT_PING_RANGE := AT_PING_ECHOES + PING_ECHOES * ECHO_FLOATS
+const AT_PING_RANGE := AT_TAIL
 const AT_HELD := AT_PING_RANGE + 1
 const AT_DOUBLE := AT_PING_RANGE + 2
 const AT_PINCH := AT_PING_RANGE + 3
@@ -192,7 +195,34 @@ const AT_KILLER := AT_PING_RANGE + 9
 ## did -- the membrane's fall rides in its block, and this is the body's half.
 ## A quantity, so it lerps.
 const AT_SLACK := AT_PING_RANGE + 10
-const STRIDE := AT_PING_RANGE + 11
+## **How brightly the nose glowed** (docs/design/three-senses.md §2.6): the glow
+## the run handed both views, so the replay lights the nose exactly as the run
+## did -- the membrane draws nothing for it, so it is not in the block. Which
+## organ is the nose is the restored genome's to say. A quantity, so it lerps.
+const AT_SMELL := AT_PING_RANGE + 11
+## **How brightly the eyespot glowed** (three-senses.md §2.7): the same, for the
+## organ on the light channel, with the shadow it was under.
+const AT_SIGHT := AT_PING_RANGE + 12
+## **How brightly the ping's organ glowed** (ping-as-outline.md §14): lit as each
+## echo landed and fading, the same, for the organ on the ping channel.
+const AT_ECHO := AT_PING_RANGE + 13
+## **The other player, as a body** (shared-pond.md §5, Phase 3): in a pond, the
+## friend in the field's person slot, `food.gd`'s PERSON_SLOT on every client --
+## where they are, which way they face, how big, their wound and their loads,
+## whether they are in the water, and how long since their phone was last heard.
+## The last two are what the world view draws a friend by beyond any body's
+## numbers: out of the water is a friend dividing, drawn as a ghost, and the
+## silence fades their halo, trail and edge mark (shared-pond-ux.md §0.2, §0.3).
+## **A radius of 0 is nobody** -- no pond, a friend dead or gone, or single
+## player, which writes nothing else here. What they wear is a PERSON delta.
+const AT_PERSON := AT_PING_RANGE + 14
+const PERSON_FLOATS := 8
+## Where in the person's block: their loads packed as a body's are, and stepped
+## the same; in the water, 1 or 0, stepped; and the silence, which lerps.
+const PERSON_LOADS := 5
+const PERSON_WET := 6
+const PERSON_QUIET := 7
+const STRIDE := AT_PERSON + PERSON_FLOATS
 
 ## Further than this between two recorded frames is a body being recycled to the
 ## far side of the water, not a body moving. Lerping across it would draw a
@@ -227,8 +257,14 @@ const PRUNE_ABOVE := 512
 # changes: at most 7.5 a second. A run with nothing on records ACTS only for the
 # hand's holds. Both are dictionaries' worth in a row, so [constant STRIDE] does
 # not move.
+#
+# **And the friend's body** (shared-pond.md §5, Phase 3): PERSON is what the
+# other player wears, `[tiers, order]` -- their worn tiers and the slot each is
+# worn in, which is what PERSON carries on the wire and what the world view
+# draws their fringe from -- written when it changes. Last, so every older kind
+# keeps its number.
 
-enum Delta { PLAYER, BODY, DAUGHTERS, RIM, SETTLE, CLEAR, PROGRAMS, ACTS }
+enum Delta { PLAYER, BODY, DAUGHTERS, RIM, SETTLE, CLEAR, PROGRAMS, ACTS, PERSON }
 
 ## Measured, not estimated. §4.6 asks for `Time.get_ticks_usec()` around
 ## [method capture] as a rolling maximum and refuses to let the estimate be
@@ -245,7 +281,7 @@ var _genome: GenomeNode = null
 var _bus: SignalBus = null
 var _soma: SomaLayer = null
 
-## 60 x 60 x 322 float32, allocated once and never grown.
+## 60 x 60 x [constant STRIDE] float32, allocated once and never grown.
 var _ring := PackedFloat32Array()
 ## When each ring slot was recorded, in seconds since the run began.
 var _when := PackedFloat32Array()
@@ -262,7 +298,10 @@ var _origin := 0.0
 ## kick rings, bruise rays and wake rays unchanged.
 var _sensations: Array = []
 ## [[t, kind, at, nutrition, gene], ...] -- `motes.struck` and `food.eaten`,
-## with the world positions the bus is not allowed to carry.
+## with the world positions the bus is not allowed to carry; and `gone`, the
+## friend leaving the water for good, where `nutrition` holds how -- vision.gd's
+## `Gone` -- as the run told its own view ([method friend_gone]). And `echo`,
+## what the ping placed ([method _on_echoed]), with the whole mark after them.
 var _marks: Array = []
 ## [[t, Delta, index, payload], ...] -- the index a slot for BODY, a floc's id
 ## for SETTLE and CLEAR, and 0 for the rest; a BODY row carries the body's id
@@ -283,7 +322,7 @@ var _had_daughters := false
 ## where a run starts, and writes nothing.
 var _programs_kept: Array = []
 var _acts_kept := 0
-## `CellBody.GAPE_BY_TIER[cytostome]` per slot, refreshed only when the genome
+## The `gape` multiplier of the body in each slot, refreshed only when the genome
 ## in it changes. See the note at the write site.
 var _gape_scale := PackedFloat32Array()
 
@@ -321,9 +360,21 @@ var _rim_radius := 0.0
 ## now and then rather than every frame.
 var _prune_at := PRUNE_ABOVE
 
+# --- The friend (shared-pond.md §5, Phase 3) ---------------------------------
+## **The live session, for one number**: how long since the other player was
+## last heard, which the world view fades their presence by. Handed over by the
+## run exactly as `vision.gd`'s is -- a read handle, never a write one -- and
+## null in single player, where nobody is ever in the person's slot.
+var _session: Node = null
+## What the friend wore when it was last written, by identity: every door that
+## changes it -- PERSON, on the host or in a mirror -- hands the field a new
+## dictionary and a new array, so a change is two compares and never a walk.
+var _person_tiers: Variant = null
+var _person_order: Variant = null
+
 
 func _ready() -> void:
-	# 6.8 MB, once. Nothing here touches a window, an input device or a
+	# 7.7 MB, once. Nothing here touches a window, an input device or a
 	# network: a headless boot allocates the ring and records nothing anybody
 	# will ever look at, which costs one allocation and no frames.
 	_ring.resize(CAPACITY * STRIDE)
@@ -343,6 +394,7 @@ func _ready() -> void:
 		_motes.struck.connect(_on_struck)
 	if _food != null:
 		_food.eaten.connect(_on_eaten)
+		_food.echoed.connect(_on_echoed)
 
 
 ## **After every other node in the run**, which is what being its last child
@@ -381,6 +433,7 @@ func capture(delta: float) -> void:
 		_ring[at + AT_LOADS + k] = _cell.loads[k] if k < _cell.loads.size() else 0.0
 
 	_capture_bodies(at)
+	_capture_person(at)
 
 	if _motes != null:
 		var points := _motes.points()
@@ -410,7 +463,6 @@ func capture(delta: float) -> void:
 		_ring[beam_at + 2] = hit
 		beam_at += BEAM_FLOATS
 
-	_capture_ping(at)
 	_ring[at + AT_PING_RANGE] = _food.ping_range if _food != null else 0.0
 	_ring[at + AT_HELD] = _genome.held_remaining if _genome != null else 0.0
 	# One integer-valued float, and the only thing in this loop that asks the
@@ -419,6 +471,9 @@ func capture(delta: float) -> void:
 	# Nobody, until the seal says who. See AT_KILLER.
 	_ring[at + AT_KILLER] = -1.0
 	_ring[at + AT_SLACK] = _soma.slack if _soma != null else 0.0
+	_ring[at + AT_SMELL] = _glow_on(_soma.lit, Catalogue.SMELL) if _soma != null else 0.0
+	_ring[at + AT_SIGHT] = _glow_on(_soma.lit, Catalogue.LIGHT) if _soma != null else 0.0
+	_ring[at + AT_ECHO] = _glow_on(_soma.lit, Catalogue.PING) if _soma != null else 0.0
 	_ring[at + AT_DELTA] = delta
 	_capture_division(at)
 
@@ -458,8 +513,8 @@ func _capture_bodies(at: int) -> void:
 		var here := _cell.position
 		for index: int in _food.bodies_near(here, REACH):
 			var b := cells[index]
-			# The other player, in a pond: never a water body. A pond's
-			# replay is withheld anyway (normal_mode `_offer_replay`).
+			# The other player, in a pond: never a water body. They are
+			# recorded in a block of their own ([method _capture_person]).
 			if b.person != null:
 				continue
 			if b.inert:
@@ -520,13 +575,15 @@ func _capture_bodies(at: int) -> void:
 		var b := cells[index]
 		# **Its genome, keyed on the body**: when it takes the slot, and when
 		# it eats -- a meal is the only thing that moves a genome in either
-		# water. Stepped at playback, and carrying the body's id.
+		# water. Stepped at playback, and carrying the body's id -- and what
+		# rides in its genes' own slots (gene-sockets.md §7), which a meal may
+		# also move.
 		var meals := b.meals
 		if meals != _slot_meals[slot]:
 			_slot_meals[slot] = meals
-			_gape_scale[slot] = CellBody.gape_of(
-				GenomeNode.tier_of(b.genome, &"cytostome"), 1.0)
-			_deltas.append([_clock, Delta.BODY, slot, b.genome.duplicate(), b.id])
+			_gape_scale[slot] = CellBody.gape_of(b.genome, 1.0)
+			_deltas.append([_clock, Delta.BODY, slot, b.genome.duplicate(), b.id,
+				b.riders.duplicate(true)])
 		var pos := b.pos
 		_ring[i] = pos.x
 		_ring[i + 1] = pos.y
@@ -534,10 +591,10 @@ func _capture_bodies(at: int) -> void:
 		_ring[i + 3] = b.radius
 		_ring[i + 4] = b.wound
 		# **The gape, without three calls per body to get it.**
-		# `food.gape_at()` resolves to `gape_of(tier_of(genome))`, which is a
-		# dictionary lookup and two static calls -- 102 of them a frame, and
+		# `food.gape_at()` resolves to `gape_of(genome)`, which is a stat read
+		# over the genome and a static call -- 102 of them a frame, and once
 		# measured at 34 of the 80 microseconds this function costs. A gape is
-		# `GAPE_BY_TIER[tier] * radius` and the tier only changes when the
+		# the body's `gape` times its radius, and the stat only changes when the
 		# genome does, which is a thing this file already watches, so the
 		# multiplier is cached there and this is a multiply. The float it writes
 		# is bit-identical to `gape_at()`'s.
@@ -547,6 +604,61 @@ func _capture_bodies(at: int) -> void:
 		_ring[i + BODY_LOADS] = FoodField.pack_loads(b.loads) \
 			if FoodField.Doses.any(b.loads) else 0.0
 		i += BODY_FLOATS
+
+
+## The brightest glow in a `lit` (cilia.gd's) of an organ on [param channel], 0
+## for none: the nose's on smell, the eyespot's on light. The replay's genome says
+## which organ each lights.
+static func _glow_on(lit: Dictionary, channel: StringName) -> float:
+	var most := 0.0
+	var glows: Dictionary = lit.get("glow", {})
+	for gene: StringName in glows:
+		var organ := Catalogue.gene(gene)
+		if organ != null and organ.channel == channel:
+			most = maxf(most, float(glows[gene]))
+	return most
+
+
+## **The friend, as the world view draws them** (see [constant AT_PERSON]): the
+## body in the field's person slot whenever a pond holds one -- in the water or
+## out of it, which is a friend dividing or one placed and not yet arrived, both
+## drawn -- and radius 0 for nobody. What they wear goes in as a PERSON delta
+## the frame it changes.
+##
+## **Not among the 48**, and on purpose: [method _capture_bodies] passes a
+## person by -- in the drop a person is in no grid to be found by, and in today's
+## water a slot of the 48 is a water body's -- so single player's slots are
+## exactly what they were, and this block is the person's alone.
+func _capture_person(at: int) -> void:
+	var i := at + AT_PERSON
+	var pb: FoodField.Body = null
+	if _food != null and _food.person() != null:
+		var cells: Array[FoodField.Body] = _food.bodies()
+		pb = cells[FoodField.PERSON_SLOT]
+	if pb == null or pb.radius <= 0.0:
+		for k in PERSON_FLOATS:
+			_ring[i + k] = 0.0
+		return
+	if not is_same(pb.genome, _person_tiers) or not is_same(pb.order, _person_order):
+		_person_tiers = pb.genome
+		_person_order = pb.order
+		_deltas.append([_clock, Delta.PERSON, 0,
+			[pb.genome.duplicate(), pb.order.duplicate()]])
+	var pos := pb.pos
+	_ring[i] = pos.x
+	_ring[i + 1] = pos.y
+	_ring[i + 2] = pb.heading
+	_ring[i + 3] = pb.radius
+	_ring[i + 4] = pb.wound
+	_ring[i + PERSON_LOADS] = FoodField.pack_loads(pb.loads) \
+		if FoodField.Doses.any(pb.loads) else 0.0
+	_ring[i + PERSON_WET] = 1.0 if pb.person.in_water else 0.0
+	# **The silence the live view fades them by**, read off the same session it
+	# reads: `quiet_for()` is -1 before anybody is greeted, which fades nothing.
+	var quiet := 0.0
+	if _session != null and is_instance_valid(_session):
+		quiet = maxf(float(_session.quiet_for()), 0.0)
+	_ring[i + PERSON_QUIET] = quiet
 
 
 ## A floc in reach this frame: told the first frame it is, with where it lies,
@@ -573,40 +685,6 @@ func _slot_of(index: int) -> int:
 	if index < 0 or index >= _slot_by_index.size():
 		return -1
 	return _slot_by_index[index]
-
-
-## **The pulse, out and back**, in eighteen floats. A radius per outgoing front
-## and four scalars per returning echo, both already sorted by the field -- the
-## fronts oldest first, so the newest and therefore smallest two are kept; the
-## echoes nearest-home first, so the four about to land are.
-##
-## A radius of -1 is an empty slot, which is the same convention the single
-## `ping_front` used for "nothing in flight". An echo with level 0 is empty and
-## neither view draws it.
-func _capture_ping(at: int) -> void:
-	for i in PING_FRONTS:
-		_ring[at + AT_PING_FRONTS + i] = -1.0
-	for i in PING_ECHOES:
-		var e := at + AT_PING_ECHOES + i * ECHO_FLOATS
-		_ring[e] = -1.0
-		_ring[e + 1] = 0.0
-		_ring[e + 2] = 0.0
-		_ring[e + 3] = 0.0
-	if _food == null:
-		return
-	var fronts: Array = _food.ping_fronts
-	# From the end: the fronts are oldest first and the newest are the ones
-	# still inside the frame.
-	for i in mini(fronts.size(), PING_FRONTS):
-		_ring[at + AT_PING_FRONTS + i] = float(fronts[fronts.size() - 1 - i])
-	var echoes: Array = _food.ping_echoes
-	for i in mini(echoes.size(), PING_ECHOES):
-		var echo: Array = echoes[i]
-		var e := at + AT_PING_ECHOES + i * ECHO_FLOATS
-		_ring[e] = float(echo[0])
-		_ring[e + 1] = float(echo[1])
-		_ring[e + 2] = float(echo[2])
-		_ring[e + 3] = float(echo[3])
 
 
 ## The division, in four floats. `double` and `pinch` are the mother becoming
@@ -706,6 +784,10 @@ func _watch_state() -> void:
 				# **The lineage's levels** (beam-levels.md §7): what the beam's
 				# shape and a sweep's hold are read off at playback.
 				"levels": _genome.level_state(),
+				# **The genes in its genes' own slots** (gene-sockets.md §7), the
+				# DNA's and the body's: a host's look and what it delivers.
+				"riders": _genome.riders().duplicate(true),
+				"body_riders": _genome.body_riders().duplicate(true),
 			}])
 	# **The drop's rim**, once: it moves only when a run starts in it, and the
 	# ring is cleared then. Today's water has none, and writes none.
@@ -794,6 +876,9 @@ func _sign_genome() -> int:
 		var grown: RefCounted = levels[gene]
 		sig += gene.hash() * (int(grown.level()) + 13) * 307
 		sig += StringName(grown.path).hash() * 17
+	# And what rides in its genes' own slots (gene-sockets.md §7): a placement into
+	# one changes nothing above.
+	sig += Riders.sign_of(_genome.riders()) * 409 + Riders.sign_of(_genome.body_riders()) * 23
 	return sig
 
 
@@ -838,6 +923,34 @@ func _on_struck(_bearing: float, _strength: float, at: Vector2) -> void:
 func _on_eaten(nutrition: float, gene: StringName, at: Vector2) -> void:
 	if _recording:
 		_mark(&"eaten", at, nutrition, gene)
+
+
+## **What the ping placed as an echo landed** (ping-as-outline.md §13): its place
+## and outline, kept whole after the usual four, for the replay's two views to
+## hold as the run's did.
+func _on_echoed(mark: Dictionary) -> void:
+	if not _recording:
+		return
+	_marks.append([_clock, &"echo", mark.get("at", Vector2.ZERO), 0.0, &"",
+		mark.duplicate(true)])
+	if _marks.size() > PRUNE_ABOVE:
+		_marks = _slice_from(_marks, _clock - float(SECONDS))
+
+
+## **The friend left the water for good, and how** -- vision.gd's `Gone`: eaten,
+## starved or poisoned, eaten by this cell, or gone from the wire -- told here by
+## the run in the same breath it tells its own view (shared-pond-ux.md §3, §5).
+## The body leaving its slot is in the frames already; this is the one thing
+## about it no frame can say, and what tells a meal ring from a slow fade.
+func friend_gone(how: int, at: Vector2) -> void:
+	if _recording:
+		_mark(&"gone", at, float(how), &"")
+
+
+## **The session, for the friend's silence** (see [member _session]). The run
+## hands it over once, as it hands its world view the same handle.
+func set_session(session: Node) -> void:
+	_session = session if (session != null and is_instance_valid(session)) else null
 
 
 func _mark(kind: StringName, at: Vector2, nutrition: float,
@@ -961,6 +1074,8 @@ func _forget() -> void:
 	_floc_stamp.clear()
 	_rim_seen = false
 	_prune_at = PRUNE_ABOVE
+	_person_tiers = null
+	_person_order = null
 
 
 func frames() -> int:
@@ -1006,6 +1121,17 @@ func rim() -> Array:
 	return []
 
 
+## **Whether the window has the other player in it**: what a replay's field is
+## made with a person slot for. A PERSON row says so, and one always does: the
+## first frame with a friend in it writes one, and a prune keeps the last from
+## before the window -- what the friend was wearing as it opened.
+func holds_person() -> bool:
+	for row: Array in _deltas:
+		if int(row[1]) == Delta.PERSON:
+			return true
+	return false
+
+
 ## Seconds into the window that recorded frame [param i] happened at.
 func time_of(i: int) -> float:
 	if _count <= 0:
@@ -1022,7 +1148,8 @@ func time_of(i: int) -> float:
 ## boolean; any position that moved further than [constant JUMP] between two
 ## frames, which is a body or a mote being recycled to the far side of the water
 ## rather than swimming there; and a slot that is empty in either frame, which is
-## a body arriving or going and not one growing out of nothing.
+## a body arriving or going and not one growing out of nothing -- the friend's
+## included, whose being in the water is a step too.
 func sample(i: int, u: float, out: PackedFloat32Array) -> void:
 	if _count <= 0:
 		return
@@ -1056,14 +1183,19 @@ func sample(i: int, u: float, out: PackedFloat32Array) -> void:
 	out[AT_COMMIT] = _ring[from + AT_COMMIT]
 	out[AT_HUNTER] = _ring[from + AT_HUNTER]
 	out[AT_KILLER] = _ring[from + AT_KILLER]
-	# **The ping's slots are not identities**, which is the same fault the
-	# hunter index has. The field re-sorts its echoes nearest-home every frame
-	# and a return that lands vacates one, so slot 2 in two consecutive frames
-	# is routinely two different bodies -- and lerping between them would slide
-	# one arc across the water to where another one was. A bearing cannot be
-	# lerped through the wrap at +-PI either. Stepped, therefore, whole.
-	for k in range(AT_TAIL, AT_PING_RANGE):
-		out[k] = _ring[from + k]
+	# **The friend, as a body is**: arriving or going is a step, never a growth
+	# out of nothing; what they carry and whether they are in the water are
+	# stepped, as a body's loads are; the heading goes the short way round.
+	if _ring[from + AT_PERSON + 3] <= 0.0 or _ring[to + AT_PERSON + 3] <= 0.0:
+		var whole := from if t < 1.0 else to
+		for k in PERSON_FLOATS:
+			out[AT_PERSON + k] = _ring[whole + AT_PERSON + k]
+	else:
+		out[AT_PERSON + 2] = lerp_angle(_ring[from + AT_PERSON + 2],
+			_ring[to + AT_PERSON + 2], t)
+		out[AT_PERSON + PERSON_LOADS] = _ring[from + AT_PERSON + PERSON_LOADS]
+		out[AT_PERSON + PERSON_WET] = _ring[from + AT_PERSON + PERSON_WET]
+		_hold_jump(out, from, to, AT_PERSON, t)
 
 
 ## A position that jumped is held at the frame it jumped from until the frame it

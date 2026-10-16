@@ -27,6 +27,7 @@ const Rulebook := preload("res://game/mechanics/rulebook.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const CellBody := preload("res://game/normal/cell.gd")
 const Drop := preload("res://game/normal/drop.gd")
+const Catalogue := preload("res://game/genes/catalogue.gd")
 
 ## **What the instincts are holding**: a water body's fields, run by the water's
 ## own triggers -- the heading they steer for, the claims of the last tick, the
@@ -84,12 +85,11 @@ func setup(cell: CellBody, food: FoodField, metabolism: Node, genome: Node) -> v
 		&"metabolism.hunger": _report_hunger,
 		&"metabolism.fed": _report_fed,
 		&"body.hit": _report_hit,
-		&"chemocyte.smell": _report_smell,
-		&"stigma.shadow": _report_shadow,
-		&"palp.touch": _report_touch,
-		&"ocellus.beam": _report_beam,
-		&"ampulla.echo": _report_echo,
 	}
+	# The genes' parts by the names their organs declare them by, as the water's
+	# are (food.gd's `wire_parts`): every variant of an organ is read as it is.
+	FoodField.wire_parts(_readers, {&"smell": _report_smell, &"shadow": _report_shadow,
+		&"touch": _report_touch, &"beam": _report_beam, &"echo": _report_echo}, true)
 	_triggers = {}
 	for output: StringName in FoodField.vocabulary().outputs:
 		var act: Callable = _food.trigger(output)
@@ -97,7 +97,7 @@ func setup(cell: CellBody, food: FoodField, metabolism: Node, genome: Node) -> v
 			_triggers[output] = act
 	# **The dash is your cell's own**, on its cooldown and at its price, fired
 	# past the menu's silence the way a water body's dash is fired by its rules.
-	_triggers[&"myoneme.dash"] = _dash
+	FoodField.wire_parts(_triggers, {&"dash": _dash}, false)
 
 
 # --- What each organ's frame reports (§4.1): food.gd's own reports -----------------
@@ -194,6 +194,7 @@ func _decide() -> void:
 	body.swimming = false
 	body.push = 0.0
 	body.tail_held = false
+	body.clinging = false
 	acted = 0
 	for won: Array in fired:
 		var k := int(won[0])
@@ -219,16 +220,15 @@ func _refresh_body() -> void:
 
 ## **What of the vocabulary the player's body has, as the rulebook's bits**
 ## (§4.1, §4.3): every gene the body wears at the level `genome.gd`'s `level_of`
-## answers -- the beam's earned level, every other gene's worn copies -- and what
-## every body has. A gene the DNA carries and the body does not wear is not
-## there: an instinct for it is asleep.
-func worn() -> int:
-	var parts := {}
-	var tiers: Dictionary = _genome.call(&"tiers")
-	for gene: StringName in tiers:
-		if int(tiers[gene]) > 0:
-			parts[gene] = maxi(int(_genome.call(&"level_of", gene)), 1)
-	return Rulebook.worn(FoodField.vocabulary(), parts, FoodField.everybody())
+## answers -- the beam's earned level, every other gene's worn copies -- counted by
+## organ (catalogue.gd's `by_organ`), and what every body has -- the catalogue's
+## `worn_levels`, which the tail's hold reads too (`cell.gd`'s `tail_level`). A gene
+## the DNA carries and the body does not wear is not there: an instinct for it is
+## asleep.
+func worn() -> PackedInt64Array:
+	return Rulebook.worn(FoodField.vocabulary(),
+		Catalogue.by_organ(Catalogue.worn_levels(_genome.call(&"tiers"), _genome)),
+		FoodField.everybody())
 
 
 ## **What the programs would do now if the autopilot were on** (automation-ux.md
@@ -266,6 +266,11 @@ func push_strength() -> float:
 ## at its level.
 func holds_tail() -> bool:
 	return body.tail_held
+
+
+## Whether the instincts hold on to what the cell touches: the haptonema's `cling`.
+func clings() -> bool:
+	return body.clinging
 
 
 # --- The handover (§2.2, §2.3) ------------------------------------------------------
@@ -323,6 +328,7 @@ func _forget() -> void:
 	body.swimming = false
 	body.push = 0.0
 	body.tail_held = false
+	body.clinging = false
 	body.tumble = -1
 	body.tumble_tick = -1
 	body.hit = 0.0

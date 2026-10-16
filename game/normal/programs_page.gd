@@ -27,6 +27,8 @@ const Rulebook := preload("res://game/mechanics/rulebook.gd")
 const ProgramWords := preload("res://game/normal/program_words.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const Cilia := preload("res://game/vision/cilia.gd")
+## The organs the body's own parts act through, found by what each provides.
+const Catalogue := preload("res://game/genes/catalogue.gd")
 const ControlsNode := preload("res://game/normal/controls.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
 
@@ -126,18 +128,23 @@ const AUTOPILOT_ON_INK := 0.35
 ## **The triggers, as the library's columns** (§2.3): the claims the vocabulary
 ## declares, in this order, each drawn as the pad that works it by hand.
 const COLUMNS: Array[StringName] = [&"steering", &"swimming", &"dash", &"push"]
-## **Which organ draws a part of the body's own** on its chip: the turns are the
-## cirrus's, a swim the flagellum's; a gene's parts are its own organ's, and the
-## rest the cell's own egg.
-const BODY_ORGANS := {
-	&"body.turn-toward": &"cirrus",
-	&"body.turn-away": &"cirrus",
-	&"body.turn-random": &"cirrus",
-	&"body.swim": &"flagellum",
+## **Which organ draws a part of the body's own** on its chip, by the stat the
+## part acts through: the turns are the organ that turns the body -- the cirrus --
+## and a swim the one that swims it -- the flagellum; a gene's parts are its own
+## organ's, and the rest the cell's own egg.
+const BODY_STATS := {
+	&"body.turn-toward": &"turn_rate",
+	&"body.turn-away": &"turn_rate",
+	&"body.turn-random": &"turn_rate",
+	&"body.swim": &"impulse_speed",
 }
-## **The parts that hold the tail still wear the hold's mark** (§3.3): the pad and
-## the page use one picture.
-const HOLDS_TAIL: Array[StringName] = [&"flagellum.hold"]
+## **The part that holds the tail still wears the hold's mark** (§3.3): the pad and
+## the page use one picture. By the name its organ declares it by, `hold`, so every
+## variant of the tail's is marked alike (rulebook.gd's `part_of`).
+const HOLD_PART := &"hold"
+## **What a gene's part does, as the hints' verb**, by the name its organ declares
+## it by: the dash dashes, the push pushes, the hold holds the tail.
+const PART_VERBS := {&"dash": &"dash", &"push": &"push", HOLD_PART: &"hold"}
 
 # --- Words (automation-ux.md §8) ------------------------------------------------------
 
@@ -508,7 +515,7 @@ var _said := ""
 var _states: Array = []
 var _never := PackedInt32Array()
 var _tick_seen := -1
-var _worn := 0
+var _worn := PackedInt64Array()
 ## **A drag in flight** (§2.6, §4.5): what is lifted, and the gap it would land in.
 var _drag_from := -1
 var _drag_gap := -1
@@ -1045,7 +1052,7 @@ func _compute_states() -> void:
 	if _library == null:
 		return
 	_vocab = FoodField.vocabulary()
-	_worn = int(_instincts.call(&"worn"))
+	_worn = _instincts.call(&"worn")
 	var merged := _library.merged(_vocab)
 	if merged == null:
 		return
@@ -1091,7 +1098,7 @@ func _lines_of(i: int) -> PackedStringArray:
 
 ## Whether [param rule]'s organs are all worn.
 func _awake(rule: Rulebook.Rule) -> bool:
-	return rule.inert or (rule.needs & _worn) == rule.needs
+	return rule.inert or Rulebook.awake(rule, _worn)
 
 
 ## The triggers [param rule] claims, as the columns' indices.
@@ -1118,12 +1125,8 @@ func _verb_of(rule: Rulebook.Rule) -> StringName:
 			return &"swim"
 		&"body.rest":
 			return &"rest"
-		&"myoneme.dash":
-			return &"dash"
-		&"axoneme.push":
-			return &"push"
-	if HOLDS_TAIL.has(rule.output):
-		return &"hold"
+	if organ_of(rule.output) != &"":
+		return PART_VERBS.get(Rulebook.part_of(rule.output), &"act")
 	return &"act"
 
 
@@ -1178,7 +1181,7 @@ static func chip_widths(font: Font) -> Vector2:
 		widest_out = maxf(widest_out, _text_w(font, said, 15))
 		for option: float in decl.options:
 			widest_out = maxf(widest_out, _text_w(font,
-				said + " · " + ProgramWords.option_text(option), 15))
+				said + " · " + ProgramWords.option_text(output, option), 15))
 	return Vector2(ceilf(widest_in + GLYPH_W + 2.0 * CHIP_PAD),
 		ceilf(widest_out + GLYPH_W + 2.0 * CHIP_PAD))
 
@@ -1744,16 +1747,17 @@ func _count_text(n: int) -> String:
 static func draw_column_mark(node: CanvasItem, column: int, centre: Vector2, ink: float) -> void:
 	match column:
 		0:
-			Cilia.draw_slot_dart(node, 1, Cilia.hue(&"cirrus") * Color(ink, ink, ink, 1.0),
+			Cilia.draw_slot_dart(node, 1, ControlsNode.TURN_HUE * Color(ink, ink, ink, 1.0),
 				centre, 9.0, false)
 		1:
 			var points := PackedVector2Array()
 			for i in 17:
 				var u := float(i) / 16.0
 				points.append(centre + Vector2((u - 0.5) * 24.0, -sin(u * TAU) * 4.5))
-			node.draw_polyline(points, Color(Cilia.hue(&"flagellum"), ink), 2.2, true)
+			node.draw_polyline(points, Color(ControlsNode.HOLD_HUE, ink), 2.2, true)
 		2:
-			Cilia.draw_tile_organ(node, &"myoneme", 1, centre + Vector2(0.0, 5.0), ink, 0.75)
+			Cilia.draw_tile_organ(node, ControlsNode.DASH_ORGAN, 1, centre + Vector2(0.0, 5.0),
+				ink, 0.75)
 		3:
 			for row in 3:
 				var points := PackedVector2Array()
@@ -1762,7 +1766,7 @@ static func draw_column_mark(node: CanvasItem, column: int, centre: Vector2, ink
 					var u := float(i) / 12.0
 					points.append(centre + Vector2((u - 0.5) * 22.0,
 						lift + sin(u * TAU + float(row) * 0.22 * TAU) * 2.4))
-				node.draw_polyline(points, Color(Cilia.hue(&"axoneme"), ink), 1.6, true)
+				node.draw_polyline(points, Color(ControlsNode.PUSH_HUE, ink), 1.6, true)
 
 
 func _draw_switch(button: Button, j: int) -> void:
@@ -2095,11 +2099,13 @@ func _focus_mark(node: Control) -> void:
 
 # --- Parts: their hue and their mark --------------------------------------------------
 
-## **The organ that reports or does [param part]**: a gene's own, the cirrus for
-## a turn and the flagellum for a swim, or &"" for the cell's own and `always`.
+## **The organ that reports or does [param part]**, as the key it is drawn as: a
+## gene's own -- its organ's first key, whichever variant a body wears
+## (catalogue.gd's `first_key`) -- the cirrus for a turn and the flagellum for a
+## swim ([constant BODY_STATS]), or &"" for the cell's own and `always`.
 static func organ_of(part: StringName) -> StringName:
-	if BODY_ORGANS.has(part):
-		return BODY_ORGANS[part]
+	if BODY_STATS.has(part):
+		return Catalogue.first_provider(BODY_STATS[part])
 	var vocab := FoodField.vocabulary()
 	var owner := &""
 	if vocab.inputs.has(part):
@@ -2108,7 +2114,13 @@ static func organ_of(part: StringName) -> StringName:
 		owner = (vocab.outputs[part] as Rulebook.OutputDecl).owner
 	if owner == &"" or FoodField.everybody().has(owner):
 		return &""
-	return owner
+	return Catalogue.first_key(owner)
+
+
+## Whether [param part] is the one that holds the tail still: a gene's part its
+## organ declares as [constant HOLD_PART].
+static func _holds_tail(part: StringName) -> bool:
+	return Rulebook.part_of(part) == HOLD_PART and organ_of(part) != &""
 
 
 ## **A part's hue**: its organ's, the cell's own for the body's and the
@@ -2126,7 +2138,7 @@ static func part_hue(part: StringName) -> Color:
 static func draw_part_glyph(node: CanvasItem, part: StringName, at: Vector2, alpha: float) -> void:
 	if part == Rulebook.ALWAYS or part == &"":
 		return
-	if HOLDS_TAIL.has(part):
+	if _holds_tail(part):
 		_draw_hold_glyph(node, at, alpha)
 		return
 	var organ := organ_of(part)
@@ -2143,9 +2155,9 @@ static func draw_part_glyph(node: CanvasItem, part: StringName, at: Vector2, alp
 
 
 ## **The hold's mark at a chip's size** (§3.3): a 19 px stroke of the tail dying
-## to flat, running into a 14 px bar, in the flagellum's hue.
+## to flat, running into a 14 px bar, in the flagellum's hue -- the hold pad's.
 static func _draw_hold_glyph(node: CanvasItem, at: Vector2, alpha: float) -> void:
-	var tone := Color(Cilia.hue(&"flagellum"), alpha)
+	var tone := Color(ControlsNode.HOLD_HUE, alpha)
 	var span := 19.0
 	var from := at.x - 12.0
 	var points := PackedVector2Array()
@@ -2371,12 +2383,11 @@ func _asleep_line(rule: Rulebook.Rule) -> String:
 		var decl: Variant = _vocab.inputs.get(part, _vocab.outputs.get(part, null))
 		if decl == null:
 			continue
-		var bit := int(decl.get(&"bit"))
-		if (bit & _worn) == bit:
+		if Rulebook.has_bit(_worn, int(decl.get(&"bit"))):
 			continue
 		var level_words := ProgramWords.asleep(part)
 		if int(decl.get(&"level")) > 1 and level_words != "" \
-				and (int(_vocab.owners.get(decl.get(&"owner"), 0)) & _worn) != 0:
+				and Rulebook.has_bit(_worn, int(_vocab.owners.get(decl.get(&"owner"), -1))):
 			return level_words
 		return tr(ASLEEP_SAYS) % ProgramWords.says(part)
 	return ""
@@ -2797,12 +2808,16 @@ static func rungs_offered(kind: StringName) -> Array:
 
 ## **What the page offers to pick** (§4.2): whatever the body and the metabolism
 ## declare, and every part of a gene your DNA carries or your body wears -- in
-## [param dna] copies and [param levels], what each worn gene works at --
-## `{inputs, outputs}` in the vocabulary's order, the genes' first, `always`
-## last; with `carried` (a gene carried and not worn) and `waiting` (a part
-## waiting for its organ's level: the level it needs) for the ones that cannot
-## act yet.
+## [param dna] copies and [param levels], what each worn gene works at, both by
+## key -- `{inputs, outputs}` in the vocabulary's order, the genes' first,
+## `always` last; with `carried` (a gene carried and not worn) and `waiting` (a
+## part waiting for its organ's level: the level it needs) for the ones that
+## cannot act yet. **Counted by organ**, as your rules count your parts
+## (own_rules.gd's `worn`, catalogue.gd's `by_organ`): a part is its organ's, so
+## a body that wears any variant of the organ is offered it.
 static func offers(vocab: Rulebook.Vocabulary, dna: Dictionary, levels: Dictionary) -> Dictionary:
+	var carried_by := Catalogue.by_organ(dna)
+	var worn_by := Catalogue.by_organ(levels)
 	var everybody := FoodField.everybody()
 	var genes_in: Array[StringName] = []
 	var own_in: Array[StringName] = []
@@ -2819,8 +2834,8 @@ static func offers(vocab: Rulebook.Vocabulary, dna: Dictionary, levels: Dictiona
 			if everybody.has(owner):
 				(pair[2] as Array).append(name)
 				continue
-			var worn := int(levels.get(owner, 0))
-			if worn <= 0 and int(dna.get(owner, 0)) <= 0:
+			var worn := int(worn_by.get(owner, 0))
+			if worn <= 0 and int(carried_by.get(owner, 0)) <= 0:
 				continue
 			(pair[1] as Array).append(name)
 			if worn <= 0:
@@ -2920,10 +2935,13 @@ func _kind_of(value: StringName) -> StringName:
 	return &""
 
 
-## **An action picked**: with its first option, for one that takes one.
+## **An action picked**: with its declared default option -- a turn toward's aim,
+## the one every chaser had -- or else its first, for one that takes one.
 func _pick_output(output: StringName) -> void:
 	var decl := _vocab.outputs.get(output) as Rulebook.OutputDecl
-	var option := float(decl.options[0]) if decl != null and not decl.options.is_empty() else NAN
+	var option := NAN
+	if decl != null and not decl.options.is_empty():
+		option = decl.default if decl.options.has(decl.default) else float(decl.options[0])
 	var lines := _lines_of(_program)
 	if _row >= lines.size():
 		_draft["output"] = output
@@ -3304,6 +3322,8 @@ static func draw_pips(node: CanvasItem, first: Vector2, hue: Color, copies: int)
 			node.draw_circle(at, PIP_ROOM_R, Color(PALE, 0.30), true, -1.0, true)
 
 
+## **What the page offers this run's body**: its DNA's copies and what each gene it
+## wears works at, by key, which [method offers] counts by organ.
 func _offers() -> Dictionary:
 	var genome: Node = _run.get(&"_genome")
 	var levels := {}
@@ -3423,13 +3443,18 @@ func _choices_inspector(input: StringName, output: StringName, outputs: bool,
 		cell.mouse_entered.connect(_hover_explain.bind(part))
 		cell.mouse_exited.connect(_set_hover.bind([]))
 		grid.add_child(cell)
-	# **`push` offers its strength** under the grid when it is the current choice.
+	# **An action with options offers them** under the grid when it is the current
+	# choice -- `push` its strength, `turn toward` its aim (sting.md §2) -- on one row
+	# as wide as the grid above, each as wide as that row shares out: two are a grid
+	# cell each, and a ladder of four still leaves room for `remove`.
 	if outputs and out_decl != null and not out_decl.options.is_empty() and rule != null:
 		var row := HBoxContainer.new()
 		row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		row.add_theme_constant_override("separation", 8)
+		var n := out_decl.options.size()
+		var each := floorf((CELL_W * 2.0 + 8.0 - 8.0 * float(n - 1)) / float(n))
 		for option: float in out_decl.options:
-			var cell := _word_cell(ProgramWords.option_text(option), CELL_W,
+			var cell := _word_cell(ProgramWords.option_text(out_decl.name, option), each,
 				is_equal_approx(option, rule.option), "option_%s" % Rulebook.number(option))
 			cell.pressed.connect(_set_option.bind(option))
 			row.add_child(cell)

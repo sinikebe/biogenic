@@ -618,6 +618,10 @@ today, and the head line says which of the two is happening (§7.1).
 
 ## 6. Holding the tail still by hand
 
+> **Since `gene-controls.md` (2026-10-15)** there is one layout and no scheme: the
+> hold is a held pad declared by the flagellum, stacked up the right edge with the
+> other pads, and §6.1's places by scheme are history.
+
 Rendered: `play_*`, `zoom_icon_and_pads`.
 
 ### 6.1 Where, scheme by scheme

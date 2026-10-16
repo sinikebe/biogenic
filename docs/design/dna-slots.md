@@ -120,6 +120,8 @@ Read on `d08b0c3`, not taken from a summary.
   - The referee's `_order_fits` holds that *every slot names a gene the body
     wears, once*.
   - `wire.gd` says that any change to the bite tables bumps `PROTOCOL`.
+    *(2026-10-10: no longer, since protocol 8: a change to a bite or dose table
+    moves `Wire.RULES`' pin, which the handshake carries -- see §14.3's note.)*
 - **`veneneux` declares no sense and no action** (`genome.gd`'s `DECLARES`). It
   acts on its own, as the dart and the mouth do (`behaviour.md` §3.3).
 - **A water cell has no layout.** Its organs sit in `Cilia.default_order`, it
@@ -211,7 +213,9 @@ Read on `d08b0c3`, not taken from a summary.
 16. **The wire.** Phase 1 moves `PROTOCOL` 6 to 7: the bite rules change, the
     pond says each body's doses, and a genome may now hold nine names.
     **`Wire.RULES` stays `46913eab…`.** Phases 3 and 4 move both, because the
-    referee judges a paralysed or sleeping guest's motion. §14.
+    referee judges a paralysed or sleeping guest's motion. §14. *(2026-10-10:
+    since protocol 8 a change to what the referee judges moves `Wire.RULES`' pin
+    alone, and `PROTOCOL` moves only with a message's format -- §14.3's note.)*
 17. **Content only, in four phases**: venom and poison, inside and outside, then
     the screen, then paralysis, then sleep. The last two come after the release
     (row 8). `binary_version` does not move. §17, §20.
@@ -1237,6 +1241,14 @@ made itself (`referee.gd`: *"a death the host made itself, said again"*).
   version sentence.
 
 ### 14.3 Phases 3 and 4: the referee judges a held guest
+
+> **Since gene-catalogue.md phase 4 (protocol 8, 2026-10-05)** the handshake carries
+> the rules a host judges and decides contacts by (`game/net/rules.gd`), so a change to
+> them moves `Wire.RULES`' pin and keeps older builds apart by itself. `PROTOCOL` moves
+> only when a message's format does: a new byte, bit or message. Read the bumps planned
+> here that way: one planned only for a judged or contact rule is the pin alone; a new
+> contact rule is a sample line in `rules.gd` and in `net_probe`'s `_rules_text`; and a
+> format change takes the next free number, 9 at the time of writing.
 
 **A guest paralysed or put to sleep by the host's water must stop on its own
 client**, and it does: POND tells it its loads every 50 ms, and its `cell.gd`

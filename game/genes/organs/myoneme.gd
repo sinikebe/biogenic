@@ -1,0 +1,118 @@
+extends "res://game/genes/gene.gd"
+## `myoneme`: **the dash**. A burst of speed for a tap, paid for in hunger -- a
+## better myoneme is a cheaper dash, not a bigger one, so it stays a decision.
+##
+## No class_name, for the reason signal_bus.gd gives. Preload it by path.
+
+## The readout's items (game/mechanics/readout.gd, which preloads nothing): what
+## [method lines] says this organ's numbers with.
+const Readout := preload("res://game/mechanics/readout.gd")
+const U := Readout.Unit
+
+## **The burst**, by tier.
+## The host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
+const DASH_SPEED_BY_TIER: Array[float] = [0.0, 190.0, 240.0, 300.0]
+## **What a dash costs, in seconds of rest**: 2.16, 1.62 and 1.15. The run pays
+## it through metabolism.gd's `spend`, like every other cost, so `crista` makes it
+## cheaper and a bigger `vacuole` tank makes it a smaller share (gene-stats.md §11,
+## owner's call 2, answered *yes* on 2026-09-29).
+##
+## **In seconds since the tank doubled** (energy.md §9): it was written as a share
+## of a born cell's tank -- 6, 4.5 and 3.2 % of thirty-six seconds -- and doubling
+## the tank would have doubled the dash with it. These are those same seconds, so
+## a dash costs what it did and no tank moves it again.
+const DASH_COST_BY_TIER: Array[float] = [0.0, 2.16, 1.62, 1.152]
+
+
+# --- Its words (gene.gd; gene-catalogue.md §8.1) -------------------------------------
+
+## **Its chip word** (gene.gd's word tables): the plain word, never the biological
+## name -- one short word for what it does, read at arm's length (figure.gd).
+##
+## TRANSLATORS: A gene's name as the player reads it on a chip beside three small
+## dots: one short lowercase word, a verb or a noun for what the gene does. The
+## `entry` line says which gene it names (its scientific name, never translated).
+## It has to be short: prefer the shortest everyday word. The same words appear
+## inside sentences such as "let go to swap eat and ping".
+## ROOM: 47 px at 13 px
+const WORDS := {&"myoneme": "dash"}
+## **What it does to the player, in one line**, after its name on the pause screen.
+##
+## TRANSLATORS: What a gene does, in one line shown after the gene's scientific
+## name and a middle dot: "cytostome · a wider mouth swallows bigger things
+## whole". Lowercase, plain words, no numbers. It has little room: it meets the
+## "numbers" switch at its right, so a translation should be no longer than the
+## English. "That side" is the side of the body where the gene's slot is. The
+## `entry` line says which gene.
+## ROOM: 440 px at 15 px
+const EXPLAINS := {&"myoneme": "tap for a burst of speed, paid for in hunger"}
+## **The line of each of its own slots** (docs/design/gene-sockets.md §2), keyed
+## `host.taken`: what the gene in it does to this one, after the slot's word.
+##
+## TRANSLATORS: What a gene placed in one of another gene's own slots does to that
+## gene, in one line shown after the placed gene's word and a middle dot: "venom ·
+## every sting leaves it too". "It" is the placed gene. Lowercase, plain words, no
+## numbers, no longer than the English: it shares the explanation's line. The
+## `entry` line says which gene's slot, then which gene it takes.
+## ROOM: 440 px at 15 px
+const SOCKET_EXPLAINS := {&"myoneme.crista": "your dash costs less hunger"}
+## **What its action is called** on an instinct's chip (automation.md §13.1).
+##
+## TRANSLATORS: The name of an action the player's cell can be told to do by one
+## of its "instincts" (rules the player writes: "when <a sense reports
+## something> -> <do this>"), on a small chip. Lowercase, a few short words.
+## "dash": a burst forward; "push": thrust held on; "hold still": stop the tail
+## (the flagellum, which swims) from beating, and keep it still.
+## ROOM: 112 px at 15 px
+const GENE_SAYS := {&"myoneme.dash": "dash"}
+## **The line that explains it** on the instincts page.
+##
+## TRANSLATORS: Explains one sense, action or value of the player's "instincts",
+## on one line under them: its name (the same words as on its chip), a middle
+## dot, then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+## which calls and listens; "your beam" its ocellus; "your nose" its chemocyte;
+## "your eyespot" its stigma; "your palps" its palp. "Your tail" is the cell's
+## flagellum, which swims; "two copies" means the gene is carried twice in the
+## cell's DNA, which is what lets the tail be held still. "For free" means it
+## costs no food.
+## ROOM: 856 px at 15 px
+const GENE_EXPLAINS := {&"myoneme.dash": "dash · a burst forward, on its cooldown, paid in hunger."}
+
+
+func _init() -> void:
+	organ = &"myoneme"
+	order = 9
+	provides = {&"dash_speed": DASH_SPEED_BY_TIER, &"dash_cost": DASH_COST_BY_TIER}
+	water = {"rarity": &"uncommon", "drifter": true}
+	# **A tap** (gene.gd's `declares`): a dash is one burst, fired on the press.
+	declares = {"out": [{"name": &"dash", "claims": [&"dash"], "button": &"tap"}]}
+	# **Its look** (gene-looks.md §6): a coil, a contractile spring -- which is what a
+	# myoneme is, Vorticella's stalk -- that draws up and lets go: a dash is that
+	# spring released. A bold zigzag, never small loops: at body size loops read as
+	# beads, and beads mean armed.
+	family = MOVING
+	look = {"shape": COIL}
+	# **Its own slot** (gene-sockets.md §3 row 10): a crista in it, and the dash
+	# costs less -- as the tail's slot does.
+	sockets = [{"takes": [&"crista"], "gives": {&"effort": [1.0, 0.70, 0.55, 0.40]}}]
+
+
+## **Its numbers on the pause screen** (gene.gd's `lines`): how hard a dash bursts, how
+## often, and what it burns.
+func lines(t: int, _level: int, _path: StringName, ctx: Dictionary, _slot: int,
+		wear: Dictionary) -> Array:
+	var cell: Variant = ctx["cell"]
+	var metabolism: Variant = ctx["metabolism"]
+	var burn := float(ctx.get("burn", 1.0))
+	var burst := stat_at(&"dash_speed", t)
+	# **Seconds of rest, scaled by `crista`** (owner's call 2, §11): the
+	# run pays a dash through metabolism.gd's `spend`, as every other
+	# cost is paid, so a bigger tank no longer makes it dearer.
+	#
+	# TRANSLATORS: The burst-of-speed gene (`myoneme`, shown as `dash`): a tap
+	# gives a short burst. "Again after {} s" is the wait before the next one.
+	return [[Readout.item("a burst of {} µm a second, about {} µm in all",
+			[burst, burst / cell.DRAG], [U.SPEED, U.DISTANCE]),
+		Readout.item("again after {} s", [cell.DASH_COOLDOWN], [U.TIME])],
+		[Readout.item("each dash burns {} s", [stat_at(&"dash_cost", t) * burn],
+			[U.ENERGY]), wear]]

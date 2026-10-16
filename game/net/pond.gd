@@ -386,23 +386,23 @@ func _host_hears(g: Guest, frame: PackedByteArray) -> void:
 			# **A new body only when it can be one**, and the same tiers
 			# otherwise but for the gift (B.2): what is applied is the answer.
 			var take: Array = g.referee.judge_person(now, bool(said[0]), said[1], said[2],
-				_food.person(g.slot) != null)
+				_food.person(g.slot) != null, said[3])
 			_charge(g)
 			if take.is_empty() or _gone(g):
 				return
 			var new_body := bool(take[0])
-			_food.set_person_genome(said[1], said[2], g.slot)
+			_food.set_person_genome(said[1], said[2], g.slot, said[3])
 			if new_body:
 				_food.renew_person(g.slot)
 				friend_renewed.emit()
 			if dedicated:
 				# What this guest wears is what its friend is told it wears --
 				# now, if the friend is in the water, and on arriving if not.
-				g.worn = [said[1], said[2]]
+				g.worn = [said[1], said[2], said[3]]
 				var other := _other(g)
 				if other != null and _food.person(other.slot) != null:
 					_send(other, Wire.EVENT_PERSON,
-						Wire.person_payload(new_body, said[1], said[2]))
+						Wire.person_payload(new_body, said[1], said[2], said[3]))
 		Wire.EVENT_ENTER:
 			var said := Wire.take_enter(frame)
 			if said.is_empty():
@@ -435,7 +435,7 @@ func _host_hears(g: Guest, frame: PackedByteArray) -> void:
 			# her record: ids are this drop's, so she is the founder of a line
 			# of her own here.
 			var slot := _food.place_sister(take[0], float(said[1]), float(take[1]),
-				said[3], said[4], PackedInt32Array(), sister_list(said[5]))
+				said[3], said[4], PackedInt32Array(), sister_list(said[5]), said[6])
 			if slot >= 0:
 				sister_placed.emit(slot)
 		Wire.EVENT_DIED:
@@ -535,7 +535,7 @@ func _host_enter(g: Guest, radius: float) -> void:
 		var other := _other(g)
 		if other != null and not other.worn.is_empty():
 			_send(g, Wire.EVENT_PERSON,
-				Wire.person_payload(false, other.worn[0], other.worn[1]))
+				Wire.person_payload(false, other.worn[0], other.worn[1], other.worn[2]))
 		noted.emit("guest %d arrived at (%.0f, %.0f)" % [g.id, at.x, at.y])
 	else:
 		_send_person(false)
@@ -743,7 +743,8 @@ func _send_genomes(g: Guest, bodies: Array) -> void:
 			continue
 		g.sent[id] = meals
 		genomes_sent += 1
-		_send(g, Wire.EVENT_GENOME, Wire.genome_payload(id, meals, cells[slot].genome))
+		_send(g, Wire.EVENT_GENOME, Wire.genome_payload(id, meals, cells[slot].genome,
+			cells[slot].riders))
 	# A body out of the send set is forgotten here once the record has grown
 	# past four sets' worth: sent again, it costs one GENOME.
 	if g.sent.size() > 4 * Wire.SEND_MAX:
@@ -1050,7 +1051,7 @@ func _guest_hears(frame: PackedByteArray) -> void:
 		Wire.EVENT_GENOME:
 			var said := Wire.take_genome(frame)
 			if not said.is_empty():
-				_food.apply_genome(int(said[0]), int(said[1]), said[2])
+				_food.apply_genome(int(said[0]), int(said[1]), said[2], said[3])
 		Wire.EVENT_SETTLE:
 			# **A floc in reach** (ocean.md §10.4): into the mirror, which works
 			# out its settling from here by its own clock.
@@ -1085,9 +1086,9 @@ func _guest_hears(frame: PackedByteArray) -> void:
 			var said := Wire.take_person(frame)
 			if said.is_empty():
 				return
-			_host_worn = [said[1], said[2]]
+			_host_worn = [said[1], said[2], said[3]]
 			if _food.mirroring():
-				_food.set_person_genome(said[1], said[2])
+				_food.set_person_genome(said[1], said[2], FoodField.PERSON_SLOT, said[3])
 			if bool(said[0]):
 				friend_renewed.emit()
 		_:
@@ -1096,9 +1097,11 @@ func _guest_hears(frame: PackedByteArray) -> void:
 
 ## **Ask to come into the host's water** (§1.6): who is arriving, then how big
 ## it is. [param tiers] and [param order] are the body about to arrive, which on
-## a return from the black is not yet the body this run wears.
-func enter(radius: float, tiers: Dictionary, order: Array) -> void:
-	_send_person_as(true, tiers, order)
+## a return from the black is not yet the body this run wears, and [param riders]
+## what it wears in its genes' own slots (gene-sockets.md §6).
+func enter(radius: float, tiers: Dictionary, order: Array,
+		riders: Dictionary = {}) -> void:
+	_send_person_as(true, tiers, order, riders)
 	_net.send_event(Wire.EVENT_ENTER, Wire.enter_payload(radius))
 	entering = true
 	_enter_since = _now()
@@ -1113,7 +1116,8 @@ func entering_for() -> float:
 ## whatever the host already said about itself goes into it now.
 func mirror_began() -> void:
 	if not _host_worn.is_empty():
-		_food.set_person_genome(_host_worn[0], _host_worn[1])
+		_food.set_person_genome(_host_worn[0], _host_worn[1], FoodField.PERSON_SLOT,
+			_host_worn[2])
 
 
 ## **The pond is over for this cell** -- taken over, or never arrived.
@@ -1125,11 +1129,13 @@ func mirror_ended() -> void:
 ## **The guest's declined daughter, for the host to leave in the water**: where,
 ## facing which way, how big, and what she wears -- and since protocol 6 the DNA
 ## she was made of and the list her cell ran, [param lines] a rule a line, none
-## for the founders' (automation.md §10.3).
+## for the founders' (automation.md §10.3) -- and since protocol 9 her DNA's
+## [param riders] (gene-sockets.md §6).
 func sister(at: Vector2, heading: float, radius: float, tiers: Dictionary,
-		dna: Dictionary = {}, lines: PackedStringArray = PackedStringArray()) -> void:
+		dna: Dictionary = {}, lines: PackedStringArray = PackedStringArray(),
+		riders: Dictionary = {}) -> void:
 	_net.send_event(Wire.EVENT_SISTER, Wire.sister_payload(at, heading, radius, tiers,
-		dna, lines))
+		dna, lines, riders))
 
 
 ## **A guest's sister's list, read with this host's own vocabulary**
@@ -1165,23 +1171,25 @@ func person_changed(new_body: bool) -> void:
 
 
 func _send_person(new_body: bool) -> void:
-	_send_person_as(new_body, _genome.tiers(), _genome.body_layout())
+	_send_person_as(new_body, _genome.tiers(), _genome.body_layout(), _genome.body_riders())
 
 
-func _send_person_as(new_body: bool, tiers: Dictionary, order: Array) -> void:
-	_worn = _signature(tiers, order)
-	_net.send_event(Wire.EVENT_PERSON, Wire.person_payload(new_body, tiers, order))
+func _send_person_as(new_body: bool, tiers: Dictionary, order: Array,
+		riders: Dictionary = {}) -> void:
+	_worn = _signature(tiers, order, riders)
+	_net.send_event(Wire.EVENT_PERSON, Wire.person_payload(new_body, tiers, order, riders))
 
 
 ## A PERSON whenever what this cell wears stops being what it last said.
 func _watch_worn() -> void:
-	var now := _signature(_genome.tiers(), _genome.body_layout())
+	var now := _signature(_genome.tiers(), _genome.body_layout(), _genome.body_riders())
 	if now != _worn:
-		_send_person_as(false, _genome.tiers(), _genome.body_layout())
+		_send_person_as(false, _genome.tiers(), _genome.body_layout(),
+			_genome.body_riders())
 
 
-static func _signature(tiers: Dictionary, order: Array) -> String:
-	return "%s|%s" % [str(tiers), str(order)]
+static func _signature(tiers: Dictionary, order: Array, riders: Dictionary = {}) -> String:
+	return "%s|%s|%s" % [str(tiers), str(order), str(riders)]
 
 
 ## The death was the other player's mouth on them, swallowed or chewed apart --
