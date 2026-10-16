@@ -29,7 +29,10 @@ concurrency:
 jobs:
   check:
     name: Launcher version bump
-    runs-on: ubuntu-latest
+    # **Where it runs** (docs/ci-runner.md): GitHub's own machine, unless the
+    # repository variable CI_RUNNER names a runner's label -- the self-hosted
+    # runner, once the code is private. Delete the variable to come back.
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
 
     steps:
       - name: Check out
