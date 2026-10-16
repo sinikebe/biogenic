@@ -31,6 +31,11 @@ at rest burns 1.0 a second. So the gauge agrees with the pause screen's numbers
 2.2 s`). A bigger `vacuole` tank is a bigger second number, and a
 `plastid` that makes some of its own is a smaller rate.
 
+**2026-10-16, the light** (daylight.md §3.4): a `plastid` makes its food in the light
+where the cell is, which falls at night and toward the drop's middle, so its rate
+falls as the cell swims into the shallows by day and climbs at dusk. Nothing in the
+gauge changed: `paying()` already took the income off.
+
 ## 2. How it looks
 
 ### 2.1 Where, and how big

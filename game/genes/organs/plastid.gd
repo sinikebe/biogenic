@@ -1,6 +1,10 @@
 extends "res://game/genes/gene.gd"
 ## `plastid`: **light**. Passive feeding, as a fraction of one upkeep unit
-## cancelled outright.
+## cancelled outright -- **in full light**. Its `sun` is what it makes in full sun;
+## a body is paid it times the light where it is, which falls at night and toward
+## the drop's deep middle (docs/design/daylight.md §2.3). That is multiplied where
+## the stat is read, never here: this file says what the organ makes, and the
+## water says how much light there is.
 ##
 ## No class_name, for the reason signal_bus.gd gives. Preload it by path.
 
@@ -35,7 +39,7 @@ const WORDS := {&"plastid": "sun"}
 ## English. "That side" is the side of the body where the gene's slot is. The
 ## `entry` line says which gene.
 ## ROOM: 440 px at 15 px
-const EXPLAINS := {&"plastid": "makes a little of its own food, so you starve slower"}
+const EXPLAINS := {&"plastid": "feeds a little on light, so you starve slower"}
 
 
 func _init() -> void:
@@ -48,16 +52,23 @@ func _init() -> void:
 	# drawn inside, which tells it from the mouth's mat where colour cannot.
 	family = METABOLISM
 	look = {"shape": ORGANELLE, "form": Kinds.FORM_LENS}
+	# **Its tile in the HUD's row** (gene.gd's `readout`; docs/design/daylight.md
+	# §3.3): the organ lit by the light where the cell is. It drives no channel, so
+	# its tile is keyed by the stat it provides, `sun`.
+	readout = true
 
 
-## **Its numbers on the pause screen** (gene.gd's `lines`): how much food it makes.
+## **Its numbers on the pause screen** (gene.gd's `lines`): how much food it makes
+## in full sun -- the table's number, which is never less than it is anywhere
+## (docs/design/daylight.md §3.5).
 func lines(t: int, _level: int, _path: StringName, _ctx: Dictionary, _slot: int,
 		wear: Dictionary) -> Array:
 	# Not scaled by `crista`: metabolism.gd takes the sun off the bill
 	# as it is, after the bill has been discounted.
 	#
 	# TRANSLATORS: The light-eating gene (`plastid`, shown as `sun`): the cell
-	# makes a little food of its own from light.
-	return [[Readout.item("makes {} s of food every second", [stat_at(&"sun", t)],
+	# makes a little food of its own from light. The number is what it makes in
+	# full sunlight; at night and in deep water it makes less, or nothing.
+	return [[Readout.item("makes {} s of food a second in full sun", [stat_at(&"sun", t)],
 			[U.RATE])],
 		[wear]]

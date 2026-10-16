@@ -1377,15 +1377,16 @@ msgid "bites take {} less"
 msgstr "les morsures infligent {} de moins"
 
 #. The light-eating gene (`plastid`, shown as `sun`): the cell makes a little
-#. food of its own from light.
+#. food of its own from light. The number is what it makes in full sunlight;
+#. at night and in deep water it makes less, or nothing.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
-#: game/normal/gene_stats.gd
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/plastid.gd
 #, python-brace-format
-msgid "makes {} s of food every second"
-msgstr "produit {} s de nourriture chaque seconde"
+msgid "makes {} s of food a second in full sun"
+msgstr "produit {} s de nourriture par seconde en plein soleil"
 
 #. The bigger-tank gene (`vacuole`, shown as `store`): the cell can keep more
 #. food, so hunger takes longer to arrive. "A full tank holds {} s, not {}"
@@ -2616,10 +2617,10 @@ msgstr "votre morsure laisse du venin, qui continue de faire mal"
 #. the English. "That side" is the side of the body where the gene's slot is.
 #. The `entry` line says which gene.
 #. entry: plastid
-#. Room: at most 440 px in 15 px type; the English takes 365 px.
-#: game/normal/normal_mode.gd
-msgid "makes a little of its own food, so you starve slower"
-msgstr "produit un peu de sa nourriture, la faim vient moins vite"
+#. Room: at most 440 px in 15 px type; the English takes 304 px.
+#: game/genes/organs/plastid.gd
+msgid "feeds a little on light, so you starve slower"
+msgstr "se nourrit un peu de lumière, la faim vient moins vite"
 
 #. What a gene does, in one line shown after the gene's scientific name and a
 #. middle dot: "cytostome · a wider mouth swallows bigger things whole".

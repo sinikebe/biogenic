@@ -274,6 +274,9 @@ func _write_state() -> void:
 		# **And who killed the cell**, on the frames the recording names it,
 		# for the rings `vision.gd` draws when nothing is hunting (§11).
 		_food.restore_killer(int(roundf(_frame[RecorderNode.AT_KILLER])))
+		# **And the light at the surface** (docs/design/daylight.md §7), so the
+		# world view tints the truth pane as the run was tinted.
+		_food.restore_daylight(_frame[RecorderNode.AT_DAYLIGHT])
 	if _motes != null:
 		for i in RecorderNode.MOTES:
 			var at := RecorderNode.AT_MOTES + i * 2

@@ -5,12 +5,13 @@ extends RefCounted
 ## only this water makes -- and a second water is a second file like it.
 ##
 ## **What it knows**: the drop, its edge (the meniscus), its snow of detritus
-## (flocs), how many live in it, and four decisions: **what is short**,
+## (flocs), its day and how deep its light reaches (docs/design/daylight.md), how
+## many live in it, and four decisions: **what is short**,
 ## **whose turn it is**, **where a run starts** and **what a new body is made
 ## of** (§13). **What it does not know** is how the arithmetic works: the rim
 ## is a `basin.gd`, nearness a `space_grid.gd`, the spawner's debt a
-## `replenish.gd` and the snow a `snowfall.gd`, all in game/mechanics/ and none
-## of them knowing it is water. Nor does it draw or run a cell: food.gd's
+## `replenish.gd`, the snow a `snowfall.gd` and the day a `daylight.gd`, all in
+## game/mechanics/ and none of them knowing it is water. Nor does it draw or run a cell: food.gd's
 ## `_seed_drifter`, `_seed_peer` and `_draw_genome` make the body, to the plan,
 ## the gift and the gene pool decided here.
 ##
@@ -28,6 +29,7 @@ const Replenish := preload("res://game/mechanics/replenish.gd")
 const Snowfall := preload("res://game/mechanics/snowfall.gd")
 const FloorQueue := preload("res://game/mechanics/floor_queue.gd")
 const Rulebook := preload("res://game/mechanics/rulebook.gd")
+const Daylight := preload("res://game/mechanics/daylight.gd")
 const Genome := preload("res://game/normal/genome.gd")
 ## The genes there are (docs/design/gene-catalogue.md): the born cell's body plan.
 const Catalogue := preload("res://game/genes/catalogue.gd")
@@ -60,6 +62,30 @@ const EDGE_ECHO_RADIUS := 80.0
 ## A `stigma` sees the rim as a shadow this deep at the closest, against a
 ## body's 1, fading to nothing at food.gd's SHADOW_RANGE.
 const EDGE_SHADOW := 0.6
+
+# --- The light: a day, a night, and depth (docs/design/daylight.md §2) ----------
+
+## **The day**, ten minutes in four spans, starting at dawn: a minute of dawn,
+## five of day, a minute of dusk and three of night (§2.1). Ten, so a sitting
+## meets a night; day longer than night, so night is a phase to get through; three
+## minutes of night, longer than a full tank at rest, and short enough to wait out.
+## Starting values: balance waits for players (§11).
+const DAY_DAWN := 60.0
+const DAY_LIGHT := 300.0
+const DAY_DUSK := 60.0
+const DAY_NIGHT := 180.0
+## **Night is dark for the sun**: real moonlight drives no photosynthesis. A
+## floor, if play ever wants one.
+const NIGHT_LIGHT := 0.0
+## **What reaches the drop's deepest point**, its middle, as a share of what falls
+## on it (§2.2): a quarter, so half the light is lost about 1,757 µm in from the
+## rim and the middle still makes something by day. The drop is a lens -- a film at
+## its rim, thickest in its middle -- and the light falls off with the water over a
+## place as Beer-Lambert has it (`basin.gd`'s `column`, `daylight.gd`'s `through`).
+const LIGHT_AT_MIDDLE := 0.25
+## **Where a new drop's day starts**: the end of dawn, so a new player meets five
+## minutes of full day first. A drop kept before the light opens here too (§6).
+const DAY_BEGINS := 60.0
 
 # --- Everything in it, all the time (§4) --------------------------------------
 
@@ -265,6 +291,13 @@ func _init(center := Vector2.ZERO) -> void:
 
 
 # --- The drop's own arithmetic ---------------------------------------------------
+
+## **This water's day** (docs/design/daylight.md §2.1): the cycle of
+## [constant DAY_DAWN], [constant DAY_LIGHT], [constant DAY_DUSK] and
+## [constant DAY_NIGHT], at [constant NIGHT_LIGHT] between dusk and dawn.
+static func daylight() -> Daylight:
+	return Daylight.new(DAY_DAWN, DAY_LIGHT, DAY_DUSK, DAY_NIGHT, NIGHT_LIGHT)
+
 
 ## **How many live in the drop**: its density over its area, 554.
 static func target() -> int:

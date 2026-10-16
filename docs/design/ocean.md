@@ -691,6 +691,14 @@ None of the numbers is new:
 | spat out by venom | `VENOM_COST_BY_TIER` × 36 s | `cell.gd` |
 | a meal | `MEAL` × `clamp(prey r / eater r, 0.35, 1.40)` of the bar; a floc the same, with no growth and no gene | `food.gd`, `metabolism.gd` |
 
+**2026-10-16, the light** (daylight.md §2.3): `plastid`'s 0.12–0.34 is what it makes
+in full sun now. Every body is paid `sun × the light where it is`, which falls at
+night and toward the drop's deep middle, and absorption is added after it, as
+before. The light moves within a step, so a body takes its exact mean over the step
+it is paid for -- a far body stepped on its tick and the player stepped every frame
+are paid one light -- and the arithmetic of a tank is unchanged. `food.gd`'s
+`Body.income` is `Body.absorbs`; a tank that cannot move is judged in the dark.
+
 The player's flagellum pays per beat, on the speed each beat adds; a water body
 swims at a steady speed and pays for holding it against the drag -- the same
 `STROKE_COST` on the same speed, 0.50 a second for a born cell either way. A
@@ -2025,6 +2033,11 @@ key, sixty in all; the genome book is keyed on (id, meals); SETTLE goes as a
 floc comes into the guest's reach and CLEAR as it leaves it or goes. Today's
 water, which only a tool opens now (`normal_mode.gd`'s `drop = 0`), keys its
 entries on its serials under the same cap.
+
+**2026-10-16, the light** (daylight.md §5): the host's drop has a day, and its sky
+is to ride in every POND snapshot -- two header bytes, `Wire.PROTOCOL` 10 -- in that
+page's second phase. Until it lands, a guest's mirror is in full light: it swims,
+pays and draws as it did before the day.
 
 ### 10.5 What the referee must learn, and `Wire.RULES`
 

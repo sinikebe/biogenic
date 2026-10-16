@@ -12,7 +12,9 @@ extends CanvasLayer
 ## in the dev app and nowhere a player looks. **And, since its rules change at
 ## every division** (docs/design/behaviour.md §7.3), how many behaviours its
 ## hunters carry and the share of them still on the founders' rules: the water
-## learning, in the same place.
+## learning, in the same place. **And, since the drop has a day** (docs/design/
+## daylight.md §3.6), how far into it the drop is and the light where the cell
+## is.
 ##
 ## **Why dropped and not the p95.** A frame is timed from one to the next, so
 ## vsync is in it: a phone holding a steady 60 reads a p95 a little over 16.7 ms
@@ -95,8 +97,8 @@ const PITCH := 19.0
 const FONT_SIZE_WIDE := 16
 const PITCH_WIDE := 21.0
 const WIDE := 1400.0
-## The frame's three rows, the water's two, its families' two and its
-## behaviours' two, told apart by this much more between them.
+## The frame's three rows, the water's two, its families' two, its
+## behaviours' two and the light's two, told apart by this much more between them.
 const GROUP_GAP := 5.0
 const WORD := Color(0.855, 0.953, 0.933, 0.42)
 const VALUE := Color(0.855, 0.953, 0.933, 0.70)
@@ -282,6 +284,15 @@ func _figures() -> Array:
 		var known := kinds.size() == 2
 		rows.append(["behaviours", str(int(kinds[0])) if known else "–", "", true])
 		rows.append(["unchanged", figure(float(kinds[1]), 1) if known else "–", "%", false])
+	# **And, for a water with a day** (docs/design/daylight.md §3.6), how far into
+	# it the drop is, as a share, and the light where the cell is, so the owner can
+	# say what time it was when something felt wrong. Nothing outside a drop.
+	if is_instance_valid(water) and water.has_method(&"daylight_counts"):
+		var light: Array = water.call(&"daylight_counts")
+		if light.size() == 2:
+			rows.append(["day", figure(float(light[0]), 2) if float(light[0]) >= 0.0
+				else "–", "", true])
+			rows.append(["light", figure(float(light[1]), 2), "", false])
 	return rows
 
 

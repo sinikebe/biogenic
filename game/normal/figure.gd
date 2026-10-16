@@ -889,7 +889,8 @@ static func _row_width(font: Font, text: String) -> float:
 ## [param numbers] on, the body's size at [param radius], what its full tank
 ## holds and how long that lasts drifting -- in the caption's own size and tint,
 ## so it is still a caption. [param upkeep] is what the [param body] costs to
-## keep, as the genome prices it.
+## keep, as the genome prices it, and [param light] the light where it is, which
+## its `sun` is made at (docs/design/daylight.md §3.5): full where nobody says.
 ##
 ## **It carries the generation**, because the hint below the figure carries what
 ## a slot is worth to a daughter, and it says `genome` because the group is two
@@ -899,7 +900,7 @@ static func _row_width(font: Font, text: String) -> float:
 ## the odds -- zero pixels either way. The phrases are drops.gd's, which a drop's
 ## line in the drop menu says too.
 static func caption(generation: int, numbers: bool, radius: float, body: Dictionary,
-		upkeep: float) -> String:
+		upkeep: float, light := 1.0) -> String:
 	# TRANSLATORS: The caption above the figure on the pause screen, in 15 px
 	# type: the word for the cell's whole set of genes, then a middle dot and %s,
 	# which is the generation ("first generation"). Keep %s. With the numbers
@@ -908,7 +909,7 @@ static func caption(generation: int, numbers: bool, radius: float, body: Diction
 	var said := String(TranslationServer.translate("genome · %s")) \
 		% Drops.generation_text(generation)
 	if numbers:
-		said += Readout.SEP + Readout.plain(GeneStats.cell_items(radius, body, upkeep))
+		said += Readout.SEP + Readout.plain(GeneStats.cell_items(radius, body, upkeep, light))
 	return said
 
 

@@ -53,6 +53,9 @@ const Cilia := preload("res://game/vision/cilia.gd")
 const Drop := preload("res://game/normal/drop.gd")
 const Replenish := preload("res://game/mechanics/replenish.gd")
 const FloorQueue := preload("res://game/mechanics/floor_queue.gd")
+## **A light on a cycle, and how much of it gets through** (docs/design/daylight.md
+## §2.5): the drop's day, which drop.gd builds and this file keeps the clock of.
+const Daylight := preload("res://game/mechanics/daylight.gd")
 ## **Lineage** (docs/design/lineage.md §4): a body's record of descent, which
 ## the drop keeps on every body and draws nowhere.
 const Descent := preload("res://game/mechanics/descent.gd")
@@ -1059,12 +1062,14 @@ class Body:
 	var armour := 1.0
 	## Where its `trichocyst` is worn, as a body-relative bearing.
 	var dart_bearing := 0.0
-	## The tank's terms: `vacuole`'s store, `plastid`'s light, all it takes in
-	## without eating (light, and what a body with no `cytostome` absorbs),
-	## `crista`'s burn and the upkeep of what it wears.
+	## The tank's terms: `vacuole`'s store, `plastid`'s food in full light, what a
+	## body with no `cytostome` absorbs, `crista`'s burn and the upkeep of what it
+	## wears. **The light is not in them** (docs/design/daylight.md §2.3): what it
+	## takes in without eating is `absorbs + sun × the light`, read at each step of
+	## its tank ([method _tank]), since the light moves where the body and the day do.
 	var reserve := 1.0
 	var sun := 0.0
-	var income := 0.0
+	var absorbs := 0.0
 	var burn := 1.0
 	var upkeep := 1.0
 	## Its own tail's speed: what it cruises at, and searches at (row 14).
@@ -4483,6 +4488,9 @@ var _replay_slots := 0
 var _replay_flocs := {}
 ## Who the recording says killed the player, as a slot; -1 for nobody.
 var _killer := -1
+## **The light at the surface, as the recording says it** (docs/design/daylight.md
+## §7): [method restore_daylight]'s. Full until a recording says otherwise.
+var _replay_light := 1.0
 
 
 ## **Makes this a replay's field**: [param slots] bodies, every one of them
@@ -4507,8 +4515,19 @@ func open_replay(cell: CellBody, slots: int) -> void:
 		_cells.append(Body.new())
 	_replay_flocs.clear()
 	_killer = -1
+	_replay_light = 1.0
 	died_to = -1
 	_fresh_senses()
+
+
+## **The light at the surface, written back from a recording** (docs/design/
+## daylight.md §7): what [method daylight_now] answers, so the view tints the
+## truth pane as the run was tinted. What gets through to a place is worked out
+## again from the recorded place under the recorded rim. A field
+## [method open_replay] made only, never a run's.
+func restore_daylight(surface: float) -> void:
+	if _replay:
+		_replay_light = clampf(surface, 0.0, 1.0)
 
 
 ## **The drop's rim, written back from a recording**: this field is in the drop
@@ -6637,6 +6656,18 @@ var rule_change := true
 ## rest stops its tail at every level, and no part a level brings is there or
 ## drawn by a change -- pack 3 had none -- what `--water-tail=pack3` plays.
 var tails_beat := true
+# --- The light's (docs/design/daylight.md §10.1), set by tools/drive.gd as the
+# ones above are, before the water is made. Nothing in the game writes them.
+## **The drop has a day, and its light fades toward its deep middle** (§2): a
+## body's food from light is its `sun` times the light where it is, averaged over
+## the step it is paid for -- the player's and every water body's alike. **Off is
+## today, to the byte** (§2.3): the light is the literal 1.0 everywhere, so
+## `absorbs + sun × 1.0` is today's `sun + absorbs` bit for bit -- what
+## `--daylight=0` plays. Today's water, with no drop, is always in full light.
+var daylight := true
+## **For the renders**: where a drop being made starts its day, in seconds into
+## the cycle (`--day-at=`). Below 0 is the game's, drop.gd's DAY_BEGINS.
+var day_at := -1.0
 
 ## **The drop this run is in**, or null for today's water.
 var _drop: Drop = null
@@ -6649,6 +6680,13 @@ var drop_seed := 0
 ## runs counts: frozen while the cell is dead or dividing, it has not aged.
 var _t := 0.0
 var _frame := 0
+## **Where the drop's day stood at its age 0** (docs/design/daylight.md §6), in
+## seconds into the cycle: the time of day is a pure function of the drop's age,
+## so it stops when the drop stops, as everything else in it does. A new drop and a
+## new room start at drop.gd's DAY_BEGINS; a kept one where it was kept.
+var _day_origin := Drop.DAY_BEGINS
+## **This water's day** (drop.gd's `daylight`), made once a field.
+var _sky: Daylight = Drop.daylight()
 ## Slots with nobody in them, reused last in, first out.
 var _free := PackedInt32Array()
 ## Living bodies, how many of them have no mouth, and flocs.
@@ -6927,6 +6965,9 @@ func _reset_drop() -> void:
 	stats.clear()
 	_t = 0.0
 	_frame = 0
+	# A new drop, and a new room, at the end of dawn (docs/design/daylight.md §2.1);
+	# a render's where it asked.
+	_day_origin = day_at if day_at >= 0.0 else Drop.DAY_BEGINS
 	_living = 0
 	_drifters = 0
 	_flocs = 0
@@ -7053,6 +7094,87 @@ func basin() -> RefCounted:
 ## **How long the drop has lived**, in the seconds it has run.
 func drop_age() -> float:
 	return _t
+
+
+# --- The light (docs/design/daylight.md §2) --------------------------------------------
+# **Any stat that should follow the light asks these** (§2.5). The plastid's `sun`
+# is the one that does, multiplied where it is read: the player's in
+# normal_mode.gd, every water body's in [method _tank]. Nothing the water decides
+# reads the light -- no rule, no search, no spawn (§4).
+
+## **Whether this water has a day**: a drop with [member daylight] on -- a solo
+## run's, a host's, a room, or a replay's picture of one. Today's water, with no
+## drop, is always in full light, and so is a guest: **a mirror's light is 1.0
+## until the pond carries the host's sky** (§5, the build's second phase), so a
+## guest in a friend's drop swims and pays in full light for now.
+func _lit() -> bool:
+	return daylight and _drop != null and not _mirror
+
+
+## **The light at the surface now**, 0 to 1 (§2.1): drop.gd's day at the drop's
+## age, from where its day stood at age 0. A replay's is the recording's
+## ([method restore_daylight]). The literal 1.0 with no day ([method _lit]).
+func daylight_now() -> float:
+	if not _lit():
+		return 1.0
+	if _replay:
+		return _replay_light
+	return _sky.surface(_day_origin + _t)
+
+
+## **How far into the day the drop is**, in seconds into the cycle -- what a kept
+## drop keeps as `day` (§6) -- or -1 where there is no day of this field's own to
+## say: today's water, a guest's mirror, a replay, or the light off.
+func day_time() -> float:
+	if not _lit() or _replay:
+		return -1.0
+	return fposmod(_day_origin + _t, _sky.period())
+
+
+## **How long one day is**, in seconds: drop.gd's four spans.
+func day_length() -> float:
+	return _sky.period()
+
+
+## **The light at [param p] now**, 0 to 1 (§2.2): the surface light times what
+## gets through the water over [param p] -- all of it on the rim, drop.gd's
+## LIGHT_AT_MIDDLE at the drop's middle. The literal 1.0 with no day.
+func light_at(p: Vector2) -> float:
+	if not _lit():
+		return 1.0
+	return daylight_now() * _through(p)
+
+
+## **The light at [param p], averaged exactly over the drop's ages [param t0] to
+## [param t1]** (§2.3): what a step of that length is paid at. A far body
+## stepped once in 32 frames and the player stepped every frame take one light
+## this way, so the tank's arithmetic does not change. The literal 1.0 with no
+## day; a replay's is its recorded light, which never steps.
+func light_over(p: Vector2, t0: float, t1: float) -> float:
+	if not _lit():
+		return 1.0
+	if _replay:
+		return _replay_light * _through(p)
+	return _sky.mean(_day_origin + t0, _day_origin + t1) * _through(p)
+
+
+## **What reaches the drop's deepest point**, for whoever draws the light (vision.gd's
+## water): drop.gd's LIGHT_AT_MIDDLE with a day, and 1 -- everything -- without.
+func light_at_deepest() -> float:
+	return Drop.LIGHT_AT_MIDDLE if _lit() else 1.0
+
+
+## **The least light anywhere, at any hour**: the day's floor under the whole
+## depth of the drop, which is 0; and 1 with no day. What a tank that cannot move
+## is judged in ([method _tank]).
+func _least_light() -> float:
+	return _sky.least * Drop.LIGHT_AT_MIDDLE if _lit() else 1.0
+
+
+## What gets through the water over [param p]: the rim's `column` there, through
+## drop.gd's LIGHT_AT_MIDDLE. A field with a day only.
+func _through(p: Vector2) -> float:
+	return Daylight.through(_drop.meniscus.column(p), Drop.LIGHT_AT_MIDDLE)
 
 
 ## **How many bodies the drop holds**: the living and the flocs, never a person.
@@ -7319,6 +7441,10 @@ func drop_state() -> Dictionary:
 	return {
 		"seed": drop_seed,
 		"age": _t,
+		# **Where the day stood when it was kept** (docs/design/daylight.md §6), in
+		# seconds into the cycle: a load works out from it where the day stood at
+		# age 0, so the drop opens at the hour it was kept.
+		"day": fposmod(_day_origin + _t, _sky.period()),
 		"frame": _frame,
 		"next_id": _next_id,
 		"rim_centre": _drop.meniscus.center,
@@ -7430,6 +7556,14 @@ func load_drop(cell: CellBody, state: Dictionary) -> Dictionary:
 		_made_for = PackedFloat64Array([CellBody.BASE_RADIUS, 0.0])
 	drop_seed = int(state["seed"])
 	_t = float(state["age"])
+	# **The day it was kept at** (docs/design/daylight.md §6), and where it stood
+	# at age 0 from that, so the day goes on from the age as everything else does.
+	# A file from before the light has none, and opens at the end of dawn,
+	# whatever its age.
+	var day := float(state.get("day", Drop.DAY_BEGINS))
+	if not is_finite(day):
+		day = Drop.DAY_BEGINS
+	_day_origin = fposmod(day - _t, _sky.period())
 	_frame = int(state["frame"])
 	_next_id = int(state["next_id"])
 	var clocks: PackedFloat64Array = state["clocks"]
@@ -7938,12 +8072,24 @@ func _step_one(i: int, b: Body, tick: int) -> void:
 ## **A tank that cannot move is not stepped**: taking in at least its upkeep
 ## and having done nothing, its hunger cannot change until it eats -- which is
 ## most drifters, most of the time -- so skipping it changes no number (§4.4).
+## **Judged in the dark** (docs/design/daylight.md §2.3): what it takes in at the
+## least light there is, so a body that needs the light to hold its tank is
+## stepped. With the light off that is today's test, `upkeep <= sun + absorbs`.
+##
+## **What it takes in is `absorbs + sun × the light`** where it is, averaged
+## exactly over the [param dt] it is paid for ([method light_over]): a far body
+## stepped on its tick and a near one stepped every frame are paid one light. Only
+## a body with a `sun` asks. With the light off it is the literal 1.0, and the sum
+## today's to the bit.
 func _tank(i: int, b: Body, dt: float) -> bool:
 	if skip_still and b.effort == 0.0 and b.starve == 0.0 and b.hunger < 1.0 \
-			and b.upkeep <= b.income:
+			and b.upkeep <= b.absorbs + b.sun * _least_light():
 		return false
+	var income := b.absorbs
+	if b.sun > 0.0:
+		income += b.sun * light_over(b.pos, _t - dt, _t)
 	b.hunger = clampf(b.hunger
-		+ dt * Metabolism.rest_rate(b.upkeep, b.income, b.reserve) / Metabolism.HUNGER_SECONDS
+		+ dt * Metabolism.rest_rate(b.upkeep, income, b.reserve) / Metabolism.HUNGER_SECONDS
 		+ Metabolism.effort_cost(b.effort, b.burn, b.reserve), 0.0, 1.0)
 	b.effort = 0.0
 	if b.hunger < 1.0:
@@ -8069,8 +8215,9 @@ func _refresh_body(b: Body) -> void:
 	b.reserve = Stats.of(g, &"store")
 	b.sun = Stats.of(g, &"sun")
 	# **A body with no mouth absorbs** (§5.3, row 11): an income like light, keyed
-	# on the organ and not on what made the body.
-	b.income = b.sun + (absorb if Catalogue.worn_provider(g, &"gape") == &"" else 0.0)
+	# on the organ and not on what made the body. The light's share is added where
+	# the tank is paid, at the light of the moment (daylight.md §2.3).
+	b.absorbs = absorb if Catalogue.worn_provider(g, &"gape") == &"" else 0.0
 	b.burn = Stats.of(g, &"burn")
 	b.armour = b.stat_armor
 	b.cruise = CellBody.swim_speed_of(g)
@@ -10397,6 +10544,19 @@ func rarity_line() -> String:
 		made, 100.0 * float(_n(&"gene_floor")) / float(maxi(made, 1)), ", ".join(drifters),
 		_n(&"gene_floor_peer"), peers_made,
 		100.0 * float(_n(&"gene_floor_peer")) / float(maxi(peers_made, 1)), ", ".join(peers)]
+
+
+## **The light, for the dev app's readout** (docs/design/daylight.md §3.6): `[how
+## far into the day the drop is, as a share of the day, the light where the cell
+## is]` -- the share -1 where there is no day of this field's own to say (a
+## friend's drop seen from inside it, the light off), and nothing at all in today's
+## water. So the owner can say what time it was when something felt wrong. Asking
+## moves nothing.
+func daylight_counts() -> Array:
+	if _cell == null or (_drop == null and not _mirror):
+		return []
+	var day := day_time()
+	return [day / day_length() if day >= 0.0 else -1.0, light_at(_cell.position)]
 
 
 ## **The water's families, for the dev app's readout** (lineage.md §4, §6.4):
