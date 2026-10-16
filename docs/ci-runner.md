@@ -129,6 +129,14 @@ hostname, and no token (CLAUDE.md, "Nothing personal in the repo").
 
 ## 4. What a runner of our own changes
 
+- **/tmp may be memory.** Debian 13 mounts a tmpfs on `/tmp`, and the first run on
+  a 1 GB container was killed there: `ci/install_godot.sh` downloads Godot's 1 GB
+  export templates into a `mktemp -d` and unpacks them beside the download. So
+  every workflow that installs Godot first points `TMPDIR` at the runner's own
+  temp folder, which is on disk and emptied after each job. `findmnt /tmp` says
+  which the container has; `systemctl mask tmp.mount` and a restart put it back on
+  disk for everything else.
+
 - **The disk persists between jobs**, which GitHub's machines never do:
   - the workspace is cleaned by `actions/checkout`, so `.godot/` and every build
     starts fresh;

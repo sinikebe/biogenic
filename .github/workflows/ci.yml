@@ -38,6 +38,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Keep temporary files on disk
+        # **The runner's own temp folder, not /tmp** (docs/ci-runner.md §4). A
+        # self-hosted container's /tmp may be memory: Debian 13 mounts a tmpfs
+        # there. Godot's export templates, a 1 GB download unpacked beside itself
+        # by ci/install_godot.sh's mktemp, filled a 1 GB container that way and
+        # the unpacking was killed. RUNNER_TEMP is on the runner's disk and
+        # emptied after every job; on GitHub's machines this changes nothing.
+        run: echo "TMPDIR=${RUNNER_TEMP}" >> "$GITHUB_ENV"
+
       - name: Start from no saved data
         # A self-hosted runner keeps its disk between jobs (docs/ci-runner.md), so
         # one run's worlds, cells, library and settings would still be in user://
