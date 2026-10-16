@@ -93,7 +93,7 @@ Variables):
 
 ```
 apt-get update
-apt-get install -y git curl ca-certificates zip unzip python3 jq shellcheck sudo
+apt-get install -y git curl ca-certificates zip unzip python3 jq shellcheck sudo iproute2
 # The GitHub CLI, which the release scripts publish with (`gh release ...`):
 curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
   -o /usr/share/keyrings/githubcli-archive-keyring.gpg
@@ -101,6 +101,10 @@ echo "deb [arch=amd64 signed-by=/usr/share/keyrings/githubcli-archive-keyring.gp
   > /etc/apt/sources.list.d/github-cli.list
 apt-get update && apt-get install -y gh
 
+# git: without it actions/checkout downloads a bare archive, and every step that
+# reads the history fails (`check_binary_skew.py`, the patch notes). iproute2 is
+# `ip`, which the network steps call inside `sudo unshare --net`.
+#
 # The runner's own user, with passwordless sudo inside the container: the
 # workflows call `sudo` for `unshare --net` and `apt-get`, as on GitHub's machines.
 adduser --disabled-password --gecos "" runner
@@ -109,8 +113,9 @@ echo "runner ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/runner
 
 **Then register it**, as that user: go to this repository's Settings → Actions →
 Runners → New self-hosted runner → Linux, x64. GitHub shows the download and a
-one-time registration token. When `config.sh` asks for labels, add `biogenic` (or
-any label, which `CI_RUNNER` must then match). Install it as a service, so it
+one-time registration token. dev's jobs ask for the `self-hosted` label every
+runner has (§1). When `config.sh` asks for labels, add one of your own too, such as
+`biogenic`: it is what `CI_RUNNER` names when `main`'s releases move to the runner. Install it as a service, so it
 survives a restart:
 
 ```
