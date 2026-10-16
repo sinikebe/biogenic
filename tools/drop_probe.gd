@@ -9572,8 +9572,8 @@ func _readout() -> void:
 ## into a list of their own -- two behaviours, half unchanged. **And its light**
 ## (docs/design/daylight.md §3.6): two rows more under those, set apart -- how far
 ## into its day the drop is, as a share, and the light where the cell is; over a
-## friend's drop, a dash for the day and the full light a guest is in until the pond
-## carries the host's sky.
+## friend's drop, a dash for the day -- the host's day is the host's -- and the full
+## light a mirror is in before its host's rim and first snapshot.
 func _readout_families() -> void:
 	var holder := Node.new()
 	add_child(holder)
