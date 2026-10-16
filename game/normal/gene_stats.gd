@@ -167,11 +167,16 @@ static func odds_text(copies: int) -> String:
 ## tank holds, and how long that lasts drifting -- the one number every cost
 ## adds up to. [param upkeep] is genome.gd's `upkeep()` for [param body]; the
 ## tail beats on its own schedule whether or not anyone steers, so it is in.
-static func cell_items(radius: float, body: Dictionary, upkeep: float) -> Array:
+## **Drifting where the body is** (docs/design/daylight.md §3.5): its `sun` is
+## made at [param light], the light there now, 0 to 1 -- full light where nobody
+## says, as outside a drop -- so the time is true where you are.
+static func cell_items(radius: float, body: Dictionary, upkeep: float,
+		light := 1.0) -> Array:
 	var ctx := context(body)
 	var gap := (Stats.of(body, &"impulse_gap_min") + Stats.of(body, &"impulse_gap_max")) * 0.5
 	var tail := _beat(Stats.of(body, &"impulse_speed"), float(ctx["burn"])) / gap
-	var drifting := _tank(ctx) / maxf(maxf(upkeep - float(ctx["sun"]), 0.0) + tail, 0.05)
+	var drifting := _tank(ctx) / maxf(maxf(upkeep - float(ctx["sun"]) * light, 0.0) + tail,
+		0.05)
 	# TRANSLATORS: Two items added to the pause screen's caption when the numbers
 	# switch is on: the cell's width, and its food tank in seconds, then how long
 	# the food lasts while the cell just drifts ("a full tank: 36 s, 12 s

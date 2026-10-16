@@ -520,7 +520,9 @@ var library_at := Library.PATH
 @onready var _gauges_row: Container = $Hud/Gauges
 ## **The senses' tiles** (docs/design/sense-tiles.md), channel to tile: one for every
 ## channel a gene with a `readout` drives, made once in the catalogue's order and
-## shown only while the lineage carries a gene on it.
+## shown only while the lineage carries a gene on it. **And one for every stat a
+## `readout` organ that drives no channel provides** (docs/design/daylight.md §3.3),
+## keyed by the stat: the plastid's `sun`, lit by the light where the cell is.
 var _sense_tiles := {}
 ## **How lit the ping's organ is** (ping-as-outline.md §14): lit by the last echo
 ## to land, by its strength, and falling over [constant ECHO_GLOW_FALL].
@@ -1109,6 +1111,8 @@ func _ready() -> void:
 	_energy_gauge.low_from = 1.0 - MetabolismNode.HUNGRY_FROM
 	# **One tile a sense, after the gauge**, in the catalogue's order, each hidden
 	# until a gene on its channel is carried: the beam has none (gene.gd's `readout`).
+	# A tile keyed by a stat comes first, beside the gauge whose rate it explains
+	# (docs/design/daylight.md §3.3).
 	for channel: StringName in _readout_channels():
 		var tile: SenseTile = Scope.new() if _scoped(channel) else SenseTile.new()
 		tile.name = "Sense_" + String(channel)
@@ -1616,7 +1620,14 @@ func _process(delta: float) -> void:
 	# (`vacuole`'s and `plastid`'s). Both land on the beat, which is where every
 	# cost in this game lands.
 	_metabolism.reserve = _cell.stat(&"store")
-	_metabolism.photosynthesis = _cell.stat(&"sun")
+	# **The sun is made in the light where the cell is** (docs/design/daylight.md
+	# §2.3), averaged exactly over this frame: this node processes before its
+	# field, so the field's clock is at the frame's start, and the frame runs to
+	# `delta` past it -- the light a water body is paid for the same stretch. The
+	# literal 1.0 outside a drop, with the light off and, for now, as a guest.
+	var age := _food.drop_age()
+	_metabolism.photosynthesis = _cell.stat(&"sun") \
+		* _food.light_over(_cell.position, age, age + delta)
 	# **In the drop a cell with no mouth absorbs its food from the water**, as
 	# every body there does (ocean.md §5.3, row 11): an income beside the light,
 	# so a player who put a gene over its own mouth lives on as a slow, cheap
@@ -3441,15 +3452,31 @@ func _update_gauges() -> void:
 
 
 ## **The channels whose genes have a tile** (gene.gd's `readout`), once each, in the
-## catalogue's order: smell, the eyespot's light, the ping, touch -- today.
+## catalogue's order: smell, the eyespot's light, the ping, touch -- today. **And,
+## ahead of them, the stats of `readout` organs that drive no channel**, each keyed by
+## the first stat it provides (docs/design/daylight.md §3.3): the plastid's `sun`.
 func _readout_channels() -> Array[StringName]:
+	var stats: Array[StringName] = []
 	var out: Array[StringName] = []
 	for key: StringName in Catalogue.keys():
 		var organ := Catalogue.gene(key)
-		if organ != null and organ.readout and organ.channel != &"" \
-				and not out.has(organ.channel) and not organ.tags.has(Catalogue.RETIRED):
-			out.append(organ.channel)
-	return out
+		if organ == null or not organ.readout or organ.tags.has(Catalogue.RETIRED):
+			continue
+		if organ.channel != &"":
+			if not out.has(organ.channel):
+				out.append(organ.channel)
+		elif not organ.provides.is_empty():
+			var stat: StringName = organ.provides.keys()[0]
+			if not stats.has(stat):
+				stats.append(stat)
+	stats.append_array(out)
+	return stats
+
+
+## **Whether a tile is keyed by a stat** rather than a membrane channel
+## ([method _readout_channels]).
+static func _tile_by_stat(key: StringName) -> bool:
+	return not Catalogue.Gene.CHANNELS.has(key)
 
 
 ## **Whether a channel's tile is a scope** (gene.gd's `scope`): any gene on it says
@@ -3484,8 +3511,12 @@ func _update_sense_tiles(shown: bool) -> void:
 		or _entering_held)
 	for channel: StringName in _sense_tiles:
 		var tile: SenseTile = _sense_tiles[channel]
-		var worn := _cell.on_channel(channel)
-		var key := worn if worn != &"" else Catalogue.worn_on(_genome.dna(), channel)
+		# Worn is the body's organ on that channel -- or, for a tile keyed by a stat,
+		# its provider of the stat -- and carried the DNA's.
+		var by_stat := _tile_by_stat(channel)
+		var worn := _cell.provider(channel) if by_stat else _cell.on_channel(channel)
+		var key := worn if worn != &"" else (Catalogue.worn_provider(_genome.dna(), channel)
+			if by_stat else Catalogue.worn_on(_genome.dna(), channel))
 		if not shown or key == &"":
 			tile.visible = false
 			continue
@@ -3510,9 +3541,15 @@ func _update_sense_tiles(shown: bool) -> void:
 ## - light: the eyespot's glow, facing the shadow, and the shadow's strength;
 ## - ping: no glow of its own -- its echoes flash it ([method _post_pings]) -- and how
 ##   much of the call's round trip it is still listening for;
-## - touch: what the palps feel, both.
+## - touch: what the palps feel, both;
+## - sun, a stat's tile: the light where the cell is, both (docs/design/daylight.md
+##   §3.3) -- the same for one copy or three: the tile says the light, and the
+##   gauge says what it earns.
 func _sense_reading(channel: StringName, organ: StringName) -> Array:
 	match channel:
+		&"sun":
+			var light := _food.light_at(_cell.position)
+			return [light, light]
 		Catalogue.SMELL:
 			return [_bus.smell_glow(), _food.taste_level]
 		Catalogue.LIGHT:
@@ -6230,10 +6267,11 @@ func _update_numbers() -> void:
 
 ## **The caption, whole** ([method Figure.caption], §5.4): the generation, and
 ## with the numbers on, this body's size, what its full tank holds and how long
-## that lasts drifting.
+## that lasts drifting -- **in the light where the cell is** (docs/design/
+## daylight.md §3.5), so a plastid's drifting time is true where you are.
 func _update_caption() -> void:
 	_genome_caption.text = Figure.caption(_generation, _show_numbers, _cell.radius,
-		_genome.tiers(), _genome.upkeep())
+		_genome.tiers(), _genome.upkeep(), _food.light_at(_cell.position))
 
 
 ## **What the three lines under the figure are about**, resolved once.

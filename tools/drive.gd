@@ -669,7 +669,11 @@ extends Node
 ## division. **And pack 4's** (docs/design/automation.md §5.4):
 ## --water-tail=pack3|row37, `pack3` being pack 3's water, where a body swims
 ## only while a swim rule fires, and `row37` the game's, where every tail that
-## swims beats unless it is held.
+## swims beats unless it is held. **And the light's** (docs/design/daylight.md
+## §10.1): --daylight=0|1, 0 being full light everywhere at every hour -- the build
+## before the day, to the byte -- and --day-at=<seconds into the day>, where a drop
+## being made starts its day, for the renders: 0 is dawn, 60 the game's start at
+## the end of it, 390 dusk and 480 night.
 ##
 ## **Your programs and the autopilot** (docs/design/automation.md §18.1, phase
 ## 4-2). **A run of this harness keeps no library** unless told where, as it
@@ -3517,7 +3521,8 @@ func _drop_switch(text: String) -> bool:
 	const FLOATS := {"--edge-gap=": &"edge_gap", "--desert=": &"desert",
 		"--age=": &"age_first", "--absorb=": &"absorb",
 		"--first-delay=": &"grace", "--mutate=": &"mutate", "--floor=": &"floor_share",
-		"--floor-tau=": &"floor_tau", "--newborn-grace=": &"newborn_grace"}
+		"--floor-tau=": &"floor_tau", "--newborn-grace=": &"newborn_grace",
+		"--day-at=": &"day_at"}
 	# `--drifter-venom=` is read as `--drifter-toxin=` as well: the switch kept its
 	# meaning -- the drifters' share of the toxin -- when the toxin took forms.
 	const SWITCHES := {"--drifter-toxin=": &"drifter_toxin",
@@ -3525,7 +3530,7 @@ func _drop_switch(text: String) -> bool:
 		"--contact-swallow=": &"contact_swallow", "--armour-swallow=": &"armour_swallow",
 		"--lod=": &"lod", "--half-rate=": &"half_rate", "--near-first=": &"near_first",
 		"--skip-still=": &"skip_still", "--births=": &"births", "--rules=": &"rules",
-		"--rule-change=": &"rule_change"}
+		"--rule-change=": &"rule_change", "--daylight=": &"daylight"}
 	if text.begins_with("--flocs-near="):
 		_field_sets[&"flocs_near"] = int(text.trim_prefix("--flocs-near="))
 		return true

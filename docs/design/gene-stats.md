@@ -345,7 +345,7 @@ Each row gives the value at 1, 2 and 3 worn copies, for a newborn with no
 | `veneneux` *venom* | 1 | `a biter takes back {} of its bite` | 35% | 55% | 80% | `VENOM_BITE_BACK_BY_TIER` |
 | | 1 | `a swallower dies, and you are spat out` | | | | words only |
 | | 2 | `being spat out burns {} s` | 17 | 12 | 7.9 | `VENOM_COST_BY_TIER × HUNGER_SECONDS × reserve` (× burn instead, if call 2 is yes) |
-| `plastid` *sun* | 1 | `makes {} s of food every second` | 0.12 | 0.22 | 0.34 | `SUN_BY_TIER` (not scaled by burn, as metabolism.gd pays it) |
+| `plastid` *sun* | 1 | `makes {} s of food a second in full sun` (2026-10-16, daylight.md §3.5: was `makes {} s of food every second`, which said more than is true at night) | 0.12 | 0.22 | 0.34 | `SUN_BY_TIER` (not scaled by burn, as metabolism.gd pays it); in full light -- a body is paid it times the light where it is |
 | `vacuole` *store* | 1 | `a full tank holds {} s, not {}` | 46 | 58 | 72 | `HUNGER_SECONDS × STORE_BY_TIER`; `HUNGER_SECONDS` |
 | `crista` *burn* | 1 | `living, swimming, turning and pushing burn {} less` (becomes `everything burns {} less` if call 2 is yes) | 12% | 23% | 34% | `1 − BURN_BY_TIER` |
 | **every gene** | 2, last | `free to wear` or `wearing it burns {} s a second` | free | 0.18 | 0.36 | `UPKEEP_PER_TIER × (copies − 1) × burn` (genome.gd): its own price |

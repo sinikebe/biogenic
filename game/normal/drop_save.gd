@@ -204,7 +204,11 @@ const CELLS := "cells"
 ## peer-borne one the one-a-count rule holds back is in `gene_queue` alone -- and
 ## `gene_since`, the drifters made since the floor's last. A file without them
 ## loads with its short genes queued in the order kept and the budget full; a build
-## before them reads `gene_short` alone, as it always has.
+## before them reads `gene_short` alone, as it always has. **And, since the drop has
+## a day** (docs/design/daylight.md §6), `day`: the seconds into the day's cycle when
+## it was kept, from which a load works out where the day stood at age 0. A file
+## without it opens at the end of dawn (drop.gd's DAY_BEGINS), whatever its age; a
+## build before it reads the rest.
 const RUNS := {
 	"state": TYPE_PACKED_BYTE_ARRAY,
 	"target": TYPE_PACKED_INT64_ARRAY,
@@ -219,6 +223,7 @@ const EXTRA := {
 	"grid": TYPE_ARRAY,
 	"stats": TYPE_DICTIONARY,
 	"turn": TYPE_INT,
+	"day": TYPE_FLOAT,
 }
 ## A run's clocks, a body's worth: food.gd's RUN_CLOCKS.
 const RUN_CLOCKS := 10
@@ -364,7 +369,7 @@ static func rules() -> String:
 ## gene list and the tiers, **every table any gene provides** -- found by stat,
 ## so a table added later is in it without anyone remembering, each under the
 ## name it had when it was `cell.gd`'s (stats.gd's `label`) -- the slot ladder,
-## growth and division, the metabolism every body runs, and the rim.
+## growth and division, the metabolism every body runs, the rim, and the light.
 static func rules_text() -> String:
 	var lines := PackedStringArray()
 	var put := func(name: String, value: Variant) -> void:
@@ -422,6 +427,15 @@ static func rules_text() -> String:
 	put.call("metabolism.MEAL", Metabolism.MEAL)
 	put.call("metabolism.ABSORB", Metabolism.ABSORB)
 	put.call("drop.RADIUS", Drop.RADIUS)
+	# **The light** (docs/design/daylight.md §6): its day and how deep it reaches are
+	# the metabolism every body with a `sun` runs, beside HUNGER_SECONDS and ABSORB.
+	# A drop kept before them reads as converted, once, and says so in the log.
+	put.call("drop.DAY_DAWN", Drop.DAY_DAWN)
+	put.call("drop.DAY_LIGHT", Drop.DAY_LIGHT)
+	put.call("drop.DAY_DUSK", Drop.DAY_DUSK)
+	put.call("drop.DAY_NIGHT", Drop.DAY_NIGHT)
+	put.call("drop.NIGHT_LIGHT", Drop.NIGHT_LIGHT)
+	put.call("drop.LIGHT_AT_MIDDLE", Drop.LIGHT_AT_MIDDLE)
 	return "\n".join(lines)
 
 

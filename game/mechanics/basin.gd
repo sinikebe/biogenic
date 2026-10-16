@@ -6,9 +6,9 @@ extends RefCounted
 ##
 ## **Nothing here knows about water, glass or cells.** It knows a centre, a
 ## radius and points. This file is a disc; another shape is another script
-## with the same five calls -- [method contain], [method depth],
-## [method exit_along], [method nearest_rim] and [method inside] -- and nothing
-## that asks them has to change.
+## with the same six calls -- [method contain], [method depth],
+## [method exit_along], [method nearest_rim], [method inside] and
+## [method column] -- and nothing that asks them has to change.
 ##
 ## **Worked in doubles.** A Vector2 holds 32-bit floats, which at a drop's
 ## size are a thousandth of a unit apart; every distance here is taken from
@@ -97,6 +97,19 @@ func nearest_rim(p: Vector2) -> Vector2:
 	if d <= 0.0:
 		return Vector2(center.x, center.y - radius)
 	return Vector2(center.x + dx * radius / d, center.y + dy * radius / d)
+
+
+## **How much of the region's depth lies over [param p]**, for a dome over it --
+## a cap thin at its rim and thickest at its centre, as a drop on a slide is
+## (docs/design/daylight.md §2.2): `s (2 - s)`, where `s` is how far in from the
+## rim [param p] is as a share of the radius. 0 on the rim and past it, 1 at the
+## centre, rising inward: steepest at the rim and flat over the middle, as a
+## shallow cap is.
+func column(p: Vector2) -> float:
+	if radius <= 0.0:
+		return 0.0
+	var s := clampf(depth(p) / radius, 0.0, 1.0)
+	return s * (2.0 - s)
 
 
 ## **Whether a body of radius [param r] centred at [param p] lies wholly

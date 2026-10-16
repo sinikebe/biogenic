@@ -1102,6 +1102,11 @@ func _push_shader() -> void:
 		_shader.set_shader_parameter("drop_center", rim.get(&"center"))
 		_shader.set_shader_parameter("drop_radius", float(rim.get(&"radius")))
 		_shader.set_shader_parameter("drop_band", FoodField.Drop.SHALLOWS)
+		# **The light** (docs/design/daylight.md §3.1): the surface light now and
+		# what reaches the drop's middle, the field's -- so the water dims and cools
+		# with the same two numbers the plastid is paid by. Both 1 with no day.
+		_shader.set_shader_parameter("day_light", _food_node.daylight_now())
+		_shader.set_shader_parameter("light_at_middle", _food_node.light_at_deepest())
 
 
 func _apply_visibility() -> void:

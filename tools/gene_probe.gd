@@ -347,6 +347,7 @@ func _ready() -> void:
 	_synthetic_plan()
 	_synthetic_gene()
 	_untranslated()
+	_light_tile()
 	_names_left()
 	print("[gene-probe] ALL PASS" if _failed == 0 else "[gene-probe] FAILED %d" % _failed)
 	get_tree().quit(0 if _failed == 0 else 1)
@@ -2751,6 +2752,41 @@ func _untranslated() -> void:
 			missing.append("%s: %s" % [key, ", ".join(lacking)])
 	print("[gene-probe] NOTE gene words with no French, of %d: %s" % [said,
 		"none" if missing.is_empty() else "; ".join(missing)])
+
+
+# --- The light (docs/design/daylight.md §10.3) -------------------------------------------------
+
+## **The plastid's tile and its two lines** (docs/design/daylight.md §3.3, §3.5): the
+## organ that provides `sun` is a `readout` organ that drives no channel -- its tile in
+## the HUD's row is keyed by the stat -- and the two lines that say what it does now
+## that it follows the light are translated into French, the two they replaced gone
+## from the catalog.
+const LIGHT_LINES: Array[String] = ["makes {} s of food a second in full sun",
+	"feeds a little on light, so you starve slower"]
+const DARK_LINES: Array[String] = ["makes {} s of food every second",
+	"makes a little of its own food, so you starve slower"]
+
+
+func _light_tile() -> void:
+	var key := Catalogue.first_provider(&"sun")
+	var organ := Catalogue.gene(key)
+	var tiled: bool = organ != null and organ.readout and organ.channel == &"" \
+		and organ.provides.keys().size() > 0 and organ.provides.keys()[0] == &"sun"
+	var fr := load(FRENCH) as Translation
+	var french := PackedStringArray()
+	var stale := 0
+	for line: String in LIGHT_LINES:
+		var said := String(fr.get_message(StringName(line))) if fr != null else ""
+		if not said.is_empty():
+			french.append("\"%s\"" % said)
+	for line: String in DARK_LINES:
+		if fr != null and not String(fr.get_message(StringName(line))).is_empty():
+			stale += 1
+	_check(("the light's tile and lines: `%s` provides sun, %s a readout organ, on channel"
+		+ " \"%s\"; its two lines in French -- %s -- and %d of the two they replaced still"
+		+ " in the catalog") % [key, "is" if organ != null and organ.readout else "is NOT",
+		organ.channel if organ != null else "?", "; ".join(french), stale],
+		tiled and french.size() == LIGHT_LINES.size() and stale == 0)
 
 
 # --- The body plan (§10, §12.1, §12.3) ------------------------------------------------------

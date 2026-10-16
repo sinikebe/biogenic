@@ -54,6 +54,21 @@ uniform float glass_grid = 0.45;
 uniform float line_px = 2.2;
 uniform vec3 line_tint = vec3(0.62, 0.95, 0.88);
 
+// The light (docs/design/daylight.md §3.1), in the drop only. `day_light` is the
+// light at the surface now, 0 at night and 1 by day; `light_at_middle` what of it
+// reaches the drop's deepest point, its middle -- the same two numbers the
+// plastid is paid by (food.gd's `light_at`). Both 1 is today's picture, which is
+// what the light off and today's water send.
+uniform float day_light = 1.0;
+uniform float light_at_middle = 1.0;
+// Where the light is low the water's own glow -- grain, cloud, grid and the rim's
+// film -- falls toward `night_glow` of itself, never below, so the water still
+// reads as water at night. At night its tint turns toward `night_tint`, by the
+// surface light alone: depth only dims, night dims and cools. The UX/UI designer's
+// levers (§11).
+uniform float night_glow = 0.5;
+uniform vec3 night_tint = vec3(0.10, 0.40, 0.66);
+
 float hash21(vec2 p) {
 	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
 }
@@ -110,10 +125,12 @@ void fragment() {
 	float aperture = 1.0 - smoothstep(-aperture_fade_px, 0.0, sdf);
 
 	float lit = aperture * amount;
-	vec3 col = water_tint * (
+	// The water's own glow, before its tint: what the light dims in the drop.
+	float glow = (
 		  grid * grid_level
 		+ grain * grain_level
 		+ (cloud - 0.35) * cloud_level) * lit;
+	vec3 col = water_tint * glow;
 
 	// --- the drop's edge -------------------------------------------------
 	if (drop_on > 0.5) {
@@ -123,8 +140,21 @@ void fragment() {
 		float dry = smoothstep(drop_radius - 1.5 * px_w, drop_radius + 1.5 * px_w, dist);
 		// The thinning film: brighter toward the rim, and only inside it.
 		float film = smoothstep(drop_radius - drop_band, drop_radius, dist) * (1.0 - dry);
-		vec3 wet = col + water_tint * film * film * rim_level * lit;
-		vec3 glass = water_tint * grid * grid_level * glass_grid * lit;
+		// --- the light (docs/design/daylight.md §3.1) ----------------------
+		// The water over this point as a share of the deepest, a shallow cap's
+		// `s (2 - s)` (basin.gd's `column`), and what of the light gets through
+		// it (daylight.gd's `through`): all of it on the rim, `light_at_middle`
+		// at the middle. One exp2 a fragment.
+		float s = clamp(1.0 - dist / max(drop_radius, 1.0), 0.0, 1.0);
+		float through = exp2(s * (2.0 - s) * log2(max(light_at_middle, 0.0001)));
+		float here = day_light * through;
+		vec3 tint = mix(night_tint, water_tint, day_light);
+		// The water's own glow and the rim's film, dimmed where the light is low
+		// and retinted by the hour; dry glass dims with the surface light alone.
+		// The meniscus line below is neither: nothing that says where something
+		// is gets dimmer.
+		vec3 wet = tint * mix(night_glow, 1.0, here) * (glow + film * film * rim_level * lit);
+		vec3 glass = tint * mix(night_glow, 1.0, day_light) * grid * grid_level * glass_grid * lit;
 		// The meniscus line. **The square is k * k, never pow(k, 2.0)**: k is
 		// negative inside the rim, and pow of a negative base is undefined in
 		// GLSL ES 3.00 -- one driver draws it, another need not (§3.3).

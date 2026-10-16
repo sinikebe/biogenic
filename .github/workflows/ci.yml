@@ -384,11 +384,20 @@ jobs:
         # the venom on its body, and part there, where it swims a hair otherwise.
         # 68,421 lines, from 68,435.
         #
+        # **Re-pinned when the drop got a day** (docs/design/daylight.md §10.4,
+        # 2026-10-16), from 0540ccd6...: the water changed on purpose. A water body
+        # with a `plastid` is paid its sun at the light where it is, which falls at
+        # night and toward the drop's deep middle, so a hunter carrying one runs
+        # hungrier there. With `--daylight=0` -- full light everywhere, the build
+        # before the day -- this branch printed 0540ccd6... to the byte. With the
+        # light on the two traces agree to 47.02 s, where a body far off in the
+        # water first stands elsewhere. 68,421 lines, as before.
+        #
         # The run prints about ten megabytes, so it goes to a file rather than a
         # variable. About twenty seconds.
         run: |
           set -uo pipefail
-          pinned="0540ccd6a8df393c37dba0b58bcc9cca8bbed705520da8efce79402281f0cd44"
+          pinned="69009c17fb51b603301563f65e530652c4ace6001c181fc7f47503e9d2ede481"
           log=$(mktemp)
           fail=0
           echo "--- seed 1, sixty seconds, R pressed at 20 s"
