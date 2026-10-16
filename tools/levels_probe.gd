@@ -755,22 +755,17 @@ func _gene_stats() -> void:
 
 
 ## **The toxin's rows** (docs/design/dna-slots.md §3.3), read off §15's
-## constants: venom by where it works -- the front, a side, the stern -- and
-## poison, each with what one stack does, diluted by the reader's own size.
+## constants: poison, with what one stack does, diluted by the reader's own size.
+## Venom draws no numbers of its own: it only rides, and its gene's slot says what
+## it gives there (the owner, 2026-10-16).
 func _toxin_rows() -> void:
 	var born := GeneStats.context({})
-	var front := Readout.plain(GeneStats.lines(&"toxicyst", 2, 0, &"", born, 3)[0])
-	var side := Readout.plain(GeneStats.lines(&"toxicyst", 2, 0, &"", born, 5)[0])
-	var stern := Readout.plain(GeneStats.lines(&"toxicyst", 1, 0, &"", born, 2)[0])
+	var venom: Array = GeneStats.lines(&"toxicyst", 2, 0, &"", born, 3)
 	var poison: Array = GeneStats.lines(&"veneneux", 3, 0, &"", born, GenomeNode.INSIDE)
-	var big := Readout.plain(GeneStats.lines(&"toxicyst", 3, 0, &"",
-		GeneStats.context({}, 40.0), 0)[0])
-	_check("front venom reads `%s`" % front, front == "each bite leaves 2 stacks of venom"
-		+ " · a stack takes 5% of a body your size over 9.66 s")
-	_check("side venom reads `%s`" % side, side.begins_with(
-		"whatever bites you on that side takes 2 stacks · a stack takes 5%"))
-	_check("stern venom reads `%s`, one stack singular" % stern, stern.begins_with(
-		"whatever bites you from behind takes 1 stack · a stack takes 5%"))
+	var big := Readout.plain(GeneStats.lines(&"veneneux", 3, 0, &"",
+		GeneStats.context({}, 40.0), GenomeNode.INSIDE)[1])
+	_check("venom draws no numbers of its own: %s" % str(venom[0]),
+		(venom[0] as Array).is_empty())
 	_check("poison reads `%s / %s`" % [Readout.plain(poison[0]), Readout.plain(poison[1])],
 		Readout.plain(poison[0]) == "whatever bites you takes 3 stacks a bite"
 			+ " · a swallower takes 48 stacks"

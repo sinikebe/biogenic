@@ -376,11 +376,19 @@ jobs:
         # the half circle put back, this branch printed f7e09406... to the byte, so
         # taking the waves out moved nothing. 68,435 lines, from 68,616.
         #
+        # **Re-pinned when venom came to ride** (docs/design/venom-rides.md), from
+        # 0c666c11...: the water changed on purpose. A toxin goes inside or into a
+        # gene's slot, never round the body, so the founder armed with venom
+        # carries it in its mouth's slot. Diffed against dev at 838c997, the traces
+        # agree to 25.8 s but for that founder's gene list, which no longer shows
+        # the venom on its body, and part there, where it swims a hair otherwise.
+        # 68,421 lines, from 68,435.
+        #
         # The run prints about ten megabytes, so it goes to a file rather than a
         # variable. About twenty seconds.
         run: |
           set -uo pipefail
-          pinned="0c666c1109ed869288514b8a5f6f43e043c1164805098e2d5d863822a4af9aad"
+          pinned="0540ccd6a8df393c37dba0b58bcc9cca8bbed705520da8efce79402281f0cd44"
           log=$(mktemp)
           fail=0
           echo "--- seed 1, sixty seconds, R pressed at 20 s"

@@ -605,8 +605,12 @@ func judge_person(now: float, new_body: bool, tiers: Dictionary, order: Array,
 			+ " has", now)
 		fouled = true
 	# **Its riders are fixed for a life**, as what it wears is: only a new body
-	# changes them, and no gift is one.
+	# changes them, and no gift is one. **But not the dead body's**: after a death
+	# its riders are the dead body's too, which is a stale body (STALE_FOR), ignored
+	# and never fouled, as its tiers are below.
 	if not Riders.same(riders, worn_riders):
+		if _stale(now):
+			return []
 		if not fouled:
 			_foul(BODY, WEIGHT_BODY, "body: its genes' own slots changed -- kept the old"
 				+ " ones", now)

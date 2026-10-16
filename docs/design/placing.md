@@ -22,7 +22,7 @@ The older specs keep their reasoning, which is still how the screen got here.
 1. **A tap on a slot only chooses it.** The choice can be undone at no cost: tap
    another slot, the tray, or the same slot again, and nothing is written.
 2. **A button under the figure does the writing, and it says what it writes**:
-   `place swim here`, `write venom over eat`, `add a copy to venom`,
+   `place swim here`, `write swim over eat`, `add a copy to venom`,
    `put venom in sting's slot`. It stands where the verb line was, only while the
    chosen slot has something to do, and goes as soon as it has done it.
 3. **A gene's own slots are on the figure**: a small chip each, off the right end of
@@ -49,7 +49,7 @@ but it cannot confirm writing over a gene: the drop is the only moment there is,
 it lands under the finger, wherever that is. A button:
 - **is somewhere else.** It sits under the lines, at least 76 px below the lowest chip
   at 1280x720, so no second landing of the same thumb reaches it;
-- **says what it does.** A confirm that names both genes (`write venom over eat`) is
+- **says what it does.** A confirm that names both genes (`write swim over eat`) is
   read at the one moment it matters, where a second tap said nothing;
 - **leaves after one press.** Placing spends the gene in hand, so the button goes
   with it, and a second press lands on the verb line, which does nothing.
@@ -68,7 +68,8 @@ it lands under the finger, wherever that is. A button:
 
   Otherwise the row is the verb line it always was: `tap a slot · your daughters may
   wear it`, `swim works only outside`, `venom has three copies already`,
-  `this slot takes burn`, `drag it to another slot`.
+  `this slot takes burn`, `drag it to another slot`. Since venom-rides.md a toxin
+  over a ring slot says `toxin goes inside, or in a lit gene's slot`.
 - **It asks the genome again when pressed** ([method _on_place_pressed]): a button
   that said one thing and did another would be the worst control on the screen. In
   a pond the queue can change under the open menu, and then it writes nothing and
@@ -218,6 +219,10 @@ the 560 the column gives it.
 ---
 
 ## 6. Checks
+
+The renders below were judged when this was built. Since venom-rides.md
+(2026-10-16) a toxin no longer goes on the ring, so the ones that write venom over
+a ring gene are of a screen that has since changed.
 
 **The gene probe**: room on the pause figure, which now covers a gene's own slots.
 - the figure makes room for the widest gene's slots;

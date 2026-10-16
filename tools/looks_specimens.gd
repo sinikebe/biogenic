@@ -39,13 +39,13 @@ const VARIANTS: Array = [
 	[&"impulse_speed", [
 		{"variant": &"rooted", "key": &"flagellumb", "order": 953, "born": 0,
 			"look": {"accent": Kinds.MARK_DISC}}]],
-	[&"venom_stacks", [
+	[&"poison_stacks", [
 		{"variant": &"paralysing", "dose": &"paralysis", "look": {"accent": Kinds.MARK_DIAMOND},
 			"forms": {Gene.INSIDE: {"key": &"paraneux", "order": 954},
-				Gene.OUTSIDE: {"key": &"paracyst", "order": 955}}},
+				Gene.RIDING: {"key": &"paracyst", "order": 955}}},
 		{"variant": &"sleeping", "dose": &"sleep", "look": {"accent": Kinds.MARK_RING},
 			"forms": {Gene.INSIDE: {"key": &"hypnoneux", "order": 956},
-				Gene.OUTSIDE: {"key": &"hypnocyst", "order": 957}}}]],
+				Gene.RIDING: {"key": &"hypnocyst", "order": 957}}}]],
 	[&"sun", [
 		{"variant": &"ringed", "key": &"plastidb", "order": 958, "born": 0,
 			"look": {"accent": Kinds.MARK_RING}}]],

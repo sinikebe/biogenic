@@ -22,13 +22,13 @@ extends RefCounted
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
 const Genome := preload("res://game/normal/genome.gd")
-## For the venom switch and nothing else. cilia -> genome -> cell already runs
-## this way, and cell.gd preloads no view, so there is no cycle.
-const CellBody := preload("res://game/normal/cell.gd")
 ## The kinds of load, by name and index. doses.gd preloads nothing.
 const Doses := preload("res://game/mechanics/doses.gd")
 ## Every gene, in order: which forms deliver a dose. Preloads nothing of game/.
 const Catalogue := preload("res://game/genes/catalogue.gd")
+## The genes in genes' own slots: which the mouth's lips carry. Preloads the
+## catalogue alone.
+const Riders := preload("res://game/genes/riders.gd")
 ## **The body plan** (docs/design/gene-catalogue.md §10): every slot's arc and
 ## bearing, the home seats and the body's shape. It preloads nothing.
 const BodyPlan := preload("res://game/genes/body_plan.gd")
@@ -769,25 +769,41 @@ static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 	var layout := order if not order.is_empty() else default_order(tiers)
 	_draw_fringe(canvas, at, fwd, stb, r, tiers, clock, fade, steer, unit, layout,
 		eye, tail, dose, lit)
-	if not riders.is_empty():
-		_draw_riders(canvas, at, fwd, stb, r, layout, riders, fade, unit)
 	var mouth := Catalogue.worn_provider(tiers, &"gape")
+	# **The venom in the mouth's own slot is fangs on its lips** (gene-sockets.md §5.3),
+	# as venom at the front was before it rode: it rides on the bite, so it is drawn
+	# on the organ every encounter is read off, and not as a bead.
+	var fangs := _lip_rider(riders, mouth)
+	if not riders.is_empty():
+		_draw_riders(canvas, at, fwd, stb, r, layout, riders, fade, unit,
+			mouth if fangs != &"" else &"")
 	draw_gape(canvas, at, fwd, stb, r, gape, mouth, int(tiers.get(mouth, 0)),
 		not is_self and gape > viewer_radius, fade, unit)
-	# **Venom at the front is on the lips**, drawn after them: a bite-riding organ
-	# (a look's `lips`) worn in a front slot, or worn nowhere, rides on the bite
-	# (food.gd's `toxins_of` reads the same layout the same way). A body with no
-	# mouth draws none.
-	if gape <= 0.0:
+	# Drawn after the lips. A body with no mouth draws none.
+	if gape <= 0.0 or fangs == &"":
 		return
-	for gene: StringName in tiers:
-		if not bool(_look_of(gene).get("lips", false)) or Genome.is_inside_form(gene):
-			continue
-		var tier := int(tiers[gene])
-		var worn := layout.find(gene)
-		if tier > 0 and (worn < 0 or Genome.is_front(worn)):
-			_draw_fangs(canvas, at, fwd, stb, r, gape, gene, tier, fade, unit,
-				float(dose.get("fangs", 0.0)))
+	_draw_fangs(canvas, at, fwd, stb, r, gape, fangs, Riders.copies_at(riders, mouth,
+		_lip_socket(riders, mouth)), fade, unit, float(dose.get("fangs", 0.0)))
+
+
+## **The rider in [param mouth]'s own slots that is drawn on its lips**: the first
+## whose look rides the bite (a look's `lips` -- the toxin's venom), or &"".
+static func _lip_rider(riders: Dictionary, mouth: StringName) -> StringName:
+	var socket := _lip_socket(riders, mouth)
+	return Riders.rider_at(riders, mouth, socket) if socket >= 0 else &""
+
+
+## Which of [param mouth]'s own slots holds a rider drawn on its lips, or -1.
+static func _lip_socket(riders: Dictionary, mouth: StringName) -> int:
+	if mouth == &"" or not riders.has(mouth):
+		return -1
+	var held: Array = Riders.of(riders, mouth)
+	for k in held.size():
+		var one: Variant = held[k]
+		if one is Array and StringName(one[0]) != &"" \
+				and bool(_look_of(StringName(one[0])).get("lips", false)):
+			return k
+	return -1
 
 
 ## **What rides in a body's genes' own slots** (docs/design/gene-sockets.md §5.3):
@@ -796,8 +812,11 @@ static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 ## the body's, host to slots (riders.gd); a host worn on no outside arc draws its
 ## beads at the nose, as a toxin worn nowhere rides on the bite. Two riders on one
 ## host sit side by side along the skin.
+## [param lips] is the mouth whose lip-riding venom is drawn as fangs instead, whose
+## beads leave that one out.
 static func _draw_riders(canvas: CanvasItem, at: Vector2, fwd: Vector2, stb: Vector2,
-		r: float, layout: Array, riders: Dictionary, fade: float, unit: float) -> void:
+		r: float, layout: Array, riders: Dictionary, fade: float, unit: float,
+		lips: StringName = &"") -> void:
 	var bead := maxf(r * RIDER_BEAD, RIDER_BEAD_MIN * unit)
 	for host: Variant in riders:
 		var slot := layout.find(host)
@@ -806,8 +825,11 @@ static func _draw_riders(canvas: CanvasItem, at: Vector2, fwd: Vector2, stb: Vec
 		var out := fwd * cos(bearing) + stb * sin(bearing)
 		var along := out.orthogonal()
 		var held: Array = []
-		for one: Variant in riders[host]:
-			if one is Array and StringName(one[0]) != &"":
+		var skip := _lip_socket(riders, host) if StringName(host) == lips else -1
+		var each: Array = riders[host]
+		for k in each.size():
+			var one: Variant = each[k]
+			if one is Array and StringName(one[0]) != &"" and k != skip:
 				held.append(StringName(one[0]))
 		for k in held.size():
 			var spread := (float(k) - float(held.size() - 1) * 0.5) * bead * RIDER_PITCH
@@ -1267,12 +1289,11 @@ static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		if copies <= 0:
 			continue
 		var flare := 0.0
-		# **An organ that rides the bite is on the lips at the front** -- the toxin's
-		# venom, today -- and is drawn with the gape; on a side or the stern it is
-		# barbs on the arc it guards, unless the switch has made a side venom inert,
-		# when it draws nothing.
+		# **An organ that rides the bite is drawn with the gape**, never on an arc:
+		# the toxin's venom, which a body wears only in its mouth's slot now -- or
+		# on an arc in a replay recorded before it rode, as barbs there.
 		if bool(_look_of(gene).get("lips", false)):
-			if slot >= Genome.INSIDE or Genome.is_front(slot) or not CellBody.VENOM_SIDES:
+			if slot >= Genome.INSIDE or Genome.is_front(slot):
 				continue
 			flare = float(dose.get("guard", 0.0))
 		_draw_worn(canvas, sk, gene, copies, arc_for_slot(slot), clock, fade,

@@ -3631,8 +3631,6 @@ func _rules_text(doubts: Array = []) -> String:
 		CellBody.bite_damage(0.3, 20.0, 30.0, 1.3, 0.0))
 	put.call("cell.bite_damage(0.3,40,r30,1,astern)",
 		CellBody.bite_damage(0.3, 40.0, 30.0, 1.0, PI))
-	put.call("cell.VENOM_ARC_DEG", CellBody.VENOM_ARC_DEG)
-	put.call("cell.VENOM_SIDES", CellBody.VENOM_SIDES)
 	put.call("cell.HARM_PER_STACK", CellBody.HARM_PER_STACK)
 	put.call("cell.DOSE_TAU_BY_KIND", CellBody.DOSE_TAU_BY_KIND)
 	put.call("cell.DOSE_GONE", CellBody.DOSE_GONE)
@@ -4390,10 +4388,14 @@ func _referee_bodies() -> void:
 	var alike := _ref_quirk(lookalike, true)
 	# And the stale body landing after the first frame, its resend late.
 	var late := _ref_quirk(dead_body, false)
-	_says(bool(quirk[0]) and bool(alike[0]) and bool(late[0]),
+	# **And a dead body with genes in its genes' own slots** (venom-rides.md): its
+	# riders are as stale as its tiers. The pond section found this one.
+	var fanged := _ref_quirk(dead_body, true, {&"cytostome": [[&"toxicyst", 2]]})
+	_says(bool(quirk[0]) and bool(alike[0]) and bool(late[0]) and bool(fanged[0]),
 		"referee: the dead body every build describes after a death is never fouled"
-		+ " -- %s; a dead body that looked like a gift: %s; landing late: %s"
-		% [str(quirk[1]), str(alike[1]), str(late[1])])
+		+ " -- %s; a dead body that looked like a gift: %s; landing late: %s; with"
+		% [str(quirk[1]), str(alike[1]), str(late[1])] + " venom in its mouth's slot: %s"
+		% str(fanged[1]))
 	# More bodies than the budget, at once: the seventh is refused.
 	var rate := Referee.new(0.0)
 	var taken := 0
@@ -4412,7 +4414,7 @@ func _referee_bodies() -> void:
 ## **The dead body, described after a death**, as every build does it: `[true
 ## if nothing fouled and the born body is what is worn, a note]`. [param early]
 ## puts the stale PERSON before the first state frame, as it lands.
-func _ref_quirk(dead_body: Dictionary, early: bool) -> Array:
+func _ref_quirk(dead_body: Dictionary, early: bool, riders: Dictionary = {}) -> Array:
 	var ref := _ref_arrived(0.0, Vector2.ZERO)
 	ref.judge_died(5.0, FoodField.Cause.STARVED, 0, true)
 	ref.take_fouls()
@@ -4420,11 +4422,11 @@ func _ref_quirk(dead_body: Dictionary, early: bool) -> Array:
 	ref.judge_enter(6.0, CellBody.BASE_RADIUS, false)
 	ref.arrive(6.0, Vector2(480.0, 0.0), CellBody.BASE_RADIUS)
 	if early:
-		ref.judge_person(6.02, false, dead_body, dead_body.keys(), true)
+		ref.judge_person(6.02, false, dead_body, dead_body.keys(), true, riders)
 	ref.claim(6.2, Vector2(480.0, 0.0), 0.0, CellBody.BASE_RADIUS, Vector2.ZERO, 0.0,
 		false)
 	if not early:
-		ref.judge_person(6.25, false, dead_body, dead_body.keys(), true)
+		ref.judge_person(6.25, false, dead_body, dead_body.keys(), true, riders)
 	ref.judge_person(6.3, false, Catalogue.born(), Catalogue.born().keys(), true)
 	var clean := ref.take_fouls().is_empty() and ref.worn == Catalogue.born()
 	# Its real gift, later, is still taken.
@@ -5557,18 +5559,18 @@ func _pond_friends() -> void:
 		"pond-field: and the friend's mouth chews this cell back (%.5f, astern),"
 		% float(cell.wound) + " each side feeling its own share")
 
-	# **Each bite carries its toxins, each way** (dna-slots.md §7.2). This cell's
-	# front venom rides its bite into the friend -- whatever their armour -- and
-	# their poison comes back into this cell: one bite, two doses. This cell's
-	# loads are the run's, and exact; the friend's are the water's to wear
-	# ([method _pond_worn]).
-	var venom := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 1, &"toxicyst": 2}
-	var venom_n := Stats.at(&"venom_stacks", 2)
+	# **Each bite carries its toxins, each way** (dna-slots.md §7.2). The venom in
+	# this cell's mouth's slot rides its bite into the friend -- whatever their
+	# armour -- and their poison comes back into this cell: one bite, two doses.
+	# This cell's loads are the run's, and exact; the friend's are the water's to
+	# wear ([method _pond_worn]).
+	var venom := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 1}
+	var fanged := {&"cytostome": [[&"toxicyst", 2]]}
+	var venom_n := Riders.value(fanged, &"cytostome", &"bite_dose", 0.0)
 	var poison_n := Stats.at(&"poison_stacks", 2)
 	var fired: Array = []
 	field = _pond_rig(24, 30.0, venom)
-	field.toxins = FoodField.toxins_of(venom,
-		[&"cytostome", &"cirrus", &"flagellum", &"toxicyst"])
+	field.toxins = FoodField.toxins_of(venom, [&"cytostome", &"cirrus", &"flagellum"], fanged)
 	field.open_pond()
 	_pond_person(field, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1,
 		ARMOUR: 3, &"veneneux": 2})
@@ -5586,19 +5588,20 @@ func _pond_friends() -> void:
 			and not dose.is_empty() and float(dose[3]) == poison_n and not bool(dose[4])
 			and fired == [FoodField.FIRED_VENOM],
 		("" if ARMOUR != &"" else NO_ARMOUR)
-		+ "pond-field: this cell's front venom rides its bite into an armoured friend"
+		+ "pond-field: the venom in this cell's mouth's slot rides its bite into an armoured friend"
 		+ " (%.3f stacks), and their poison comes back into this cell (%.0f, told"
 		% [into_them, into_me] + " as a dose); its venom is told as fired, once")
 
-	# And the other way: a friend's front venom rides their bite into this
-	# poisonous cell, and its poison goes into them.
+	# And the other way: the venom in a friend's mouth's slot rides their bite into
+	# this poisonous cell, and its poison goes into them.
 	var poisonous := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 1, &"veneneux": 2}
 	fired = []
 	field = _pond_rig(25, 30.0, poisonous, Vector2.ZERO, PI)
 	field.toxins = FoodField.toxins_of(poisonous, [&"cytostome", &"cirrus", &"flagellum"])
 	field.open_pond()
-	_pond_person(field, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1,
-		&"toxicyst": 2}, PI)
+	field.set_person_genome({&"cytostome": 1, &"cirrus": 1, &"flagellum": 1},
+		[&"cytostome", &"cirrus", &"flagellum"], FoodField.PERSON_SLOT, fanged)
+	field.place_person(at, PI, 28.0)
 	said = _pond_listen(field)
 	field.toxin_fired.connect(func(how: int) -> void: fired.append(how))
 	field._process(POND_STEP)
@@ -5611,61 +5614,9 @@ func _pond_friends() -> void:
 			and float(mine.wound) > 0.0 and into_me == venom_n
 			and not dose.is_empty() and float(dose[3]) == venom_n and not bool(dose[4])
 			and _pond_worn(into_them, poison_n) and fired == [FoodField.FIRED_POISON],
-		"pond-field: and a friend's front venom rides their bite into this poisonous"
+		"pond-field: and the venom in a friend's mouth's slot rides their bite into this poisonous"
 		+ " cell (%.0f stacks, told as a dose), and its poison goes into them (%.3f);"
 		% [into_me, into_them] + " its poison is told as fired, once")
-
-	# **A side sting** (§7.2): the friend wears their venom in slot 5, on the
-	# starboard quarter. This cell's bite landing there takes its stacks, and the
-	# same bite on their other quarter none -- and neither friend's mouth is on
-	# this cell, so nothing else doses it. Then this cell's own sting, worn in
-	# slot 5 too, into a friend whose mouth lands there.
-	var guards := Cilia.slot_bearing(5)
-	var stinger := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, ARMOUR: 3,
-		&"toxicyst": 2}
-	var quarter: Array = [&"cytostome", &"cirrus", &"flagellum", ARMOUR, &"",
-		&"toxicyst"]
-	var sting: Array = []
-	for side: float in [guards, -guards]:
-		field = _pond_rig(26, 30.0, mouth)
-		field.open_pond()
-		field.set_person_genome(stinger, quarter)
-		# Turned so that this cell, straight below them, is at `side` from their
-		# nose: the bearing its bite lands at.
-		field.place_person(at, PI - side, 28.0)
-		said = _pond_listen(field)
-		field._process(POND_STEP)
-		mine = field.get("_cell")
-		dose = _pond_said(said, "dosed")
-		sting.append([float((mine.loads as PackedFloat64Array)[0]),
-			float(dose[3]) if not dose.is_empty() else 0.0,
-			not _pond_said(said, "touched", FoodField.Contact.BITTEN).is_empty()
-				and float(mine.wound) == 0.0])
-	var my_sting := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"toxicyst": 2}
-	fired = []
-	field = _pond_rig(27, 30.0, my_sting, Vector2.ZERO, -guards)
-	field.toxins = FoodField.toxins_of(my_sting,
-		[&"cytostome", &"cirrus", &"flagellum", &"", &"", &"toxicyst"])
-	field.open_pond()
-	_pond_person(field, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}, PI)
-	said = _pond_listen(field)
-	field.toxin_fired.connect(func(how: int) -> void: fired.append(how))
-	field._process(POND_STEP)
-	mine = field.get("_cell")
-	friend = field.bodies()[FoodField.PERSON_SLOT]
-	into_them = float((friend.loads as PackedFloat64Array)[0])
-	_says(sting.size() == 2 and float(sting[0][0]) == venom_n
-			and float(sting[0][1]) == venom_n and bool(sting[0][2])
-			and float(sting[1][0]) == 0.0 and float(sting[1][1]) == 0.0
-			and bool(sting[1][2])
-			and not _pond_said(said, "bitten").is_empty()
-			and float((mine.loads as PackedFloat64Array)[0]) == 0.0
-			and _pond_worn(into_them, venom_n) and fired == [FoodField.FIRED_STING],
-		("" if ARMOUR != &"" else NO_ARMOUR)
-		+ "pond-field: a side sting -- this cell's bite on the quarter a friend wears"
-		+ " their venom on takes %.0f stacks, and on their other quarter %.0f; and"
-		% [float(sting[0][0]), float(sting[1][0])] + " this cell's own sting puts"
-		+ " %.3f into a friend biting it there, told as fired, once" % into_them)
 
 
 ## **Every way one player's contact with the other can end in a death**, and the
@@ -7481,13 +7432,13 @@ func _check_pond() -> void:
 	var genome_guest: Node = guest_run.get_node(^"Genome")
 	# **And a push and a dash** (automation.md §18.3 check 23), which its programs
 	# use on the autopilot below.
-	# **And the toxin, both forms** (dna-slots.md §20.3 check 11): venom on its
-	# flank and poison inside -- eight names -- so every word of the guest's from
+	# **And the toxin, both forms** (dna-slots.md §20.3 check 11; venom-rides.md):
+	# venom in its mouth's slot and poison inside, so every word of the guest's from
 	# here to the section's end is a venomous, poisonous body's.
 	var reentry := await _pond_reenter(guest_run, {&"cytostome": 3, &"cirrus": 1,
-		&"flagellum": 2, &"axoneme": 1, &"myoneme": 1, &"toxicyst": 1, &"veneneux": 1},
-		[&"cytostome", &"cirrus", &"flagellum", &"axoneme", &"myoneme", &"toxicyst"],
-		[host_pin], host_pond)
+		&"flagellum": 2, &"axoneme": 1, &"myoneme": 1, &"veneneux": 1},
+		[&"cytostome", &"cirrus", &"flagellum", &"axoneme", &"myoneme"],
+		[host_pin], host_pond, {&"cytostome": [[&"toxicyst", 1]]})
 	guest_home = guest_cell.position
 	guest_pin = [guest_cell, guest_home, 0.0]
 	pins = [host_pin, guest_pin]
@@ -7496,8 +7447,10 @@ func _check_pond() -> void:
 		return (Genome.tier_of(host_food.bodies()[FoodField.PERSON_SLOT].genome,
 			&"cytostome") == 3), 1.0, pins)
 	var guest_worn: Dictionary = host_food.bodies()[FoodField.PERSON_SLOT].genome
+	var guest_fangs := Riders.rider_at(host_food.bodies()[FoodField.PERSON_SLOT].riders,
+		&"cytostome", 0)
 	_says(reentry >= 0.0 and worn_three >= 0.0 and host_food.person() != null
-			and guest_worn.has(&"toxicyst") and guest_worn.has(&"veneneux"),
+			and guest_fangs == &"toxicyst" and guest_worn.has(&"veneneux"),
 		"pond: the guest leaves the pond, grows a tier-3 mouth, venom and poison alone"
 		+ " and swims back in %.2f s, and the host takes the body it arrives with"
 		% reentry)
@@ -8943,7 +8896,7 @@ func _pond_budget(seconds: float) -> int:
 ## [param room], the host's pond, is asked what it judged of that guest
 ## meanwhile, and a NOTE says so beside what the run was doing as its ENTER ran out.
 func _pond_reenter(run: Node, tiers: Dictionary, order: Array, pins: Array,
-		room: Object = null) -> float:
+		room: Object = null, riders: Dictionary = {}) -> float:
 	var pond: Object = run.get("_pond")
 	var food: Node = run.get_node(^"Food")
 	await _pond_until(func() -> bool:
@@ -8959,7 +8912,7 @@ func _pond_reenter(run: Node, tiers: Dictionary, order: Array, pins: Array,
 	var from := _now()
 	pond.mirror_ended()
 	food.leave_mirror()
-	(run.get_node(^"Genome")).express(tiers, order)
+	(run.get_node(^"Genome")).express(tiers, order, null, null, null, riders)
 	var in_again := func() -> bool:
 		return bool(pond.in_pond) and food.mirroring() \
 			and float(run.get("_water_beat")) < 0.0
@@ -9377,6 +9330,7 @@ func _referee_said(referees: Array) -> String:
 	var closest := {"movement": 0.0, "heading": 0.0, "shouts": 0.0, "arrivals": 0.0,
 		"bodies": 0.0}
 	var fouls := 0
+	var ruled: Array[String] = []
 	var speed := 0.0
 	var over := -INF
 	for referee: Object in referees:
@@ -9389,6 +9343,9 @@ func _referee_said(referees: Array) -> String:
 		closest["arrivals"] = maxf(closest["arrivals"], float(referee.enters.closest))
 		closest["bodies"] = maxf(closest["bodies"], float(referee.bodies.closest))
 		fouls += int(referee.fouled())
+		var struck: Dictionary = referee.get("struck")
+		for rule: Variant in struck:
+			ruled.append("%s %d" % [str(rule), int(struck[rule])])
 		speed = maxf(speed, float(referee.get("worst_speed")))
 		over = maxf(over, float(referee.get("worst_radius")))
 	var parts: Array[String] = []
@@ -9399,7 +9356,8 @@ func _referee_said(referees: Array) -> String:
 		calls.append("%s %.0f%%" % [budget, 100.0 * float(closest[budget])])
 	return "%d fouls over %d referee%s; judged %s; closest calls %s; fastest %.0f u/s,"\
 		% [fouls, referees.size(), "" if referees.size() == 1 else "s", ", ".join(parts),
-			", ".join(calls), speed] + " radius at most %+.2f of what it was fed" % over
+			", ".join(calls), speed] + " radius at most %+.2f of what it was fed" % over \
+		+ ("" if ruled.is_empty() else " -- struck: " + ", ".join(ruled))
 
 
 ## **How many snapshots [param seconds] of waiting must bring**, at least: the
@@ -10001,13 +9959,13 @@ func _check_server() -> void:
 	var b_genome: Node = b_run.get_node(^"Genome")
 	# And a second copy of its tail (automation.md §5.2), which it holds still below.
 	# And a push and a dash, which its programs use on the autopilot (check 23).
-	# **And the toxin, both forms** (dna-slots.md §20.3 check 11): venom at the
-	# back of its free arcs and poison inside -- eight names, for the room's
-	# referee and the other guest's mirror.
+	# **And the toxin, both forms** (dna-slots.md §20.3 check 11; venom-rides.md):
+	# venom in its mouth's slot and poison inside, for the room's referee and the
+	# other guest's mirror.
 	var b_brought := await _pond_reenter(b_run, {&"cytostome": 2, &"cirrus": 1,
-		&"flagellum": 2, &"palp": 1, &"axoneme": 1, &"myoneme": 1, &"toxicyst": 1,
-		&"veneneux": 1}, [&"cytostome", &"cirrus", &"flagellum", &"palp", &"axoneme",
-		&"myoneme", &"toxicyst"], [a_pin], pond)
+		&"flagellum": 2, &"palp": 1, &"axoneme": 1, &"myoneme": 1, &"veneneux": 1},
+		[&"cytostome", &"cirrus", &"flagellum", &"palp", &"axoneme", &"myoneme"],
+		[a_pin], pond, {&"cytostome": [[&"toxicyst", 1]]})
 	b_home = b_cell.position
 	b_pin = [b_cell, b_home, 0.0]
 	pins = [a_pin, b_pin]

@@ -277,14 +277,6 @@ const DOSE_TAU_BY_KIND: Array[float] = [6.0, 4.0, 8.0]
 ## **Below this a load is gone**, cleared whole: one stack lasts
 ## `6 x ln 5 = 9.7 s`, so a light dose stops a body mending for about ten.
 const DOSE_GONE := 0.2
-## **How far round its slot's bearing a venom on a side or the stern stings** a
-## mouth that bites there: the sting's own arc, so the two weapons that guard a side
-## reach as far round it.
-const VENOM_ARC_DEG := 110.0
-## **Whether a venom on a side or the stern stings at all.** False makes it inert
-## there, and venom works through the bite alone: the switch, should the owner read
-## *"the direction slots express outside"* as the mouth only (dna-slots.md §22.2).
-const VENOM_SIDES := true
 
 # --- Steering --------------------------------------------------------------
 ## The water pushes back: a slow random walk on the heading the player never
