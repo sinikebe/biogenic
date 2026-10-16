@@ -34,7 +34,10 @@ env:
 jobs:
   sync:
     name: Sync from template
-    runs-on: ubuntu-latest
+    # **Where it runs** (docs/ci-runner.md): GitHub's own machine, unless the
+    # repository variable CI_RUNNER names a runner's label -- the self-hosted
+    # runner, once the code is private. Delete the variable to come back.
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
     # Skip inside the template itself, which would otherwise sync from its own
     # HEAD and open a pull request against itself. Change this alongside
     # LAUNCHER_TEMPLATE_REPO if you maintain your own fork of the template.
