@@ -10569,8 +10569,8 @@ func rarity_line() -> String:
 ## far into the day the drop is, as a share of the day, the light where the cell
 ## is]` -- the share -1 where there is no day of this field's own to say (a
 ## friend's drop seen from inside it, whose light is the host's, or the light off),
-## and nothing at all in today's water. So the owner can say what time it was when something felt wrong. Asking
-## moves nothing.
+## and nothing at all in today's water. So the owner can say what time it was when
+## something felt wrong. Asking moves nothing.
 func daylight_counts() -> Array:
 	if _cell == null or (_drop == null and not _mirror):
 		return []
