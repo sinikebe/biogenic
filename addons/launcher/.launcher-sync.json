@@ -2,7 +2,7 @@
   "_comment": "Written by ci/sync_launcher.sh. Do not edit addons/launcher/ or ci/ by hand -- the next sync overwrites them.",
   "source": "sinikebe/godot-launcher-template",
   "ref": "main",
-  "commit": "32e2e16ced8516a538d031e6f18164b8e9cf5e18",
-  "subject": "Stop Android Back from quitting the app from inside a game (#90)",
-  "synced_at": "2026-10-16T17:14:32Z"
+  "commit": "f1b44d49f31b5285f9917ab6c9332510256cde2b",
+  "subject": "Say that the template is landscape-only, and how to change it (#92)",
+  "synced_at": "2026-10-16T20:05:06Z"
 }

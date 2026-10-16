@@ -34,10 +34,13 @@ env:
 jobs:
   sync:
     name: Sync from template
-    # **Where it runs** (docs/ci-runner.md): GitHub's own machine, unless the
-    # repository variable CI_RUNNER names a runner's label -- the self-hosted
-    # runner, once the code is private. Delete the variable to come back.
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    # **Where it runs** (docs/ci-runner.md): **dev's work on the self-hosted
+    # runner** -- a pull request into dev from this repository, or a push or a
+    # dispatch on dev -- and everything else on GitHub's own machine, unless the
+    # repository variable CI_RUNNER names a runner's label. A fork's pull request
+    # never reaches the self-hosted runner: its code is a stranger's. To send dev
+    # back to GitHub's machines, set CI_RUNNER_DEV to ubuntu-latest.
+    runs-on: ${{ ((github.base_ref == 'dev' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name != 'pull_request' && github.ref_name == 'dev')) && (vars.CI_RUNNER_DEV || 'self-hosted') || (vars.CI_RUNNER || 'ubuntu-latest') }}
     # Skip inside the template itself, which would otherwise sync from its own
     # HEAD and open a pull request against itself. Change this alongside
     # LAUNCHER_TEMPLATE_REPO if you maintain your own fork of the template.
@@ -71,6 +74,15 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "Launcher already up to date."
           fi
+
+      - name: Keep temporary files on disk
+        # **The runner's own temp folder, not /tmp** (docs/ci-runner.md §4). A
+        # self-hosted container's /tmp may be memory: Debian 13 mounts a tmpfs
+        # there. Godot's export templates, a 1 GB download unpacked beside itself
+        # by ci/install_godot.sh's mktemp, filled a 1 GB container that way and
+        # the unpacking was killed. RUNNER_TEMP is on the runner's disk and
+        # emptied after every job; on GitHub's machines this changes nothing.
+        run: echo "TMPDIR=${RUNNER_TEMP}" >> "$GITHUB_ENV"
 
       - name: Cache Godot
         if: steps.diff.outputs.changed == 'true'
