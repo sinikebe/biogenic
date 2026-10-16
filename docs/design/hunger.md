@@ -354,6 +354,12 @@ Change the pose for each frame:
 
 ## 8. Later steps
 
+> **Steps 2 and 3 are built** (sound-and-touch.md, 2026-10-16, binary 8). At the
+> owner's word they are on every beat rather than only in the last chance, and very
+> light: a soft lub-dub, and two ticks in the hand while the cell is in the water.
+> Both switches are on the settings sheet, on by default. The racing beat is what
+> makes them say hunger.
+
 - **Step 2, haptics.** This would be the real fix for a player whose eyes are on
   the food: a heartbeat felt in the hand during the last chance.
   - **How it works:** a subscriber to `sensation`, which is the seam

@@ -524,6 +524,28 @@ jobs:
             exit 1
           fi
 
+      - name: Check the heartbeat's sound and touch
+        # docs/design/sound-and-touch.md §7: the heartbeat is low, quiet and
+        # clean, its two parts land inside one beat at any pace, a buzz is short
+        # and weak and comes only in the water with vibration on, and the two
+        # switches are kept and mute the mix. Nothing of it is drawn, so no
+        # render can catch a fault in it. It plays to the dummy driver here.
+        run: |
+          set -uo pipefail
+          out=$(timeout 300 ~/godot/godot --headless --path . --fixed-fps 60 \
+                  res://tools/feel_probe.tscn 2>&1) || true
+          grep -E "^\[feel-probe\]" <<< "$out" || true
+          if ! grep -q "^\[feel-probe\] ALL PASS$" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error|ERROR:" <<< "$out" || true
+            echo "::error::the heartbeat's sound or touch is wrong -- see the probe lines above"
+            exit 1
+          fi
+          if grep -qE "SCRIPT ERROR|Parse Error" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error" <<< "$out"
+            echo "::error::the feel probe hit a script error -- checks after it did not run"
+            exit 1
+          fi
+
       - name: Check the drop
         # docs/design/ocean.md §14.3: what the finite water is built on. The
         # grid against brute force over 10,000 queries, the basin's rim against

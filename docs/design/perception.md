@@ -509,6 +509,13 @@ Do not let either become load-bearing. They are reinforcement for a channel that
 already works, which is the only way a channel that is mono, muted, disabled or
 absent on some fraction of devices can be used at all.
 
+**Opened on 2026-10-16** (sound-and-touch.md), as this section said it would be.
+The owner asked for a heartbeat that is heard and felt, very lightly. It is a second
+subscriber to the bus's `beat`, with no change to the visual layer, and the
+`VIBRATE` permission made binary 8. The rule above still holds: the heartbeat
+reinforces the drawn beat, and a player with the sound and vibration off loses
+nothing they need.
+
 ## 6. Left open — owner's call
 
 1. ~~One line of onboarding text.~~ **DECIDED: yes, one line, first run only.**

@@ -143,6 +143,32 @@ static func save_locale(locale: String) -> void:
 	_store("app", "locale", locale)
 
 
+## **Whether the game makes a sound, and whether it buzzes the hand**: the settings
+## sheet's two switches (docs/design/sound-and-touch.md §4), both on until the
+## player turns one off. They belong to the whole app, beside the language, and
+## game/feel/feel.gd applies them.
+static func load_sound() -> bool:
+	var config := ConfigFile.new()
+	if config.load(PATH) != OK:
+		return true
+	return bool(config.get_value("app", "sound", true))
+
+
+static func save_sound(value: bool) -> void:
+	_store("app", "sound", value)
+
+
+static func load_vibration() -> bool:
+	var config := ConfigFile.new()
+	if config.load(PATH) != OK:
+		return true
+	return bool(config.get_value("app", "vibration", true))
+
+
+static func save_vibration(value: bool) -> void:
+	_store("app", "vibration", value)
+
+
 static func onboarding_seen() -> bool:
 	var config := ConfigFile.new()
 	if config.load(PATH) != OK:

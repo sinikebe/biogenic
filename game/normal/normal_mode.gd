@@ -58,6 +58,10 @@ const REPLAY_SCENE := "res://game/replay/replay.tscn"
 const Cilia := preload("res://game/vision/cilia.gd")
 ## **A sense's tile in the HUD's row** (docs/design/sense-tiles.md).
 const SenseTile := preload("res://game/normal/sense_tile.gd")
+## **What the body is heard and felt as** (docs/design/sound-and-touch.md), and its
+## first cue, the heartbeat.
+const Feel := preload("res://game/feel/feel.gd")
+const Heart := preload("res://game/feel/heart.gd")
 ## **The other cell, if there is one.** Preloaded for one static lookup: the
 ## session is a node under `/root` that the earshot screen left there, and a run
 ## reached any other way finds nothing and is the game that already shipped.
@@ -524,6 +528,9 @@ const ECHO_GLOW_FALL := 0.6
 ## renders in both views; an echo off a body 300 units ahead, at about 0.4, lights it
 ## at about two thirds.
 const ECHO_GLOW_FLOOR := 0.4
+## **The heartbeat, heard and felt** (docs/design/sound-and-touch.md): the bus's
+## second listener, handed every sensation by [method _on_bus_sensation].
+var _feel: Feel = null
 @onready var _recorder: RecorderNode = $Recorder
 @onready var _watch_ui: CenterContainer = $Hud/Watch
 @onready var _watch_button: Button = $Hud/Watch/Button
@@ -1017,6 +1024,14 @@ func _ready() -> void:
 	# target's breath rides the same beat. Listening is not posting: this file
 	# is still the only one that writes to the bus.
 	_bus.sensation.connect(_on_bus_sensation)
+	# **The heartbeat heard and felt** (sound-and-touch.md §3): two sounds made once
+	# a process, a few milliseconds, and three silent players. Nothing here needs a
+	# window or a device: a headless boot plays to the dummy driver and buzzes no
+	# hand, because it has none.
+	_feel = Feel.new()
+	_feel.name = "Feel"
+	add_child(_feel)
+	_feel.cue(&"beat", Heart.parts())
 	_pause_ui.hide()
 	# Eighteen Controls and two rows of text, built once. Nothing here asks for
 	# a window, an input device or a network, so a headless boot pays one
@@ -1916,7 +1931,12 @@ func _forget_eye() -> void:
 ## body is on screen for**: a pause over it in single player, where the bus
 ## keeps beating under the scrim, would spend the flare where nobody can see
 ## it, so it waits for the first beat back in the water.
-func _on_bus_sensation(kind: StringName, _info: Dictionary) -> void:
+func _on_bus_sensation(kind: StringName, info: Dictionary) -> void:
+	# **Heard on every beat the bus makes, felt only in the water** (sound-and-touch.md
+	# §3.2): the beat goes on under the pause scrim and so does its sound, but the
+	# hand is not buzzed while a menu is up, nor once the cell is no longer alive.
+	if _feel != null:
+		_feel.hear(kind, info, not _menu_open and _life == Life.ALIVE)
 	if kind != &"beat":
 		return
 	if _menu_open or _life != Life.ALIVE or _split >= Split.PINCH:
@@ -3488,6 +3508,9 @@ func _sense_reading(channel: StringName, organ: StringName) -> Array:
 func _settle_gauges(level: float) -> void:
 	_energy_gauge.settle(level)
 	_echo_glow = 0.0
+	# And nothing of the last life's beat still to be heard.
+	if _feel != null:
+		_feel.quiet()
 	for channel: StringName in _sense_tiles:
 		(_sense_tiles[channel] as SenseTile).settle()
 
