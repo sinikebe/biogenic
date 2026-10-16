@@ -39,8 +39,8 @@ signal fired(kind: StringName, index: int, sounded: bool, db: float, ms: int,
 const RunState := preload("res://game/run_state.gd")
 
 ## How many sounds can overlap: the end of one beat under the start of the next,
-## and one more.
-const VOICES := 3
+## a call, and the echoes of it that land together.
+const VOICES := 6
 ## The quietest a strength is taken as, so a whisper of a sensation is very quiet
 ## rather than minus infinity decibels.
 const QUIETEST := 0.001

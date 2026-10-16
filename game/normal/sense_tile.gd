@@ -45,7 +45,7 @@ var _flash := 0.0
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	focus_mode = Control.FOCUS_NONE
-	custom_minimum_size = Vector2(SIZE, SIZE)
+	custom_minimum_size = Vector2(_width(), SIZE)
 	set_process(false)
 
 
@@ -93,15 +93,29 @@ func _process(delta: float) -> void:
 
 func _draw() -> void:
 	if _well != null:
-		draw_style_box(_well, Rect2(Vector2.ZERO, Vector2(SIZE, SIZE)))
+		draw_style_box(_well, Rect2(Vector2.ZERO, Vector2(_width(), SIZE)))
 	if gene == &"":
 		return
 	var at := Vector2(SIZE * 0.5, ORGAN_Y)
 	if not active:
 		Cilia.draw_tile_organ(self, gene, 1, at, GREY_ALPHA, ORGAN_SCALE, 0.0, GREY)
+	else:
+		Cilia.draw_tile_organ(self, gene, 1, at, Cilia.TILE_STROKE_ALPHA, ORGAN_SCALE,
+			maxf(glow, _flash))
+	_draw_reading()
+
+
+## **How wide the readout is**: a tile is square; a wider readout (scope.gd) says
+## so here, and the slab and its place in the row follow.
+func _width() -> float:
+	return SIZE
+
+
+## **How much the sense picks up**, drawn beside the organ: a tile's bar, at work
+## only. A wider readout draws its own here, grey or not.
+func _draw_reading() -> void:
+	if not active:
 		return
-	Cilia.draw_tile_organ(self, gene, 1, at, Cilia.TILE_STROKE_ALPHA, ORGAN_SCALE,
-		maxf(glow, _flash))
 	var bar := Rect2(BAR_INSET, BAR_Y, SIZE - BAR_INSET * 2.0, BAR_H)
 	draw_rect(bar, TRACK)
 	if level > 0.0:

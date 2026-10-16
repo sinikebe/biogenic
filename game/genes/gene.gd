@@ -177,6 +177,10 @@ var upkeep_share := 1.0
 ## most organs, and for the beam, whose rays already say what they strike (the owner,
 ## 2026-10-15: *"Beam does not need one"*).
 var readout := false
+## **And whether that tile is widened into a scope** (sense-tiles.md §7): for a
+## sense that calls and listens, what came back of the call by how far, under a
+## distance scale. The ping today.
+var scope := false
 
 ## **Its place in the water** (§9; docs/design/gene-rarity.md §2):
 ##

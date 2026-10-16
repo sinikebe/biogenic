@@ -1,7 +1,8 @@
 extends RefCounted
-## **A sound made in code** (docs/design/sound-and-touch.md §2): a thump -- a sine
-## that falls in pitch as it dies away, softly driven so it carries a few
-## overtones, and low-passed so it carries nothing else. The game has no audio
+## **A sound made in code** (docs/design/sound-and-touch.md §2): a sine that falls
+## in pitch as it dies away, softly driven so it carries a few overtones, and
+## low-passed so it carries nothing else. At 50 Hz it is a thump (the heart); at
+## 1.5 kHz, a beep (the ping). The game has no audio
 ## files, and this makes it need none: a few numbers are the whole of a sound, a
 ## change to one ships as content, and the probe can read the waves it plays.
 ##
