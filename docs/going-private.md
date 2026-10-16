@@ -29,16 +29,17 @@ owner picks it up again.
 
 ## 2. Done
 
-- **The runner switch** (pull request #220). Every job's `runs-on` is
-  `${{ vars.CI_RUNNER || 'ubuntu-latest' }}`, and jobs start from no saved data.
-  docs/ci-runner.md is the container's setup guide. Nothing changes until the
-  repository variable `CI_RUNNER` names the runner's label.
+- **The runner switch** (pull request #220). Jobs start from no saved data, and
+  docs/ci-runner.md is the container's setup guide.
+- **The runner, for dev** (2026-10-16, the owner: *"Set it for dev and trigger
+  ci"*). dev's work runs on the self-hosted runner, and a fork's pull request and
+  everything on `main` on GitHub's machines (docs/ci-runner.md §1).
 
 ## 3. To do, in this order
 
-1. **The runner.** The owner sets up the container (docs/ci-runner.md §2 and §3)
-   and sets `CI_RUNNER`. Then a pull request's CI runs on it and is compared with
-   a GitHub-hosted run (§5 there).
+1. **The runner.** Set up by the owner, and carrying dev's work since 2026-10-16.
+   Once it has for a while, `CI_RUNNER` set to its label moves `main`'s releases to
+   it too (docs/ci-runner.md §1).
 2. **The template issue** (§4 below). The template's release scripts publish to
    the repository they run in, and work out the patch note from that repository's
    tags, so publishing elsewhere is theirs to support. A Claude session was
@@ -101,8 +102,8 @@ be extracted, as they can today.
 > 4. `release.yml` wires the above, `branch-<name>` prereleases included.
 >
 > **And the runner, for private repos.** Actions minutes cost money there.
-> Biogenic's workflows say `runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}`,
-> and start by removing `~/.local/share/godot/app_userdata/<project name>*`,
+> Biogenic's workflows run dev's work on a self-hosted runner and the rest on
+> `${{ vars.CI_RUNNER || 'ubuntu-latest' }}`, and start by removing `~/.local/share/godot/app_userdata/<project name>*`,
 > which a persistent self-hosted runner would otherwise carry between jobs. In
 > the template's own workflows, that would leave no drift in a game's
 > `.github/workflows/`.

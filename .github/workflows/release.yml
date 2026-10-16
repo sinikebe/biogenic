@@ -62,10 +62,13 @@ jobs:
     # otherwise build that branch -- reviewed or not -- with the signing key and
     # publish it as a prerelease of its own.
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
-    # **Where it runs** (docs/ci-runner.md): GitHub's own machine, unless the
-    # repository variable CI_RUNNER names a runner's label -- the self-hosted
-    # runner, once the code is private. Delete the variable to come back.
-    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    # **Where it runs** (docs/ci-runner.md): **dev's work on the self-hosted
+    # runner** -- a pull request into dev from this repository, or a push or a
+    # dispatch on dev -- and everything else on GitHub's own machine, unless the
+    # repository variable CI_RUNNER names a runner's label. A fork's pull request
+    # never reaches the self-hosted runner: its code is a stranger's. To send dev
+    # back to GitHub's machines, set CI_RUNNER_DEV to ubuntu-latest.
+    runs-on: ${{ ((github.base_ref == 'dev' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name != 'pull_request' && github.ref_name == 'dev')) && (vars.CI_RUNNER_DEV || 'self-hosted') || (vars.CI_RUNNER || 'ubuntu-latest') }}
     permissions:
       contents: write # create the release and upload its assets
 

@@ -1,8 +1,8 @@
 # The self-hosted CI runner
 
-> **On hold** (the owner, 2026-10-16: *"I can't set the runner yet"*). The switch
-> is in the workflows and does nothing until `CI_RUNNER` is set. The whole plan
-> for going private, in order, is docs/going-private.md.
+> **In use for dev** (the owner, 2026-10-16: *"Set it for dev and trigger ci"*):
+> dev's work runs on the self-hosted runner, and `main`'s on GitHub's machines
+> (§1). The whole plan for going private, in order, is docs/going-private.md.
 
 The owner, 2026-10-16, on taking the repository private: *"A self hosted runner
 running of an LXC container"*, chosen over running the checks in the public
@@ -27,17 +27,29 @@ a minute: check GitHub's pricing page.
 
 ## 1. Switching
 
-Every job's `runs-on` is `${{ vars.CI_RUNNER || 'ubuntu-latest' }}`:
-`ci.yml`, `release.yml`, `launcher-version.yml` and `sync-launcher.yml`.
+Every job's `runs-on` -- `ci.yml`, `release.yml`, `launcher-version.yml` and
+`sync-launcher.yml` -- picks the machine by what the job is for:
 
-- **To use the runner:** go to Settings → Secrets and variables → Actions →
-  Variables and add `CI_RUNNER`. Its value is the runner's label (§3), for example
-  `biogenic`.
-- **To go back to GitHub's machines:** delete the variable. Do this whenever the
-  container will be down for a while. A job whose runner is offline waits in the
-  queue (up to a day) and then fails.
+- **dev's work runs on the self-hosted runner**: a pull request into `dev` from
+  this repository, and a push or a manual run on `dev` (the dev app's publish, a
+  launcher sync started on `dev`). It asks for the `self-hosted` label, which
+  every self-hosted runner carries, so no variable is needed;
+- **a fork's pull request never does.** Its code is a stranger's, and the runner
+  sits on the owner's own machine. It runs on GitHub's;
+- **everything else runs on GitHub's machines**: a release into `main`, the
+  release's own publish, and the scheduled launcher sync, which starts from
+  `main`.
 
-Nothing changes until the variable exists.
+Two repository variables move them (Settings → Secrets and variables → Actions →
+Variables):
+
+- **`CI_RUNNER_DEV`**: where dev's work runs instead. Set it to `ubuntu-latest` to
+  send dev back to GitHub's machines whenever the container will be down for a
+  while. A job whose runner is offline waits in the queue (up to a day) and then
+  fails. Delete it to come back to the runner.
+- **`CI_RUNNER`**: where everything else runs, `ubuntu-latest` while it is unset.
+  Set it to the runner's label (§3) once the runner has carried dev for a while,
+  and `main`'s releases move to it too.
 
 ## 2. The container
 
@@ -48,9 +60,24 @@ Nothing changes until the variable exists.
   "Take the network from under a host" check runs a server in a network
   namespace of its own (`sudo unshare --net`), and an unprivileged container
   without nesting refuses it.
-- **About 4 cores, 8 GB of memory and 20 GB of disk.** The disk holds the Android
-  SDK, Java, Godot and its export templates, which persist between runs. A run's
-  own files go in its workspace and its temporary directory.
+- **About 4 cores, 2 to 4 GB of memory, and 20 GB of disk.** The disk holds the
+  Android SDK, Java, Godot and its export templates, which persist between runs. A
+  run's own files go in its workspace and its temporary directory.
+- **Memory, measured** (2026-10-16, one Godot process at a time, its peak resident
+  size; a CI job runs its steps one after another, so the largest is what counts):
+  - a content pack's export, 818 MB;
+  - the drop probe, 488 MB;
+  - the LAN session (net probe, host and guests in one process), 388 MB;
+  - the gene probe, 362 MB;
+  - check 8's minute of play, 293 MB.
+
+  The APK's and the Windows executable's exports were not measured: they need the
+  export templates, which the container this was measured in did not have. They
+  pack and sign what the pack export packs, so expect them near it, plus Java's
+  for the APK's signing. Add the runner service and the system, under 1 GB. **2 GB
+  is the least to try, 4 GB is comfortable**, and swap of 2 to 4 GB turns a spike
+  into a slow step instead of a killed one. The first runs on a small container
+  are that measurement: a step killed for memory ends with exit code 137.
 - **Outbound HTTPS only, nothing inbound**: a runner polls GitHub, nothing calls
   it. It downloads from GitHub, Godot's release downloads, Google's Android
   repository and the Ubuntu mirrors.
@@ -117,8 +144,8 @@ hostname, and no token (CLAUDE.md, "Nothing personal in the repo").
 
 ## 5. Trying it
 
-Once the runner shows as **Idle** under Settings → Actions → Runners, set
-`CI_RUNNER` and re-run a pull request's CI. Then compare:
+Once the runner shows as **Idle** under Settings → Actions → Runners, open a pull
+request into `dev`, or run CI by hand on `dev`. Then compare:
 - the same checks pass (ALL PASS from each probe, and check 8's hash unchanged);
 - the logs show the runner's name rather than "GitHub Actions";
 - the time. The first run downloads Java, the Android SDK and Godot, and later
