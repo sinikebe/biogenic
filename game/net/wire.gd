@@ -167,7 +167,7 @@ const PROTOCOL := 9
 ## until this is moved, saying that no [constant PROTOCOL] bump goes with it. A build
 ## on new rules plays every build on its own rules, and none on the old ones until
 ## they update: that is what moving it means.
-const RULES := "dcaa5126c1bbad4499e5b75958936c6512ea000187d2324f110960b4cfd0cb8c"
+const RULES := "227baab28a8556fda9efaeddddd6c3d51a9761a9f029589889ff1b01ccb04606"
 
 # --- Frame kinds. Byte 0 of every frame. ------------------------------------
 ## Guest to host, first thing after the transport connects: *this is what I

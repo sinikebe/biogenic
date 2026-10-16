@@ -31,6 +31,9 @@ const Rulebook := preload("res://game/mechanics/rulebook.gd")
 const Genome := preload("res://game/normal/genome.gd")
 ## The genes there are (docs/design/gene-catalogue.md): the born cell's body plan.
 const Catalogue := preload("res://game/genes/catalogue.gd")
+## The genes in genes' own slots: where a peer's venom goes. Preloads the
+## catalogue alone.
+const Riders := preload("res://game/genes/riders.gd")
 
 # --- Size and shape (§2) -----------------------------------------------------
 
@@ -502,10 +505,17 @@ static func daughter_behaviours(list: Rulebook.Behaviour, vocab: Rulebook.Vocabu
 ## to one that wears another variant of it -- **the floor never gives a body a second
 ## strain beside the one it wears**. The gene waits for the next peer. Every organ
 ## today holds its variants side by side, so only the first rule ever answers.
-static func takes_back(tiers: Dictionary, gene: StringName) -> bool:
+static func takes_back(tiers: Dictionary, gene: StringName,
+		riders: Dictionary = {}) -> bool:
 	for form: StringName in Genome.forms_of(gene):
 		if int(tiers.get(form, 0)) > 0:
 			return false
+	# **Nor one whose gene's slot carries it** -- the venom in its mouth's.
+	var rider := Catalogue.rides_as(gene)
+	for host: Variant in riders:
+		for one: Variant in riders[host]:
+			if one is Array and StringName(one[0]) == rider:
+				return false
 	var organ := Catalogue.organ_of(gene)
 	if not Catalogue.one_variant(organ):
 		return true
@@ -519,17 +529,27 @@ static func takes_back(tiers: Dictionary, gene: StringName) -> bool:
 
 ## **A gene the floor gives back through a peer** (`floor_by_peers`, the toxin's
 ## every strain; gene-catalogue.md §6.4): [param gene], a variety, at tier 1, and
-## [param inside] -- the coin -- in its inside form, or outside in its outside one
+## [param inside] -- the coin -- in its inside form, or else where it goes outside
 ## (docs/design/dna-slots.md §9); a gene of one place in the one it has. Inside
-## takes no arc. Outside takes one, as the old gene did: a peer with no room
-## outside gives up a gene for it -- `pick` chooses which -- but never one of its
-## body plan or of [param senses], so it stays a cell that can live; with nothing
-## else to give up, it takes a bonus slot. Nothing, for a peer that carries it in
-## any form, or that may not take it ([method takes_back]).
+## takes no arc. **A gene whose outside form only rides** -- the toxin, whose venom
+## goes nowhere but a gene's slot since 2026-10-16 -- goes into the first of
+## [param riders]' slots that takes it, the mouth's, at one copy; with no slot that
+## does, inside. Outside on the body it takes an arc, as the old gene did: a peer
+## with no room outside gives up a gene for it -- `pick` chooses which -- but never
+## one of its body plan or of [param senses], so it stays a cell that can live;
+## with nothing else to give up, it takes a bonus slot. Nothing, for a peer that
+## carries it in any form, or that may not take it ([method takes_back]).
 static func give_back(tiers: Dictionary, gene: StringName, slots: int,
-		senses: Array[StringName], pick: int, inside: bool) -> void:
-	if not takes_back(tiers, gene):
+		senses: Array[StringName], pick: int, inside: bool,
+		riders: Dictionary = {}) -> void:
+	if not takes_back(tiers, gene, riders):
 		return
+	if not inside and Genome.is_riding_form(Catalogue.rides_as(gene)):
+		var room := Riders.room_for(riders, tiers, gene)
+		if not room.is_empty():
+			Riders.put(riders, room[0], room[1], gene, 1)
+			return
+		inside = true
 	var form := Genome.form_in(gene, Genome.INSIDE_PLACE if inside else Genome.OUTSIDE_PLACE)
 	if form == &"":
 		form = Genome.forms_of(gene)[0]

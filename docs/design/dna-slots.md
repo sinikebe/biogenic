@@ -23,6 +23,12 @@ and, answering this document's first draft and the screen's (§22):
 >
 > "Also, does cell have mouths?"
 
+> **Superseded in part, 2026-10-16** (docs/design/venom-rides.md), at the owner's
+> word: *"Remove toxin outside. Toxin can only be in eat or inside body."* A toxin
+> goes inside, as poison, or into a gene's own slot that takes it, as venom: the
+> mouth's, and the sting's. The seven slots round the body refuse it, so venom at
+> the front, on a side or at the stern (§3, §5) is gone. The rest stands.
+
 **Revised to those answers.** The first draft put two places on the seven
 slots round the body: the three at the front were the mouth's, the other four
 the body's. The owner's precision replaces that. **There are two places, in the

@@ -619,7 +619,7 @@ func _index() -> void:
 			bad.append_array(_unknown_fields(organ.organ, entry,
 				["variant", "dose", "forms"] + (["key"] if forms.is_empty() else [])))
 			for place: Variant in forms:
-				if StringName(place) != Gene.OUTSIDE and StringName(place) != Gene.INSIDE:
+				if not [Gene.OUTSIDE, Gene.INSIDE, Gene.RIDING].has(StringName(place)):
 					bad.append("%s's place %s" % [organ.organ, place])
 				if forms[place] is Dictionary:
 					bad.append_array(_unknown_fields(organ.organ, forms[place], ["key"]))
@@ -1723,7 +1723,7 @@ func _sockets() -> void:
 			unchanged = false
 	var plain := FoodField.toxins_of(body, [&"cytostome", &"", &"flagellum", &"trichocyst"])
 	var records := FoodField.toxins_of(body, [&"cytostome", &"", &"flagellum", &"trichocyst"],
-		true, riding)
+		riding)
 	var harm := float(Doses.Kind.HARM)
 	var upkeep := Genome.upkeep_of(body, {}, riding)
 	_check(("a rider gives its host its slot's gift by its copies -- the sting's dose %s at 0"
@@ -1803,6 +1803,47 @@ func _sockets() -> void:
 		and kept and gone)
 	genome.free()
 	again.free()
+
+	# **Venom rides, and only rides** (the owner, 2026-10-16): no outside slot takes
+	# it, the inside takes its poison, and a save that wore it outside -- the DNA and
+	# the body -- puts it in the mouth's slot, or lets it go where no slot has room.
+	var refusing: Node = Genome.new()
+	refusing.express({&"cytostome": 1, &"cirrus": 1, &"flagellum": 1},
+		[&"cytostome", &"cirrus", &"flagellum"])
+	refusing.integrate(&"veneneux")
+	var outside: Array = refusing.placing(&"veneneux", 3)
+	var inside: Array = refusing.placing(&"veneneux", Genome.INSIDE)
+	var not_placed: int = refusing.place(3)
+	refusing.free()
+	var old: Node = Genome.new()
+	old.express({&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"toxicyst": 2},
+		[&"cytostome", &"cirrus", &"flagellum", &"toxicyst"])
+	var seated := [old.layout(), Riders.by_name(old.riders()), Riders.by_name(old.body_riders()),
+		old.dna().has(&"toxicyst"), old.tiers().has(&"toxicyst")]
+	var mouthless: Node = Genome.new()
+	mouthless.express({&"cirrus": 1, &"flagellum": 1, &"toxicyst": 1},
+		[&"toxicyst", &"cirrus", &"flagellum"])
+	var let_go := [mouthless.layout(), mouthless.riders().is_empty(),
+		mouthless.dna().has(&"toxicyst")]
+	old.free()
+	mouthless.free()
+	var water_body := {&"cytostome": 1, &"toxicyst": 2}
+	var water_riders := {}
+	var water_moved := Genome.seat_riding(water_body, [], water_riders)
+	_check(("venom only rides: a waiting toxin is refused outside (%s) and placed inside as"
+		+ " poison (%s), and a tap outside places nothing (%s); a save that wore venom"
+		+ " outside has it in the mouth's slot, DNA and body (%s), and without a mouth lets"
+		+ " it go (%s); a water body's the same (%s, %s)") % [str(outside), str(inside),
+		Genome.Result.keys()[not_placed], str(seated), str(let_go), str(water_moved),
+		str(Riders.by_name(water_riders))],
+		outside[0] == Genome.PLACE_FACES_OUT and inside[0] == Genome.PLACE_WRITE
+		and not_placed == Genome.Result.NOTHING
+		and _same_list(seated[0], [&"cytostome", &"cirrus", &"flagellum", &""])
+		and seated[1] == {"cytostome": [["toxicyst", 2]]}
+		and seated[2] == {"cytostome": [["toxicyst", 2]]} and not seated[3] and not seated[4]
+		and let_go[1] and not let_go[2] and not (let_go[0] as Array).has(&"toxicyst")
+		and water_moved and water_body == {&"cytostome": 1}
+		and Riders.by_name(water_riders) == {"cytostome": [["toxicyst", 2]]})
 
 
 ## **The rulebook has no ceiling on owners** (§13, §15.6): the game's tables and seventy
@@ -2295,12 +2336,6 @@ func _words() -> void:
 		var needed: Array[StringName] = [&"word", &"explains"]
 		if Catalogue.has_forms(key):
 			needed.append_array([&"carried", &"carried_explains"] as Array[StringName])
-		# **A venom says where it works** (the 1b review's finding 4): every provider of
-		# `venom_stacks` -- whose mechanic is the bite at the front and a sting on a side
-		# or at the stern -- has its line on a side and at the stern, or a second strain
-		# would say its front line on the flank.
-		if Catalogue.provides(key, &"venom_stacks"):
-			needed.append_array([&"side", &"stern"] as Array[StringName])
 		# **A variant names itself after its organ** (gene-looks.md §4): every variant
 		# but the organ as shipped has its word for `organ · variant`.
 		if not Catalogue.as_shipped(key):
@@ -2483,12 +2518,17 @@ static func _quoted(text: String) -> String:
 ## a row with nothing in it is drawn as nothing at all. A gene that does not level
 ## is read in every slot too, as the pause screen reads it, so that every line its
 ## organ's file can say is said once here; worn somewhere, it still says what it
-## costs (a side venom the switch made inert says nothing else).
+## costs. **A form that only rides draws nothing**, as a gene's slot shows no
+## numbers of its own (gene-sockets.md §5): the toxin's venom.
 func _lines() -> void:
 	var ctx := GeneStats.context({})
 	var bad: Array[String] = []
 	var rows_read := 0
 	for key: StringName in Catalogue.live():
+		if Genome.is_riding_form(key):
+			if GeneStats.lines(key, 2, 0, &"", ctx)[0] != []:
+				bad.append("%s only rides, and draws numbers" % key)
+			continue
 		var levels := Catalogue.levels(key)
 		var cases: Array = [[0, &""]]
 		if not levels.is_empty():
@@ -2993,7 +3033,7 @@ func _plan_faults() -> Array[String]:
 ## as it shipped ([constant SHIPPED_PLAN]) -- in its own file and, as a build before
 ## slots left it, in a world's -- loaded under [constant PLAN_TEST], every gene in its
 ## slot by id and the removed slot's gene on the arc nearest it, nothing lost; the
-## genome's rules, the venom's sides, the wire's limits and the pause figure on that
+## genome's rules, the sting's side, the wire's limits and the pause figure on that
 ## plan; a cell kept under it loaded on the shipped plan again; and today's plan back,
 ## all of it, after. **Today's plan is never read here**: a change to it fails the
 ## check that holds it to the pins, and none of these. Every expectation is written by
@@ -3002,12 +3042,12 @@ func _synthetic_plan() -> void:
 	var before := _plan_snapshot()
 	BodyPlan.use(SHIPPED_PLAN, SHIPPED_RETIRED)
 	var dna := {&"cytostome": 2, &"cirrus": 1, &"flagellum": 3, &"ocellus": 1, &"palp": 1,
-		&"toxicyst": 2, &"ampulla": 1, &"veneneux": 2}
+		&"trichocyst": 2, &"ampulla": 1, &"veneneux": 2}
 	# Each gene by the id of its slot: the DNA's; the body's, which still wears the
 	# stigma the DNA has since written its eyespot over; and the second daughter's,
 	# her eyespot and palp shifted.
 	var kept_ids := {&"nose": &"cytostome", &"starboard": &"cirrus", &"tail": &"flagellum",
-		&"fore_starboard": &"ocellus", &"fore_port": &"palp", &"aft_starboard": &"toxicyst",
+		&"fore_starboard": &"ocellus", &"fore_port": &"palp", &"aft_starboard": &"trichocyst",
 		&"aft_port": &"ampulla"}
 	var worn_ids := kept_ids.duplicate()
 	worn_ids[&"fore_starboard"] = &"stigma"
@@ -3096,7 +3136,7 @@ func _synthetic_plan() -> void:
 		and refused_empty)
 
 	# **The genome's rules on it**: the counts, the ladder, the places, a move out of
-	# its last slot outside, and the venom's side read off the plan.
+	# its last slot outside, and the sting's side read off the plan.
 	var on_plan: Node = genomes[0]
 	var outside := _outside_indexes(PLAN_TEST)
 	var front: Array[int] = []
@@ -3119,22 +3159,19 @@ func _synthetic_plan() -> void:
 	var moved_to := expect_order.find(&"")
 	var moved: bool = on_plan.move(moved_from, moved_to)
 	var after_move: Array = on_plan.layout().duplicate()
-	var stings := FoodField.toxins_of(body, _worn_of(on_plan))
-	var sting_at := NAN
-	for k in range(0, stings.size(), FoodField.TOX_STRIDE):
-		if int(stings[k]) == FoodField.HOW_STING:
-			sting_at = stings[k + 3]
-	var venom := expect_worn.find(&"toxicyst")
+	var sting_seat: int = FoodField._seat_of(_worn_of(on_plan), body, &"dart_wound")
+	var sting_at := Cilia.slot_bearing(sting_seat) if sting_seat >= 0 else NAN
+	var venom := expect_worn.find(&"trichocyst")
 	var shipped_venom: Vector2 = SHIPPED_PLAN[_outside_indexes(SHIPPED_PLAN)[
-		worn.find(&"toxicyst")]]["arc"]
+		worn.find(&"trichocyst")]]["arc"]
 	var many := dna.duplicate()
 	many[&"stigma"] = 1
 	many[&"chemocyte"] = 1
 	var drawn := Cilia.default_order(many)
 	_check(("and the genome's rules follow it: slots %s at r13 to r40, its rows' %s; inside"
 		+ " from %d with %d, the front %s and the stern %d; the gene in slot %d, its last"
-		+ " outside, moves to the free slot %d (%s: %s); the venom on the moved rear diagonal"
-		+ " stings along its bearing (%.4f, the plan's %.4f); and a water body's default"
+		+ " outside, moves to the free slot %d (%s: %s); the sting on the moved rear diagonal"
+		+ " fires along its bearing (%.4f, the plan's %.4f); and a water body's default"
 		+ " order seats %d outside") % [str(ladder), str(by_rows), Genome.INSIDE,
 		Genome.INSIDE_SLOTS, str(Genome.FRONT), Genome.STERN, moved_from, moved_to, str(moved),
 		str(after_move), sting_at, Cilia.slot_bearing(venom), drawn.size()],
@@ -4003,22 +4040,24 @@ static func _offered_alike(vocab: Rulebook.Vocabulary, organ: StringName, varian
 ## entry of one place in that organ's own file (gene-catalogue.md §6.4), registered
 ## in its place: every rule that was the toxin's special case covers it by its
 ## organ's tags, so no drifter carries it and the floor gives it back through a
-## peer, into the one place it has; its venom is delivered at the front and on a
-## side, by its own kind; and its lines say what a stack of that kind does.
+## peer, into the one place it has; its poison is delivered to a biter and a
+## swallower, by its own kind; and its lines say what a stack of that kind does.
 func _strain_of_shipped() -> void:
 	var before := Array(Catalogue.keys())
 	var dosed := &""
 	for key: StringName in Catalogue.live():
-		if Catalogue.dose_of(key) != &"" and Catalogue.provides(key, &"venom_stacks"):
+		if Catalogue.dose_of(key) != &"" and Genome.is_inside_form(key):
 			dosed = key
 			break
 	var organ: Gene = (Catalogue.gene(dosed).get_script() as GDScript).new()
-	var stacks: Array = Catalogue.table(dosed, &"venom_stacks")
+	var bites: Array = Catalogue.table(dosed, &"poison_stacks")
+	var gulps: Array = Catalogue.table(dosed, &"swallow_stacks")
 	var shipped := Catalogue.keys_of_organ(Catalogue.organ_of(dosed)).duplicate()
 	organ.variants = organ.variants + [{"variant": &"probebarb", "dose": Catalogue.dose_of(dosed),
-		"order": 930, "water": {"drifter": true},
+		"water": {"drifter": true},
 		"look": {"accent": Kinds.MARK_DIAMOND},
-		"provides": {&"venom_stacks": stacks}}]
+		"forms": {Gene.INSIDE: {"key": &"probebarb", "order": 930,
+			"provides": {&"poison_stacks": bites, &"swallow_stacks": gulps}}}}]
 	Catalogue.register(organ)
 	var kept := Array(Catalogue.keys_of_organ(Catalogue.organ_of(dosed))) \
 		== Array(shipped) + [&"probebarb"]
@@ -4036,8 +4075,7 @@ func _strain_of_shipped() -> void:
 	var peer := Catalogue.born().duplicate()
 	Drop.give_back(peer, strain, CellBody.SLOT_MAX, Catalogue.tagged(Catalogue.SENSE), 0, true)
 	var kind := float(Doses.kind_of(Catalogue.dose_of(strain)))
-	var bite := FoodField.toxins_of({strain: 2}, [strain])
-	var side := FoodField.toxins_of({strain: 2}, [&"", strain])
+	var records := FoodField.toxins_of({strain: 2}, [])
 	var said := Catalogue.gene(strain).dose_line(GeneStats.context({}))
 	# **Its beads are its accent** (gene-looks.md §3.3): the toxin's colour, diamonds.
 	var beads := [Cilia.hue(strain) == Cilia.hue(dosed), Cilia.accent_of(strain),
@@ -4047,16 +4085,15 @@ func _strain_of_shipped() -> void:
 	_check(("and a second strain of %s, one entry of one place in its own file (its first"
 		+ " strain's keys kept: %s), is covered by every rule"
 		+ " that was the toxin's: tagged %s, no drifter carries it (%s), the floor gives it"
-		+ " back through a peer (%s), into its one place (%s); its venom bites at the front"
-		+ " and stings on a side, by its own kind (%s; %s); it says what a stack of its"
-		+ " dose does; and it is the toxin's colour with %s beads, named %s") % [gone,
+		+ " back through a peer (%s), into its one place (%s); its poison goes into a biter"
+		+ " and a swallower, by its own kind (%s); it says what a stack of its dose does;"
+		+ " and it is the toxin's colour with %s beads, named %s") % [gone,
 		str(kept), str(tagged), str(not drifting and to_drifter == &""), by_peer,
-		str(peer.get(strain, 0)), str(bite), str(side), beads[1], beads[2]],
+		str(peer.get(strain, 0)), str(records), beads[1], beads[2]],
 		kept and tagged and not drifting and to_drifter == &"" and by_peer == strain
 		and int(peer.get(strain, 0)) == 1
-		and bite == PackedFloat64Array([FoodField.HOW_BITE, kind, float(stacks[2]), 0.0])
-		and side == PackedFloat64Array([FoodField.HOW_STING, kind, float(stacks[2]),
-			Cilia.slot_bearing(1)])
+		and records == PackedFloat64Array([FoodField.HOW_POISON, kind, float(bites[2]), 0.0,
+			FoodField.HOW_SWALLOW, kind, float(gulps[2]), 0.0])
 		and not said.is_empty() and Array(Catalogue.keys()) == before
 		and beads == [true, Kinds.MARK_DIAMOND, "%s · probebarb" % Genome.name_of(dosed)])
 	_person_order()

@@ -42,6 +42,8 @@ const Progression := preload("res://game/mechanics/progression.gd")
 ## **Every gene there is** (docs/design/gene-catalogue.md): its order, its forms,
 ## its tags and its numbers, by key. Every rule here is generic and asks it.
 const Catalogue := preload("res://game/genes/catalogue.gd")
+## A gene's shape, for its places (`RIDING` among them). It loads nothing.
+const Gene := preload("res://game/genes/gene.gd")
 const Stats := preload("res://game/genes/stats.gd")
 ## The genes in genes' own slots, and every question asked of them
 ## (docs/design/gene-sockets.md). It preloads only the catalogue.
@@ -461,6 +463,14 @@ func express(dna: Dictionary, order: Array, body: Variant = null,
 	_riders = Riders.kept(Riders.copy(riders), _dna)
 	_body_riders = Riders.kept(Riders.copy(body_riders) if body_riders != null
 		else _riders, _body)
+	# **Venom worn outside, by a save from before it rode** (2026-10-16): into the
+	# first gene's slot that takes it, in the DNA and on the body alike.
+	if seat_riding(_dna, _order, _riders):
+		print("[genome] venom worn outside moved into a gene's slot, or let go")
+	if seat_riding(_body, [], _body_riders):
+		for gene: StringName in _body_slots.keys():
+			if not _body.has(gene):
+				_body_slots.erase(gene)
 	_tend_levels()
 	_sync_order()
 	body_version += 1
@@ -522,6 +532,30 @@ func _put_in_place(whole: bool) -> void:
 	for gene: StringName in _body_slots.keys():
 		if is_inside_form(gene) or int(_body_slots[gene]) >= INSIDE:
 			_body_slots.erase(gene)
+
+
+## **A riding form found on a body** (gene.gd's RIDING; the owner, 2026-10-16: venom
+## goes in the mouth's slot or inside, never outside): a save, a drop or a pose from
+## before venom rode. It leaves [param tiers] -- and its slot in [param seats], if
+## it has one -- and goes into the first gene's slot of [param riders] that takes it,
+## by [method Riders.room_for]: an empty one, or more copies of itself, up to three.
+## Where no gene has room, it is let go. True when anything moved.
+static func seat_riding(tiers: Dictionary, seats: Array, riders: Dictionary) -> bool:
+	var moved := false
+	for gene: Variant in tiers.keys():
+		var form := StringName(gene)
+		if Catalogue.place_of(form) != Gene.RIDING:
+			continue
+		var copies := int(tiers[gene])
+		tiers.erase(gene)
+		var at := seats.find(form)
+		if at >= 0:
+			seats[at] = &""
+		var room := Riders.room_for(riders, tiers, form)
+		if not room.is_empty():
+			Riders.put(riders, room[0], room[1], form, copies)
+		moved = true
+	return moved
 
 
 ## One form becomes another, at its copies, in the DNA -- and on the body too
@@ -628,7 +662,9 @@ func _lapse_form(waiting: Waiting) -> void:
 			_raise(form, waiting.copies)
 			return
 	for form: StringName in tried:
-		if _dna.has(form):
+		# **A riding form goes into a gene's slot by the player's hand alone**
+		# (gene-sockets.md §4), never by a lapse.
+		if _dna.has(form) or is_riding_form(form):
 			continue
 		if is_inside_form(form):
 			if count_inside(_dna) < INSIDE_SLOTS:
@@ -1072,6 +1108,9 @@ func integrate(gene: StringName) -> int:
 	if has_forms(gene):
 		var room := slot_room
 		for form: StringName in forms_of(gene):
+			# A riding form is never in the DNA: its room is a gene's slot's.
+			if is_riding_form(form):
+				continue
 			if int(_dna.get(form, 0)) < TIER_MAX:
 				room = true
 				break
@@ -1149,9 +1188,14 @@ func place(slot: int, which: int = 0) -> int:
 	if slot < 0:
 		return Result.NOTHING
 	if is_inside(slot):
-		if slot >= INSIDE + INSIDE_SLOTS or form_at(_waiting[which].gene, slot) == &"":
+		if slot >= INSIDE + INSIDE_SLOTS:
 			return Result.NOTHING
 	elif slot >= _order.size():
+		return Result.NOTHING
+	# **A gene that cannot sit there keeps waiting**: one that faces out offered the
+	# inside, and a toxin offered the ring, since its venom only rides (gene.gd's
+	# RIDING). Nothing is spent on a placement that cannot be.
+	if form_at(_waiting[which].gene, slot) == &"":
 		return Result.NOTHING
 	# It reached the DNA by another route while it waited: [method _settle]
 	# raises that locus, and certainly writes no second copy in a second slot.
@@ -1695,6 +1739,12 @@ static func is_inside_form(form: StringName) -> bool:
 	return Catalogue.place_of(form) == INSIDE_PLACE
 
 
+## **Whether [param form] only rides** (gene.gd's RIDING): in a gene's own slot, never
+## on the body -- the toxin's venom.
+static func is_riding_form(form: StringName) -> bool:
+	return Catalogue.place_of(form) == Gene.RIDING
+
+
 ## Whether [param form] is one form of a gene with others.
 static func has_forms(form: StringName) -> bool:
 	return Catalogue.has_forms(form)
@@ -1865,10 +1915,11 @@ static func _mutate_trade(tiers: Dictionary) -> bool:
 ##   variety's first, and any variety the lineage carries in any form -- so the
 ##   toxin comes by `veneneux`'s name, as often as it ever did, and a lineage that
 ##   carries venom does not draw it again as poison;
-## - **a toxin that comes takes the form of the slot it lands in**: venom, since
-##   the gene it replaces sat outside. A water cell has no slots ([param seats]
-##   empty), so its place is one more coin, drawn only when the toxin is what
-##   comes;
+## - **a toxin that comes is poison, inside**: its venom only rides (gene.gd's
+##   RIDING), so it can take no slot outside. With the inside full it does not
+##   come, and the caller's next kind is tried. A gene of forms that has an
+##   outside form takes the form of the slot it lands in, and a water cell's, with
+##   no slots ([param seats] empty), is one more coin;
 ## - **the poison that goes, inside, is replaced by a gene that faces out**, which
 ##   needs a free outside slot: a hole in a daughter's layout, or, for a water
 ##   cell, fewer genes outside than the plan has slots. With none, the drift does
@@ -1901,11 +1952,21 @@ static func _mutate_drift(tiers: Dictionary, seats: Array[StringName]) -> bool:
 	var form := into
 	if has_forms(into):
 		# The slot it lands in decides, and that slot is the outside one the gene
-		# it replaces held. A water cell has none to read: a coin.
-		if water:
-			form = into if randi() % 2 == 0 else form_in(into, OUTSIDE_PLACE)
+		# it replaces held. A water cell has none to read: a coin. **A gene of no
+		# outside form** -- the toxin, whose venom only rides -- comes inside, as
+		# its inside form, or not at all.
+		var outer := form_in(into, OUTSIDE_PLACE)
+		if outer == &"":
+			form = form_in(into, INSIDE_PLACE)
+		elif water:
+			form = into if randi() % 2 == 0 else outer
 		else:
-			form = form_in(into, OUTSIDE_PLACE)
+			form = outer
+		if form == &"":
+			return false
+		if is_inside_form(form) and not is_inside_form(out) \
+				and count_inside(tiers) >= INSIDE_SLOTS:
+			return false
 	var tier := int(tiers[out])
 	if is_inside_form(out) and not is_inside_form(form):
 		# The poison goes and a gene that faces out comes: it needs an arc.

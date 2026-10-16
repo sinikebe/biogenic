@@ -742,8 +742,7 @@ static func explains(gene: StringName, slot: int = -1,
 	var taken: Dictionary = words.get(&"paths", {})
 	if taken.has(path):
 		return String(TranslationServer.translate(taken[path]))
-	if slot >= 0 and not GenomeNode.is_inside(slot) and not GenomeNode.is_front(slot) \
-			and CellBody.VENOM_SIDES:
+	if slot >= 0 and not GenomeNode.is_inside(slot) and not GenomeNode.is_front(slot):
 		if slot == GenomeNode.STERN and words.has(&"stern"):
 			return String(TranslationServer.translate(words[&"stern"]))
 		if words.has(&"side"):

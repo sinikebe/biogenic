@@ -743,8 +743,7 @@ class WatchedDrop extends "res://game/normal/food.gd":
 		var carriers := {}
 		for b in _cells:
 			if b.seeded and not b.inert:
-				for gene: StringName in b.genome:
-					var kind := Genome.variety(gene)
+				for kind: StringName in carried_kinds(b):
 					carriers[kind] = int(carriers.get(kind, 0)) + 1
 		for gene: StringName in Catalogue.drifters():
 			var n := int(carriers.get(gene, 0))
@@ -765,6 +764,21 @@ class WatchedDrop extends "res://game/normal/food.gd":
 			if n < keeps and _short_before.has(gene):
 				still_short += 1
 		_short_before = _gene_floor.short.duplicate()
+
+	## **The varieties water body [param b] carries**, each once: every gene it
+	## wears, as its variety, and every form in its genes' slots that only rides --
+	## the venom in its mouth's (the owner, 2026-10-16) -- as the floor counts them
+	## (food.gd's `_carriers`).
+	static func carried_kinds(b: Object) -> Dictionary:
+		var kinds := {}
+		for gene: StringName in b.get("genome"):
+			kinds[Genome.variety(gene)] = true
+		var riders: Dictionary = b.get("riders")
+		for host: Variant in riders:
+			for one: Variant in riders[host]:
+				if one is Array and Genome.is_riding_form(StringName(one[0])):
+					kinds[Genome.variety(StringName(one[0]))] = true
+		return kinds
 
 
 func _ready() -> void:
@@ -1359,23 +1373,32 @@ func _drop() -> void:
 		and blind.size() == 4 and int(blind[Catalogue.tagged(Catalogue.SENSE)[3]]) == 1
 		and sighted.size() == 4)
 	# **The toxin back through a peer, at either place** (dna-slots.md §9, §20.3
-	# check 8): venom takes an arc as the old gene did, poison takes none.
+	# check 8): venom into the mouth's slot -- it rides, and takes no arc -- poison
+	# inside, where it takes none either.
 	var full := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"ampulla": 1, &"crista": 2}
-	Drop.give_back(full, TOXIN, 5, Catalogue.tagged(Catalogue.SENSE), 3, false)
-	var bare := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"chemocyte": 1}
-	Drop.give_back(bare, TOXIN, 3, Catalogue.tagged(Catalogue.SENSE), 3, false)
+	var full_riders := {}
+	Drop.give_back(full, TOXIN, 5, Catalogue.tagged(Catalogue.SENSE), 3, false, full_riders)
+	var mouthless := {&"cirrus": 1, &"flagellum": 1, &"chemocyte": 1}
+	var mouthless_riders := {}
+	Drop.give_back(mouthless, TOXIN, 3, Catalogue.tagged(Catalogue.SENSE), 3, false,
+		mouthless_riders)
 	var inside := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"ampulla": 1, &"crista": 2}
 	Drop.give_back(inside, TOXIN, 5, Catalogue.tagged(Catalogue.SENSE), 3, true)
-	var carried := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"toxicyst": 2}
-	Drop.give_back(carried, TOXIN, 5, Catalogue.tagged(Catalogue.SENSE), 3, true)
-	_check("venom back through a full peer takes a spare slot, never the plan or a sense"
-		+ " (%s); with none spare, a bonus one (%s); poison takes no slot (%s); and a"
-		% [str(full.keys()), str(bare.keys()), str(inside.keys())]
+	var carried := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
+	var carried_riders := {&"cytostome": [[&"toxicyst", 2]]}
+	Drop.give_back(carried, TOXIN, 5, Catalogue.tagged(Catalogue.SENSE), 3, true,
+		carried_riders)
+	_check("venom back through a peer goes into its mouth's slot, its genes untouched (%s, %s);"
+		% [str(full.keys()), str(Riders.by_name(full_riders))]
+		+ " with no mouth, poison (%s); poison takes no slot (%s); and a"
+		% [str(mouthless.keys()), str(inside.keys())]
 		+ " peer carrying either form is given nothing (%s)" % str(carried.keys()),
-		full.has(&"toxicyst") and not full.has(&"crista") and full.has(&"ampulla")
-		and full.size() == 5 and bare.size() == 5 and bare.has(&"toxicyst")
+		full.size() == 5 and not full.has(&"toxicyst")
+		and Riders.by_name(full_riders) == {"cytostome": [["toxicyst", 1]]}
+		and mouthless.has(TOXIN) and mouthless_riders.is_empty()
 		and inside.has(TOXIN) and inside.has(&"crista") and inside.size() == 6
-		and carried.size() == 4 and not carried.has(TOXIN))
+		and carried.size() == 3 and not carried.has(TOXIN)
+		and Riders.by_name(carried_riders) == {"cytostome": [["toxicyst", 2]]})
 	# Where a new body may go: out of every player's reach, and in the drop.
 	var players := PackedVector2Array([OFF_CENTRE + Vector2(1500.0, -800.0),
 		OFF_CENTRE + Vector2(-4500.0, 3000.0)])
@@ -2150,8 +2173,7 @@ func _lineage_look(field: WatchedDrop, t: float, seen: Dictionary) -> void:
 	var genes := {}
 	for b: Object in field.get("_cells"):
 		if b.get("seeded") and not b.get("inert"):
-			for gene: StringName in b.get("genome"):
-				genes[GenomeNode.variety(gene)] = true
+			genes.merge(WatchedDrop.carried_kinds(b))
 	# The least from no ceiling at all: a catalogue may carry more than any number.
 	seen["genes"] = minf(float(seen.get("genes", INF)), float(genes.size()))
 	seen["looks"] = int(seen.get("looks", 0)) + 1
@@ -2810,10 +2832,15 @@ func _determinism() -> void:
 ## 45 degrees either side of the way its organ faces, where it heard the whole half
 ## circle, so a water hunter with a ping hears fewer bodies. With the half circle put
 ## back, this branch printed the old ones to the byte.
+## **Re-recorded when venom came to ride** (docs/design/venom-rides.md), from the
+## check's own output, because the water changed on purpose: a toxin goes inside or
+## into a gene's slot, never round the body, so the floor's venom and the founders'
+## ride their mouths, and drift brings the toxin as poison. Nothing else moved; the
+## rules two builds agree on moved with venom's side and stern lines (`Wire.RULES`).
 const THREE_ONE_LINES: Array[String] = [
-	"[census] t 40  living 549 (drifters 456, hunters 93)  flocs 34  | hunters at r40 0, mean r 29.5, hunger 0.67  | could swallow r26/r34/r40 17/0/0  dread 0.33/0.01/0.00  genes 17  | spawned 634  died: swallowed 82 chewed 0 starved 3 (r40 0) poisoned 0  | grazed by the water 3, by drifters 0, dissolved 0, snow kept 4, remains 3  | runs 0 at you 0 misses 0 stings 2 dashes 0  floors: gene 0+0 drifter 0  | sum 3035524957",
-	"[lineage] t 40  hunters 93, born 0  generation mean 1.00 max 1  families 93 (largest 1)  dna apart 33  | cruise 56.5 notice 638 mouth 1.00 upkeep 1.00 genes worn 4.02 carried 4.14  tails 93 sighted 93 at r40 0  | divisions 0 (trade 0 drift 0 faithfully 0), daughters 0: tailless 0, given a sense 0  | the spawner's peers 4 (for the floor 4, for venom 0), drifters 75, left to births 0  | worn cytostome 1.00 cirrus 1.00 flagellum 1.00 stigma 0.31 ocellus 0.25 chemocyte 0.19 ampulla 0.25 axoneme 0.00 palp 0.00 myoneme 0.00 trichocyst 0.00 pellicle 0.00 veneneux 0.00 plastid 0.00 vacuole 0.00 crista 0.00 toxicyst 0.02 haptonema 0.00  | commonest 28x cytostome:1,cirrus:1,flagellum:1,stigma:1 ; 23x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 22x cytostome:1,cirrus:1,flagellum:1,ampulla:1",
-	"[behaviour] t 40  hunters 93: on the founders' rules 93, other lists 0  | founders' rules fired 2729/8655/278/147/1458/17459/0  | meals of hunters with a nose 19, radar 21, laser 25  | stings 2, stuns 0, your wakes 0  | now holding a heading 39, resting 18, swimming 75, pushing 0, stunned 0, echoes in flight 44",
+	"[census] t 40  living 542 (drifters 447, hunters 95)  flocs 34  | hunters at r40 0, mean r 29.5, hunger 0.68  | could swallow r26/r34/r40 17/0/0  dread 0.26/0.00/0.00  genes 16  | spawned 628  died: swallowed 84 chewed 0 starved 2 (r40 0) poisoned 0  | grazed by the water 2, by drifters 0, dissolved 0, snow kept 4, remains 2  | runs 0 at you 0 misses 0 stings 2 dashes 0  floors: gene 0+0 drifter 0  | sum 3017086443",
+	"[lineage] t 40  hunters 95, born 0  generation mean 1.00 max 1  families 95 (largest 1)  dna apart 32  | cruise 56.5 notice 636 mouth 1.00 upkeep 1.00 genes worn 4.00 carried 4.15  tails 95 sighted 95 at r40 0  | divisions 0 (trade 0 drift 0 faithfully 0), daughters 0: tailless 0, given a sense 0  | the spawner's peers 4 (for the floor 4, for venom 0), drifters 69, left to births 0  | worn cytostome 1.00 cirrus 1.00 flagellum 1.00 stigma 0.32 ocellus 0.24 chemocyte 0.20 ampulla 0.24 axoneme 0.00 palp 0.00 myoneme 0.00 trichocyst 0.00 pellicle 0.00 veneneux 0.00 plastid 0.00 vacuole 0.00 crista 0.00 toxicyst 0.00 haptonema 0.00  | commonest 30x cytostome:1,cirrus:1,flagellum:1,stigma:1 ; 23x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 23x cytostome:1,cirrus:1,flagellum:1,ocellus:1",
+	"[behaviour] t 40  hunters 95: on the founders' rules 95, other lists 0  | founders' rules fired 2616/8597/281/140/1580/17694/0  | meals of hunters with a nose 18, radar 23, laser 23  | stings 2, stuns 0, your wakes 0  | now holding a heading 42, resting 22, swimming 73, pushing 0, stunned 0, echoes in flight 40",
 ]
 ## What phase 3-2's behaviour line adds after phase 3-1's, for a water whose
 ## rules never changed: one behaviour, every hunter on it, no change made.
@@ -5928,12 +5955,17 @@ const IDENTITY_DNA := {&"cytostome": 2, &"cirrus": 1, &"flagellum": 1, &"chemocy
 ## seconds of rest where it held thirty-six, at the same costs and the same meals, so a
 ## hunter starves later. With the tank, the meal and the dash put back as they were,
 ## this branch printed the old ones to the byte.
+## **Re-recorded when venom came to ride** (docs/design/venom-rides.md), from the
+## check's own output, because the water changed on purpose: a toxin goes inside or
+## into a gene's slot, never round the body, so the floor's venom and the founders'
+## ride their mouths, and drift brings the toxin as poison. Nothing else moved; the
+## rules two builds agree on moved with venom's side and stern lines (`Wire.RULES`).
 const IDENTITY_LINES: Array[String] = [
-	"[census] t 30  living 536 (drifters 440, hunters 96)  flocs 29  | hunters at r40 0, mean r 30.3, hunger 0.38  | could swallow r26/r34/r40 26/1/0  dread 0.35/0.01/0.00  genes 18  | spawned 638  died: swallowed 102 chewed 0 starved 0 (r40 0) poisoned 0  | grazed by the water 4, by drifters 0, dissolved 0, snow kept 3, remains 0  | runs 157 at you 0 misses 47 stings 4 dashes 0  floors: gene 0+0 drifter 0  | sum 2976889376",
-	"[census] t 60  living 537 (drifters 443, hunters 94)  flocs 27  | hunters at r40 21, mean r 35.1, hunger 0.50  | could swallow r26/r34/r40 67/6/3  dread 1.04/0.15/0.04  genes 18  | spawned 767  died: swallowed 227 chewed 1 starved 2 (r40 0) poisoned 0  | grazed by the water 9, by drifters 1, dissolved 0, snow kept 5, remains 2  | runs 387 at you 0 misses 169 stings 6 dashes 12  floors: gene 0+0 drifter 0  | sum 1749966948",
-	"[census] t 30  living 532 (drifters 420, hunters 112)  flocs 33  | hunters at r40 0, mean r 30.2, hunger 0.38  | could swallow r26/r34/r40 25/1/0  dread 0.37/0.00/0.00  genes 17  | spawned 650  died: swallowed 118 chewed 0 starved 0 (r40 0) poisoned 0  | grazed by the water 2, by drifters 0, dissolved 0, snow kept 5, remains 0  | runs 257 at you 0 misses 128 stings 1 dashes 0  floors: gene 0+0 drifter 0  | sum 1911577667",
-	"[census] t 60  living 523 (drifters 421, hunters 102)  flocs 32  | hunters at r40 20, mean r 35.9, hunger 0.49  | could swallow r26/r34/r40 83/3/2  dread 1.48/0.14/0.02  genes 17  | spawned 805  died: swallowed 274 chewed 3 starved 5 (r40 0) poisoned 0  | grazed by the water 8, by drifters 1, dissolved 0, snow kept 6, remains 5  | runs 511 at you 0 misses 235 stings 4 dashes 4  floors: gene 0+0 drifter 0  | sum 3231311563",
-	"[census] t 30  living 535 (drifters 419, hunters 116)  flocs 23  | hunters at r40 0, mean r 30.0, hunger 0.37  | could swallow r26/r34/r40 27/0/0  dread 0.46/0.00/0.00  genes 17  | spawned 651  died: swallowed 116 chewed 0 starved 0 (r40 0) poisoned 0  | grazed by the water 7, by drifters 1, dissolved 0, snow kept 1, remains 0  | runs 227 at you 0 misses 87 stings 2 dashes 0  floors: gene 0+0 drifter 0  | sum 760284622",
+	"[census] t 30  living 536 (drifters 440, hunters 96)  flocs 29  | hunters at r40 0, mean r 30.3, hunger 0.38  | could swallow r26/r34/r40 26/1/0  dread 0.35/0.01/0.00  genes 17  | spawned 638  died: swallowed 102 chewed 0 starved 0 (r40 0) poisoned 0  | grazed by the water 4, by drifters 0, dissolved 0, snow kept 3, remains 0  | runs 157 at you 0 misses 47 stings 4 dashes 0  floors: gene 0+0 drifter 0  | sum 2976889376",
+	"[census] t 60  living 537 (drifters 443, hunters 94)  flocs 27  | hunters at r40 21, mean r 35.1, hunger 0.50  | could swallow r26/r34/r40 67/6/3  dread 1.04/0.15/0.04  genes 17  | spawned 767  died: swallowed 227 chewed 1 starved 2 (r40 0) poisoned 0  | grazed by the water 9, by drifters 1, dissolved 0, snow kept 5, remains 2  | runs 387 at you 0 misses 169 stings 6 dashes 12  floors: gene 0+0 drifter 0  | sum 1749966948",
+	"[census] t 30  living 532 (drifters 420, hunters 112)  flocs 33  | hunters at r40 0, mean r 30.2, hunger 0.38  | could swallow r26/r34/r40 25/1/0  dread 0.37/0.00/0.00  genes 16  | spawned 650  died: swallowed 118 chewed 0 starved 0 (r40 0) poisoned 0  | grazed by the water 2, by drifters 0, dissolved 0, snow kept 5, remains 0  | runs 257 at you 0 misses 128 stings 1 dashes 0  floors: gene 0+0 drifter 0  | sum 1911577667",
+	"[census] t 60  living 531 (drifters 431, hunters 100)  flocs 33  | hunters at r40 17, mean r 35.7, hunger 0.49  | could swallow r26/r34/r40 84/5/4  dread 1.37/0.14/0.03  genes 16  | spawned 809  died: swallowed 269 chewed 4 starved 5 (r40 0) poisoned 0  | grazed by the water 7, by drifters 2, dissolved 0, snow kept 7, remains 5  | runs 515 at you 0 misses 243 stings 4 dashes 7  floors: gene 0+0 drifter 0  | sum 3004367297",
+	"[census] t 30  living 535 (drifters 419, hunters 116)  flocs 23  | hunters at r40 0, mean r 30.0, hunger 0.37  | could swallow r26/r34/r40 27/0/0  dread 0.46/0.00/0.00  genes 16  | spawned 651  died: swallowed 116 chewed 0 starved 0 (r40 0) poisoned 0  | grazed by the water 7, by drifters 1, dissolved 0, snow kept 1, remains 0  | runs 227 at you 0 misses 87 stings 2 dashes 0  floors: gene 0+0 drifter 0  | sum 760284622",
 ]
 
 
@@ -5997,9 +6029,14 @@ const IDENTITY_LINES: Array[String] = [
 ## seconds of rest where it held thirty-six, at the same costs and the same meals, so a
 ## hunter starves later. With the tank, the meal and the dash put back as they were,
 ## this branch printed the old ones to the byte.
+## **Re-recorded when venom came to ride** (docs/design/venom-rides.md), from the
+## check's own output, because the water changed on purpose: a toxin goes inside or
+## into a gene's slot, never round the body, so the floor's venom and the founders'
+## ride their mouths, and drift brings the toxin as poison. Nothing else moved; the
+## rules two builds agree on moved with venom's side and stern lines (`Wire.RULES`).
 const DEV_LINES: Array[String] = [
-	"[census] t 300  living 600 (drifters 430, hunters 170)  flocs 27  | hunters at r40 1, mean r 31.6, hunger 0.44  | could swallow r26/r34/r40 109/26/18  dread 1.56/0.51/0.24  genes 17  | spawned 1969  died: swallowed 1615 chewed 118 starved 82 (r40 0) poisoned 7  | grazed by the water 70, by drifters 3, dissolved 29, snow kept 10, remains 89  | runs 3083 at you 0 misses 1601 stings 99 dashes 402  floors: gene 0+2 drifter 0  | sum 3919946691",
-	"[lineage] t 300  hunters 170, born 170  generation mean 5.82 max 9  families 54 (largest 10)  dna apart 145  | cruise 86.7 notice 1198 mouth 1.38 upkeep 1.79 genes worn 5.69 carried 7.27  tails 116 sighted 170 at r40 1  | divisions 453 (trade 203 drift 250 faithfully 0), daughters 906: tailless 307, given a sense 171  | the spawner's peers 12 (for the floor 10, for venom 2), drifters 1402, left to births 0  | worn cytostome 1.38 cirrus 1.68 flagellum 1.64 stigma 0.26 ocellus 0.76 chemocyte 0.92 ampulla 0.71 axoneme 0.34 palp 0.28 myoneme 0.46 trichocyst 0.33 pellicle 0.38 veneneux 0.00 plastid 0.38 vacuole 0.24 crista 0.31 toxicyst 0.09 haptonema 0.65  | commonest 1x cytostome:1,ampulla:2,axoneme:3,pellicle:2,haptonema:2 ; 1x cytostome:1,ampulla:3,axoneme:3,trichocyst:1,haptonema:2 ; 1x cytostome:1,chemocyte:3,ampulla:3,plastid:2",
+	"[census] t 300  living 598 (drifters 425, hunters 173)  flocs 21  | hunters at r40 0, mean r 31.5, hunger 0.39  | could swallow r26/r34/r40 106/28/19  dread 1.36/0.47/0.26  genes 17  | spawned 1959  died: swallowed 1629 chewed 116 starved 71 (r40 0) poisoned 4  | grazed by the water 69, by drifters 3, dissolved 25, snow kept 13, remains 75  | runs 2947 at you 0 misses 1470 stings 123 dashes 298  floors: gene 0+2 drifter 0  | sum 4017699240",
+	"[lineage] t 300  hunters 173, born 173  generation mean 5.90 max 11  families 53 (largest 9)  dna apart 150  | cruise 85.6 notice 1177 mouth 1.38 upkeep 1.81 genes worn 5.80 carried 7.32  tails 122 sighted 173 at r40 0  | divisions 459 (trade 222 drift 237 faithfully 0), daughters 918: tailless 313, given a sense 163  | the spawner's peers 12 (for the floor 10, for venom 2), drifters 1392, left to births 0  | worn cytostome 1.38 cirrus 1.90 flagellum 1.66 stigma 0.30 ocellus 0.68 chemocyte 0.91 ampulla 0.71 axoneme 0.29 palp 0.47 myoneme 0.38 trichocyst 0.38 pellicle 0.40 veneneux 0.09 plastid 0.30 vacuole 0.32 crista 0.27 toxicyst 0.00 haptonema 0.69  | commonest 2x cytostome:1,cirrus:3,flagellum:3,chemocyte:1,pellicle:3,plastid:2,haptonema:3 ; 2x cytostome:1,flagellum:1,ocellus:1,ampulla:2,axoneme:3,palp:3,myoneme:1,trichocyst:3 ; 1x cytostome:1,ampulla:1,axoneme:3,palp:3,trichocyst:3,plastid:1",
 ]
 
 
@@ -6668,7 +6705,7 @@ func _gene_slots() -> void:
 		field.take_out(k)
 	# Yours, with venom in its slot, into a water cell touching its side.
 	var riders := {&"trichocyst": [[&"toxicyst", 3]]}
-	field.toxins = FoodField.toxins_of({&"trichocyst": 3}, [], true, riders)
+	field.toxins = FoodField.toxins_of({&"trichocyst": 3}, [], riders)
 	field.dart_wound = Stats.at(&"dart_wound", 3)
 	field.dart_bearing = PI * 0.5
 	field.dart_cooldown = Stats.at(&"dart_cooldown", 3)
@@ -6703,13 +6740,16 @@ func _gene_slots() -> void:
 	var daughters: PackedInt32Array = field._divide(grown, gb)
 	var carried := 0
 	var wearing := 0
+	var ids := {}
 	for d: int in daughters:
 		var db: Object = cells[d]
+		ids[int(db.get("id"))] = true
 		if Riders.rider_at(db.get("dna_riders"), &"cytostome", 0) == &"toxicyst":
 			carried += 1
 		if Riders.rider_at(db.get("riders"), &"cytostome", 0) == &"toxicyst":
 			wearing += 1
-	# And the drop's file keeps both, through the shape it is checked by.
+	# And the drop's file keeps both, through the shape it is checked by: the
+	# daughters', by their ids, since the floor's peers may carry venom too.
 	var data := DropSave.compose(field.drop_state(), {})
 	var shape := DropSave.unusable(data)
 	var cell2 := CellBody.new()
@@ -6720,9 +6760,9 @@ func _gene_slots() -> void:
 	var kept := 0
 	for i in (field2.get("_cells") as Array).size():
 		var b2: Object = (field2.get("_cells") as Array)[i]
-		if bool(b2.get("seeded")) and Riders.rider_at(b2.get("riders"), &"cytostome",
-				0) == &"toxicyst" and Riders.rider_at(b2.get("dna_riders"), &"cytostome",
-				0) == &"toxicyst":
+		if bool(b2.get("seeded")) and ids.has(int(b2.get("id"))) \
+				and Riders.rider_at(b2.get("riders"), &"cytostome", 0) == &"toxicyst" \
+				and Riders.rider_at(b2.get("dna_riders"), &"cytostome", 0) == &"toxicyst":
 			kept += 1
 	field2.queue_free()
 	cell2.free()
@@ -7307,10 +7347,15 @@ func _modular() -> void:
 ## 45 degrees either side of the way its organ faces, where it heard the whole half
 ## circle, so a water hunter with a ping hears fewer bodies. With the half circle put
 ## back, this branch printed the old ones to the byte.
+## **Re-recorded when venom came to ride** (docs/design/venom-rides.md), from the
+## check's own output, because the water changed on purpose: a toxin goes inside or
+## into a gene's slot, never round the body, so the floor's venom and the founders'
+## ride their mouths, and drift brings the toxin as poison. Nothing else moved; the
+## rules two builds agree on moved with venom's side and stern lines (`Wire.RULES`).
 const PACK3_LINES: Array[String] = [
-	"[census] t 300  living 549 (drifters 454, hunters 95)  flocs 69  | hunters at r40 0, mean r 30.6, hunger 0.46  | could swallow r26/r34/r40 45/9/6  dread 0.76/0.18/0.08  genes 18  | spawned 1382  died: swallowed 759 chewed 25 starved 193 (r40 0) poisoned 2  | grazed by the water 74, by drifters 2, dissolved 93, snow kept 13, remains 195  | runs 0 at you 0 misses 0 stings 44 dashes 0  floors: gene 0+2 drifter 0  | sum 2177970666",
-	"[lineage] t 300  hunters 95, born 68  generation mean 2.72 max 6  families 60 (largest 6)  dna apart 71  | cruise 78.0 notice 873 mouth 1.25 upkeep 1.30 genes worn 4.57 carried 6.02  tails 74 sighted 95 at r40 0  | divisions 146 (trade 71 drift 75 faithfully 0), daughters 292: tailless 105, given a sense 71  | the spawner's peers 146 (for the floor 144, for venom 2), drifters 681, left to births 0  | worn cytostome 1.25 cirrus 1.02 flagellum 1.40 stigma 0.19 ocellus 0.49 chemocyte 0.29 ampulla 0.45 axoneme 0.27 palp 0.14 myoneme 0.05 trichocyst 0.09 pellicle 0.08 veneneux 0.01 plastid 0.13 vacuole 0.14 crista 0.11 toxicyst 0.03 haptonema 0.28  | commonest 9x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 7x cytostome:1,cirrus:1,flagellum:1,chemocyte:1 ; 5x cytostome:1,cirrus:1,flagellum:1,ocellus:1",
-	"[behaviour] t 300  hunters 95: on the founders' rules 45, other lists 50  | founders' rules fired 18193/46964/1783/1096/7548/87650/2143  | meals of hunters with a nose 154, radar 283, laser 338  | stings 44, stuns 0, your wakes 0  | now holding a heading 34, resting 45, swimming 50, pushing 7, stunned 0, echoes in flight 76  | behaviours 42, unchanged 49.5 %  | rules changed 146: nudge 76, replace 30, swap 11, copy 16, drop 13",
+	"[census] t 300  living 553 (drifters 458, hunters 95)  flocs 77  | hunters at r40 0, mean r 30.2, hunger 0.50  | could swallow r26/r34/r40 42/4/2  dread 0.68/0.15/0.07  genes 17  | spawned 1369  died: swallowed 727 chewed 28 starved 197 (r40 0) poisoned 1  | grazed by the water 77, by drifters 2, dissolved 85, snow kept 13, remains 198  | runs 0 at you 0 misses 0 stings 34 dashes 0  floors: gene 0+3 drifter 0  | sum 1611088657",
+	"[lineage] t 300  hunters 95, born 44  generation mean 2.14 max 8  families 76 (largest 4)  dna apart 57  | cruise 70.6 notice 813 mouth 1.12 upkeep 1.23 genes worn 4.44 carried 5.46  tails 83 sighted 95 at r40 0  | divisions 137 (trade 60 drift 77 faithfully 0), daughters 274: tailless 87, given a sense 69  | the spawner's peers 168 (for the floor 165, for venom 3), drifters 646, left to births 0  | worn cytostome 1.12 cirrus 1.14 flagellum 1.28 stigma 0.24 ocellus 0.45 chemocyte 0.29 ampulla 0.32 axoneme 0.20 palp 0.04 myoneme 0.12 trichocyst 0.08 pellicle 0.06 veneneux 0.04 plastid 0.11 vacuole 0.16 crista 0.01 toxicyst 0.00 haptonema 0.17  | commonest 16x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 15x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 12x cytostome:1,cirrus:1,flagellum:1,chemocyte:1",
+	"[behaviour] t 300  hunters 95: on the founders' rules 62, other lists 33  | founders' rules fired 19242/49345/1867/1146/6803/93617/1377  | meals of hunters with a nose 184, radar 247, laser 341  | stings 34, stuns 0, your wakes 0  | now holding a heading 31, resting 41, swimming 53, pushing 5, stunned 0, echoes in flight 51  | behaviours 29, unchanged 65.3 %  | rules changed 137: nudge 66, replace 25, swap 17, copy 17, drop 12",
 ]
 ## **The same five minutes in the game's water** (row 37), pinned as
 ## [constant DEV_LINES] pins pack 2's: [method _five_minutes]' drop, seed 1, as
@@ -7383,10 +7428,15 @@ const PACK3_LINES: Array[String] = [
 ## 45 degrees either side of the way its organ faces, where it heard the whole half
 ## circle, so a water hunter with a ping hears fewer bodies. With the half circle put
 ## back, this branch printed the old ones to the byte.
+## **Re-recorded when venom came to ride** (docs/design/venom-rides.md), from the
+## check's own output, because the water changed on purpose: a toxin goes inside or
+## into a gene's slot, never round the body, so the floor's venom and the founders'
+## ride their mouths, and drift brings the toxin as poison. Nothing else moved; the
+## rules two builds agree on moved with venom's side and stern lines (`Wire.RULES`).
 const TAIL_LINES: Array[String] = [
-	"[census] t 300  living 549 (drifters 451, hunters 98)  flocs 78  | hunters at r40 0, mean r 30.0, hunger 0.48  | could swallow r26/r34/r40 35/8/2  dread 0.56/0.16/0.07  genes 17  | spawned 1541  died: swallowed 970 chewed 20 starved 216 (r40 0) poisoned 0  | grazed by the water 104, by drifters 6, dissolved 74, snow kept 16, remains 216  | runs 0 at you 0 misses 0 stings 43 dashes 0  floors: gene 0+2 drifter 0  | sum 3447574312",
-	"[lineage] t 300  hunters 98, born 47  generation mean 2.76 max 10  families 72 (largest 9)  dna apart 59  | cruise 68.5 notice 941 mouth 1.19 upkeep 1.31 genes worn 4.47 carried 5.34  tails 85 sighted 98 at r40 0  | divisions 214 (trade 103 drift 111 faithfully 0), daughters 428: tailless 138, given a sense 79  | the spawner's peers 143 (for the floor 141, for venom 2), drifters 843, left to births 0  | worn cytostome 1.19 cirrus 1.09 flagellum 1.24 stigma 0.29 ocellus 0.50 chemocyte 0.59 ampulla 0.30 axoneme 0.12 palp 0.27 myoneme 0.04 trichocyst 0.00 pellicle 0.19 veneneux 0.00 plastid 0.04 vacuole 0.17 crista 0.10 toxicyst 0.06 haptonema 0.31  | commonest 21x cytostome:1,cirrus:1,flagellum:1,chemocyte:1 ; 13x cytostome:1,cirrus:1,flagellum:1,stigma:1 ; 9x cytostome:1,cirrus:1,flagellum:1,ampulla:1",
-	"[behaviour] t 300  hunters 98: on the founders' rules 60, other lists 38  | founders' rules fired 18126/33920/1561/1600/7093/76721/3059  | meals of hunters with a nose 283, radar 328, laser 368  | stings 43, stuns 0, your wakes 0  | now holding a heading 38, resting 46, swimming 88, pushing 2, stunned 0, echoes in flight 47  | behaviours 34, unchanged 61.2 %  | rules changed 214: nudge 113, replace 45, swap 20, copy 20, drop 16",
+	"[census] t 300  living 551 (drifters 456, hunters 95)  flocs 77  | hunters at r40 0, mean r 30.7, hunger 0.47  | could swallow r26/r34/r40 46/7/4  dread 0.55/0.15/0.07  genes 17  | spawned 1530  died: swallowed 906 chewed 11 starved 241 (r40 0) poisoned 1  | grazed by the water 115, by drifters 4, dissolved 94, snow kept 18, remains 242  | runs 0 at you 0 misses 0 stings 51 dashes 0  floors: gene 0+2 drifter 0  | sum 86573132",
+	"[lineage] t 300  hunters 95, born 65  generation mean 3.18 max 7  families 58 (largest 5)  dna apart 70  | cruise 78.3 notice 914 mouth 1.17 upkeep 1.36 genes worn 4.74 carried 5.97  tails 76 sighted 95 at r40 0  | divisions 180 (trade 86 drift 94 faithfully 0), daughters 360: tailless 135, given a sense 76  | the spawner's peers 143 (for the floor 141, for venom 2), drifters 832, left to births 0  | worn cytostome 1.17 cirrus 1.18 flagellum 1.28 stigma 0.29 ocellus 0.66 chemocyte 0.43 ampulla 0.57 axoneme 0.45 palp 0.18 myoneme 0.06 trichocyst 0.15 pellicle 0.06 veneneux 0.05 plastid 0.09 vacuole 0.28 crista 0.24 toxicyst 0.00 haptonema 0.13  | commonest 9x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 9x cytostome:1,cirrus:1,flagellum:1,stigma:1 ; 8x cytostome:1,cirrus:1,flagellum:1,chemocyte:1",
+	"[behaviour] t 300  hunters 95: on the founders' rules 47, other lists 48  | founders' rules fired 18054/34621/1745/1115/8438/80961/2422  | meals of hunters with a nose 253, radar 392, laser 328  | stings 51, stuns 0, your wakes 0  | now holding a heading 32, resting 42, swimming 78, pushing 8, stunned 0, echoes in flight 85  | behaviours 42, unchanged 49.5 %  | rules changed 180: nudge 95, replace 38, swap 14, copy 11, drop 22",
 ]
 ## **The player's seeded trace** ([method _tail_trace]): forty seconds of a cell
 ## stepped by its own drive, wearing a tail of two copies that nobody holds,
@@ -7430,8 +7480,11 @@ const TAIL_LINES: Array[String] = [
 ## `ping_echoes` or `_pulses`, and the water's calls hear in a cone. `dev` at 56bfe46,
 ## read through the shorter list, printed 59216500612c5669 and 03aae15dfd6d7d93, as
 ## this branch did with the half circle put back.
-const PACK3_TRACE := "1fd8aa1301286d529b432e90eaeda12b46896cd39b16b1c639ddcccc4e8604f8"
-const TAIL_TRACE := "2a6126e70d403c58c4e6feb06cd63bc96969d54ce891370dfa1ef8a319e5eb79"
+## **Re-recorded when venom came to ride** (venom-rides.md), from the check's own
+## output: the water round the player changed on purpose -- its founders' venom rides
+## their mouths, and the floor's too.
+const PACK3_TRACE := "91a8ed3aeac1edf24044a41249252efe7f26940c9d4e6ca71f92e5b39ce96fd1"
+const TAIL_TRACE := "9b9de8196e694123a6ddefa16d358f36f3ae9340f8fbd4eefc1708d10ebee968"
 ## A tail of two copies, the level a tail can be held still at, on a born body.
 const TWO_TAILS := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2}
 const ONE_TAIL := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
@@ -9531,7 +9584,12 @@ const HARM := 0
 ## says, mutation for mutation.
 ## **Re-recorded with the haptonema** (haptonema.md §2), from the check's own output:
 ## drift may bring a fourth common, so every drift after the first that drew differs.
-const DEV_MUTATIONS := "be65245013f0f3e679d4bfdf7a8314b0b474890317cd7a66ff8613f772b92ba1"
+## **Re-recorded when venom came to ride** (venom-rides.md, 2026-10-16): a toxin that
+## comes is poison now, inside, where it was venom in the slot of the gene it replaced,
+## so the 214 trials that bring it are left out of the digest altogether, and the
+## other 3,786 are what `dev` at 838c997 draws -- the same function run on its own
+## genome.gd, with those trials left out too, gives this digest to the byte.
+const DEV_MUTATIONS := "4c9bdc4d9cab121cc2bb124abc894703f060dd8099caa82601e9d9c970c9a46d"
 const DEV_MUTATIONS_CAME := 214
 ## **What `dev`'s water draws** (d08b0c3), for [method draw_digest]'s 3,000
 ## bodies: the digest of those that drew no toxin, and how many drew it. Worked
@@ -9602,6 +9660,11 @@ func _in_place(g: GenomeNode) -> String:
 	var dna := g.dna()
 	var layout := g.layout()
 	var inside := g.inside_layout()
+	# **A form that only rides is never on the body** (the owner, 2026-10-16).
+	for tiers: Dictionary in [dna, g.tiers()]:
+		for gene: StringName in tiers:
+			if GenomeNode.is_riding_form(gene):
+				return "%s on the body, where it only rides" % gene
 	if GenomeNode.count_inside(dna) > GenomeNode.INSIDE_SLOTS:
 		return "%d forms inside, room for %d" % [GenomeNode.count_inside(dna),
 			GenomeNode.INSIDE_SLOTS]
@@ -9666,38 +9729,34 @@ func _dna_forms() -> void:
 	var inside := GenomeNode.INSIDE
 	var wrote := PackedStringArray()
 	var wrong := 0
+	# **Venom only rides** (the owner, 2026-10-16): every outside slot refuses a waiting
+	# toxin, and it waits on; the inside writes its poison.
 	for eaten: StringName in [&"veneneux", &"toxicyst"]:
 		for slot in inside + 1:
 			var g := _dna_genome()
 			g.integrate(eaten)
 			var said := g.placing(eaten, slot)
 			var result := g.place(slot)
-			var want := &"veneneux" if slot == inside else &"toxicyst"
-			var other := &"toxicyst" if slot == inside else &"veneneux"
-			if not (result == GenomeNode.Result.INTEGRATED and said == [GenomeNode.PLACE_WRITE, slot, &""]
-					and int(g.dna().get(want, 0)) == 1 and not g.dna().has(other)
-					and g.dna_slot(want) == slot and g.waiting().is_empty()
-					and _in_place(g) == ""):
+			var ok := false
+			if slot == inside:
+				ok = result == GenomeNode.Result.INTEGRATED \
+					and said == [GenomeNode.PLACE_WRITE, slot, &""] \
+					and int(g.dna().get(&"veneneux", 0)) == 1 and g.dna_slot(&"veneneux") == slot \
+					and g.waiting().is_empty()
+			else:
+				ok = result == GenomeNode.Result.NOTHING \
+					and said == [GenomeNode.PLACE_FACES_OUT, -1, &""] \
+					and not g.dna().has(&"veneneux") and g.waiting().size() == 1
+			if not (ok and not g.dna().has(&"toxicyst") and _in_place(g) == ""):
 				wrong += 1
 			if eaten == &"veneneux":
-				wrote.append("%d %s" % [slot, want])
+				wrote.append("%d %s" % [slot, "poison" if slot == inside else "refused"])
 			_dna_free(g)
 	_check(("dna 1. forms follow their places: a waiting toxin, eaten as either form, placed"
-		+ " in each slot writes %s (%d of 16 wrong)") % [", ".join(wrote), wrong], wrong == 0)
-	# A placement where its form is carried adds copies there: venom carried at slot 3,
-	# the toxin eaten as poison and tapped on empty slot 4.
+		+ " in each slot -- %s (%d of 16 wrong)") % [", ".join(wrote), wrong], wrong == 0)
 	var base := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
 	var three: Array = [&"cytostome", &"cirrus", &"flagellum"]
-	var with_venom := base.duplicate()
-	with_venom[&"toxicyst"] = 1
-	var g := _dna_posed(with_venom, three + [&"toxicyst"])
-	g.integrate(&"veneneux")
-	var elsewhere := g.placing(&"veneneux", 4)
-	var raised := g.place(4)
-	var raise_ok := elsewhere == [GenomeNode.PLACE_RAISE, 3, &""] \
-		and raised == GenomeNode.Result.RAISED and int(g.dna()[&"toxicyst"]) == 2 \
-		and g.layout()[4] == &"" and not g.dna().has(&"veneneux") and _in_place(g) == ""
-	_dna_free(g)
+	var g: GenomeNode = null
 	# The same inside, eaten as venom: poison carried at two, then at three.
 	var with_poison := base.duplicate()
 	with_poison[&"veneneux"] = 2
@@ -9722,32 +9781,28 @@ func _dna_forms() -> void:
 		and refused == GenomeNode.Result.NOTHING and g.waiting() == [&"ampulla"] \
 		and not g.dna().has(&"ampulla")
 	_dna_free(g)
-	_check(("dna 1. a placement where its form is carried adds copies there and leaves the"
-		+ " tapped slot as it was: venom at 3, tapped at 4, says %s and raises it (%s); poison"
+	_check(("dna 1. a placement where its form is carried adds copies there: poison"
 		+ " inside says %s, then at three %s, and spends the sample (%s); ampulla offered the"
-		+ " inside says %s, is refused and waits on (%s)") % [str(elsewhere), str(raise_ok),
-		str(in_place), str(full), str(inside_ok), str(faces), str(faces_ok)],
-		raise_ok and inside_ok and faces_ok)
+		+ " inside says %s, is refused and waits on (%s)") % [str(in_place), str(full),
+		str(inside_ok), str(faces), str(faces_ok)],
+		inside_ok and faces_ok)
 	# A lapse follows §5.3, case by case: [what is carried, the meal, what it ends as].
 	var full_order := _outside_full()
 	var outside_full := {}
 	for gene: StringName in full_order:
 		outside_full[gene] = 1
+	# **A lapse never writes venom**: it rides in a gene's slot, by the hand alone.
 	var cases := [
 		["poison carried", with_poison, three, &"veneneux", {&"veneneux": 3}],
-		["venom carried, eaten as poison", with_venom, three + [&"toxicyst"], &"veneneux",
-			{&"toxicyst": 2}],
-		["poison at three, venom at one", _merged(base, {&"veneneux": 3, &"toxicyst": 1}),
-			three + [&"toxicyst"], &"veneneux", {&"veneneux": 3, &"toxicyst": 2}],
 		["neither, eaten as poison", base, three, &"veneneux", {&"veneneux": 1}],
-		["neither, eaten as venom", base, three, &"toxicyst", {&"toxicyst": 1}],
+		["neither, eaten as venom", base, three, &"toxicyst", {&"veneneux": 1, &"toxicyst": 0}],
 		["neither, eaten as venom, the outside full", outside_full, full_order, &"toxicyst",
 			{&"veneneux": 1}],
 		["poison at three, the outside full", _merged(outside_full, {&"veneneux": 3}),
 			full_order,
 			&"veneneux", {&"veneneux": 3, &"toxicyst": 0}],
 		["poison at three, room outside", _merged(base, {&"veneneux": 3}), three, &"veneneux",
-			{&"veneneux": 3, &"toxicyst": 1}],
+			{&"veneneux": 3, &"toxicyst": 0}],
 	]
 	var lapses := PackedStringArray()
 	var lapse_wrong := 0
@@ -9764,10 +9819,7 @@ func _dna_forms() -> void:
 			ended[form] = int(g.dna().get(form, 0))
 			if ended[form] != int(one[4][form]):
 				ok = false
-		# The venom a lapse writes new takes the first free arc.
-		if int((one[4] as Dictionary).get(&"toxicyst", 0)) == 1 \
-				and not (one[1] as Dictionary).has(&"toxicyst"):
-			ok = ok and g.dna_slot(&"toxicyst") == (one[2] as Array).size()
+		ok = ok and Riders.count(g.riders()) == 0
 		lapse_wrong += 0 if ok else 1
 		lapses.append("%s: %s%s" % [one[0], str(ended), "" if ok else " WRONG"])
 		_dna_free(g)
@@ -9824,21 +9876,19 @@ func _dna_moves() -> void:
 	var inside := GenomeNode.INSIDE
 	var three: Array = [&"cytostome", &"cirrus", &"flagellum"]
 	var base := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
-	var both := _merged(base, {&"toxicyst": 3, &"veneneux": 1})
-	var venom := _merged(base, {&"toxicyst": 2})
 	var poison := _merged(base, {&"veneneux": 1})
+	var eye := _merged(base, {&"ampulla": 2})
+	var both := _merged(eye, {&"veneneux": 1})
 	# [what, dna, order, from, to, refusal, the DNA's toxin after, where venom sits after]
+	# **Venom only rides** (the owner, 2026-10-16), so poison never moves out: it would
+	# become a venom on the body.
 	var cases := [
-		["venom 3 at slot 3 and poison 1, venom moved in: they trade copies", both,
-			three + [&"toxicyst"], 3, inside, &"", {&"veneneux": 3, &"toxicyst": 1}, 3],
-		["venom 2 moved in: poison 2", venom, three + [&"toxicyst"], 3, inside, &"",
-			{&"veneneux": 2, &"toxicyst": 0}, -1],
-		["poison 1 moved out to 4: venom 1", poison, three, inside, 4, &"",
-			{&"veneneux": 0, &"toxicyst": 1}, 4],
-		["venom moved along the outside, 3 to 5", venom, three + [&"toxicyst"], 3, 5, &"",
-			{&"veneneux": 0, &"toxicyst": 2}, 5],
-		["poison out to 4 with venom at 3: a collision", both, three + [&"toxicyst"], inside, 4,
-			GenomeNode.MOVE_COLLISION, {&"veneneux": 1, &"toxicyst": 3}, 3],
+		["poison 1 moved out to 4: refused, it works only inside", poison, three, inside, 4,
+			GenomeNode.MOVE_FACES_OUT, {&"veneneux": 1, &"toxicyst": 0}, -1],
+		["poison out onto the ping at 3: refused both ways", both, three + [&"ampulla"],
+			inside, 3, GenomeNode.MOVE_FACES_OUT, {&"veneneux": 1, &"toxicyst": 0}, -1],
+		["the ping moved along the outside, 3 to 5", eye, three + [&"ampulla"], 3, 5, &"",
+			{&"veneneux": 0, &"toxicyst": 0}, -1],
 		["the tail moved in", base, three, 2, inside, GenomeNode.MOVE_FACES_OUT,
 			{&"veneneux": 0, &"toxicyst": 0}, -1],
 		["poison out onto the tail, which would go in", poison, three, inside, 2,
@@ -9866,7 +9916,7 @@ func _dna_moves() -> void:
 	# Every pair of slots of four genomes: can_move says what move does.
 	var pairs := 0
 	var disagree := 0
-	for one: Array in [[both, three + [&"toxicyst"]], [venom, three + [&"", &"", &"toxicyst"]],
+	for one: Array in [[both, three + [&"ampulla"]], [eye, three + [&"", &"", &"ampulla"]],
 			[poison, three], [base, three]]:
 		for from in inside + 1:
 			for to in inside + 1:
@@ -9877,8 +9927,8 @@ func _dna_moves() -> void:
 				if could != moved or _in_place(g) != "":
 					disagree += 1
 				_dna_free(g)
-	_check(("dna 1. a move converts across inside and outside, swaps copies, and is refused on"
-		+ " a collision or a gene that faces out: %s; can_move agrees with move on %d of %d"
+	_check(("dna 1. a move goes along the outside, and is refused across inside and outside,"
+		+ " where a gene would become nothing: %s; can_move agrees with move on %d of %d"
 		+ " pairs") % ["; ".join(said), pairs - disagree, pairs], wrong == 0 and disagree == 0)
 
 
@@ -9900,7 +9950,7 @@ func _dna_random() -> void:
 	var first_bad := ""
 	var disagreed := 0
 	var unfit := 0
-	var carried_both := 0
+	var riding_worn := 0
 	var inside_held := 0
 	for k in 10000:
 		match randi() % 9:
@@ -9950,18 +10000,21 @@ func _dna_random() -> void:
 				first_bad = "after op %d: %s" % [k, why]
 		if not Referee._order_fits(g.tiers(), g.body_layout()):
 			unfit += 1
-		if g.dna().has(&"toxicyst") and g.dna().has(&"veneneux"):
-			carried_both += 1
+		for tiers: Dictionary in [g.dna(), g.tiers()]:
+			for gene: StringName in tiers:
+				if GenomeNode.is_riding_form(gene):
+					riding_worn += 1
 		if g.dna().has(&"veneneux"):
 			inside_held += 1
 	_dna_free(g)
 	_check(("dna 1. ten thousand seeded random operations -- %s -- end with every form in its"
 		+ " place, no place over its room and no form twice: %d wrong%s; a refused move changed"
-		+ " nothing and can_move agreed every time (%d not); %d genomes carried poison and %d"
-		+ " both forms") % [str(done), bad, "" if first_bad.is_empty() else " (" + first_bad + ")",
-		disagreed, inside_held, carried_both],
+		+ " nothing and can_move agreed every time (%d not); %d genomes carried poison, and"
+		+ " venom was on a body %d times") % [str(done), bad,
+		"" if first_bad.is_empty() else " (" + first_bad + ")", disagreed, inside_held,
+		riding_worn],
 		bad == 0 and disagreed == 0 and done["mutation"] > 500 and done["move"] > 200
-		and done["lapse"] > 200 and done["old"] > 50 and carried_both > 100)
+		and done["lapse"] > 200 and done["old"] > 50 and inside_held > 100 and riding_worn == 0)
 	_check(("dna 2. the referee's slot rule holds: every one of the 10,000 genomes passes"
 		+ " Referee._order_fits with its worn layout (%d do not)") % unfit, unfit == 0)
 
@@ -9986,10 +10039,9 @@ const PLAIN_GENES: Array[StringName] = [&"cirrus", &"flagellum", &"stigma", &"oc
 
 ## **What [param genome]'s mutation draws** for [param trials] seeded genomes with
 ## no toxin, each as a daughter's, with her layout, and as a water cell's, with
-## none: `[digest, trials that brought the toxin in]`. The toxin that comes is
-## written by its gene's name, whatever form it took, and the number after a
-## trial that brought it is left out: a water cell's coin for its place is the
-## change (dna-slots.md §5.5). Run once on `dev`'s genome.gd to pin
+## none: `[digest of the trials that brought no toxin in, trials that did]`. A trial
+## that brought it is counted and left out: where the toxin lands is what changed
+## (dna-slots.md §5.5; venom-rides.md). Run once on `dev`'s genome.gd to pin
 ## [constant DEV_MUTATIONS].
 static func mutation_digest(genome: Object, trials: int) -> Array:
 	var lines := PackedStringArray()
@@ -10016,9 +10068,8 @@ static func mutation_digest(genome: Object, trials: int) -> Array:
 		line += " | " + _mutation_line(genome.call(&"mutated", dna, []))
 		if line.contains("veneneux"):
 			came += 1
-		else:
-			line += " | %d" % randi()
-		lines.append(line)
+			continue
+		lines.append(line + " | %d" % randi())
 	return ["\n".join(lines).sha256_text(), came]
 
 
@@ -10087,15 +10138,15 @@ static func _newborn_only(tiers: Dictionary, gifts: Array[StringName]) -> bool:
 
 # --- 3. The meal that waits -------------------------------------------------------------
 
-## **A meal of a carried toxin waits** (§5.1): `HELD`, not `RAISED`; its other
-## form's meal is the same sample, a copy more; a gene of one form is raised as
-## today; and frames never settle a toxin on their own.
+## **A meal of a carried toxin waits** (§5.1): `HELD`, not `RAISED`, since it may
+## go inside or into a gene's slot; its other form's meal is the same sample, a
+## copy more; a gene of one form is raised as today; and frames never settle a
+## toxin on their own.
 func _dna_meal_waits() -> void:
 	var base := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
-	var g := _dna_posed(_merged(base, {&"toxicyst": 1}),
-		[&"cytostome", &"cirrus", &"flagellum", &"toxicyst"])
-	var first := g.integrate(&"toxicyst")
-	var second := g.integrate(&"veneneux")
+	var g := _dna_posed(_merged(base, {&"veneneux": 1}), [&"cytostome", &"cirrus", &"flagellum"])
+	var first := g.integrate(&"veneneux")
+	var second := g.integrate(&"toxicyst")
 	var one := g.waiting()
 	var copies := g.waiting_copies(&"veneneux")
 	var plain := g.integrate(&"flagellum")
@@ -10103,16 +10154,17 @@ func _dna_meal_waits() -> void:
 	for f in 600:
 		g._process(1.0 / 60.0)
 	var still := g.waiting()
-	var kept := int(g.dna()[&"toxicyst"]) == 1 and not g.dna().has(&"veneneux")
+	var kept := int(g.dna()[&"veneneux"]) == 1 and not g.dna().has(&"toxicyst") \
+		and Riders.count(g.riders()) == 0
 	_dna_free(g)
 	var names := ["NOTHING", "INTEGRATED", "RAISED", "SATURATED", "HELD", "NO_ROOM"]
-	_check(("dna 3. the meal that waits: venom carried, a meal of it is %s; one of poison"
+	_check(("dna 3. the meal that waits: poison carried, a meal of it is %s; one of venom"
 		+ " joins it, one sample (%s) of %d copies; a tail is %s, to %d copies; ten seconds of"
 		+ " frames leave the toxin waiting (%s) and the DNA as it was (%s)") % [names[first],
 		str(one), copies, names[plain], tail, str(still), str(kept)],
 		first == GenomeNode.Result.HELD and second == GenomeNode.Result.HELD
-		and one == [&"toxicyst"] and copies == 2 and plain == GenomeNode.Result.RAISED
-		and tail == 2 and still == [&"toxicyst"] and kept)
+		and one == [&"veneneux"] and copies == 2 and plain == GenomeNode.Result.RAISED
+		and tail == 2 and still == [&"veneneux"] and kept)
 
 
 # --- 6 and 7. Every cell alike; venom and poison ---------------------------------------
@@ -10171,10 +10223,11 @@ func _dna_home(cell: CellBody, home: Vector2) -> void:
 
 
 ## **Checks 6 and 7** (§7): every delivery of the table, each posed with the cell
-## in the role and with a water cell in it -- a front venom biting, a venom on a
-## flank bitten on its side and off it, a poisonous body bitten and swallowed --
-## each by the function the water resolves that contact with, and the stacks
-## compared to the float.
+## in the role and with a water cell in it -- the venom in a mouth's slot biting, a
+## poisonous body bitten and swallowed -- each by the function the water resolves
+## that contact with, and the stacks compared to the float. **Venom rides** since
+## 2026-10-16: on the body's own slots it was the mouth's slot's venom by another
+## road, so a flank's venom is gone with them.
 func _dna_deliveries() -> void:
 	var water := _water(3000.0)
 	var field: WatchedDrop = water[0]
@@ -10185,25 +10238,24 @@ func _dna_deliveries() -> void:
 	var fired := [0, 0, 0]
 	field.toxin_fired.connect(func(how: int) -> void: fired[how] += 1)
 	var copies := 2
-	var venom_n := Stats.at(&"venom_stacks", copies)
+	var fanged := {&"cytostome": [[&"toxicyst", copies]]}
+	var venom_n := Riders.value(fanged, &"cytostome", &"bite_dose", 0.0)
 	var poison_n := Stats.at(&"poison_stacks", copies)
 	var swallow_n := Stats.at(&"swallow_stacks", copies)
 	var three: Array = [&"cytostome", &"cirrus", &"flagellum"]
-	var front: Array = three + [&"toxicyst"]
-	var flank: Array = three + [&"", &"", &"toxicyst"]
-	var venom := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2, &"toxicyst": copies}
+	# The venom in the mouth's slot: a plain body, and its riders.
+	var venom := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2}
 	var poison := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2, &"veneneux": copies}
 	var plain := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2}
 	# Armoured by the first live organ that provides it, asked for by its stat.
 	var armoured := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2,
 		Catalogue.first_provider(&"armor"): 3}
 	var mouth := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 2}
-	var side := Cilia.slot_bearing(5)
 	var astray := 0
 	var n := 0
-	# --- A front venom, biting: yours, on a bare body and an armoured one; a water
-	# cell's, worn by the default order, on the same two; and a water cell's on you.
-	field.toxins = FoodField.toxins_of(venom, front)
+	# --- The mouth's venom, biting: yours, on a bare body and an armoured one; a water
+	# cell's on the same two; and a water cell's on you.
+	field.toxins = FoodField.toxins_of(venom, three, fanged)
 	var you_front := []
 	for tiers: Dictionary in [plain, armoured]:
 		var t := _dna_body(field, n, 40.0, tiers)
@@ -10218,6 +10270,7 @@ func _dna_deliveries() -> void:
 	for tiers: Dictionary in [plain, armoured]:
 		var t := _dna_body(field, n, 40.0, tiers)
 		var v := _dna_body(field, n + 1, 30.0, venom)
+		(cells[v] as Object).set("riders", Riders.copy(fanged))
 		n += 2
 		_dna_mouth_on(field, v, (cells[t] as Object).get("pos"), 0.0, 0.0)
 		field._chew(v, cells[v], t, cells[t])
@@ -10225,6 +10278,7 @@ func _dna_deliveries() -> void:
 		field.take_out(t)
 		field.take_out(v)
 	var biter := _dna_body(field, n, 30.0, venom)
+	(cells[biter] as Object).set("riders", Riders.copy(fanged))
 	n += 1
 	_dna_mouth_on(field, biter, home, 0.0, 0.0)
 	field._bitten_by(biter, cells[biter])
@@ -10236,6 +10290,7 @@ func _dna_deliveries() -> void:
 	var swallowed_venom := []
 	var big := _dna_body(field, n, 40.0, mouth)
 	var small := _dna_body(field, n + 1, 14.0, venom)
+	(cells[small] as Object).set("riders", Riders.copy(fanged))
 	n += 2
 	var small_b: Object = cells[small]
 	field._mouth_on_drop(big, cells[big], small, cells[small], field._gape(cells[big]))
@@ -10243,13 +10298,14 @@ func _dna_deliveries() -> void:
 	var venom_eaten := not bool(small_b.get("seeded"))
 	field.take_out(big)
 	var morsel_at := home + Vector2(0.0, -(cell.radius + 12.0))
-	var morsel := _pose(field, morsel_at, 15.0, {&"cytostome": 1, &"toxicyst": 3}, PI, 0.5)
+	var morsel := _pose(field, morsel_at, 15.0, {&"cytostome": 1}, PI, 0.5)
+	(cells[morsel] as Object).set("riders", {&"cytostome": [[&"toxicyst", 3]]})
 	field.set("_near", field.bodies_near(home, 2500.0))
 	var you_alive: bool = not field._contacts_with(null)
 	swallowed_venom.append(cell.loads[HARM])
 	var morsel_eaten := not bool((cells[morsel] as Object).get("seeded"))
 	_dna_home(cell, home)
-	field.toxins = FoodField.toxins_of(venom, front)
+	field.toxins = FoodField.toxins_of(venom, three, fanged)
 	var eater_at := home + Vector2(0.0, -(40.0 + cell.radius) * 0.95)
 	var eater := _pose(field, eater_at, 40.0, mouth, _facing(eater_at, home), 0.5)
 	field.set("_near", field.bodies_near(home, 2500.0))
@@ -10257,50 +10313,6 @@ func _dna_deliveries() -> void:
 	swallowed_venom.append(field.loads_of(eater)[HARM])
 	field.take_out(eater)
 	field.toxins = PackedFloat64Array()
-	_dna_home(cell, home)
-	# --- A venom on a flank (slot 5): bitten on that side -- and 50° either side of it
-	# -- and off it -- 60° either side, and from behind. Yours, by water mouths; a
-	# water cell's, by water mouths; and a water cell's, by you.
-	var offsets: Array[float] = [0.0, deg_to_rad(50.0), deg_to_rad(-50.0), deg_to_rad(60.0),
-		deg_to_rad(-60.0), PI]
-	var stings := [venom_n, venom_n, venom_n, 0.0, 0.0, 0.0]
-	field.toxins = FoodField.toxins_of(venom, flank)
-	var you_flank := []
-	for off: float in offsets:
-		var m := _dna_body(field, n, 30.0, mouth)
-		n += 1
-		_dna_home(cell, home)
-		_dna_mouth_on(field, m, home, 0.0, side + off)
-		if absf(angle_difference(cell.bearing_to((cells[m] as Object).get("pos")),
-				side + off)) > 0.0001:
-			astray += 1
-		field._bitten_by(m, cells[m])
-		you_flank.append(field.loads_of(m)[HARM])
-		field.take_out(m)
-	_dna_home(cell, home)
-	field.toxins = PackedFloat64Array()
-	var its_flank := []
-	for off: float in offsets:
-		var s := _dna_body(field, n, 30.0, venom, flank)
-		var m := _dna_body(field, n + 1, 30.0, mouth)
-		n += 2
-		var landed := _dna_mouth_on(field, m, (cells[s] as Object).get("pos"), 0.0, side + off)
-		if absf(angle_difference(landed, side + off)) > 0.0001:
-			astray += 1
-		field._chew(m, cells[m], s, cells[s])
-		its_flank.append(field.loads_of(m)[HARM])
-		field.take_out(s)
-		field.take_out(m)
-	var from_you := []
-	for off: float in [0.0, PI]:
-		var s := _dna_body(field, n, 40.0, venom, flank)
-		n += 1
-		if absf(angle_difference(_dna_you_on(field, cell, cells[s], side + off),
-				side + off)) > 0.0001:
-			astray += 1
-		field._bite_from(s, cells[s])
-		from_you.append(cell.loads[HARM])
-		field.take_out(s)
 	_dna_home(cell, home)
 	# --- A poisonous body bitten, from the nose, the flank and the stern: you, by
 	# water mouths; a water cell, by water mouths and by you.
@@ -10374,36 +10386,6 @@ func _dna_deliveries() -> void:
 	field.dosed.disconnect(log_dosed)
 	field.eaten.disconnect(log_eaten)
 	_dna_home(cell, home)
-	# --- With VENOM_SIDES off a side venom leaves nothing, yours or a water cell's,
-	# and a front venom still bites.
-	field.venom_sides = false
-	field.toxins = FoodField.toxins_of(venom, flank, false)
-	var off_sides := []
-	var m_off := _dna_body(field, n, 30.0, mouth)
-	n += 1
-	_dna_mouth_on(field, m_off, home, 0.0, side)
-	field._bitten_by(m_off, cells[m_off])
-	off_sides.append(field.loads_of(m_off)[HARM])
-	field.take_out(m_off)
-	_dna_home(cell, home)
-	field.toxins = PackedFloat64Array()
-	var s_off := _dna_body(field, n, 30.0, venom, flank)
-	m_off = _dna_body(field, n + 1, 30.0, mouth)
-	n += 2
-	_dna_mouth_on(field, m_off, (cells[s_off] as Object).get("pos"), 0.0, side)
-	field._chew(m_off, cells[m_off], s_off, cells[s_off])
-	off_sides.append(field.loads_of(m_off)[HARM])
-	field.take_out(s_off)
-	field.take_out(m_off)
-	field.toxins = FoodField.toxins_of(venom, front, false)
-	var t_off := _dna_body(field, n, 40.0, plain)
-	n += 1
-	_dna_you_on(field, cell, cells[t_off], 0.0)
-	field._bite_from(t_off, cells[t_off])
-	var front_still := field.loads_of(t_off)[HARM]
-	field.take_out(t_off)
-	field.venom_sides = true
-	field.toxins = PackedFloat64Array()
 	var never_stung := not field.has_signal(&"stung")
 	_done(water)
 	var all_of := func(values: Array, want: float) -> bool:
@@ -10411,37 +10393,32 @@ func _dna_deliveries() -> void:
 			if float(value) != want:
 				return false
 		return true
-	_check(("dna 6. every cell alike: a front venom of %d copies biting leaves %s from you,"
-		+ " %s from a water cell (the last on you); a venom on a flank bitten 0°, ±50°,"
-		+ " ±60° and opposite gives %s from you and %s from a water cell; a poisonous"
+	_check(("dna 6. every cell alike: the venom in a mouth's slot at %d copies, biting,"
+		+ " leaves %s from you, %s from a water cell (the last on you); a poisonous"
 		+ " body bitten from the nose, flank and stern gives %s from you and %s from a water"
 		+ " cell, by water mouths and by you; swallowed, %s -- you, a water cell, then by you;"
 		+ " %d poses off their bearing") % [copies, str(you_front), str(its_front),
-		str(you_flank), str(its_flank), str(you_poison), str(its_poison), str(swallowed),
-		astray],
+		str(you_poison), str(its_poison), str(swallowed), astray],
 		you_front == [venom_n, venom_n] and its_front == [venom_n, venom_n, venom_n]
-		and you_flank == stings and its_flank == stings and all_of.call(you_poison, poison_n)
+		and all_of.call(you_poison, poison_n)
 		and all_of.call(its_poison, poison_n) and its_poison.size() == 6
 		and all_of.call(swallowed, swallow_n) and swallowed.size() == 3 and astray == 0)
-	_check(("dna 7. venom and poison: a front venom's bite leaves %.0f whatever the armour"
-		+ " (%s), and nothing on a swallow (%s; the venom eaten %s, %s, you swallowed %s); a"
-		+ " flank venom stings within 55° of its bearing and nowhere else (%s), and you take"
-		+ " it biting there (%s); a poisonous body bitten leaves %.0f on the biter; swallowed,"
+	_check(("dna 7. venom and poison: the mouth's venom's bite leaves %.0f whatever the"
+		+ " armour (%s), and nothing on a swallow (%s; the venom eaten %s, %s, you swallowed"
+		+ " %s); a poisonous body bitten leaves %.0f on the biter; swallowed,"
 		+ " %.0f on the swallower, there when your death is told (%s), the body eaten (%s, %s,"
-		+ " %s) and the eater alive (%s), told %s; `stung` gone (%s); with VENOM_SIDES off a"
-		+ " flank venom leaves %s and a front one still %.0f; fired: venom %d, sting %d,"
-		+ " poison %d") % [venom_n, str(you_front), str(swallowed_venom), str(venom_eaten),
-		str(morsel_eaten), str(you_swallowed), str(its_flank), str(from_you), poison_n,
+		+ " %s) and the eater alive (%s), told %s; `stung` gone (%s); fired: venom %d,"
+		+ " sting %d, poison %d") % [venom_n, str(you_front), str(swallowed_venom),
+		str(venom_eaten), str(morsel_eaten), str(you_swallowed), poison_n,
 		swallow_n, str(told), str(poisoned_eaten), str(poison_eaten), str(you_ate),
-		str(eater_lives), " then ".join(order), str(never_stung), str(off_sides), front_still,
+		str(eater_lives), " then ".join(order), str(never_stung),
 		fired[FoodField.FIRED_VENOM], fired[FoodField.FIRED_STING],
 		fired[FoodField.FIRED_POISON]],
 		you_front == [venom_n, venom_n] and swallowed_venom == [0.0, 0.0, 0.0] and venom_eaten
-		and morsel_eaten and you_alive and you_swallowed and its_flank == stings
-		and from_you == [venom_n, 0.0] and told == [swallow_n] and poisoned_eaten
-		and poison_eaten and you_ate and eater_lives and order == ["dosed", "eaten"]
-		and never_stung and off_sides == [0.0, 0.0] and front_still == venom_n
-		and fired[FoodField.FIRED_VENOM] == 3 and fired[FoodField.FIRED_STING] == 3
+		and morsel_eaten and you_alive and you_swallowed and told == [swallow_n]
+		and poisoned_eaten and poison_eaten and you_ate and eater_lives
+		and order == ["dosed", "eaten"] and never_stung
+		and fired[FoodField.FIRED_VENOM] == 2 and fired[FoodField.FIRED_STING] == 0
 		and fired[FoodField.FIRED_POISON] == 4)
 
 
@@ -10543,7 +10520,8 @@ func _dna_water() -> void:
 		for form: StringName in GenomeNode.forms_of(TOXIN):
 			toxic_drop += 1 if one.genome.has(form) else 0
 	# The floor: the drop down to its last carriers gives the toxin to the next peer,
-	# its place by a coin -- and to none that carries a form of it.
+	# its place by a coin -- venom into its mouth's slot, poison inside -- and to none
+	# that carries a form of it.
 	var places := {"venom": 0, "poison": 0}
 	var still_short := 0
 	var over := 0
@@ -10554,7 +10532,8 @@ func _dna_water() -> void:
 		var i := _pose(field, home + Vector2(1500.0, 300.0 * (k % 8)), 34.0, peer)
 		field._give_back_by_peer(cells[i])
 		var genome: Dictionary = (cells[i] as Object).get("genome")
-		places["venom"] += 1 if genome.has(&"toxicyst") else 0
+		var fangs := Riders.rider_at((cells[i] as Object).get("riders"), &"cytostome", 0)
+		places["venom"] += 1 if fangs == &"toxicyst" and not genome.has(&"toxicyst") else 0
 		places["poison"] += 1 if genome.has(&"veneneux") else 0
 		if _due(field).has(TOXIN):
 			still_short += 1
@@ -10565,21 +10544,30 @@ func _dna_water() -> void:
 	var carriers := 0
 	for form: StringName in [&"toxicyst", &"veneneux"]:
 		_owe(field, [TOXIN])
-		var i := _pose(field, home + Vector2(-1500.0, 0.0), 34.0, _merged(peer, {form: 1}))
+		var i := _pose(field, home + Vector2(-1500.0, 0.0), 34.0,
+			peer if form == &"toxicyst" else _merged(peer, {form: 1}))
+		if form == &"toxicyst":
+			(cells[i] as Object).set("riders", {&"cytostome": [[form, 1]]})
 		field._give_back_by_peer(cells[i])
-		carriers += (cells[i] as Object).get("genome").size()
+		carriers += (cells[i] as Object).get("genome").size() \
+			+ Riders.count((cells[i] as Object).get("riders"))
 		field.take_out(i)
-	# Where a water cell wears its toxin.
+	# Where a water cell wears its toxin: poison takes no seat outside.
 	var worn := Cilia.default_order({&"cytostome": 2, &"cirrus": 1, &"flagellum": 1,
-		&"veneneux": 2, &"toxicyst": 1, &"ampulla": 1, &"pellicle": 1})
-	var seats_ok: bool = worn.size() > 3 and worn[3] == &"toxicyst" and not worn.has(&"veneneux") \
+		&"veneneux": 2, &"ampulla": 1, &"pellicle": 1})
+	var seats_ok: bool = worn.size() == 5 and not worn.has(&"veneneux") \
 		and worn.has(&"ampulla") and worn.has(&"pellicle")
 	# A water cell's poison takes no outside room.
 	var full := {}
 	for gene: StringName in _outside_full():
 		full[gene] = 1
 	var in_room := GenomeNode.integrate_into(full.duplicate(), &"veneneux", CellBody.SLOT_MAX)
-	var out_room := GenomeNode.integrate_into(full.duplicate(), &"toxicyst", CellBody.SLOT_MAX)
+	var outer: StringName = &""
+	for gene: StringName in Catalogue.live():
+		if outer == &"" and not full.has(gene) and not GenomeNode.has_forms(gene) \
+				and not GenomeNode.is_inside_form(gene):
+			outer = gene
+	var out_room := GenomeNode.integrate_into(full.duplicate(), outer, CellBody.SLOT_MAX)
 	# **What the water makes with a mouth is a newborn** (water-evolves.md §1): the
 	# born body and one gift sense, and never the toxin, which only the floor gives,
 	# through a peer, as above. It drew 3,000 peers of every radius until the water
@@ -10603,8 +10591,8 @@ func _dna_water() -> void:
 		+ " carry a form of the toxin; the floor gives it back through a peer as venom %d"
 		+ " times and as poison %d of 40, the drop short of it after %d, %d over their room;"
 		+ " a peer carrying either form is given nothing (%d genes in two peers of 6); the"
-		+ " default order wears %s; a water cell's poison takes no room (%s), its venom does"
-		+ " (%s); and of 3,000 newborns the water made %d were the born body and one gift"
+		+ " default order wears %s; a water cell's poison takes no room (%s), a gene"
+		+ " outside does (%s); and of 3,000 newborns the water made %d were the born body and one gift"
 		+ " sense, %d carrying the toxin") % [
 		toxic_today, toxic_drop, places["venom"], places["poison"], still_short, over,
 		carriers, str(worn), "INTEGRATED" if in_room == GenomeNode.Result.INTEGRATED
@@ -11106,14 +11094,14 @@ func _rarity_draw() -> void:
 
 ## **2. Drift** (§11.3 item 2), static, on the same catalogue: 50,000 drifts of one water
 ## cell's DNA -- §5.2's line, the mouth, the cirrus, the tail, the nose, the eye and the
-## plates, with the toxin as venom -- by `genome.gd`'s own `_mutate_drift`. None brings a
-## variety the DNA carries in any form, the toxin's poison included, the mouth or a
+## plates, with the toxin as poison -- by `genome.gd`'s own `_mutate_drift`. None brings a
+## variety the DNA carries in any form, the toxin's venom included, the mouth or a
 ## retired gene; each class's share of what came lands within 5 % of its share of
 ## `drift_weight` over the varieties the DNA lacks; and the variant the water never makes
 ## comes, at its share of its organ in drift.
 func _rarity_drift() -> void:
 	var dna := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"chemocyte": 1, &"ocellus": 1,
-		&"pellicle": 1, &"toxicyst": 1}
+		&"pellicle": 1, &"veneneux": 1}
 	var carried := {}
 	for gene: StringName in dna:
 		carried[Catalogue.variety(gene)] = true

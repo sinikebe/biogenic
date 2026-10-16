@@ -2732,7 +2732,7 @@ func _toxins() -> PackedFloat64Array:
 	var key := hash(tiers) ^ (hash(worn) * 31) ^ (Riders.sign_of(riders) * 17)
 	if key != _toxins_key:
 		_toxins_key = key
-		_toxins_now = FoodField.toxins_of(tiers, worn, CellBody.VENOM_SIDES, riders)
+		_toxins_now = FoodField.toxins_of(tiers, worn, riders)
 	return _toxins_now
 
 
@@ -5175,11 +5175,11 @@ const HINT_SOCKET_EMPTY := "nothing in this slot yet"
 # genome -- `placing()` for a gene in hand, `move_refusal()` for one in the air --
 # so the line, the chip and the guard never disagree.
 
-## TRANSLATORS: While a toxin is waiting and no slot is chosen: tapping a slot
-## round the body (outside) makes it venom, the slot in the body (inside) makes it
-## poison.
+## TRANSLATORS: While a toxin is waiting and no slot is chosen: the slot inside the
+## body makes it poison, and a lit slot of another gene, such as the mouth's, makes
+## it venom. Only those slots are lit.
 ## ROOM: 560 px at 14 px
-const ACT_ARM_FORMS := "tap a slot · venom outside, poison inside"
+const ACT_ARM_FORMS := "tap a lit slot · poison inside, venom in a gene's slot"
 ## **A gene that faces out says what it does, not what the slot refuses**:
 ## `swim works only outside` is true, short, and teaches the rule from the other
 ## side.
@@ -5189,6 +5189,18 @@ const ACT_ARM_FORMS := "tap a slot · venom outside, poison inside"
 ## such as `swim`.
 ## ROOM: 560 px at 14 px with word
 const ACT_FACES_OUT := "%s works only outside"
+## **And a gene that never sits outside says where it goes** (the owner, 2026-10-16:
+## a toxin goes in the mouth's slot or inside, never outside).
+##
+## TRANSLATORS: When the player tries to put a waiting toxin into one of the slots
+## round the body: it only goes inside the body, or into a lit slot of another gene
+## such as the mouth's. %s is its word while it waits, `toxin`.
+## ROOM: 560 px at 14 px with word
+const ACT_NOT_OUTSIDE := "%s goes inside, or in a lit gene's slot"
+## TRANSLATORS: When the player drags the poison gene from inside the body to one of
+## the slots round it: it works only inside. %s is its word, `poison`.
+## ROOM: 560 px at 14 px with word
+const ACT_ONLY_INSIDE := "%s works only inside"
 ## TRANSLATORS: A slot is chosen for a waiting gene, but that gene already has the
 ## most copies a gene can have, three, so placing it there would do nothing. %s is
 ## its word, such as `venom` or `poison`.
@@ -5746,7 +5758,7 @@ func _act_line() -> String:
 			var lands := GenomeNode.form_at(flying, _hovered)
 			match what[0]:
 				GenomeNode.PLACE_FACES_OUT:
-					return tr(ACT_FACES_OUT) % _word(flying)
+					return _faces_line(flying, true)
 				GenomeNode.PLACE_FULL:
 					return tr(ACT_RAISE_FULL) % _word(lands)
 				GenomeNode.PLACE_RAISE:
@@ -5774,7 +5786,7 @@ func _act_line() -> String:
 		var form := GenomeNode.form_at(hand, _armed)
 		match _genome.placing(hand, _armed)[0]:
 			GenomeNode.PLACE_FACES_OUT:
-				return tr(ACT_FACES_OUT) % _word(hand)
+				return _faces_line(hand, true)
 			GenomeNode.PLACE_FULL:
 				return tr(ACT_RAISE_FULL) % _word(form)
 		return ""
@@ -5805,7 +5817,7 @@ func _move_line(from: int, to: int) -> String:
 	var back := GenomeNode.form_at(under, from) if under != &"" else &""
 	match _genome.move_refusal(from, to):
 		GenomeNode.MOVE_FACES_OUT:
-			return tr(ACT_FACES_OUT) % _word(flying if lands == &"" else under)
+			return _faces_line(flying if lands == &"" else under, false)
 		GenomeNode.MOVE_COLLISION:
 			var carried := lands if lands != flying and lands != under \
 				and _genome.dna().has(lands) else back
@@ -5822,6 +5834,17 @@ func _move_line(from: int, to: int) -> String:
 		return tr(ACT_SWAP_FORM) % [_word(flying), _word(under), _word(under),
 			_word(back)]
 	return tr(ACT_SWAP) % [_word(flying), _word(under)]
+
+
+## **Why [param gene] cannot go where it is pointed** (dna-slots-ux.md §3.4): a gene
+## that faces out works only outside; one with no outside form -- the toxin --
+## goes inside or in a gene's slot when it is [param waiting], and works only
+## inside when it is the poison in the DNA.
+func _faces_line(gene: StringName, waiting: bool) -> String:
+	if GenomeNode.form_in(gene, GenomeNode.OUTSIDE_PLACE) != &"":
+		return tr(ACT_FACES_OUT) % _word(gene)
+	return tr(ACT_NOT_OUTSIDE) % _carried_word(gene) if waiting \
+		else tr(ACT_ONLY_INSIDE) % _word(gene)
 
 
 ## **A refused `Shift`+arrow says why** (dna-slots-ux.md §3.4), for
@@ -8455,7 +8478,10 @@ func _offer_free() -> Array[int]:
 	for slot in mini(mini(layout.size(), Figure.SLOT_SEAT.size()), GenomeNode.INSIDE):
 		if layout[slot] != &"":
 			continue
-		if GenomeNode.has_forms(gene) and layout.has(GenomeNode.form_at(gene, slot)):
+		# A gene of forms buds where its outside form is not carried yet -- and
+		# nowhere round the body for a toxin, whose venom only rides.
+		var form := GenomeNode.form_at(gene, slot)
+		if form == &"" or (GenomeNode.has_forms(gene) and layout.has(form)):
 			continue
 		out.append(slot)
 	return out

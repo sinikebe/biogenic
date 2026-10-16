@@ -2715,8 +2715,10 @@ func _step_toxins() -> void:
 		match String(event[1]):
 			"hit":
 				var bearing := float(event[2])
+				# A bite whose mouth's slot holds venom at three copies.
 				_food.call(&"_dose", FoodField.TARGET_PLAYER, 0,
-					Stats.at(&"venom_stacks", 3), -1, bearing, false)
+					Riders.value({&"cytostome": [[&"toxicyst", 3]]}, &"cytostome",
+					&"bite_dose", 0.0), -1, bearing, false)
 				_food.bitten.emit(bearing, 1.0)
 			"meal":
 				_food.call(&"_dose", FoodField.TARGET_PLAYER, 0,

@@ -232,8 +232,6 @@ static func text() -> String:
 		CellBody.bite_damage(0.3, 20.0, 30.0, 1.3, 0.0))
 	put.call("cell.bite_damage(0.3,40,r30,1,astern)",
 		CellBody.bite_damage(0.3, 40.0, 30.0, 1.0, PI))
-	put.call("cell.VENOM_ARC_DEG", CellBody.VENOM_ARC_DEG)
-	put.call("cell.VENOM_SIDES", CellBody.VENOM_SIDES)
 	put.call("cell.HARM_PER_STACK", CellBody.HARM_PER_STACK)
 	put.call("cell.DOSE_TAU_BY_KIND", CellBody.DOSE_TAU_BY_KIND)
 	put.call("cell.DOSE_GONE", CellBody.DOSE_GONE)

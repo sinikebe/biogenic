@@ -75,8 +75,8 @@ static func context(body: Dictionary, radius: float = CellBody.BASE_RADIUS) -> D
 ## in the body [param ctx] describes ([method context]). Each is an array of
 ## readout items, and `[[], []]` for a gene with no row. A levelled gene reads
 ## [param level] and [param path] instead of its copies (§5.2). [param slot] is
-## where it is worn, for a gene whose numbers depend on it -- venom at the front
-## and on a side are two rows -- and -1 where nobody knows.
+## where it is worn, for a gene whose numbers depend on it, and -1 where nobody
+## knows.
 ##
 ## **Each organ says its own** (gene-catalogue.md §8.4): its file's `lines` hook,
 ## handed the context and what wearing it costs. A gene with no row draws nothing,

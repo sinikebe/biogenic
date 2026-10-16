@@ -117,10 +117,10 @@ signal bitten(bearing: float, strength: float)
 ## dose. `Contact.STUNG` keeps its number and is never sent.)
 signal dosed(bearing: float, kind: int, stacks: float, meal: bool)
 ## **This cell's toxin went into something** (§10.1, item 12): [param how] is
-## [constant FIRED_VENOM] -- its venom rode in on its bite -- [constant
-## FIRED_STING], a venom on a side stung a mouth biting there, or [constant
-## FIRED_POISON], its poison was taken by a biter or a swallower. For the view's
-## flare and nothing else.
+## [constant FIRED_VENOM] -- the venom in its mouth's slot rode in on its bite --
+## [constant FIRED_STING], the venom in its sting's slot went in with a sting, or
+## [constant FIRED_POISON], its poison was taken by a biter or a swallower. For the
+## view's flare and nothing else.
 signal toxin_fired(how: int)
 ## `trichocyst`: your sting went off into what touched you, at that bearing.
 signal darted(bearing: float)
@@ -293,16 +293,13 @@ const MIRROR_SHOWN := 1.0
 ## body-relative bearing it guards. Read once whenever a body changes, never at
 ## a bite.
 ##
-## [constant HOW_BITE]: venom at the front, into whatever its bite lands on.
-## [constant HOW_STING]: venom on a side or the stern, into a mouth biting
-## within `VENOM_ARC_DEG / 2` of its bearing. [constant HOW_POISON]: poison,
-## into whatever bites it, anywhere. [constant HOW_SWALLOW]: poison, into
-## whatever swallows it. [constant HOW_DART]: a toxin in the sting's own slot
-## (docs/design/gene-sockets.md §3 row 1), into whatever the sting stings. A
-## toxin in the mouth's own slot (row 3) is a [constant HOW_BITE], as venom at
-## the front is.
+## [constant HOW_BITE]: a toxin in the mouth's own slot (docs/design/gene-sockets.md
+## §3 row 3), into whatever its bite lands on. [constant HOW_POISON]: poison, into
+## whatever bites it, anywhere. [constant HOW_SWALLOW]: poison, into whatever
+## swallows it. [constant HOW_DART]: a toxin in the sting's own slot (row 1), into
+## whatever the sting stings. 1 was venom on a side or the stern, which went with
+## venom on the body (2026-10-16), and is never written.
 const HOW_BITE := 0
-const HOW_STING := 1
 const HOW_POISON := 2
 const HOW_SWALLOW := 3
 const HOW_DART := 4
@@ -1528,17 +1525,11 @@ var dart_cooldown := 0.0
 ## of it, so a sting in a rear slot is the answer to being flanked and placement
 ## becomes a defensive decision. Meaningless while [member dart_wound] is 0.
 var dart_bearing := 0.0
-## **What this cell's toxins deliver** -- its venom, where it is worn, and its
-## poison -- as [method toxins_of] reads them off its worn body, written once a
+## **What this cell's toxins deliver** -- its poison, and the venom in its genes'
+## own slots -- as [method toxins_of] reads them off its worn body, written once a
 ## frame by the run where the dart's arc is (docs/design/dna-slots.md §7.2).
 ## Empty is a cell with no toxin.
 var toxins := PackedFloat64Array()
-## **Whether a venom on a side or the stern stings** (cell.gd's `VENOM_SIDES`),
-## as this water reads its bodies' toxins: the design's switch, held here so a
-## probe can turn it off on one field and see a side venom leave nothing
-## (dna-slots.md §20.3 check 7). This cell's own follow it through
-## [method toxins_of], which the run hands the same constant.
-var venom_sides := CellBody.VENOM_SIDES
 ## **The body whose stacks this cell took last**: a slot, or -1. Who a death by
 ## a dose is the death of ([member died_to], [member died_by]); with
 ## [member _dosed_serial], the serial that slot held then, since a swallowed
@@ -2926,61 +2917,48 @@ func _felt(damage: float) -> float:
 # stacks from the same contact. A body is named by its slot, and the cell on
 # this device -- which is in no slot -- by [constant TARGET_PLAYER].
 #
-# | form   | where         | when                                   | who takes it |
-# | venom  | the front     | a bite its mouth lands                 | the bitten   |
-# | venom  | a side, stern | a bite landing within VENOM_ARC_DEG / 2 | the biter    |
-# | poison | inside        | a bite landing anywhere                | the biter    |
-# | poison | inside        | it is swallowed                        | the swallower|
+# | form   | where              | when                       | who takes it  |
+# | venom  | the mouth's slot   | a bite its mouth lands     | the bitten    |
+# | venom  | the sting's slot   | a sting that lands         | the stung     |
+# | poison | inside             | a bite landing anywhere    | the biter     |
+# | poison | inside             | it is swallowed            | the swallower |
+#
+# **Venom rides, and nowhere else** (the owner, 2026-10-16): on the body's outside
+# slots it was the mouth's slot's venom by another road, so the road went.
 #
 # Armour does not stop venom: `pellicle` divides a bite's damage and the stacks
 # ride in whole. A dose is stacks in a body's loads; what they do is the dose
 # step's, over the seconds that follow -- nobody leaves the water at the bite.
 # ---------------------------------------------------------------------------
 
-## **What a body wearing [param tiers] delivers** -- its toxins' forms, by where
-## each sits -- as records of [constant TOX_STRIDE] floats `[how, kind, stacks,
-## bearing]` ([constant HOW_BITE] and the rest). [param order] is where its
-## outside forms are worn, slot by slot; empty, the default order every water
-## cell is drawn and senses in ([method Cilia.default_order]). A venom with no
-## seat rides on the bite. Empty for a body with no toxin, which is most of the
-## water. Read once, whenever what a body wears changes. [param sides] false is
-## a venom on a side or the stern that stings nothing ([member venom_sides]).
+## **What a body wearing [param tiers] delivers** -- its poison, and the venom in
+## its genes' own slots -- as records of [constant TOX_STRIDE] floats `[how, kind,
+## stacks, bearing]` ([constant HOW_BITE] and the rest). Empty for a body with no
+## toxin, which is most of the water. Read once, whenever what a body wears changes.
 ##
-## [param riders] are **the body's riders** (docs/design/gene-sockets.md): a toxin
-## in its mouth's own slot rides on every bite ([constant HOW_BITE]), and one in
-## its sting's on every sting ([constant HOW_DART]) -- the sting that fires, the
-## first in slot order. Each is its slot's gift at the rider's copies, of the dose
-## the rider's strain delivers.
+## [param order] is where its outside genes are worn, slot by slot; empty, the
+## default order every water cell is drawn and senses in ([method
+## Cilia.default_order]): the sting that fires is the first in it. [param riders]
+## are **the body's riders** (docs/design/gene-sockets.md): a toxin in its mouth's
+## own slot rides on every bite ([constant HOW_BITE]), and one in its sting's on
+## every sting ([constant HOW_DART]). Each is its slot's gift at the rider's copies,
+## of the dose the rider's strain delivers.
 static func toxins_of(tiers: Dictionary, order: Array = [],
-		sides := CellBody.VENOM_SIDES, riders: Dictionary = {}) -> PackedFloat64Array:
+		riders: Dictionary = {}) -> PackedFloat64Array:
 	var out := PackedFloat64Array()
-	var seats: Array = order
 	for gene: Variant in tiers:
 		var form := StringName(gene)
-		# **A toxin is a key with a dose**, whatever its places: a strain of one place,
-		# outside alone, is venom too (gene-catalogue.md §6.4).
 		var copies := clampi(int(tiers[gene]), 0, Genome.TIER_MAX)
 		var kind := Doses.kind_of(Genome.strain_of(form))
-		if copies <= 0 or kind < 0:
+		if copies <= 0 or kind < 0 or not Genome.is_inside_form(form):
 			continue
-		if Genome.is_inside_form(form):
-			_toxin_record(out, HOW_POISON, kind, Stats.value(form, &"poison_stacks", copies))
-			_toxin_record(out, HOW_SWALLOW, kind, Stats.value(form, &"swallow_stacks", copies))
-			continue
-		if seats.is_empty():
-			seats = Cilia.default_order(tiers)
-		var slot := seats.find(form)
-		if slot < 0 or Genome.is_front(slot):
-			_toxin_record(out, HOW_BITE, kind, Stats.value(form, &"venom_stacks", copies))
-		elif sides:
-			_toxin_record(out, HOW_STING, kind, Stats.value(form, &"venom_stacks", copies),
-				Cilia.slot_bearing(slot))
+		_toxin_record(out, HOW_POISON, kind, Stats.value(form, &"poison_stacks", copies))
+		_toxin_record(out, HOW_SWALLOW, kind, Stats.value(form, &"swallow_stacks", copies))
 	if riders.is_empty():
 		return out
 	_rider_record(out, HOW_BITE, riders, Catalogue.worn_provider(tiers, &"bite"),
 		&"bite_dose")
-	if seats.is_empty():
-		seats = Cilia.default_order(tiers)
+	var seats: Array = order if not order.is_empty() else Cilia.default_order(tiers)
 	_rider_record(out, HOW_DART, riders, Catalogue.seated_provider(seats, tiers,
 		&"dart_wound"), &"sting_dose")
 	return out
@@ -3024,20 +3002,19 @@ func _toxins_at(who: int) -> PackedFloat64Array:
 		return PackedFloat64Array()
 	var b := _cells[who]
 	var key := hash(b.genome) ^ (hash(b.order) * 31 if not b.order.is_empty() else 0) \
-		^ (0 if venom_sides else 0x5157) ^ (Riders.sign_of(b.riders) * 17)
+		^ (Riders.sign_of(b.riders) * 17)
 	if key != b.toxins_key:
-		b.toxins = toxins_of(b.genome, b.order, venom_sides, b.riders)
+		b.toxins = toxins_of(b.genome, b.order, b.riders)
 		b.toxins_key = key
 	return b.toxins
 
 
 ## **A bite's toxins** (§7.1): [param biter] bit [param target], landing at
 ## [param landed] -- the signed bearing at the target, clockwise from its nose.
-## The biter's front venom goes into the target; the target's poison, and its
-## sting if the bite landed within `VENOM_ARC_DEG / 2` of the bearing it guards,
-## go into the biter. [param felt] is the bearing the cell on this device feels
+## The venom in the biter's mouth's slot goes into the target; the target's poison
+## goes into the biter. [param felt] is the bearing the cell on this device feels
 ## its own dose from, when it is one of the two.
-func _bite_doses(biter: int, target: int, landed: float, felt: float) -> void:
+func _bite_doses(biter: int, target: int, _landed: float, felt: float) -> void:
 	var into_target := _toxins_at(biter)
 	for r in range(0, into_target.size(), TOX_STRIDE):
 		if int(into_target[r]) == HOW_BITE:
@@ -3045,17 +3022,11 @@ func _bite_doses(biter: int, target: int, landed: float, felt: float) -> void:
 			if biter == TARGET_PLAYER:
 				toxin_fired.emit(FIRED_VENOM)
 	var into_biter := _toxins_at(target)
-	var reach := deg_to_rad(CellBody.VENOM_ARC_DEG) * 0.5
 	for r in range(0, into_biter.size(), TOX_STRIDE):
-		var how := int(into_biter[r])
-		if how == HOW_POISON:
+		if int(into_biter[r]) == HOW_POISON:
 			_dose(biter, int(into_biter[r + 1]), into_biter[r + 2], target, felt, false)
 			if target == TARGET_PLAYER:
 				toxin_fired.emit(FIRED_POISON)
-		elif how == HOW_STING and absf(angle_difference(into_biter[r + 3], landed)) <= reach:
-			_dose(biter, int(into_biter[r + 1]), into_biter[r + 2], target, felt, false)
-			if target == TARGET_PLAYER:
-				toxin_fired.emit(FIRED_STING)
 
 
 ## **A swallow's toxin** (§7.1): [param eater] swallowed [param eaten], and takes
@@ -6366,13 +6337,17 @@ func _newborn() -> Dictionary:
 
 
 ## **Where a toxin the water draws goes** (docs/design/dna-slots.md §9): the
-## water draws it as one gene, by its variety's name and weight, and a coin puts
-## it inside, as poison, or outside, as venom -- the two places are equal. Any
-## other gene is itself, and no number is drawn for it.
+## water draws it as one gene, by its variety's name and weight. A gene of forms
+## with an outside form gets a coin between its two places; **the toxin has none
+## since its venom only rides** (gene.gd's RIDING), so it is its variety, poison,
+## inside, and no number is drawn. Any other gene is itself.
 func _place_toxin(gene: StringName) -> StringName:
 	if not Genome.has_forms(gene):
 		return gene
-	return gene if randi() % 2 == 0 else Genome.form_in(gene, Genome.OUTSIDE_PLACE)
+	var outer := Genome.form_in(gene, Genome.OUTSIDE_PLACE)
+	if outer == &"":
+		return gene
+	return gene if randi() % 2 == 0 else outer
 
 
 ## **A gene drawn from [param pool]**, varieties all, **by each one's weight in the
@@ -7555,6 +7530,10 @@ func load_drop(cell: CellBody, state: Dictionary) -> Dictionary:
 			if not kept_dna_riders.is_empty() else {}
 		b.riders = Riders.kept(Riders.copy(kept_riders[k]), b.genome) \
 			if not kept_riders.is_empty() else {}
+		# **Venom worn on the body, by a drop kept before it only rode**
+		# (2026-10-16): into its mouth's slot, or let go.
+		Genome.seat_riding(b.dna, [], b.dna_riders)
+		Genome.seat_riding(b.genome, [], b.riders)
 		if not b.inert and b.radius > CellBody.DIVIDE_RADIUS:
 			b.radius = CellBody.DIVIDE_RADIUS
 			trimmed += 1
@@ -9939,15 +9918,18 @@ func _free_slot_drop() -> int:
 ## (`Drop.takes_back`), and the gene waits for the next.
 func _give_back_by_peer(b: Body) -> void:
 	var gene := _peer_short()
-	if gene == &"" or not Drop.takes_back(b.genome, gene):
+	if gene == &"" or not Drop.takes_back(b.genome, gene, b.riders):
 		return
 	# Owed until its count is met ([member _peer_owed]); one, for a due gene no
 	# count of this run's owed -- a kept drop's queue, put back.
 	_peer_owed[gene] = int(_peer_owed.get(gene, 1)) - 1
 	if int(_peer_owed[gene]) <= 0:
 		_gene_floor.due.erase(gene)
+	var riders := Riders.copy(b.riders)
 	Drop.give_back(b.genome, gene, CellBody.slots_for(b.radius),
-		Catalogue.tagged(Catalogue.SENSE), randi(), randi() % 2 == 0)
+		Catalogue.tagged(Catalogue.SENSE), randi(), randi() % 2 == 0, riders)
+	b.riders = riders
+	b.dna_riders = Riders.copy(riders)
 	b.derive()
 	_stat(&"gene_floor_peer")
 	_stat(_floor_stat(&"gene_floor_peer", gene))
@@ -9983,10 +9965,13 @@ func _arm_the_founders() -> void:
 			if owed <= 0:
 				break
 			if not b.seeded or b.inert or b.drifter or b.person != null \
-					or not Drop.takes_back(b.genome, gene):
+					or not Drop.takes_back(b.genome, gene, b.riders):
 				continue
+			var riders := Riders.copy(b.riders)
 			Drop.give_back(b.genome, gene, CellBody.slots_for(b.radius),
-				Catalogue.tagged(Catalogue.SENSE), randi(), randi() % 2 == 0)
+				Catalogue.tagged(Catalogue.SENSE), randi(), randi() % 2 == 0, riders)
+			b.riders = riders
+			b.dna_riders = Riders.copy(riders)
 			b.dna = b.genome.duplicate()
 			b.derive()
 			_refresh_body(b)
@@ -10004,6 +9989,20 @@ func _carriers() -> Dictionary:
 		for gene: StringName in b.genome:
 			var kind := Genome.variety(gene)
 			counts[kind] = int(counts.get(kind, 0)) + 1
+		# **And a form that only rides, in its genes' slots** -- the venom in its
+		# mouth's, the toxin's one way outside since 2026-10-16: a carrier of that
+		# variety too, once, unless it wears it as well.
+		var riding := {}
+		for host: Variant in b.riders:
+			for one: Variant in b.riders[host]:
+				if one is Array and Genome.is_riding_form(StringName(one[0])):
+					riding[Genome.variety(StringName(one[0]))] = true
+		for kind: Variant in riding:
+			var worn := false
+			for gene: StringName in b.genome:
+				worn = worn or Genome.variety(gene) == kind
+			if not worn:
+				counts[kind] = int(counts.get(kind, 0)) + 1
 	return counts
 
 

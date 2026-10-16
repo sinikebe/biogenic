@@ -101,9 +101,8 @@ const ROWS := {
 		"judged": false, "contact": true, "group": &"dart_wound"},
 	&"dart_cooldown": {"none": 0.0, "better": LOWER, "combine": BEST, "unit": "s",
 		"judged": false, "contact": true, "group": &"dart_wound"},
-	# The toxin: venom outside, poison inside (docs/design/dna-slots.md §6).
-	&"venom_stacks": {"none": 0.0, "better": HIGHER, "combine": BEST, "unit": "stacks",
-		"judged": false, "contact": true, "group": &""},
+	# The toxin's poison, inside (docs/design/dna-slots.md §6). Its venom rides in a
+	# gene's slot, and gives through that slot's table (`bite_dose`, `sting_dose`).
 	&"poison_stacks": {"none": 0.0, "better": HIGHER, "combine": BEST, "unit": "stacks",
 		"judged": false, "contact": true, "group": &""},
 	&"swallow_stacks": {"none": 0.0, "better": HIGHER, "combine": BEST,
