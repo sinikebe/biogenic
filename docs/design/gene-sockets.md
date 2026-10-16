@@ -28,8 +28,9 @@ numbers and what to watch when playing.
 
 1. **Some genes have slots of their own.** The gene's file says how many and what
    each one takes. A gene in one of them changes that gene and nothing else.
-2. **On the pause screen, a placed gene with slots opens a view of them.** The view
-   shows the gene, its slots, what is in each and what each one takes.
+2. **On the pause screen, a gene's slots are chips beside it**, on the figure itself
+   (placing.md §2, the owner, 2026-10-16). Each shows what is in it, or what it
+   takes. There is no separate view any more.
 3. **While a gene waits to be placed, everywhere it can go is lit.** It shows as a
    faint gene on every empty body slot that takes it, and on every gene's slot that
    takes it. What cannot take it stays dark.
@@ -152,43 +153,35 @@ Balance waits for players: these are starting values, and §8 says what to watch
 
 ## 5. The screen
 
+**Superseded on 2026-10-16 by placing.md**, at the owner's word: *"Double tapping a
+slot to put a gene can lead to mistakes. remove that. I think you can use a bit more
+of the screen to display all gene slots instead of having to enter a sub screen as
+well."* What follows is what it says now; placing.md §2 has the numbers.
+
 ### 5.1 The ring
 
-- **A chip whose gene has slots shows them**: one small port per slot at the chip's
-  right end, hollow for an empty slot, filled in its rider's hue.
+- **A chip whose gene has slots has them beside it**: a small chip each, off its
+  right end, on a stem from its helix -- a lobe, its rider's rungs and its word, or,
+  empty, what it takes, faint. The ring's columns moved apart to make room.
 - **With a gene in hand, everywhere it can go is lit**:
   - every empty body slot that takes it draws the gene faint, as the toxin's
     `venom` and `poison` ghosts always did, now for every gene;
-  - every port that takes it glows in its hue.
-  
+  - every gene's slot that takes it lights its stem in the gene's hue and shows
+    the gene as it would land.
+
   A slot with nothing lit cannot take it.
-- **A chip with slots opens on its second tap**, with nothing in hand or with a gene
-  in hand that one of its slots takes. The first tap reads it, and the line under the
-  figure says `tap again to open sting's slots`, with `· venom fits` when the gene
-  in hand fits. With a gene in hand that none of its slots takes, the second tap
-  writes over it, as it always did.
-- **A drag from the tray onto a chip whose slots take the gene opens them**, with
-  the slot that takes it armed.
+- **A tap on a gene's slot chooses it**, as a tap on a ring slot does, and the
+  button under the figure puts the gene in (`put venom in sting's slot`), writes it
+  over the rider (`write venom over burn`) or adds a copy (`add a copy to venom`).
+- **A drag from the tray onto a gene's slot that takes it** puts it there when the
+  slot is empty, and otherwise chooses it for the button.
 
 ### 5.2 The slot view
 
-It replaces the figure in the same 420 × 372, as the fork's cards do:
-
-- **The host at the top**, its chip, with its organ drawn large above the word. With
-  a gene in hand that is not the host, two taps on it write over it, as on the ring.
-- **Its slots in a row below**, one chip each, threaded to the host. An empty one
-  draws what it takes, faint: `venom`, `burn`. A full one draws its rider, word and
-  copies.
-- **With a gene in hand**, the slots that take it are lit, as on the ring, and the
-  others are drawn refused.
-- **Taps**: one reads a slot or arms it, two place (`tap again to put venom in
-  sting's slot`; `tap again for one more copy`; `tap again to put venom over burn`).
-  The 300 ms guard and the four-second arm hold as they do on the ring.
-- **Closing**: a `‹ back` chip at the top left, `Esc`, or resume. Placing does not
-  close it, so the player sees the gene land.
-- **The lines under it** read the slot: its word in its rider's hue, or its takes
-  word for an empty one, then the slot's line.
-- **Keys**: `←` and `→` walk the host and the slots; `Enter` taps.
+Gone (placing.md §3). The lines under the figure read a gene's slot when it is
+chosen or hovered: its word in its rider's hue, or its takes word for an empty one,
+then the slot's line; and under it, `nothing in this slot yet`, what a rider written
+over loses, or `a daughter wears it whenever she wears sting`.
 
 ### 5.3 In the water
 
@@ -259,8 +252,8 @@ touched. A body's organs are drawn as they always were.
   refuses a rider on a host not worn, on a socket not declared, or that does not fit;
   the rules pin.
 - **Rendered and judged at both shapes**: the ring with a gene in hand and its lit
-  slots and ports, the slot view empty, armed and full, and a cell in the water with
-  a rider's bead.
+  slots, a gene's slot chosen and filled, and a cell in the water with a rider's bead
+  (placing.md §6).
 - **Pins.** `Wire.PROTOCOL` 9 and `Wire.RULES` moved (§6); the net probe's SISTER
   size pin is 2,189 bytes, from 1,378. The drop probe's seeded lines (pack 2's five
   minutes, the identity gate, pack 3's and the game's water) are re-recorded: with the

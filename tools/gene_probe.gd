@@ -90,6 +90,12 @@ const Earshot := preload("res://game/net/earshot.gd")
 ## a file keeps them.
 const BodyPlan := preload("res://game/genes/body_plan.gd")
 const Figure := preload("res://game/normal/figure.gd")
+## **What the pause screen keeps beside the figure**, on the narrowest canvas (1280
+## wide): the columns are centred, the side column is 232 with 64 between, and the
+## genome column must end left of the page chip, whose left edge is 176 in from the
+## right. So the figure has 2 x (1280 - 176 - 640) - 296 = 632 px, and this is the
+## rest of the canvas.
+const FIGURE_BESIDE := 1280.0 - 632.0
 const DropSave := preload("res://game/normal/drop_save.gd")
 const CellSave := preload("res://game/normal/cell_save.gd")
 const NormalMode := preload("res://game/normal/normal_mode.gd")
@@ -217,9 +223,12 @@ const GATED := {"gd": "#", "tscn": ";", "tres": ";", "gdshader": "//"}
 ## and its message says what to move: these and the rows, in the same commit, and the
 ## protocol with them ([constant PLAN_MOVED]).
 const SHIPPED_COUNTS: Array = [3, 7, 7, 1, 2, 7, 9, 3.5]
-const SHIPPED_SEATS: Array[Vector2] = [Vector2(0.0, -138.0), Vector2(150.0, 0.0),
-	Vector2(0.0, 168.0), Vector2(150.0, -138.0), Vector2(-150.0, -138.0),
-	Vector2(150.0, 168.0), Vector2(-150.0, 168.0), Vector2(0.0, 6.0)]
+## **The seats by column**: `x` is the ring's column, -1 to 1, which the figure
+## spaces by however much room a gene's own slots need (figure.gd's `_lay_out`,
+## placing.md §2); `y` is the row's offset, as written.
+const SHIPPED_SEATS: Array[Vector2] = [Vector2(0.0, -138.0), Vector2(1.0, 0.0),
+	Vector2(0.0, 168.0), Vector2(1.0, -138.0), Vector2(-1.0, -138.0),
+	Vector2(1.0, 168.0), Vector2(-1.0, 168.0), Vector2(0.0, 6.0)]
 const SHIPPED_NEIGHBOURS: Array = [[4, -1, 3, 7], [7, 3, -1, 5], [6, 7, 5, -1],
 	[0, -1, -1, 1], [-1, -1, 0, 6], [2, 1, -1, -1], [-1, 4, 2, -1], [-1, 0, 1, 2]]
 const SHIPPED_RING: Array[int] = [0, 3, 1, 5, 2, 6, 4, 7]
@@ -2761,7 +2770,11 @@ func _plan() -> void:
 	var counts := [CellBody.SLOT_MIN, CellBody.SLOT_MAX, Genome.INSIDE, Genome.INSIDE_SLOTS,
 		Genome.STERN, Wire.ORDER_MAX, Wire.GENES_MAX,
 		Array(ladder) if ladder is PackedFloat64Array else ladder]
-	var ring := _same_list(Figure.SLOT_SEAT, SHIPPED_SEATS) \
+	var pitch := Figure.RING_X[2]
+	var shipped_seats: Array[Vector2] = []
+	for seat: Vector2 in SHIPPED_SEATS:
+		shipped_seats.append(Vector2(seat.x * pitch, seat.y))
+	var ring := _same_list(Figure.SLOT_SEAT, shipped_seats) \
 		and _same_list(Figure.SLOT_NEIGHBOUR, SHIPPED_NEIGHBOURS) \
 		and _same_list(Figure.SLOT_RING, SHIPPED_RING)
 	var born := BodyPlan.home_layout(Catalogue.born_order())
@@ -2932,6 +2945,37 @@ func _plan_faults() -> Array[String]:
 	for slot in Figure.SLOT_SEAT.size():
 		if not box.encloses(Rect2(Figure.chip_at(slot), Figure.SLOT_SIZE)):
 			out.append("chip %d leaves the figure" % slot)
+	# **And a gene's own slots beside every chip** (docs/design/placing.md §2): room
+	# for the widest gene's, inside the box, clear of every other chip and slot, and
+	# the box inside the narrowest canvas beside the pause screen's side column.
+	var widest := 0
+	for key: StringName in Catalogue.live():
+		widest = maxi(widest, Catalogue.sockets(key).size())
+	if Figure.SOCKETS_DRAWN != widest:
+		out.append("the figure makes room for %d of a gene's own slots, the widest gene has %d"
+			% [Figure.SOCKETS_DRAWN, widest])
+	var rects: Array[Rect2] = []
+	var names: Array[String] = []
+	for slot in Figure.SLOT_SEAT.size():
+		rects.append(Rect2(Figure.chip_at(slot), Figure.SLOT_SIZE))
+		names.append("chip %d" % slot)
+		if slot >= BodyPlan.INSIDE:
+			continue
+		for k in Figure.SOCKETS_DRAWN:
+			var sock := Rect2(Figure.socket_at(slot, k), Figure.SOCKET_SIZE)
+			if not box.encloses(sock):
+				out.append("slot %d of chip %d leaves the figure" % [k, slot])
+			rects.append(sock)
+			names.append("slot %d of chip %d" % [k, slot])
+	for i in rects.size():
+		for j in range(i + 1, rects.size()):
+			if rects[i].intersects(rects[j]):
+				out.append("%s and %s overlap on the figure" % [names[i], names[j]])
+	var room := float(ProjectSettings.get_setting("display/window/size/viewport_width")) \
+		- FIGURE_BESIDE
+	if Figure.FIGURE_SIZE.x > room:
+		out.append("the figure is %.0f px wide, and the pause screen leaves it %.0f"
+			% [Figure.FIGURE_SIZE.x, room])
 	# **Room on the choosing screen** (normal_mode.gd's `_build_choosing`): a locus a
 	# slot between its two caps, and its words under them, above the foot of the
 	# shortest canvas there is -- landscape-locked, every one is at least this tall.
@@ -3163,9 +3207,9 @@ func _synthetic_plan() -> void:
 	_check(("and the pause figure lays it out: seats %s, Tab round %s, and from the inside"
 		+ " left to the port flank, %s") % [str(seats), str(ring), str(inside_ways)],
 		seats.size() == PLAN_TEST.size()
-		and seats[_index_in(PLAN_TEST, &"port")] == Vector2(-150.0, 0.0)
-		and seats[_index_in(PLAN_TEST, &"bow_port")] == Vector2(-150.0, -138.0)
-		and seats[_index_in(PLAN_TEST, &"aft_starboard")] == Vector2(150.0, 168.0)
+		and seats[_index_in(PLAN_TEST, &"port")] == Vector2(-Figure.RING_X[2], 0.0)
+		and seats[_index_in(PLAN_TEST, &"bow_port")] == Vector2(-Figure.RING_X[2], -138.0)
+		and seats[_index_in(PLAN_TEST, &"aft_starboard")] == Vector2(Figure.RING_X[2], 168.0)
 		and seats[inside_at] == Vector2(0.0, 6.0)
 		and _same_list(ring, _indexes_of(PLAN_TEST, [&"nose", &"fore_starboard", &"starboard",
 			&"aft_starboard", &"tail", &"aft_port", &"port", &"bow_port", &"inside"]))
