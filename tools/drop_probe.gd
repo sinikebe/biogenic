@@ -184,6 +184,9 @@ extends Node
 
 const SpaceGrid := preload("res://game/mechanics/space_grid.gd")
 const Basin := preload("res://game/mechanics/basin.gd")
+## **The day** (docs/design/daylight.md §2): a light on a cycle, and how much of it
+## gets through.
+const Daylight := preload("res://game/mechanics/daylight.gd")
 const Replenish := preload("res://game/mechanics/replenish.gd")
 const Snowfall := preload("res://game/mechanics/snowfall.gd")
 ## The gene floor's queue and budget (docs/design/gene-rarity.md §3.3).
@@ -825,6 +828,17 @@ func _ready() -> void:
 		print("[drop-probe] NOTE --sockets-only: %d failed" % _failed)
 		get_tree().quit(0 if _failed == 0 else 1)
 		return
+	# `--daylight-only` is for working on the light (docs/design/daylight.md §10.3):
+	# its own section, check 10 and the drops its check 5 and the lineage checks read,
+	# and nothing else. CI never passes it, and it never prints ALL PASS.
+	if OS.get_cmdline_user_args().has("--daylight-only"):
+		_tank()
+		_five_minutes()
+		_lineage()
+		_daylight()
+		print("[drop-probe] NOTE --daylight-only: %d failed" % _failed)
+		get_tree().quit(0 if _failed == 0 else 1)
+		return
 	# `--cells-only` is for working on your cells (docs/design/cells.md §6.3): the
 	# save, your drops and your cells, the three sections a kept cell runs through,
 	# and nothing else. CI never passes it, and it never prints ALL PASS.
@@ -870,6 +884,7 @@ func _ready() -> void:
 	await _sister_lineage()
 	await _dna_slots()
 	_rarity_draws()
+	_daylight()
 	print("[drop-probe] ALL PASS" if _failed == 0
 		else "[drop-probe] FAILED %d" % _failed)
 	get_tree().quit(0 if _failed == 0 else 1)
@@ -1668,8 +1683,27 @@ func _lod() -> void:
 ## store, burn, and light and absorption -- are the field's own reading of its
 ## genome, so they are held to the node's too.
 func _tank() -> void:
-	var water := _water(3000.0)
-	var field: WatchedDrop = water[0]
+	# **With the light off** (docs/design/daylight.md §10.3): the node is handed the
+	# field's light, which is today's 1.0, so this is the check it always was.
+	var water := _water(3000.0, true, true, false)
+	var ran := _one_tank(water[0], false)
+	_done(water)
+	_check(("one tank: 3 genomes, the node a frame at a time and the water body at its"
+		+ " rates, 60 s of the same efforts and meals, end %s apart (hunger ran %.2f"
+		+ " to %.2f, never pinned)") % [String.num_scientific(ran[0]), ran[1], ran[2]],
+		ran[0] < 1e-6 and ran[1] > 0.0 and ran[2] < 1.0)
+	_tank_edges()
+
+
+## **Check 10's three genomes, the node against the water body**, in [param field]:
+## the node a frame at a time as the run steps it, its `sun` times the field's own
+## light over the frame (`light_over`, as normal_mode.gd asks it), the water body in
+## food.gd's own tank at the rates its distance would give it. With [param day]
+## the field's clock runs with the frames from the start of the day's cycle, so its
+## dawn rises through the 60 s and every step is paid a moving light
+## (docs/design/daylight.md §10.3 check 3). Returns `[how far apart they end, the
+## lowest hunger, the highest]`.
+func _one_tank(field: WatchedDrop, day: bool) -> Array:
 	var genomes := [
 		{&"cytostome": 1, &"cirrus": 1, &"flagellum": 1},
 		{&"cytostome": 2, &"cirrus": 1, &"flagellum": 3, &"vacuole": 2, &"plastid": 3,
@@ -1684,16 +1718,20 @@ func _tank() -> void:
 	var frames := 3600
 	var dt := 1.0 / 60.0
 	var dash := Stats.at(&"dash_cost", 1)
+	var started := float(field.get("_t"))
+	if day:
+		field.set("_day_origin", -started)
+	var at := Vector2(1500.0, 0.0)
 	for tiers: Dictionary in genomes:
 		var met: Node = Metabolism.new()
 		met.upkeep = GenomeNode.upkeep_of(tiers)
 		met.reserve = Stats.of(tiers, &"store")
-		met.photosynthesis = Stats.of(tiers, &"sun") \
-			+ (Metabolism.ABSORB if GenomeNode.tier_of(tiers, &"cytostome") == 0 else 0.0)
 		met.burn = Stats.of(tiers, &"burn")
 		met.set_hunger(0.3)
-		var index := _pose(field, Vector2(1500.0, 0.0), 30.0, tiers, 0.0, 0.3)
+		field.set("_t", started)
+		var index := _pose(field, at, 30.0, tiers, 0.0, 0.3)
 		var tank: Object = (field.get("_cells") as Array)[index]
+		var where: Vector2 = tank.get("pos")
 		var last := -1
 		for f in frames:
 			# What the body did this frame, in seconds of rest: a stroke now and
@@ -1705,11 +1743,17 @@ func _tank() -> void:
 				effort += randf_range(0.0, 0.02)
 			if f == 1500:
 				effort += dash
-			# The run pays the effort, then the node is alive for the frame, then
-			# the water feeds it.
+			# The run pays the effort, then the node is alive for the frame -- in
+			# the light over the frame, which starts at the field's clock -- then the
+			# water feeds it.
+			var t0 := started + float(f) * dt
+			met.photosynthesis = Stats.of(tiers, &"sun") * field.light_over(where, t0, t0 + dt) \
+				+ (Metabolism.ABSORB if GenomeNode.tier_of(tiers, &"cytostome") == 0 else 0.0)
 			met.spend(effort)
 			met.call(&"_process", dt)
 			tank.set("effort", float(tank.get("effort")) + effort)
+			# The field's clock at the frame's end, as its own frame leaves it.
+			field.set("_t", started + float(f + 1) * dt)
 			# A meal every ten seconds, worth three fifths of what is missing, so
 			# neither tank is ever pinned at empty or at full: a pinned tank
 			# would agree with anything.
@@ -1727,11 +1771,13 @@ func _tank() -> void:
 		worst = maxf(worst, absf(float(met.hunger) - float(tank.get("hunger"))))
 		met.free()
 		field._drop_lose(index, 0)
-	_done(water)
-	_check(("one tank: 3 genomes, the node a frame at a time and the water body at its"
-		+ " rates, 60 s of the same efforts and meals, end %s apart (hunger ran %.2f"
-		+ " to %.2f, never pinned)") % [String.num_scientific(worst), low, high],
-		worst < 1e-6 and low > 0.0 and high < 1.0)
+	field.set("_t", started)
+	return [worst, low, high]
+
+
+## The tank's checks that need no field: the drifters, a mouthless born cell and
+## the arithmetic at its edges.
+func _tank_edges() -> void:
 	# A body with no mouth at rest: every drifter the water makes holds its tank,
 	# neither burning it nor -- with light or a mitochondrion to spare -- filling it.
 	var starving := PackedStringArray()
@@ -1784,8 +1830,11 @@ func _tank() -> void:
 ## nobody's senses (water-evolves.md). [param rules] false is pack 2's
 ## hand-written hunter (behaviour.md §12.3 check 1), and [param tails] false pack
 ## 3's water, where a tail beats only while a swim rule fires (automation.md
-## §5.4) -- set before the water is made, as a tool sets it.
-func _water(desert := 0.0, rules := true, tails := true) -> Array:
+## §5.4) -- set before the water is made, as a tool sets it. [param light] false
+## is the water before the day (docs/design/daylight.md §10.4), full light
+## everywhere at every hour: what every identity gate runs, since an older pack
+## had no day.
+func _water(desert := 0.0, rules := true, tails := true, light := true) -> Array:
 	var cell := CellBody.new()
 	cell.radius = CellBody.BASE_RADIUS
 	var field := WatchedDrop.new()
@@ -1793,6 +1842,7 @@ func _water(desert := 0.0, rules := true, tails := true) -> Array:
 	field.desert = desert
 	field.rules = rules
 	field.tails_beat = tails
+	field.daylight = light
 	add_child(field)
 	field.setup_drop(cell)
 	field.in_water = false
@@ -2279,9 +2329,12 @@ static func _keyed(line: String) -> String:
 ## byte -- its census and lineage lines at five minutes are [constant DEV_LINES],
 ## `dev`'s, and the senses the player and the water share are pinned by
 ## [method _membrane]. The drop of [method _five_minutes] is on rules, so the
-## division is checked on both.
+## division is checked on both. **Since the drop has a day** (docs/design/daylight.md
+## §10.3 check 5) the checks here read it with its day, whose lines are
+## [constant DAYLIGHT_LINES], and the same drop is run again with the light off for
+## [constant DEV_LINES]: pack 2 had no day.
 func _lineage() -> void:
-	var lines: Array[String] = []
+	var lit: Array[String] = []
 	seed(1)
 	var water := _water(0.0, false)
 	var field: WatchedDrop = water[0]
@@ -2292,9 +2345,20 @@ func _lineage() -> void:
 			_lineage_look(field, float(f + 1) / 60.0, seen)
 	seen["food"] = float(int(field.get("_drifters"))) / Drop.food_count(FoodField.DRIFTER_SHARE)
 	_lineage_runs.append(_lineage_summary(field, "pack 2's hunter's", seen))
-	lines.append(field.census_line())
-	lines.append(field.lineage_line())
+	lit.append(field.census_line())
+	lit.append(field.lineage_line())
 	_done(water)
+	# **And with the light off** (docs/design/daylight.md §10.3 check 5): the same
+	# drop with no day is `dev`'s to the byte -- DEV_LINES are the daylight-off gate.
+	var lines: Array[String] = []
+	seed(1)
+	var dark := _water(0.0, false, true, false)
+	var off: WatchedDrop = dark[0]
+	for f in LINEAGE_LOOKS * LOOK_FRAMES:
+		off._process(1.0 / 60.0)
+	lines.append(off.census_line())
+	lines.append(off.lineage_line())
+	_done(dark)
 	seed(20260930)
 	var differ := 0
 	for k in DEV_LINES.size():
@@ -2304,10 +2368,24 @@ func _lineage() -> void:
 			print("[drop-probe] check 1, line %d, this build: %s" % [k + 1, ours])
 			print("[drop-probe] check 1, line %d, dev:        %s" % [k + 1, _keyed(DEV_LINES[k])])
 	_check(("1. with the rules off it is pack 2, the drop: seed 1, five minutes on pack 2's"
-		+ " hunter -- its census and lineage lines against dev's: %s") % [
+		+ " hunter with the light off -- its census and lineage lines against dev's: %s") % [
 		"the same to the byte" if differ == 0
 		else "%d DIFFER" % differ],
 		differ == 0 and lines.size() == DEV_LINES.size())
+	var moved := 0
+	for k in maxi(lit.size(), DAYLIGHT_LINES.size()):
+		var ours: String = lit[k] if k < lit.size() else "(none)"
+		var pinned: String = _keyed(DAYLIGHT_LINES[k]) if k < DAYLIGHT_LINES.size() else "(none)"
+		if ours != pinned:
+			moved += 1
+			print("[drop-probe] daylight 5, line %d, this build: %s" % [k + 1, ours])
+			print("[drop-probe] daylight 5, line %d, pinned:     %s" % [k + 1, pinned])
+	var lit_differs := lit.size() == 2 and lines.size() == 2 and lit[0] != lines[0]
+	_check(("daylight 5. off is dev, to the byte: the same drop, the light on, prints its"
+		+ " census and lineage lines %s, and %s") % [
+		"as pinned" if moved == 0 else "%d MOVED" % moved,
+		"not dev's" if lit_differs else "DEV'S -- THE SWITCH DOES NOTHING"],
+		moved == 0 and lit.size() == DAYLIGHT_LINES.size() and lit_differs)
 	var posed := _food_over_floor()
 	var runs := _lineage_runs
 	var composed: Array[Dictionary] = []
@@ -2724,7 +2802,7 @@ func _determinism() -> void:
 		behaviours.append(field.behaviour_line())
 		_done(water)
 	seed(8088)
-	var pack3 := _water(0.0, true, false)
+	var pack3 := _water(0.0, true, false, false)
 	var field3: WatchedDrop = pack3[0]
 	field3.rule_change = false
 	for f in 40 * 60:
@@ -6040,6 +6118,18 @@ const DEV_LINES: Array[String] = [
 ]
 
 
+## **The same five minutes with the light on** (docs/design/daylight.md §10.3 check
+## 5, §10.4): [method _lineage]'s drop -- seed 1, pack 2's hunter -- with its day,
+## as this build first printed it, in this project's container. [constant DEV_LINES]
+## are the same drop with the light off. **A change to the water made on purpose
+## changes them**: re-record them then from the check's own output, and say so in
+## the commit.
+const DAYLIGHT_LINES: Array[String] = [
+	"[census] t 300  living 589 (drifters 425, hunters 164)  flocs 28  | hunters at r40 0, mean r 30.7, hunger 0.36  | could swallow r26/r34/r40 87/16/12  dread 1.26/0.39/0.25  genes 17  | spawned 1856  died: swallowed 1516 chewed 104 starved 77 (r40 0) poisoned 6  | grazed by the water 72, by drifters 4, dissolved 23, snow kept 14, remains 83  | runs 2591 at you 0 misses 1228 stings 110 dashes 170  floors: gene 0+2 drifter 0  | sum 665317595",
+	"[lineage] t 300  hunters 164, born 164  generation mean 5.97 max 10  families 52 (largest 9)  dna apart 145  | cruise 88.7 notice 1179 mouth 1.30 upkeep 1.78 genes worn 5.71 carried 7.32  tails 108 sighted 164 at r40 0  | divisions 436 (trade 212 drift 224 faithfully 0), daughters 872: tailless 300, given a sense 147  | the spawner's peers 12 (for the floor 10, for venom 2), drifters 1289, left to births 0  | worn cytostome 1.30 cirrus 1.73 flagellum 1.59 stigma 0.40 ocellus 0.74 chemocyte 1.15 ampulla 0.58 axoneme 0.46 palp 0.32 myoneme 0.23 trichocyst 0.43 pellicle 0.24 veneneux 0.11 plastid 0.42 vacuole 0.35 crista 0.37 toxicyst 0.00 haptonema 0.44  | commonest 1x cytostome:1,ampulla:2,axoneme:3,plastid:2,vacuole:1 ; 1x cytostome:1,chemocyte:1,crista:2 ; 1x cytostome:1,chemocyte:2,ampulla:1,axoneme:1,myoneme:3,trichocyst:3,haptonema:3",
+]
+
+
 ## **lineage 10, the identity gate** (§11.2, §11.3 check 10): **with births
 ## off** -- the field's own `births` switch, the seam every pack-2 rule is
 ## behind -- the drop's census lines are `dev`'s to the byte on the same seeds:
@@ -6102,6 +6192,7 @@ func _identity_lines(births: bool, first := 0) -> Array[String]:
 		field.process_mode = Node.PROCESS_MODE_DISABLED
 		field.births = births
 		field.rules = false
+		field.daylight = false
 		add_child(field)
 		field.setup_drop(cell)
 		field.in_water = false
@@ -6126,6 +6217,7 @@ func _identity_lines(births: bool, first := 0) -> Array[String]:
 	room.process_mode = Node.PROCESS_MODE_DISABLED
 	room.births = births
 	room.rules = false
+	room.daylight = false
 	add_child(room)
 	room.open_dedicated(nobody)
 	for f in 30 * 60:
@@ -6213,6 +6305,8 @@ func _membrane_digest(rules: bool) -> String:
 	field.process_mode = Node.PROCESS_MODE_DISABLED
 	field.grace = 1e6
 	field.rules = rules
+	# An older pack's water, before the day (docs/design/daylight.md §10.4).
+	field.daylight = false
 	add_child(field)
 	field.setup_drop(cell)
 	field.in_water = true
@@ -7433,10 +7527,16 @@ const PACK3_LINES: Array[String] = [
 ## into a gene's slot, never round the body, so the floor's venom and the founders'
 ## ride their mouths, and drift brings the toxin as poison. Nothing else moved; the
 ## rules two builds agree on moved with venom's side and stern lines (`Wire.RULES`).
+## **Re-recorded when the drop got a day** (docs/design/daylight.md §10.4, 2026-10-16),
+## from the check's own output, because the water changed on purpose: a body with a
+## `plastid` is paid its sun at the light where it is, which falls at night and toward
+## the drop's deep middle, so a hunter carrying one runs hungrier there and the stream
+## follows. With the light off this branch printed the old ones to the byte, and the
+## player's trace did not move.
 const TAIL_LINES: Array[String] = [
-	"[census] t 300  living 551 (drifters 456, hunters 95)  flocs 77  | hunters at r40 0, mean r 30.7, hunger 0.47  | could swallow r26/r34/r40 46/7/4  dread 0.55/0.15/0.07  genes 17  | spawned 1530  died: swallowed 906 chewed 11 starved 241 (r40 0) poisoned 1  | grazed by the water 115, by drifters 4, dissolved 94, snow kept 18, remains 242  | runs 0 at you 0 misses 0 stings 51 dashes 0  floors: gene 0+2 drifter 0  | sum 86573132",
-	"[lineage] t 300  hunters 95, born 65  generation mean 3.18 max 7  families 58 (largest 5)  dna apart 70  | cruise 78.3 notice 914 mouth 1.17 upkeep 1.36 genes worn 4.74 carried 5.97  tails 76 sighted 95 at r40 0  | divisions 180 (trade 86 drift 94 faithfully 0), daughters 360: tailless 135, given a sense 76  | the spawner's peers 143 (for the floor 141, for venom 2), drifters 832, left to births 0  | worn cytostome 1.17 cirrus 1.18 flagellum 1.28 stigma 0.29 ocellus 0.66 chemocyte 0.43 ampulla 0.57 axoneme 0.45 palp 0.18 myoneme 0.06 trichocyst 0.15 pellicle 0.06 veneneux 0.05 plastid 0.09 vacuole 0.28 crista 0.24 toxicyst 0.00 haptonema 0.13  | commonest 9x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 9x cytostome:1,cirrus:1,flagellum:1,stigma:1 ; 8x cytostome:1,cirrus:1,flagellum:1,chemocyte:1",
-	"[behaviour] t 300  hunters 95: on the founders' rules 47, other lists 48  | founders' rules fired 18054/34621/1745/1115/8438/80961/2422  | meals of hunters with a nose 253, radar 392, laser 328  | stings 51, stuns 0, your wakes 0  | now holding a heading 32, resting 42, swimming 78, pushing 8, stunned 0, echoes in flight 85  | behaviours 42, unchanged 49.5 %  | rules changed 180: nudge 95, replace 38, swap 14, copy 11, drop 22",
+	"[census] t 300  living 553 (drifters 457, hunters 96)  flocs 75  | hunters at r40 0, mean r 30.3, hunger 0.51  | could swallow r26/r34/r40 44/7/4  dread 0.48/0.06/0.03  genes 17  | spawned 1532  died: swallowed 890 chewed 5 starved 242 (r40 0) poisoned 0  | grazed by the water 117, by drifters 4, dissolved 96, snow kept 20, remains 242  | runs 0 at you 0 misses 0 stings 29 dashes 0  floors: gene 0+6 drifter 0  | sum 3897636447",
+	"[lineage] t 300  hunters 96, born 58  generation mean 2.50 max 10  families 66 (largest 5)  dna apart 63  | cruise 65.5 notice 798 mouth 1.22 upkeep 1.26 genes worn 4.44 carried 5.62  tails 68 sighted 96 at r40 0  | divisions 158 (trade 77 drift 81 faithfully 0), daughters 316: tailless 123, given a sense 55  | the spawner's peers 182 (for the floor 176, for venom 6), drifters 795, left to births 0  | worn cytostome 1.22 cirrus 1.32 flagellum 1.01 stigma 0.39 ocellus 0.22 chemocyte 0.40 ampulla 0.40 axoneme 0.20 palp 0.09 myoneme 0.17 trichocyst 0.07 pellicle 0.02 veneneux 0.02 plastid 0.15 vacuole 0.17 crista 0.07 toxicyst 0.00 haptonema 0.15  | commonest 19x cytostome:1,cirrus:1,flagellum:1,stigma:1 ; 7x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 7x cytostome:1,cirrus:1,flagellum:1,chemocyte:1",
+	"[behaviour] t 300  hunters 96: on the founders' rules 58, other lists 38  | founders' rules fired 21480/37998/2271/1481/9190/94629/2890  | meals of hunters with a nose 254, radar 376, laser 307  | stings 29, stuns 0, your wakes 0  | now holding a heading 35, resting 39, swimming 90, pushing 5, stunned 0, echoes in flight 57  | behaviours 31, unchanged 60.4 %  | rules changed 158: nudge 91, replace 37, swap 9, copy 12, drop 9",
 ]
 ## **The player's seeded trace** ([method _tail_trace]): forty seconds of a cell
 ## stepped by its own drive, wearing a tail of two copies that nobody holds,
@@ -7525,14 +7625,14 @@ func _tail() -> void:
 ## [method _membrane]; the tail does not reach it.)
 func _tail_pack3() -> void:
 	seed(1)
-	var water := _water(0.0, true, false)
+	var water := _water(0.0, true, false, false)
 	var field: WatchedDrop = water[0]
 	for f in 5 * 60 * 60:
 		field._process(1.0 / 60.0)
 	var off: Array[String] = [field.census_line(), field.lineage_line(),
 		field.behaviour_line()]
 	_done(water)
-	var traces := [_tail_trace(false), _tail_trace(true)]
+	var traces := [_tail_trace(false, false), _tail_trace(true)]
 	seed(20260930)
 	var differ := 0
 	for k in maxi(off.size(), PACK3_LINES.size()):
@@ -7575,8 +7675,10 @@ func _tail_pack3() -> void:
 ## the water of a drop, its senses fed as a run feeds them; the
 ## SHA-256 of its place, heading, motion, stroke clock and effort, and every sense
 ## [constant MEMBRANE] names, each frame. [param tails] is the field's
-## `tails_beat`. Set by name, so the same lines digest on a build without it.
-func _tail_trace(tails: bool) -> String:
+## `tails_beat` and [param light] its `daylight` (docs/design/daylight.md §10.4),
+## off for pack 3's, which had no day. Set by name, so the same lines digest on a
+## build without them.
+func _tail_trace(tails: bool, light := true) -> String:
 	seed(1)
 	var cell := _tail_body({&"cytostome": 1, &"cirrus": 2, &"flagellum": 2, &"chemocyte": 1,
 		&"stigma": 1})
@@ -7584,6 +7686,7 @@ func _tail_trace(tails: bool) -> String:
 	var field := FoodField.new()
 	field.process_mode = Node.PROCESS_MODE_DISABLED
 	field.set("tails_beat", tails)
+	field.set("daylight", light)
 	add_child(field)
 	field.setup_drop(cell)
 	field.in_water = true
@@ -9466,7 +9569,11 @@ func _readout() -> void:
 ## share on the founders' rules, in percent. Different by what they say: the
 ## hunters are put a quarter each on the founders' rules, on a list of their
 ## own, on that list written another way, and on the founders' rules read again
-## into a list of their own -- two behaviours, half unchanged.
+## into a list of their own -- two behaviours, half unchanged. **And its light**
+## (docs/design/daylight.md §3.6): two rows more under those, set apart -- how far
+## into its day the drop is, as a share, and the light where the cell is; over a
+## friend's drop, a dash for the day and the full light a guest is in until the pond
+## carries the host's sky.
 func _readout_families() -> void:
 	var holder := Node.new()
 	add_child(holder)
@@ -9504,25 +9611,33 @@ func _readout_families() -> void:
 	FrameReadout.posing = "dev"
 	var readout := FrameReadout.attach(holder, field)
 	FrameReadout.posing = null
+	# Dusk, so neither the hour nor the light is a round number.
+	field.set("_day_origin", fposmod(Drop.DAY_DAWN + Drop.DAY_LIGHT + 21.0
+		- float(field.get("_t")), field.day_length()))
 	var rows: Array = readout.call(&"_figures") if readout != null else []
 	var counts: Array = field.lineage_counts()
 	var kinds: Array = field.behaviour_counts()
+	var light: Array = field.daylight_counts()
+	var hour := field.day_time() / field.day_length()
+	var here := field.light_at(cell.position)
 	field.become_mirror()
 	var away: Array = readout.call(&"_figures") if readout != null else []
 	var named := []
 	for row: Array in rows:
 		named.append(row[0])
 	var tail := func(of: Array) -> Array:
-		return [of[5][1], of[6][1]] if of.size() == 9 else []
+		return [of[5][1], of[6][1]] if of.size() == 11 else []
 	var last := func(of: Array) -> Array:
-		return [of[7][1], of[8][1], of[8][2]] if of.size() == 9 else []
+		return [of[7][1], of[8][1], of[8][2]] if of.size() == 11 else []
+	var lit := func(of: Array) -> Array:
+		return [of[9][1], of[10][1]] if of.size() == 11 else []
 	_check(("lineage, the readout: over a drop of its own, rows %s -- generation %s and"
 		+ " families %s over its %d hunters (the drop counts %s), the families' two set"
 		+ " apart; over a friend's drop, %s") % [str(named), str(tail.call(rows)[0])
-		if rows.size() == 9 else "-", str(tail.call(rows)[1]) if rows.size() == 9 else "-", k,
+		if rows.size() == 11 else "-", str(tail.call(rows)[1]) if rows.size() == 11 else "-", k,
 		str(counts), str(tail.call(away))],
 		named == ["frame", "p95", "dropped", "water", "stepped", "generation", "families",
-			"behaviours", "unchanged"]
+			"behaviours", "unchanged", "day", "light"]
 		and tail.call(rows) == ["3.0", "4"] and counts == [3.0, 4] and bool(rows[5][3])
 		and not bool(rows[6][3]) and tail.call(away) == ["–", "–"])
 	# At least two hunters in each quarter. How many hunters there are is the
@@ -9532,13 +9647,22 @@ func _readout_families() -> void:
 		+ " the founders' rules, a list of their own, that list written another way and the"
 		+ " founders' read again -- behaviours %s, unchanged %s %s (the drop counts %s), the"
 		+ " two set apart; over a friend's drop, %s") % [h, str(last.call(rows)[0])
-		if rows.size() == 9 else "-", str(last.call(rows)[1]) if rows.size() == 9 else "-",
-		str(last.call(rows)[2]) if rows.size() == 9 else "-", str(kinds),
+		if rows.size() == 11 else "-", str(last.call(rows)[1]) if rows.size() == 11 else "-",
+		str(last.call(rows)[2]) if rows.size() == 11 else "-", str(kinds),
 		str(last.call(away).slice(0, 2))],
 		h >= 8 and kinds.size() == 2 and int(kinds[0]) == 2
 		and absf(float(kinds[1]) - share) < 1e-9
 		and last.call(rows) == ["2", FrameReadout.figure(share, 1), "%"] and bool(rows[7][3])
 		and not bool(rows[8][3]) and last.call(away).slice(0, 2) == ["–", "–"])
+	_check(("the readout's light (docs/design/daylight.md §3.6): at dusk, day %s and light"
+		+ " %s (the drop says %s, %.4f of its day and %.4f at the cell), the two set apart;"
+		+ " over a friend's drop, %s") % [str(lit.call(rows)[0]) if rows.size() == 11 else "-",
+		str(lit.call(rows)[1]) if rows.size() == 11 else "-", str(light), hour, here,
+		str(lit.call(away))],
+		light.size() == 2 and lit.call(rows) == [FrameReadout.figure(hour, 2),
+			FrameReadout.figure(here, 2)] and hour > 0.6 and hour < 0.7 and here > 0.0
+		and here < 1.0 and bool(rows[9][3]) and not bool(rows[10][3])
+		and lit.call(away) == ["–", FrameReadout.figure(1.0, 2)])
 	holder.queue_free()
 	cell.free()
 	await get_tree().process_frame
@@ -11268,3 +11392,263 @@ func _drifters_by_class(field: WatchedDrop) -> String:
 			float(drifters) * float(weights[name]) / total / float(n)])
 	return "drifters made %d, the draw's %d and the floor's %d, %d standing -- %s" % [
 		drawn + given, drawn, given, drifters, "; ".join(said)]
+
+
+# --- The light (docs/design/daylight.md §10.3) ----------------------------------------------
+
+## **The day, the depth, and the tank under them** (docs/design/daylight.md §10.3): 1, the
+## curve; 2, the column; 3, one tank under a moving day; 4, the drifters in the dark; 6,
+## the save; 7, the replay. Check 5 -- off is `dev`, to the byte -- is [method _lineage]'s,
+## which runs the drop it pins. Last of all, and seeded, so nothing here moves the stream
+## any check before it reads.
+func _daylight() -> void:
+	seed(4242)
+	_daylight_curve()
+	_daylight_column()
+	_daylight_tank()
+	_daylight_drifters()
+	_daylight_save()
+	_daylight_replay()
+	seed(20260930)
+
+
+## **1. The curve**: 0 through the night and 1 through the day; continuous at the four
+## joins; a whole cycle's mean 0.6 to 1e-12 wherever it starts; the mean over a stretch
+## against a 10,000-step sum to 1e-6, across a join and across midnight; and at a room's
+## age, about a million seconds, a frame's mean the same as at the cycle's start to 1e-9.
+func _daylight_curve() -> void:
+	var sky := Drop.daylight()
+	var p: float = sky.period()
+	var day_from := Drop.DAY_DAWN
+	var day_to := Drop.DAY_DAWN + Drop.DAY_LIGHT
+	var night_from := day_to + Drop.DAY_DUSK
+	var off_day := 0
+	var off_night := 0
+	var t := day_from
+	while t < day_to:
+		off_day += 0 if sky.surface(t) == 1.0 else 1
+		t += 0.1
+	t = night_from
+	while t < p:
+		off_night += 0 if sky.surface(t) == Drop.NIGHT_LIGHT else 1
+		t += 0.1
+	var jump := 0.0
+	for join: float in [0.0, day_from, day_to, night_from]:
+		jump = maxf(jump, absf(sky.surface(join - 1e-6) - sky.surface(join + 1e-6)))
+	var whole := 0.0
+	for start: float in [0.0, 123.456, p - 0.001, 1e6 + 3.25]:
+		whole = maxf(whole, absf(sky.mean(start, start + p) - 0.6))
+	whole = maxf(whole, absf(sky.whole_mean() - 0.6))
+	var summed := 0.0
+	for stretch: Array in [[30.0, 90.0], [350.0, 430.0], [400.0, 670.0], [590.0, 1250.5]]:
+		var a: float = stretch[0]
+		var b: float = stretch[1]
+		var n := 10000
+		var h := (b - a) / float(n)
+		var sum := 0.0
+		for k in n:
+			sum += sky.surface(a + (float(k) + 0.5) * h)
+		summed = maxf(summed, absf(sky.mean(a, b) - sum / float(n)))
+	var frame := 1.0 / 60.0
+	var room := 0.0
+	for k in 60:
+		var at := 1e6 + float(k)
+		var near := fposmod(at, p)
+		room = maxf(room, absf(sky.mean(at, at + frame) - sky.mean(near, near + frame)))
+	_check(("daylight 1. the curve: %d of 3,000 day samples not 1 and %d of 1,800 night"
+		+ " samples not %.1f; the four joins %s apart a millionth of a second either side; a"
+		+ " whole cycle's mean %s off 0.6; a stretch's mean %s off a 10,000-step sum, across"
+		+ " dawn, dusk and midnight; a frame's mean at a room's million seconds %s off the"
+		+ " same frame of the cycle") % [off_day, off_night, Drop.NIGHT_LIGHT,
+		String.num_scientific(jump), String.num_scientific(whole),
+		String.num_scientific(summed), String.num_scientific(room)],
+		off_day == 0 and off_night == 0 and jump < 1e-7 and whole < 1e-12 and summed < 1e-6
+		and room < 1e-9)
+
+
+## **2. The column**: 0 on the rim and past it, 1 at the centre, rising inward; and in a
+## drop at noon the light on the rim exactly 1 and at the centre exactly
+## LIGHT_AT_MIDDLE.
+func _daylight_column() -> void:
+	var rim := Basin.new(OFF_CENTRE, Drop.RADIUS)
+	var edge: float = rim.column(OFF_CENTRE + Vector2(Drop.RADIUS, 0.0))
+	var past: float = rim.column(OFF_CENTRE + Vector2(0.0, Drop.RADIUS + 300.0))
+	var middle: float = rim.column(OFF_CENTRE)
+	var falls := 0
+	var last := -1.0
+	for k in 101:
+		var at := OFF_CENTRE + Vector2.from_angle(0.7) * Drop.RADIUS * (1.0 - float(k) / 100.0)
+		var here: float = rim.column(at)
+		if here < last:
+			falls += 1
+		last = here
+	var water := _water()
+	var field: WatchedDrop = water[0]
+	var centre: Vector2 = field.basin().get(&"center")
+	field.set("_day_origin", Drop.DAY_DAWN + Drop.DAY_LIGHT * 0.5 - float(field.get("_t")))
+	var noon: float = field.daylight_now()
+	# On the rim or a hair past it, as near as a float holds a point there.
+	var on_rim: Vector2 = field.basin().nearest_rim(centre + Vector2(1.0, 0.25))
+	while float(field.basin().depth(on_rim)) > 0.0:
+		on_rim += (on_rim - centre).normalized() * 1e-3
+	var at_rim: float = field.light_at(on_rim)
+	var at_middle: float = field.light_at(centre)
+	var halfway: float = field.light_at(centre + Vector2(0.0, Drop.RADIUS * 0.5))
+	_done(water)
+	_check(("daylight 2. the column: %s on the rim, %s past it, %s at the centre, falling"
+		+ " %d times of 100 steps inward; at noon (%s) the light on the rim %s, at the"
+		+ " centre %s (LIGHT_AT_MIDDLE %.2f), halfway %.3f") % [str(edge), str(past),
+		str(middle), falls, str(noon), str(at_rim), str(at_middle), Drop.LIGHT_AT_MIDDLE,
+		halfway],
+		edge == 0.0 and past == 0.0 and middle == 1.0 and falls == 0 and noon == 1.0
+		and at_rim == 1.0 and at_middle == Drop.LIGHT_AT_MIDDLE
+		and halfway > Drop.LIGHT_AT_MIDDLE and halfway < 1.0)
+
+
+## **3. One tank under a moving day**: check 10's three genomes again, the field's day
+## set so its dawn rises through the 60 s -- the node takes the field's light over each
+## frame, the water body is paid at its rates -- and they end within 1e-6.
+func _daylight_tank() -> void:
+	var water := _water(3000.0)
+	var field: WatchedDrop = water[0]
+	var ran := _one_tank(field, true)
+	var where := Vector2(1500.0, 0.0)
+	var started := float(field.get("_t"))
+	var rose := [field.light_over(where, started, started + 1.0 / 60.0),
+		field.light_over(where, started + 59.0, started + 60.0)]
+	_done(water)
+	_check(("daylight 3. one tank under a moving day: check 10's 3 genomes, the light where"
+		+ " the body is rising from %.4f to %.4f through the 60 s, the node a frame at a time"
+		+ " and the water body at its rates end %s apart (hunger ran %.2f to %.2f)") % [
+		rose[0], rose[1], String.num_scientific(ran[0]), ran[1], ran[2]],
+		ran[0] < 1e-6 and ran[1] > 0.0 and ran[2] < 1.0 and rose[0] < 0.01 and rose[1] > 0.2)
+
+
+## **4. The drifters in the dark**: every drifter gene, at the one copy the water makes
+## them with, holds its tank at the drop's least light -- what absorbing pays covers it.
+func _daylight_drifters() -> void:
+	var starving := PackedStringArray()
+	var genes := Drop.drifter_genes(Catalogue.drifters())
+	for gene: StringName in genes:
+		var tiers := {gene: 1}
+		var dark := Stats.of(tiers, &"sun") * Drop.NIGHT_LIGHT * Drop.LIGHT_AT_MIDDLE
+		if Metabolism.rest_rate(GenomeNode.upkeep_of(tiers), Metabolism.ABSORB + dark,
+				Stats.of(tiers, &"store")) != 0.0:
+			starving.append(str(gene))
+	_check(("daylight 4. the drifters in the dark: %d of %d drifter genes burn anything at"
+		+ " the drop's least light (%s)") % [starving.size(), genes.size(),
+		", ".join(starving)],
+		starving.is_empty() and genes.size() > 0)
+
+
+## **6. The save**: a drop kept at dusk opens at dusk -- its hour and its light -- through
+## the file; one whose file has no `day` opens at DAY_BEGINS whatever its age; and the
+## light's lines are in the drop's rules, so a file written before them reads as
+## converted.
+func _daylight_save() -> void:
+	var path := "user://drop_probe/daylight.save"
+	var water := _water()
+	var field: WatchedDrop = water[0]
+	for f in 5 * 60:
+		field._process(1.0 / 60.0)
+	var dusk := Drop.DAY_DAWN + Drop.DAY_LIGHT + Drop.DAY_DUSK * 0.37
+	field.set("_day_origin", fposmod(dusk - float(field.get("_t")), field.day_length()))
+	for f in 7:
+		field._process(1.0 / 60.0)
+	var hour: float = field.day_time()
+	var light: float = field.daylight_now()
+	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
+	var wrote := DropSave.write(path, DropSave.compose(field.drop_state(), {}))
+	var back := DropSave.read(path)
+	var kept: Dictionary = back.get("drop", {})
+	var loaded := _load_into(kept)
+	var opened: float = (loaded[0] as Node).call(&"day_time")
+	var opened_light: float = (loaded[0] as Node).call(&"daylight_now")
+	_unload(loaded)
+	var before := kept.duplicate()
+	before.erase("day")
+	var old := _load_into(before)
+	var morning: float = (old[0] as Node).call(&"day_time")
+	_unload(old)
+	_done(water)
+	for leftover: String in [path, path + ".old", path.get_basename() + ".tmp"]:
+		if FileAccess.file_exists(leftover):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(leftover))
+	var without := PackedStringArray()
+	var light_lines := 0
+	for line: String in DropSave.rules_text().split("\n"):
+		var name := line.get_slice("=", 0)
+		if name in ["drop.DAY_DAWN", "drop.DAY_LIGHT", "drop.DAY_DUSK", "drop.DAY_NIGHT",
+				"drop.NIGHT_LIGHT", "drop.LIGHT_AT_MIDDLE"]:
+			light_lines += 1
+		else:
+			without.append(line)
+	var older := {"rules": "\n".join(without).sha256_text()}
+	var ours := {"rules": DropSave.rules()}
+	_check(("daylight 6. the save: a drop kept at dusk, %.6f s into its day at light %.6f,"
+		+ " written (%s) and opened at %.6f s and %.6f -- %s s and %s apart; a file with no"
+		+ " day opens at %.6f s (DAY_BEGINS %.0f); the light's %d lines in the drop's rules,"
+		+ " a file without them %s, one with them %s") % [hour, light, error_string(wrote),
+		opened, opened_light, String.num_scientific(absf(opened - hour)),
+		String.num_scientific(absf(opened_light - light)), morning, Drop.DAY_BEGINS,
+		light_lines, "converted" if DropSave.converted(older) else "NOT CONVERTED",
+		"converted" if DropSave.converted(ours) else "as it was"],
+		wrote == OK and hour > Drop.DAY_DAWN + Drop.DAY_LIGHT
+		and hour < Drop.DAY_DAWN + Drop.DAY_LIGHT + Drop.DAY_DUSK and light > 0.0
+		and light < 1.0 and absf(opened - hour) < 1e-9 and absf(opened_light - light) < 1e-12
+		and absf(morning - Drop.DAY_BEGINS) < 1e-9 and light_lines == 6
+		and DropSave.converted(older) and not DropSave.converted(ours))
+
+
+## **7. The replay**: through five seconds of dusk the recorded light is the field's,
+## frame by frame; the replay's own field answers what the recording says, and works out
+## what got through to a place under the recorded rim; and the run's field is untouched.
+func _daylight_replay() -> void:
+	var rig := _rig(true)
+	var field: WatchedDrop = rig[1]
+	var cell: CellBody = rig[2]
+	var rec: Node = rig[3]
+	var dusk := Drop.DAY_DAWN + Drop.DAY_LIGHT + 5.0
+	field.set("_day_origin", fposmod(dusk - float(field.get("_t")), field.day_length()))
+	var wrong := 0
+	var first := -1.0
+	var last := -1.0
+	for f in 300:
+		_rig_step(rig, 1)
+		var ring: PackedFloat32Array = rec.get("_ring")
+		var said := ring[_newest(rec) + RecorderNode.AT_DAYLIGHT]
+		if said != _f32(field.daylight_now()):
+			wrong += 1
+		if first < 0.0:
+			first = said
+		last = said
+	rec.call(&"seal")
+	var kept := [field.get("_t"), field.get("_day_origin"), field.daylight_now(),
+		field.light_at(cell.position)]
+	var screen := _raise_replay(rig[0], rec)
+	var water: Node = screen.get("_food")
+	var answered := 0
+	var asked := 0
+	var span := float(rec.call(&"span"))
+	for at: float in [0.0, span * 0.5, span - 0.01]:
+		_seek(screen, at)
+		var frame: PackedFloat32Array = screen.get("_frame")
+		var recorded := float(frame[RecorderNode.AT_DAYLIGHT])
+		var p: Vector2 = cell.position
+		var through := Daylight.through(float(water.call(&"basin").call(&"column", p)),
+			Drop.LIGHT_AT_MIDDLE)
+		asked += 1
+		if float(water.call(&"daylight_now")) == recorded \
+				and float(water.call(&"light_at", p)) == recorded * through \
+				and recorded <= first + 1e-6 and recorded >= last - 1e-6:
+			answered += 1
+	var after := [field.get("_t"), field.get("_day_origin"), field.daylight_now(),
+		field.light_at(cell.position)]
+	screen.queue_free()
+	(rig[0] as Node).queue_free()
+	_check(("daylight 7. the replay: through 300 frames of dusk, the light falling from %.4f"
+		+ " to %.4f, the recorded light is not the field's on %d; the replay's own field"
+		+ " answers the recording, and what gets through under the recorded rim, at %d of"
+		+ " %d seeks; the run's field %s") % [first, last, wrong, answered, asked,
+		"untouched" if after == kept else "CHANGED"],
+		wrong == 0 and first > last and answered == asked and after == kept)
