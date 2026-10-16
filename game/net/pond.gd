@@ -717,8 +717,12 @@ func _flush_guest(g: Guest) -> void:
 	# §14.1): the guest's cell wears its own loads between snapshots, and obeys
 	# these at each one.
 	var loads: PackedFloat64Array = pb.loads if pb != null else PackedFloat64Array()
-	var size: int = _net.send_pond(wound, bodies, loads) if g.id == 0 \
-		else _net.send_pond_to(g.id, wound, bodies, loads)
+	# **And the sky** (docs/design/daylight.md §5): the light at the surface of this
+	# drop -- a phone host's, or a server's room's own -- which the guest's light is,
+	# times what gets through the water over it.
+	var sky: float = _food.daylight_now()
+	var size: int = _net.send_pond(wound, bodies, loads, sky) if g.id == 0 \
+		else _net.send_pond_to(g.id, wound, bodies, loads, sky)
 	pond_bytes_max = maxi(pond_bytes_max, size)
 	ponds_sent += 1
 	if pb != null:
@@ -1031,7 +1035,7 @@ func apply_newest() -> bool:
 	var said := Wire.take_pond(frame)
 	if said.is_empty():
 		return false
-	_food.apply_pond(float(said[1]), said[2], said[3])
+	_food.apply_pond(float(said[1]), said[2], said[3], float(said[4]))
 	return true
 
 

@@ -561,11 +561,15 @@ static func _body_why(body: Array) -> String:
 ## finite, no more bodies than a snapshot holds, the person and only the person
 ## by the person's id, and a person's motion one a body could have -- and since
 ## protocol 7 the recipient's three loads, each a count of stacks its byte can
-## say.
+## say; and since protocol 10 the host's surface light, 0 to 1
+## (docs/design/daylight.md §5).
 static func _pond_why(pond: Array) -> String:
 	var why := _finite_why(pond)
 	if not why.is_empty():
 		return why
+	var light := float(pond[4]) if pond.size() > 4 else NAN
+	if not is_finite(light) or light < 0.0 or light > 1.0:
+		return "a surface light of %s" % str(light)
 	var loads: PackedFloat64Array = pond[3]
 	if loads.size() != Wire.POND_LOADS:
 		return "%d loads" % loads.size()
@@ -677,7 +681,8 @@ func _valid_frame(from_host: bool, next := -1) -> PackedByteArray:
 				_rng.randi_range(1, Stats.table(&"ping_range").size() - 1)])
 		7:
 			if from_host:
-				return Wire.pond(seq, _rng.randf(), _pond_bodies(), _pond_loads())
+				return Wire.pond(seq, _rng.randf(), _pond_bodies(), _pond_loads(),
+					_rng.randf_range(-0.25, 1.25))
 			return Wire.event(seq, Wire.EVENT_ENTER, Wire.enter_payload(radius))
 		8:
 			return Wire.event(seq, Wire.EVENT_ARRIVE, Wire.arrive_payload(at,

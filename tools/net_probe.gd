@@ -702,11 +702,13 @@ func _check_pond_wire() -> void:
 		Wire.POND_IS_PERSON | Wire.POND_IN_WATER, Vector2(512.25, -96.5), 1.5, 28.28,
 		0.4, 44.0, Vector2(-37.5, 12.25), -0.75])
 	var whole := Wire.pond(123456, 0.62, bodies)
-	_says(whole.size() == Wire.POND_MAX and Wire.POND_MAX == 1181,
+	_says(whole.size() == Wire.POND_MAX and Wire.POND_MAX == 1183
+			and Wire.POND_HEADER == 12 and Wire.POND_MAX <= 1392,
 		"pond wire: sixty water bodies and a person make %d bytes, the budget's"
-		% whole.size() + " 1,181 -- one datagram under ENet's 1,392")
+		% whole.size() + " 1,183 -- one datagram under ENet's 1,392 -- after a header of"
+		+ " %d" % Wire.POND_HEADER)
 	var said := Wire.take_pond(whole)
-	var exact := said.size() == 4 and int(said[0]) == 123456 \
+	var exact := said.size() == 5 and int(said[0]) == 123456 \
 		and absf(float(said[1]) - 0.62) <= 0.5 / 255.0 \
 		and (said[2] as Array).size() == bodies.size()
 	var worst_heading := 0.0
@@ -745,7 +747,7 @@ func _check_pond_wire() -> void:
 			PackedFloat64Array([63.75, 63.75, 63.75]), PackedFloat64Array([12.3, 0.25, 7.6]),
 			PackedFloat64Array([64.0, 400.0, INF])]:
 		var got := Wire.take_pond(Wire.pond(9, 0.25, bodies.slice(0, 2), loads))
-		loads_back.append(Array(got[3]) if got.size() == 4 else [])
+		loads_back.append(Array(got[3]) if got.size() == 5 else [])
 	var flagged: Array = []
 	for k in 3:
 		flagged.append((bodies[k] as Array).duplicate())
@@ -753,7 +755,7 @@ func _check_pond_wire() -> void:
 	flagged[1][Wire.Entry.FLAGS] = Wire.POND_PARALYSED | Wire.POND_STALKING
 	flagged[2][Wire.Entry.FLAGS] = Wire.POND_ASLEEP | Wire.POND_HARMED | Wire.POND_PARALYSED
 	var flags_back := Wire.take_pond(Wire.pond(10, 0.0, flagged))
-	var flags_kept := flags_back.size() == 4 and (flags_back[2] as Array).size() == 3
+	var flags_kept := flags_back.size() == 5 and (flags_back[2] as Array).size() == 3
 	if flags_kept:
 		for k in 3:
 			flags_kept = flags_kept and int(flags_back[2][k][Wire.Entry.FLAGS]) \
@@ -768,6 +770,27 @@ func _check_pond_wire() -> void:
 		% str(loads_back) + " for none, the most, between and past it -- and a body's"
 		+ " harmed, paralysed and asleep flags are its own bits (%s), the field's own"
 		% str(flags_kept))
+	# **The host's sky, since protocol 10** (docs/design/daylight.md §5, §10.3): the
+	# light at the surface of the host's drop, in the header, to a 65,535th -- at none,
+	# full, between, and held to them past either end; not a number goes as full light,
+	# the water with no day; and a snapshot that says nothing of it is in full light.
+	var skies := [0.0, 1.0, 0.37, 0.123456, 0.999985, -0.5, 2.0, NAN, INF]
+	var sky_back: Array = []
+	var sky_worst := 0.0
+	for sky: float in skies:
+		var got := Wire.take_pond(Wire.pond(11, 0.0, bodies.slice(0, 2), PackedFloat64Array(),
+			sky))
+		var back := float(got[4]) if got.size() == 5 else -1.0
+		sky_back.append(back)
+		var meant := clampf(sky, 0.0, 1.0) if is_finite(sky) else 1.0
+		sky_worst = maxf(sky_worst, absf(back - meant))
+	var unsaid := Wire.take_pond(Wire.pond(12, 0.0, []))
+	_says(sky_worst <= 0.5 / Wire.POND_DAYLIGHT_SCALE and float(sky_back[0]) == 0.0
+			and float(sky_back[1]) == 1.0 and unsaid.size() == 5 and float(unsaid[4]) == 1.0
+			and Wire.POND_DAYLIGHT == 10 and Wire.POND_DAYLIGHT_SCALE == 65535.0,
+		"pond wire: the host's surface light round-trips to a 65,535th (worst %s) -- 0 and 1"
+		% String.num_scientific(sky_worst) + " exactly, past either end held to it, not a"
+		+ " number as full light -- and a snapshot that says none is in full light")
 
 	# Refused whole: every truncation, one byte too many, a slot that is not one,
 	# a place that is not finite, a motion no body could have.
@@ -806,7 +829,7 @@ func _check_pond_wire() -> void:
 	person[Wire.Entry.VELOCITY] = Vector2(Wire.MOTION_MAX * 2.0, 0.0)
 	rotten.append(person)
 	var cleaned := Wire.take_pond(Wire.pond(1, 0.0, rotten))
-	_says(cleaned.size() == 4 and (cleaned[2] as Array).size() == 3
+	_says(cleaned.size() == 5 and (cleaned[2] as Array).size() == 3
 			and (cleaned[2][2][Wire.Entry.VELOCITY] as Vector2) == Vector2.ZERO,
 		"pond wire: a body the reader would refuse is never written, and an"
 		+ " impossible motion goes as none")
@@ -825,7 +848,7 @@ func _check_pond_wire() -> void:
 	var over := capped.duplicate()
 	over.append_array(capped.slice(capped.size() - Wire.POND_PERSON))
 	over[6] = int(over[6]) + 1
-	_says(capped.size() <= Wire.POND_MAX and capped_said.size() == 4
+	_says(capped.size() <= Wire.POND_MAX and capped_said.size() == 5
 			and (capped_said[2] as Array).size() == fits
 			and over.size() > Wire.POND_MAX and Wire.take_pond(over).is_empty(),
 		"pond wire: sixty-one people are written as the %d that fit, %d bytes of"
@@ -1793,7 +1816,9 @@ func _check_skew() -> void:
 	# somebody's phone right now, because updates are opt-in. A 4 reads a
 	# protocol-5 snapshot's ids as slots (ocean.md §10.4), and a 5 refuses a
 	# protocol-6 SISTER and leaves its division unanswered (automation.md
-	# §10.3). So every one of them is refused by name, 5 included. The one from
+	# §10.3). And a 9 reads a protocol-10 snapshot's light as its first body
+	# (docs/design/daylight.md §5). So every one of them is refused by name, 5 and 9
+	# included. The one from
 	# the future is still worth its two seconds: the host cannot tell which side
 	# is behind, and does not need to.
 	var older: Array = range(1, Wire.PROTOCOL)
@@ -5222,6 +5247,7 @@ func _check_pond_field() -> void:
 	_drop_pond_rules()
 	_drop_pond_anchors()
 	_drop_pond_mirror()
+	_drop_pond_light()
 	_drop_pond_kept()
 	_drop_pond_births()
 	var touched := 0
@@ -6683,6 +6709,57 @@ func _drop_pond_mirror() -> void:
 			"" if problems.is_empty() else " -- NOT: " + ", ".join(problems.slice(0, 4))])
 
 
+## **The day** (docs/design/daylight.md §2): what gets through the water, under a
+## rim.
+const Daylight := preload("res://game/mechanics/daylight.gd")
+const Basin := preload("res://game/mechanics/basin.gd")
+
+
+## **The guest's light is the host's sky** (docs/design/daylight.md §5, §10.3): a
+## mirror on the host's rim is in full light until its first snapshot; given one at
+## light d, through the wire, it answers d -- to a 65,535th -- times what gets through
+## the water over the guest's place under the host's rim, for its tank, its tile and
+## the water's tint, and holds it between snapshots; and it keeps no day of its own.
+func _drop_pond_light() -> void:
+	var host := _pond_drop_rig(87, 30.0, POND_SENSES)
+	var at := _drop_point(host, 700.0)
+	var mirror := _pond_rig(87, 28.0, POND_SENSES)
+	mirror.become_mirror()
+	var rim: Array = host.rim()
+	mirror.mirror_rim(rim[0], float(rim[1]))
+	var cell: Object = mirror.get("_cell")
+	cell.position = at
+	var through := Daylight.through(Basin.new(rim[0], float(rim[1])).column(at),
+		FoodField.Drop.LIGHT_AT_MIDDLE)
+	var first: float = mirror.daylight_now()
+	var wrong := PackedStringArray()
+	var answered := PackedStringArray()
+	for d: float in [0.0, 0.37, 0.8125, 1.0]:
+		var said := Wire.take_pond(Wire.pond(1, 0.0, [], PackedFloat64Array(), d))
+		if said.size() != 5:
+			wrong.append("%s unread" % str(d))
+			continue
+		var light := float(said[4])
+		mirror.apply_pond(0.0, said[2], said[3], light)
+		# Held between snapshots: a frame of the mirror's own moves nothing.
+		mirror.call("_step_mirror", POND_STEP)
+		var here: float = mirror.light_at(at)
+		answered.append("%.4f" % here)
+		if absf(light - d) > 0.5 / Wire.POND_DAYLIGHT_SCALE or mirror.daylight_now() != light \
+				or here != light * through or mirror.light_over(at, 0.0, 1.0) != here:
+			wrong.append(str(d))
+	var day: float = mirror.day_time()
+	var deepest: float = mirror.light_at_deepest()
+	_says(first == 1.0 and wrong.is_empty() and day == -1.0
+			and deepest == FoodField.Drop.LIGHT_AT_MIDDLE and through > 0.25 and through < 1.0,
+		"pond-field, the drop: the guest's light is the host's sky -- full until its first"
+		+ " snapshot (%s); at 0, 0.37, 0.8125 and 1 through the wire, %s at its place,"
+		% [str(first), ", ".join(answered)] + " the host's light times the %.4f that gets"
+		% through + " through there under the host's rim, held between snapshots; no day of"
+		+ " its own (%s)%s" % [str(day), "" if wrong.is_empty() else " -- NOT at "
+			+ ", ".join(wrong)])
+
+
 ## **A drop kept while it is a pond keeps nobody** (ocean.md §9.1): the other
 ## player is never in the file -- no body where they are, their slot empty
 ## loaded -- and a chase of them is kept as a chase of nobody.
@@ -8065,6 +8142,8 @@ func _check_pond() -> void:
 	var own: Dictionary = guest_run.get("_own_drop")
 	var own_seed := int(own.get("seed", -1))
 	var own_age := float(own.get("age", -1.0))
+	# **And its own day** (docs/design/daylight.md §6), frozen with it.
+	var own_day := float(own.get("day", -1.0))
 	var closed_at := _now()
 	host_net.close()
 	var took := await _pond_until(func() -> bool: return not guest_food.mirroring(),
@@ -8074,6 +8153,11 @@ func _check_pond() -> void:
 		and int(guest_food.drop_seed) == own_seed and guest_food.drop_age() >= own_age \
 		and guest_food.drop_age() < own_age + 1.0 \
 		and (guest_run.get("_own_drop") as Dictionary).is_empty()
+	var day_length: float = guest_food.day_length()
+	var day_due := fposmod(own_day + float(guest_food.drop_age()) - own_age, day_length)
+	var day_off := absf(float(guest_food.day_time()) - day_due)
+	day_off = minf(day_off, day_length - day_off)
+	var own_hour: bool = own_day >= 0.0 and day_off < 1e-6
 	var now_kept := [guest_cell.radius, (guest_run.get_node(^"Genome")).tiers(),
 		int(guest_run.get("_generation")), float(guest_met.hunger)]
 	# Kept, less what the body spent while the host went: the second the wait
@@ -8082,15 +8166,17 @@ func _check_pond() -> void:
 	var spent_max: float = (1.0 + CellBody.STROKE_COST * Stats.at(&"impulse_speed", 
 		Stats.table(&"impulse_speed").size() - 1)) / float(guest_met.HUNGER_SECONDS)
 	var gained := float(now_kept[3]) - float(kept[3])
-	_says(took >= 0.0 and took_frames <= _pond_budget(0.1) and fresh
+	_says(took >= 0.0 and took_frames <= _pond_budget(0.1) and fresh and own_hour
 			and is_equal_approx(float(kept[0]), float(now_kept[0]))
 			and kept[1] == now_kept[1] and int(kept[2]) == int(now_kept[2])
 			and gained > -0.01 and gained < spent_max + 0.01,
 		"pond: the host closes and the guest takes over %d frames later (0.1 s"
 		% took_frames + " at 60 fps is %d; %.0f ms here) in its own drop again, as it"
 		% [_pond_budget(0.1), (took if took >= 0.0 else _now() - closed_at) * 1000.0]
-		+ " set it aside (drop %d, %.1f s old then, %d bodies now),"
-		% [own_seed, own_age, guest_food.drop_bodies()]
+		+ " set it aside (drop %d, %.1f s old then, %d bodies now, its day %.2f s in then"
+		% [own_seed, own_age, guest_food.drop_bodies(), own_day]
+		+ " and %.2f now, %s),"
+		% [float(guest_food.day_time()), "its own" if own_hour else "NOT ITS OWN"]
 		+ " keeping r%.2f, its genome, generation %d and hunger %.2f (set to %.2f)"
 		% [float(now_kept[0]), int(now_kept[2]), float(now_kept[3]), float(kept[3])])
 	guest_met.set_hunger(own_hunger)

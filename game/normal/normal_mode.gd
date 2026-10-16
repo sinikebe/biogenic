@@ -1624,7 +1624,8 @@ func _process(delta: float) -> void:
 	# §2.3), averaged exactly over this frame: this node processes before its
 	# field, so the field's clock is at the frame's start, and the frame runs to
 	# `delta` past it -- the light a water body is paid for the same stretch. The
-	# literal 1.0 outside a drop, with the light off and, for now, as a guest.
+	# literal 1.0 outside a drop and with the light off; a guest's is the host's
+	# sky over where it is (daylight.md §5).
 	var age := _food.drop_age()
 	_metabolism.photosynthesis = _cell.stat(&"sun") \
 		* _food.light_over(_cell.position, age, age + delta)
