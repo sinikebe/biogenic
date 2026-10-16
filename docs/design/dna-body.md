@@ -275,6 +275,10 @@ the genome stepped by hand between the arming tap and the confirming one:
 
 ## 6. The lines, and the keys
 
+> **Superseded in part, 2026-10-16** (docs/design/placing.md): a tap only chooses a
+> slot, and a button under the figure writes, saying what it writes. There is no
+> second tap and no four-second lapse.
+
 `Explain`, `Hint` and `Act` keep their rows, rules and colours, centred under
 the figure. The word *locus* leaves the screen with the strand.
 

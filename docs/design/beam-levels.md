@@ -421,6 +421,11 @@ because the tray has a chip to grow (`P01`).
 
 ### 8.3 The fork
 
+> **Superseded in part, 2026-10-16** (docs/design/placing.md): a tap only chooses a
+> slot, and a button under the figure writes, saying what it writes. The fork's way
+> is chosen the same way: the button opens the cards (`choose how beam grows`), a
+> tap reads a way, and the button takes it (`choose fill · for good`).
+
 The fork is open while `_genome.can_choose(gene)`: level at or past
 `FORK_LEVEL`, no path. It shows in three places and is chosen in one.
 

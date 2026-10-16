@@ -372,6 +372,12 @@ func _rebuild() -> void:
 		var chip := _make_chip(slot)
 		_slots.add_child(chip)
 		_chips[slot] = chip
+	# **Every gene's own slots beside it**, as on pause (docs/design/placing.md §2):
+	# drawn, never pressed.
+	for slot in mini(_live, GenomeNode.INSIDE):
+		var gene := _gene_at(slot)
+		for k in mini(Catalogue.sockets(gene).size(), Figure.SOCKETS_DRAWN):
+			_slots.add_child(_make_socket(gene, k, slot))
 	if not _waiting.is_empty() or not _forks.is_empty():
 		_tray.add_child(Figure.make_tray_caption())
 	for one: Array in _waiting:
@@ -420,6 +426,27 @@ func _make_chip(slot: int) -> Control:
 	node.focus_exited.connect(node.queue_redraw)
 	node.mouse_entered.connect(_on_hover.bind(slot))
 	node.mouse_exited.connect(_on_unhover.bind(slot))
+	return node
+
+
+## One of a gene's own slots, as pause draws it with nothing in hand: its rider, or
+## faint, what it takes. Never pressed.
+func _make_socket(gene: StringName, socket: int, slot: int) -> Control:
+	var node := Control.new()
+	node.name = "Slot%d_%d" % [slot, socket]
+	node.custom_minimum_size = Figure.SOCKET_SIZE
+	node.size = Figure.SOCKET_SIZE
+	node.position = Figure.socket_at(slot, socket)
+	node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	node.focus_mode = Control.FOCUS_NONE
+	var rider := Riders.rider_at(_riders, gene, socket)
+	var copies := Riders.copies_at(_riders, gene, socket)
+	var worn := Riders.copies_at(_body_riders, gene, socket) \
+		if Riders.rider_at(_body_riders, gene, socket) == rider else 0
+	node.draw.connect(Figure.draw_socket_chip.bind(node, socket, rider, copies,
+		mini(worn, copies), Cilia.hue(rider) if rider != &"" else Figure.PALE, false, false,
+		Figure.socket_takes(gene, socket) if rider == &"" else &"", Figure.GHOST_INK,
+		Color(0.0, 0.0, 0.0, 0.0)))
 	return node
 
 
@@ -610,15 +637,11 @@ func _draw_chip(node: Control, slot: int) -> void:
 	var copies := int(_dna.get(gene, 0))
 	var worn := mini(int(_tiers.get(gene, 0)), copies)
 	var grown: Progression = _levels.get(gene, null) as Progression if gene != &"" else null
-	# Its gene's own slots as ports, none lit: nothing is in hand on a cell at rest.
-	var ports: Array = []
-	for k in Catalogue.sockets(gene).size():
-		ports.append([Riders.rider_at(_riders, gene, k), Color(0.0, 0.0, 0.0, 0.0)])
 	Figure.draw_chip(node, slot, gene, copies, worn,
 		Cilia.hue(gene) if gene != &"" else Figure.PALE,
 		grown.level() if grown != null else 0,
 		grown != null and grown.can_choose(), _selected == slot, false, false, &"", 0,
-		Figure.GHOST_INK, ports)
+		Figure.GHOST_INK)
 
 
 func _draw_organ() -> void:

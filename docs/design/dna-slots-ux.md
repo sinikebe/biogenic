@@ -267,6 +267,10 @@ shoot.
 
 ## 3. The pause screen
 
+> **Superseded in part, 2026-10-16** (docs/design/placing.md): a tap only chooses a
+> slot, and a button under the figure writes, saying what it writes. Wherever this
+> section says "tap again", read the button.
+
 ### 3.1 The inside slot
 
 **The seven slots round the body are outside; the inside slot sits in the

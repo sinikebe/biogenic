@@ -312,7 +312,7 @@ theme_override_constants/v_separation = 8
 alignment = 1
 
 [node name="Figure" type="Control" parent="Hud/Pause/Center/Columns/Genome"]
-custom_minimum_size = Vector2(420, 372)
+custom_minimum_size = Vector2(516, 372)
 mouse_filter = 2
 size_flags_horizontal = 4
 
@@ -334,7 +334,7 @@ mouse_filter = 2
 
 [node name="Fork" type="Control" parent="Hud/Pause/Center/Columns/Genome"]
 visible = false
-custom_minimum_size = Vector2(420, 372)
+custom_minimum_size = Vector2(516, 372)
 mouse_filter = 2
 size_flags_horizontal = 4
 
@@ -348,12 +348,6 @@ offset_left = 220.0
 offset_top = 41.0
 offset_right = 420.0
 offset_bottom = 331.0
-
-[node name="Sockets" type="Control" parent="Hud/Pause/Center/Columns/Genome"]
-visible = false
-custom_minimum_size = Vector2(420, 372)
-mouse_filter = 2
-size_flags_horizontal = 4
 
 [node name="Lines" type="Control" parent="Hud/Pause/Center/Columns/Genome"]
 custom_minimum_size = Vector2(0, 82)
@@ -429,6 +423,14 @@ mouse_filter = 2
 theme_override_colors/font_color = Color(0.588, 1, 0.859, 0.5)
 theme_override_font_sizes/font_size = 14
 horizontal_alignment = 1
+
+[node name="Place" type="Button" parent="Hud/Pause/Center/Columns/Genome/Lines/Stack"]
+visible = false
+custom_minimum_size = Vector2(232, 48)
+size_flags_horizontal = 4
+focus_mode = 0
+auto_translate_mode = 2
+theme_override_font_sizes/font_size = 16
 
 [node name="NumbersToggle" type="Control" parent="Hud/Pause/Center/Columns/Genome/Lines"]
 anchors_preset = 1

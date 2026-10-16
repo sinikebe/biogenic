@@ -3378,14 +3378,6 @@ msgstr ""
 msgid "genome · %s"
 msgstr ""
 
-#. The chip in the corner of a gene's own slots, on the pause screen: it goes
-#. back to the whole genome, the ring of slots round the cell. Keep the arrow
-#. on its left, as on "‹ programs". Lowercase.
-#. Room: at most 88 px in 15 px type; the English takes 68 px.
-#: game/normal/figure.gd
-msgid "‹ genome"
-msgstr ""
-
 #. Under the energy gauge in the top-left corner, once the cell's food tank is
 #. empty: how many whole seconds the cell has left to eat before it dies. {}
 #. is the number. 14 px type, right-aligned under the gauge's bar.
@@ -3723,20 +3715,65 @@ msgstr ""
 msgid "tap a slot · your daughters may wear it"
 msgstr ""
 
-#. A slot is chosen for the waiting gene; a second tap confirms.
-#. Room: at most 560 px in 14 px type; the English takes 120 px.
-#: game/normal/normal_mode.gd
-msgid "tap again to place"
-msgstr ""
-
-#. The two %s are the short words of two genes, such as `eat` and `ping`: the
-#. first is the waiting gene, the second the gene it would replace in the DNA.
-#. Keep both %s, in this order.
-#. Room: at most 560 px in 14 px type, measured with your widest gene word and
-#. your second widest in place of the placeholders; the English takes 252 px.
+#. The `PLACE_` lines are the words on one button under the figure, in 16 px
+#. type: pressing it does what they say. Short: at most 480 px. This one: a
+#. slot is chosen for the waiting gene. %s is the gene's short word as it
+#. would be in that slot, such as `swim`, or `venom` for a toxin outside.
+#. Room: at most 480 px in 16 px type, measured with your widest gene word in
+#. place of the placeholders; the English takes 138 px.
 #: game/normal/normal_mode.gd
 #, c-format
-msgid "tap again to write %s over %s"
+msgid "place %s here"
+msgstr ""
+
+#. The button, when the chosen slot already holds a gene. The two %s are the
+#. short words of two genes, such as `eat` and `ping`: the first is the
+#. waiting gene, the second the gene it would replace in the DNA. Keep both
+#. %s, in this order.
+#. Room: at most 480 px in 16 px type, measured with your widest gene word and
+#. your second widest in place of the placeholders; the English takes 192 px.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "write %s over %s"
+msgstr ""
+
+#. The button, when the waiting gene would add one copy to a gene the cell
+#. already carries. %s is that gene's short word, such as `venom`.
+#. Room: at most 480 px in 16 px type, measured with your widest gene word in
+#. place of the placeholders; the English takes 161 px.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "add a copy to %s"
+msgstr ""
+
+#. The button, when an empty slot of a gene's own is chosen: some genes have
+#. small slots where another gene can be placed to change them. The first %s
+#. is the waiting gene's word as it would be there (`venom`), the second the
+#. word of the gene the slot belongs to (`sting`). Keep both, in this order.
+#. Room: at most 480 px in 16 px type, measured with your widest gene word and
+#. your second widest in place of the placeholders; the English takes 203 px.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "put %s in %s's slot"
+msgstr ""
+
+#. The button, for a gene that can now grow in one of two ways: it shows the
+#. two ways. %s is the gene's short word, such as `beam`.
+#. Room: at most 480 px in 16 px type, measured with your widest gene word in
+#. place of the placeholders; the English takes 200 px.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "choose how %s grows"
+msgstr ""
+
+#. The button, once one of the two ways is chosen: pressing it takes that way,
+#. and the choice cannot be undone. %s is the way's name (see the cards'
+#. titles). Keep %s.
+#. Room: at most 480 px in 16 px type, measured with your widest gene word in
+#. place of the placeholders; the English takes 190 px.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "choose %s · for good"
 msgstr ""
 
 #. While the player drags a waiting gene over an empty slot; letting go places
@@ -3749,13 +3786,14 @@ msgid "let go to place %s here"
 msgstr ""
 
 #. While dragging a waiting gene over a slot that already holds a gene:
-#. letting go only selects it, and a second tap writes over it. The two %s are
-#. short gene words: the one being dragged, then the one it would replace.
+#. letting go only chooses it, and the button under it then writes over it.
+#. The two %s are short gene words: the one being dragged, then the one it
+#. would replace.
 #. Room: at most 560 px in 14 px type, measured with your widest gene word and
-#. your second widest in place of the placeholders; the English takes 333 px.
+#. your second widest in place of the placeholders; the English takes 350 px.
 #: game/normal/normal_mode.gd
 #, c-format
-msgid "let go, then tap again to place %s over %s"
+msgid "let go, then press below to write %s over %s"
 msgstr ""
 
 #. Under a gene that is already in a slot: it can be dragged to another slot.
@@ -3799,55 +3837,6 @@ msgstr ""
 msgid "let go to leave %s where it is"
 msgstr ""
 
-#. For a gene that can grow in two different ways (the player picks one, for
-#. good). %s is the gene's short word, such as `beam`.
-#. Room: at most 560 px in 14 px type, measured with your widest gene word in
-#. place of the placeholders; the English takes 259 px.
-#: game/normal/normal_mode.gd
-#, c-format
-msgid "tap again to choose how %s grows"
-msgstr ""
-
-#. Some genes have small slots of their own, where another gene can be placed
-#. to change them. %s is the short word of the gene that has them, such as
-#. `sting`.
-#. Room: at most 560 px in 14 px type, measured with your widest gene word in
-#. place of the placeholders; the English takes 214 px.
-#: game/normal/normal_mode.gd
-#, c-format
-msgid "tap again to open %s's slots"
-msgstr ""
-
-#. The same, while the player holds a waiting gene that fits one of those
-#. slots. The first %s is the word of the gene with the slots (`sting`), the
-#. second the waiting gene's (`toxin`). Keep both, in this order.
-#. Room: at most 560 px in 14 px type, measured with your widest gene word and
-#. your second widest in place of the placeholders; the English takes 296 px.
-#: game/normal/normal_mode.gd
-#, c-format
-msgid "tap again to open %s's slots · %s fits"
-msgstr ""
-
-#. In the view of a gene's own slots, with a waiting gene in hand and no slot
-#. chosen yet: the slots that would take it are lit. %s is the waiting gene's
-#. word, such as `toxin`.
-#. Room: at most 560 px in 14 px type, measured with your widest gene word in
-#. place of the placeholders; the English takes 204 px.
-#: game/normal/normal_mode.gd
-#, c-format
-msgid "tap a lit slot to put %s in it"
-msgstr ""
-
-#. In the view of a gene's own slots, when none of them takes the waiting
-#. gene. The first %s is the word of the gene whose slots these are (`sting`),
-#. the second the waiting gene's (`ping`). Keep both, in this order.
-#. Room: at most 560 px in 14 px type, measured with your widest gene word and
-#. your second widest in place of the placeholders; the English takes 203 px.
-#: game/normal/normal_mode.gd
-#, c-format
-msgid "no slot of %s takes %s"
-msgstr ""
-
 #. A slot of a gene's own is chosen that does not take the waiting gene. %s is
 #. the word of the gene the slot does take, such as `venom`.
 #. Room: at most 560 px in 14 px type, measured with your widest gene word in
@@ -3857,15 +3846,15 @@ msgstr ""
 msgid "this slot takes %s"
 msgstr ""
 
-#. An empty slot of a gene's own is chosen with a waiting gene in hand, and a
-#. second tap places it. The first %s is the waiting gene's word as it would
-#. be in the slot (`venom`), the second the word of the gene whose slot it is
+#. While dragging a waiting gene over an empty slot of a gene's own: letting
+#. go puts it there. The first %s is the waiting gene's word as it would be
+#. there (`venom`), the second the word of the gene the slot belongs to
 #. (`sting`). Keep both, in this order.
 #. Room: at most 560 px in 14 px type, measured with your widest gene word and
-#. your second widest in place of the placeholders; the English takes 262 px.
+#. your second widest in place of the placeholders; the English takes 237 px.
 #: game/normal/normal_mode.gd
 #, c-format
-msgid "tap again to put %s in %s's slot"
+msgid "let go to put %s in %s's slot"
 msgstr ""
 
 #. The hint under a gene placed in one of another gene's own slots: a daughter
@@ -3903,27 +3892,9 @@ msgstr ""
 msgid "%s works only outside"
 msgstr ""
 
-#. A slot is chosen for a waiting toxin; a second tap places it, as the form
-#. it takes in that slot. %s is `venom` or `poison`.
-#. Room: at most 560 px in 14 px type, measured with your widest gene word in
-#. place of the placeholders; the English takes 205 px.
-#: game/normal/normal_mode.gd
-#, c-format
-msgid "tap again to place %s here"
-msgstr ""
-
-#. A slot is chosen for a waiting toxin, but the toxin would become a form the
-#. cell already carries, so a second tap adds one copy of it where it already
-#. is. %s is `venom` or `poison`.
-#. Room: at most 560 px in 14 px type, measured with your widest gene word in
-#. place of the placeholders; the English takes 225 px.
-#: game/normal/normal_mode.gd
-#, c-format
-msgid "tap again to add a copy to %s"
-msgstr ""
-
-#. As above, but that form already has the most copies a gene can have, three,
-#. so placing it there would do nothing. %s is `venom` or `poison`.
+#. A slot is chosen for a waiting gene, but that gene already has the most
+#. copies a gene can have, three, so placing it there would do nothing. %s is
+#. its word, such as `venom` or `poison`.
 #. Room: at most 560 px in 14 px type, measured with your widest gene word in
 #. place of the placeholders; the English takes 215 px.
 #: game/normal/normal_mode.gd
@@ -3932,13 +3903,13 @@ msgid "%s has three copies already"
 msgstr ""
 
 #. While dragging a waiting toxin over a slot where it would add a copy to a
-#. form the cell already carries: letting go chooses the slot, and a second
-#. tap adds the copy. %s is `venom` or `poison`.
+#. form the cell already carries: letting go chooses the slot, and the button
+#. under it then adds the copy. %s is `venom` or `poison`.
 #. Room: at most 560 px in 14 px type, measured with your widest gene word in
-#. place of the placeholders; the English takes 305 px.
+#. place of the placeholders; the English takes 323 px.
 #: game/normal/normal_mode.gd
 #, c-format
-msgid "let go, then tap again to add a copy to %s"
+msgid "let go, then press below to add a copy to %s"
 msgstr ""
 
 #. While dragging a gene to a slot where it would turn into a form the cell
@@ -4022,19 +3993,11 @@ msgid "both ways start at the next level"
 msgstr ""
 
 #. The line of instructions under the figure while the two cards are up and
-#. none is chosen: a "way" is one of the two cards.
-#. Room: at most 560 px in 14 px type; the English takes 148 px.
+#. none is chosen: a "way" is one of the two cards. Tapping one shows what it
+#. does; a button then takes it.
+#. Room: at most 560 px in 14 px type; the English takes 131 px.
 #: game/normal/normal_mode.gd
-msgid "tap a way to choose it"
-msgstr ""
-
-#. A card is chosen; a second tap takes it, and the choice cannot be undone.
-#. %s is the way's name (see the cards' titles). Keep %s.
-#. Room: at most 560 px in 14 px type, measured with your widest way name in
-#. place of the placeholders; the English takes 247 px.
-#: game/normal/normal_mode.gd
-#, c-format
-msgid "tap again to choose %s · for good"
+msgid "tap a way to read it"
 msgstr ""
 
 #. The hint under the figure while the two cards are up and a way is hovered

@@ -72,10 +72,11 @@ extends Node
 ##                           (dna-body.md §8)
 ##   --touch=<seconds>:<x>,<y>
 ##                           press and release one finger at that canvas point;
-##                           repeatable. This is how the genome strip's two-tap
-##                           arming gets exercised on the input path a phone
-##                           actually uses. Coordinates are in canvas units, not
-##                           window pixels -- but note the canvas is only 1280
+##                           repeatable. This is how the pause screen's choosing
+##                           and its button (docs/design/placing.md) get
+##                           exercised on the input path a phone actually uses.
+##                           Coordinates are in canvas units, not window
+##                           pixels -- but note the canvas is only 1280
 ##                           wide at 16:9: `expand` keeps the height at 720 and
 ##                           widens it, so at 2400x1080 the canvas is 1600 across
 ##                           and a centred widget is 160 further right.
@@ -3179,6 +3180,9 @@ func _step_rects() -> void:
 		"Gauge": base + "/Genome/Lines/Stack/Hint/Gauge",
 		"Text": base + "/Genome/Lines/Stack/Hint/Text",
 		"Act": base + "/Genome/Lines/Stack/Act",
+		# **The button that writes** (placing.md §1), in the verb line's place
+		# while the chip chosen has something to place.
+		"Place": base + "/Genome/Lines/Stack/Place",
 		# The switch: its hit rect, which is 96 x 48 however it is drawn.
 		"NumbersToggle": base + "/Genome/Lines/NumbersToggle",
 		# **The fork view and its two cards** (§8.3, §8.7): the one surface

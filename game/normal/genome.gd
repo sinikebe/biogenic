@@ -135,7 +135,7 @@ static func _read_plan() -> void:
 # found to be one. The toxin is today's one gene with two (organs/toxin.gd);
 # every other is itself, outside. The statics below ask the catalogue.
 
-## What a second tap would do with a waiting gene ([method placing]): write it
+## What placing a waiting gene would do ([method placing]): write it
 ## here, add a copy to the form it makes where that form already is, refuse as
 ## full, or refuse because the gene faces out.
 const PLACE_WRITE := &"write"
@@ -1158,7 +1158,7 @@ func place(slot: int, which: int = 0) -> int:
 	return _settle(_waiting.pop_at(which), slot)
 
 
-## **What a second tap on [param slot] would do with the waiting [param gene]**
+## **What placing the waiting [param gene] on [param slot] would do**
 ## (dna-slots.md §5.2), as `[what, where, over]`: [constant PLACE_WRITE] here;
 ## [constant PLACE_RAISE], a copy added to the form it makes, which is already
 ## carried in slot `where`; [constant PLACE_FULL], that form is at three copies
@@ -1205,12 +1205,12 @@ func place_rider(host: StringName, socket: int, which: int = 0) -> int:
 	return Result.RAISED if done == Riders.Put.RAISED else Result.INTEGRATED
 
 
-## **What a second tap on slot [param socket] of [param host] would do with the
+## **What placing in slot [param socket] of [param host] would do with the
 ## waiting [param gene]**, as `[what, over]`: [constant PLACE_WRITE] into it, over
 ## the rider `over` (`&""` for an empty slot); [constant PLACE_RAISE], more copies of
 ## the rider there; [constant PLACE_FULL], that rider at three copies already;
-## [constant PLACE_FACES_OUT], a gene the slot does not take. The slot view's armed
-## preview, its line and its guard all ask this, as the ring asks [method placing].
+## [constant PLACE_FACES_OUT], a gene the slot does not take. A gene's slot's chip,
+## its line, the button and its guard all ask this, as the ring asks [method placing].
 func placing_rider(gene: StringName, host: StringName, socket: int) -> Array:
 	var there := Riders.rider_at(_riders, host, socket)
 	if not _dna.has(host) or not Catalogue.fits(host, socket, gene):
