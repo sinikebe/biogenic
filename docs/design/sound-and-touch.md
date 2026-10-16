@@ -226,3 +226,100 @@ All of these are starting values. The owner will play them, as always.
   when a buzz may be felt.
 - **A new sound** is a cue on another sensation kind the bus already posts (`taste`,
   `hit`, `ping`, `shove`…): one `cue()` call and its numbers.
+
+---
+
+## 9. The ping, heard (2026-10-16)
+
+The owner, the same day:
+
+> "Now, a beep for the sonar, and a different tone for emission and echoes. With
+> variable intensity for echoes depending on time traveling. Add also an
+> oscilloscope small UI showing pikes and a distance scale"
+
+The scope is the ping's readout in the HUD's row (sense-tiles.md §7). The sounds
+are here, in `game/feel/sonar.gd`, through the same synthesizer and listener as the
+heart, with no new mechanism.
+
+### 9.1 Two tones
+
+| | the call | an echo |
+|---|---|---|
+| when | as the `ampulla` calls (the field's `pulsed`) | as each echo lands (the bus's `ping`) |
+| pitch | falls from 1.5 to 1.05 kHz, like a bat's call | a pip at 2.05 to 1.98 kHz, higher than the call ever is |
+| shape | 4 ms attack, 70 ms decay, 0.22 s | 3 ms attack, 26 ms decay, 0.10 s |
+| volume | −22 dBFS | −22 dBFS at strength 1, and as loud as the echo is strong |
+
+**The call is the longer one and the echo the higher**, so three to five echoes a
+call read as answers, never as more calls.
+
+**The call is not a sensation**: it is the cell's own act. So `normal_mode.gd`'s
+`_on_pulsed` plays it, beside the shout to a friend, and not through the bus. The
+echoes do come through the bus, as its `ping`, so they are heard exactly when the
+membrane's mark lands. Neither buzzes the hand.
+
+### 9.2 An echo is as loud as the distance it travelled
+
+An echo's strength is `food.gd`'s `ping_level` over its whole path, out and back.
+At one copy (a reach of 1100 µm):
+
+| a body's near edge | 100 | 270 | 500 | 800 | 1000 | 1045 |
+|---|---|---|---|---|---|---|
+| strength | 0.94 | 0.83 | 0.67 | 0.43 | 0.22 | 0.15 |
+| played at, dBFS | −22.5 | −23.6 | −25.5 | −29.3 | −35.1 | −38.5 |
+
+So how long an echo took to come home is how loud it is: about 16 dB from the
+nearest to the farthest. That is the "variable intensity depending on time
+traveling" the owner asked for. It is the same strength the membrane draws and
+the instincts read, so there is still one measure of an echo. A body half behind
+another comes back quieter too, because it is quieter. At two and three copies the
+reach is longer, so the same body sounds louder.
+
+### 9.3 Where it sits in the mix
+
+Measured on the listening sample: 99.97 % of the energy is between 1 and 2.5 kHz,
+none under 400 Hz, and none above 5 kHz. That is the band §2.2 left free: clear of
+the heart, and where a phone's speaker is at its best. The call is under a quarter
+of a second, once every 8.8 to 15.2 seconds. A tone at 1 to 2 kHz sounds far louder
+than the heart at the same level, so at −22 dBFS it is already the louder thing,
+which a deliberate act should be.
+
+There are six voices now, up from three: a beat's two parts, a call, and the echoes
+that land together.
+
+### 9.4 What to watch
+
+- **Is the call too present** every 8.8 s, or too easy to miss? The lever is
+  `CALL_DB`.
+- **Can the far echoes be heard?** One off a body at the edge of reach is about
+  −38 dBFS. If players lose them, the lever is a loudness law, an exponent under 1
+  on the strength (a part's volume is linear in it today). The lever is not
+  `ECHO_DB`, which would make the near ones loud too.
+- **Do the echoes read as distance?** That depends on the delay as much as the
+  volume. The scope shows the same thing, so a player can learn one from the
+  other.
+- **Stereo.** An echo has a bearing, and on headphones it could be panned to it.
+  That is not built. It would need its own bus with a panner, and it is the next
+  lever if direction by ear is wanted.
+
+### 9.5 Checks
+
+`tools/feel_probe.tscn`, sections 6 and 7:
+
+- **6, the two sounds:**
+  - at most 1 % under 400 Hz and 1 % above 5 kHz, measured through filters
+    three passes deep;
+  - both start and end in silence;
+  - the call is the longer one and the echo the higher;
+  - echoes off bodies 100 and 1000 units away play 12.6 dB apart, which is
+    their strengths' ratio;
+  - no buzz.
+- **7, a real run with a ping worn, 12 s:**
+  - 2 calls heard;
+  - 4 echoes posted, 4 heard, each at its own strength;
+  - the scope's sweep was out, holding one spike for each echo since the last
+    call.
+- **`--sonar-wav=<path>`** writes the listening sample:
+  - two calls, each answered by bodies at 270, 430, 660 and 1000 units;
+  - each echo lands when it would and is as loud as it would be at one copy.
+  It was sent to the owner with this build.

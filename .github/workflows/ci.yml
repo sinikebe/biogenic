@@ -528,8 +528,11 @@ jobs:
         # docs/design/sound-and-touch.md §7: the heartbeat is low, quiet and
         # clean, its two parts land inside one beat at any pace, a buzz is short
         # and weak and comes only in the water with vibration on, and the two
-        # switches are kept and mute the mix. Nothing of it is drawn, so no
-        # render can catch a fault in it. It plays to the dummy driver here.
+        # switches are kept and mute the mix. And the ping (§9): its call and its
+        # echoes sit above the heart, an echo is as loud as it is strong, and a
+        # run with a ping hears every call and echo and fills its scope. Nothing
+        # of the sound is drawn, so no render can catch a fault in it. It plays to
+        # the dummy driver here.
         run: |
           set -uo pipefail
           out=$(timeout 300 ~/godot/godot --headless --path . --fixed-fps 60 \

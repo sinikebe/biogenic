@@ -1,6 +1,7 @@
 extends Node
-## **The heartbeat, heard and felt, checked** (docs/design/sound-and-touch.md §7):
-## what a render cannot show, because nothing of it is drawn.
+## **The heartbeat and the ping, heard and felt, checked**
+## (docs/design/sound-and-touch.md §7, §9.5): what a render cannot show, because
+## nothing of it is drawn.
 ##
 ##   godot --headless --path . --fixed-fps 60 res://tools/feel_probe.tscn
 ##   godot --headless --path . res://tools/feel_probe.tscn -- --wav=/tmp/heart.wav
@@ -17,15 +18,26 @@ extends Node
 ##    and a tap throws its switch.
 ## 5. **A run**: every beat the bus makes is heard, lub and dub, and felt in the
 ##    water but not on the pause screen.
+## 6. **The ping's sounds** (§9): the call and an echo sit above the heart's band
+##    and below a hiss, start and end in silence, the call is the longer and the
+##    echo the higher; an echo is as loud as it is strong, and neither buzzes.
+## 7. **A run with a ping**: every call is heard, every echo the bus posts is
+##    heard at its own strength, and the scope's sweep runs and holds a spike for
+##    each echo since the call.
 ##
 ## `--wav=<path>` also writes a listening sample: the heart at rest, then racing,
-## at the volumes the game plays it at.
+## at the volumes the game plays it at. `--sonar-wav=<path>` writes the ping's:
+## two calls, each answered by four bodies at 270, 430, 660 and 1000 units, each
+## echo landing when it would and as loud as it would be at one copy.
 ##
 ## Excluded from export (`tools/*` on every preset), so none of it ships.
 
 const Feel := preload("res://game/feel/feel.gd")
 const Heart := preload("res://game/feel/heart.gd")
 const Tone := preload("res://game/feel/tone.gd")
+const Sonar := preload("res://game/feel/sonar.gd")
+const FoodField := preload("res://game/normal/food.gd")
+const Cilia := preload("res://game/vision/cilia.gd")
 const RunState := preload("res://game/run_state.gd")
 const CORNER := "res://game/menu/corner.tscn"
 const RUN := "res://game/normal/normal_mode.tscn"
@@ -42,15 +54,23 @@ const LOUDEST_DB := -18.0
 ## The longest and strongest a buzz may be.
 const LONGEST_BUZZ_MS := 25
 const STRONGEST_BUZZ := 0.25
+## The ping's bands: at most this share under 400 Hz (the heart's) and above 5 kHz.
+const PING_UNDER_400 := 0.01
+const PING_ABOVE_5K := 0.01
+## The bodies the sonar sample's calls are answered by, in units to their near edge.
+const SAMPLE_BODIES: Array[float] = [270.0, 430.0, 660.0, 1000.0]
 
 var _failed := 0
 
 
 func _ready() -> void:
 	var wav := ""
+	var sonar_wav := ""
 	for arg in OS.get_cmdline_user_args():
 		if str(arg).begins_with("--wav="):
 			wav = str(arg).trim_prefix("--wav=")
+		elif str(arg).begins_with("--sonar-wav="):
+			sonar_wav = str(arg).trim_prefix("--sonar-wav=")
 	var sound_was := RunState.load_sound()
 	var vibration_was := RunState.load_vibration()
 	_sound()
@@ -58,8 +78,12 @@ func _ready() -> void:
 	_switches()
 	await _sheet()
 	await _run()
+	_sonar()
+	await _sonar_run()
 	if wav != "":
 		_write(wav)
+	if sonar_wav != "":
+		_write_sonar(sonar_wav)
 	# Whatever this machine had, put back.
 	Feel.set_sound(sound_was)
 	Feel.set_vibration(vibration_was)
@@ -112,13 +136,37 @@ static func _energy(samples: PackedFloat32Array) -> float:
 	return maxf(sum, 1e-12)
 
 
-## Twelve decibels an octave under [param hz]: Butterworth, through the bilinear
-## transform, as a measuring instrument and never as a sound.
-static func _high_pass(samples: PackedFloat32Array, hz: float) -> PackedFloat32Array:
+## Twelve decibels an octave under [param hz] a pass: Butterworth, through the
+## bilinear transform, as a measuring instrument and never as a sound.
+static func _high_pass(samples: PackedFloat32Array, hz: float, passes: int = 1) \
+		-> PackedFloat32Array:
+	var out := samples
+	for p in passes:
+		out = _high_pass_once(out, hz)
+	return out
+
+
+## And its mirror, over [param hz].
+static func _low_pass(samples: PackedFloat32Array, hz: float, passes: int = 1) \
+		-> PackedFloat32Array:
+	var out := samples
+	for p in passes:
+		out = _biquad(out, hz, false)
+	return out
+
+
+static func _high_pass_once(samples: PackedFloat32Array, hz: float) -> PackedFloat32Array:
+	return _biquad(samples, hz, true)
+
+
+static func _biquad(samples: PackedFloat32Array, hz: float, high: bool) -> PackedFloat32Array:
 	var w := tan(PI * hz / Tone.RATE)
 	var k := 1.0 / (1.0 + sqrt(2.0) * w + w * w)
 	var a1 := 2.0 * (w * w - 1.0) * k
 	var a2 := (1.0 - sqrt(2.0) * w + w * w) * k
+	# High: k (1, -2, 1). Low: k w^2 (1, 2, 1).
+	var b0: float = k if high else k * w * w
+	var b1: float = -2.0 * k if high else 2.0 * k * w * w
 	var out := PackedFloat32Array()
 	out.resize(samples.size())
 	var x1 := 0.0
@@ -127,7 +175,7 @@ static func _high_pass(samples: PackedFloat32Array, hz: float) -> PackedFloat32A
 	var y2 := 0.0
 	for i in samples.size():
 		var x := samples[i]
-		var y := k * (x - 2.0 * x1 + x2) - a1 * y1 - a2 * y2
+		var y := b0 * x + b1 * x1 + b0 * x2 - a1 * y1 - a2 * y2
 		x2 = x1
 		x1 = x
 		y2 = y1
@@ -293,9 +341,9 @@ func _run() -> void:
 	var buzzes := [0]
 	feel.buzzer = func(_ms: int, _amplitude: float) -> void: buzzes[0] += 1
 	var heard := [0]
-	feel.fired.connect(func(_kind: StringName, _index: int, sounded: bool, _db: float,
+	feel.fired.connect(func(kind: StringName, _index: int, sounded: bool, _db: float,
 			_ms: int, _amplitude: float) -> void:
-		if sounded:
+		if sounded and kind == &"beat":
 			heard[0] += 1)
 	var beats := [0]
 	bus.sensation.connect(func(kind: StringName, _info: Dictionary) -> void:
@@ -315,6 +363,110 @@ func _run() -> void:
 		and water[2] == water[1])
 	_check("5. on the pause screen: %d beats, %d sounds and %d buzzes -- heard, never felt"
 		% paused, paused[0] >= 2 and paused[1] >= paused[0] * 2 - 1 and paused[2] == 0)
+	run.queue_free()
+	await get_tree().process_frame
+
+
+# --- 6. The ping's sounds -----------------------------------------------------
+
+func _sonar() -> void:
+	var shapes := {}
+	for named: Array in [["call", Sonar.CALL, Sonar.CALL_DB], ["echo", Sonar.ECHO, Sonar.ECHO_DB]]:
+		var samples := Tone.thump_samples(named[1])
+		var total := _energy(samples)
+		# Each band through a filter that keeps only it, three passes deep, 36 dB an
+		# octave: one pass at 5 kHz let through 2.8 % of a 2 kHz tone's energy, and the
+		# complement of a high-pass at 400 Hz counted its droop at 1 kHz -- the
+		# instrument, not the sound (measured).
+		var under_400 := _energy(_low_pass(samples, 400.0, 3)) / total
+		var above_5k := _energy(_high_pass(samples, 5000.0, 3)) / total
+		shapes[named[0]] = samples.size()
+		_check("6. the ping's %s: %.2f s at %.0f dBFS (at most %.0f), %.3f %% under 400 Hz (at most %.1f), %.3f %% above 5 kHz (at most %.1f), from %.4f to %.4f"
+			% [named[0], samples.size() / float(Tone.RATE), named[2], LOUDEST_DB,
+				under_400 * 100.0, PING_UNDER_400 * 100.0, above_5k * 100.0,
+				PING_ABOVE_5K * 100.0, samples[0], samples[samples.size() - 1]],
+			float(named[2]) <= LOUDEST_DB and under_400 <= PING_UNDER_400
+			and above_5k <= PING_ABOVE_5K and absf(samples[0]) < 0.001
+			and samples[samples.size() - 1] == 0.0)
+	_check("6. the call is the longer (%d samples against %d) and an echo the higher: it starts at %.0f Hz, above the call's %.0f to %.0f"
+		% [shapes["call"], shapes["echo"], Sonar.ECHO["from_hz"], Sonar.CALL["from_hz"],
+			Sonar.CALL["to_hz"]],
+		int(shapes["call"]) > int(shapes["echo"])
+		and float(Sonar.ECHO["to_hz"]) > float(Sonar.CALL["from_hz"]))
+	Feel.sound_on = true
+	Feel.vibration_on = true
+	Feel.handheld = 1
+	var feel: Feel = Feel.new()
+	add_child(feel)
+	feel.set_process(false)
+	feel.cue(&"call", Sonar.call_parts())
+	feel.cue(&"ping", Sonar.echo_parts())
+	var buzzes := [0]
+	feel.buzzer = func(_ms: int, _amplitude: float) -> void: buzzes[0] += 1
+	var played: Array = []
+	feel.fired.connect(func(kind: StringName, _index: int, sounded: bool, db: float, _ms: int,
+			_amplitude: float) -> void: played.append([kind, sounded, db]))
+	feel.hear(&"call", {"strength": 1.0}, true)
+	var near := FoodField.ping_level(2.0 * 100.0, 1100.0)
+	var far := FoodField.ping_level(2.0 * 1000.0, 1100.0)
+	feel.hear(&"ping", {"strength": near}, true)
+	feel.hear(&"ping", {"strength": far}, true)
+	feel.step(1.0)
+	var spread := float(played[1][2]) - float(played[2][2]) if played.size() == 3 else 0.0
+	_check("6. a call at %.0f dB; an echo off a body 100 units out at %.2f plays %.1f dB, one off a body 1000 out at %.2f plays %.1f dB -- %.1f dB apart, as their strengths are; no buzz (%d)"
+		% [float(played[0][2]) if played.size() > 0 else 0.0, near,
+			float(played[1][2]) if played.size() > 1 else 0.0, far,
+			float(played[2][2]) if played.size() > 2 else 0.0, spread, buzzes[0]],
+		played.size() == 3 and bool(played[0][1]) and bool(played[1][1])
+		and bool(played[2][1]) and is_equal_approx(float(played[0][2]), Sonar.CALL_DB)
+		and is_equal_approx(spread, linear_to_db(near / far)) and spread > 10.0
+		and buzzes[0] == 0)
+	feel.free()
+
+
+# --- 7. A run with a ping ------------------------------------------------------
+
+func _sonar_run() -> void:
+	var run: Node = (load(RUN) as PackedScene).instantiate()
+	for key: StringName in [&"keep", &"cells_at", &"library_at"]:
+		if key in run:
+			run.set(key, "")
+	add_child(run)
+	var tiers := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"ampulla": 1}
+	(run.get("_genome") as Node).call(&"express", tiers, Cilia.default_order(tiers))
+	var feel: Feel = run.get_node(^"Feel")
+	var bus: Node = run.get("_bus")
+	var counts := {"calls": 0, "pings": 0, "heard": 0, "since": 0, "wrong": 0}
+	# The run hears the bus before this probe does -- it connected first -- so an
+	# echo's sound has played by the time its sensation reaches the check below.
+	var last_db := [INF]
+	feel.fired.connect(func(kind: StringName, _index: int, sounded: bool, db: float,
+			_ms: int, _amplitude: float) -> void:
+		if kind == &"call" and sounded:
+			counts["calls"] += 1
+			counts["since"] = 0
+		elif kind == &"ping" and sounded:
+			counts["heard"] += 1
+			last_db[0] = db)
+	bus.sensation.connect(func(kind: StringName, info: Dictionary) -> void:
+		if kind == &"ping":
+			counts["pings"] += 1
+			counts["since"] += 1
+			var strength := float(info.get("strength", 0.0))
+			if not is_equal_approx(float(last_db[0]),
+					Sonar.ECHO_DB + linear_to_db(maxf(strength, 0.001))):
+				counts["wrong"] += 1
+			last_db[0] = INF)
+	await _seconds(12.0)
+	var scope: Node = run.call(&"_ping_scope")
+	var spikes: int = (scope.get("_spikes") as Array).size() if scope != null else -1
+	var sweep: float = float(scope.get("sweep")) if scope != null else -1.0
+	_check("7. a run with a ping, 12 s: %d calls heard, %d echoes posted and %d heard, %d at a volume not their strength's"
+		% [counts["calls"], counts["pings"], counts["heard"], counts["wrong"]],
+		counts["calls"] >= 1 and counts["heard"] == counts["pings"] and counts["wrong"] == 0)
+	_check("7. its scope: the sweep is out at %.0f units, and holds %d spikes for the %d echoes since the last call"
+		% [sweep, spikes, counts["since"]],
+		scope != null and sweep > 0.0 and spikes == counts["since"])
 	run.queue_free()
 	await get_tree().process_frame
 
@@ -356,3 +508,32 @@ func _write(path: String) -> void:
 	var err := stream.save_to_wav(path)
 	_check("the listening sample: %.1f s written to %s (%s)" % [t + 0.6, path, error_string(err)],
 		err == OK)
+
+
+## **The ping as a player hears it**: two calls 8.8 s apart, each answered by
+## [constant SAMPLE_BODIES] -- each echo landing when it would, `2d / PING_SPEED`
+## after its call, as loud as `ping_level` makes it at one copy.
+func _write_sonar(path: String) -> void:
+	var call := Tone.thump_samples(Sonar.CALL)
+	var pip := Tone.thump_samples(Sonar.ECHO)
+	var length := 0.3 + 8.8 * 2.0
+	var mix := PackedFloat32Array()
+	mix.resize(int(length * Tone.RATE))
+	for k in 2:
+		var at := 0.3 + 8.8 * k
+		_add(mix, call, at, db_to_linear(Sonar.CALL_DB))
+		for distance: float in SAMPLE_BODIES:
+			var level := FoodField.ping_level(2.0 * distance, 1100.0)
+			_add(mix, pip, at + 2.0 * distance / FoodField.PING_SPEED,
+				db_to_linear(Sonar.ECHO_DB) * level)
+	var err := Tone.stream_of(mix).save_to_wav(path)
+	_check("the ping's listening sample: %.1f s written to %s (%s)" % [length, path,
+		error_string(err)], err == OK)
+
+
+static func _add(mix: PackedFloat32Array, sound: PackedFloat32Array, at: float,
+		gain: float) -> void:
+	var from := int(at * Tone.RATE)
+	for i in sound.size():
+		if from + i < mix.size():
+			mix[from + i] += sound[i] * gain

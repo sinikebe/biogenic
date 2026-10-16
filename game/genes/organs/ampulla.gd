@@ -142,8 +142,10 @@ func _init() -> void:
 	# 2, which the ping's lobes and marks are drawn in, a shade apart from the beam's.
 	family = SENSING
 	# **Its tile in the HUD's row** (gene.gd's `readout`; sense-tiles.md): the organ
-	# lit by its echoes, and how long it still listens.
+	# lit by its echoes -- widened into a scope (sense-tiles.md §7): the call, and
+	# each echo where it came from, as high as it was strong, under a scale in µm.
 	readout = true
+	scope = true
 	# **A sense that points pays half** for each copy past the first (gene.gd's
 	# `upkeep_share`; docs/design/energy.md §8): the owner, 2026-10-15, so a grown
 	# one takes half the share of the tank a second. A starting value, for play to judge.

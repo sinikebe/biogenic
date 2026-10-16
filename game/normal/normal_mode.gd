@@ -56,12 +56,15 @@ const REPLAY_SCENE := "res://game/replay/replay.tscn"
 ## vocabulary: §2.4's promise is that a point-of-view player who looks in the
 ## mirror already speaks the language if they ever switch views.
 const Cilia := preload("res://game/vision/cilia.gd")
-## **A sense's tile in the HUD's row** (docs/design/sense-tiles.md).
+## **A sense's tile in the HUD's row** (docs/design/sense-tiles.md), and the
+## scope a calling sense's tile widens into (§7).
 const SenseTile := preload("res://game/normal/sense_tile.gd")
+const Scope := preload("res://game/normal/scope.gd")
 ## **What the body is heard and felt as** (docs/design/sound-and-touch.md), and its
 ## first cue, the heartbeat.
 const Feel := preload("res://game/feel/feel.gd")
 const Heart := preload("res://game/feel/heart.gd")
+const Sonar := preload("res://game/feel/sonar.gd")
 ## **The other cell, if there is one.** Preloaded for one static lookup: the
 ## session is a node under `/root` that the earshot screen left there, and a run
 ## reached any other way finds nothing and is the game that already shipped.
@@ -1032,6 +1035,10 @@ func _ready() -> void:
 	_feel.name = "Feel"
 	add_child(_feel)
 	_feel.cue(&"beat", Heart.parts())
+	# **And the ping heard** (§9): a beep as it calls, and a pip for each echo the
+	# bus posts, as loud as the echo is strong.
+	_feel.cue(&"call", Sonar.call_parts())
+	_feel.cue(&"ping", Sonar.echo_parts())
 	_pause_ui.hide()
 	# Eighteen Controls and two rows of text, built once. Nothing here asks for
 	# a window, an input device or a network, so a headless boot pays one
@@ -1127,7 +1134,7 @@ func _ready() -> void:
 	# **One tile a sense, after the gauge**, in the catalogue's order, each hidden
 	# until a gene on its channel is carried: the beam has none (gene.gd's `readout`).
 	for channel: StringName in _readout_channels():
-		var tile: SenseTile = SenseTile.new()
+		var tile: SenseTile = Scope.new() if _scoped(channel) else SenseTile.new()
 		tile.name = "Sense_" + String(channel)
 		tile.visible = false
 		_gauges_row.add_child(tile)
@@ -2080,9 +2087,15 @@ func _post_pings(delta: float) -> void:
 		_bus.ping(float(echo[0]), float(echo[1]), float(echo[2]), float(echo[3]))
 		var lit := lerpf(ECHO_GLOW_FLOOR, 1.0, clampf(float(echo[1]), 0.0, 1.0))
 		_echo_glow = maxf(_echo_glow, lit)
-		# Each echo lights the ping's tile as it lights the organ (sense-tiles.md §1).
+		# Each echo lights the ping's tile as it lights the organ (sense-tiles.md §1),
+		# and stands on its scope where it came from: as far as the call's round trip
+		# has run, as high as it is strong, as wide as its body is deep (§7).
 		if tile != null and tile.visible:
 			tile.flash(lit)
+			if tile is Scope:
+				(tile as Scope).echo((1.0 - _food.ping_listen) * _food.ping_range,
+					float(echo[1]),
+					float(echo[3]) * FoodField.PING_SPEED / (2.0 * FoodField.PING_RING))
 	_hear_others()
 	_bus.ping_out(_food.ping_bearing, _food.ping_listen)
 
@@ -2168,6 +2181,12 @@ func _on_echoed(mark: Dictionary) -> void:
 func _on_pulsed() -> void:
 	if not _food.in_water:
 		return
+	# **The call, heard** (sound-and-touch.md §9). Not a sensation -- it is the
+	# cell's own act, as the shout below is -- so it comes from here and not through
+	# the bus; the echoes do come through it, as the bus's `ping`.
+	if _feel != null:
+		_feel.hear(&"call", {"strength": 1.0}, false)
+	_ping_scope_call()
 	if _net == null or not is_instance_valid(_net):
 		return
 	_net.shout(_cell.position, _cell.radius, _cell.ping_range())
@@ -3459,6 +3478,28 @@ func _readout_channels() -> Array[StringName]:
 	return out
 
 
+## **Whether a channel's tile is a scope** (gene.gd's `scope`): any gene on it says
+## so.
+func _scoped(channel: StringName) -> bool:
+	for key: StringName in Catalogue.keys():
+		var organ := Catalogue.gene(key)
+		if organ != null and organ.scope and organ.channel == channel:
+			return true
+	return false
+
+
+## **The ping's scope**, or null while there is none (sense-tiles.md §7).
+func _ping_scope() -> Scope:
+	return _sense_tiles.get(Catalogue.PING) as Scope
+
+
+## **A call went out**: the scope's sweep starts again.
+func _ping_scope_call() -> void:
+	var scope := _ping_scope()
+	if scope != null:
+		scope.call_out()
+
+
 ## **The senses' tiles, once a frame** (docs/design/sense-tiles.md). A tile is shown
 ## while the lineage carries a gene on its channel -- in the DNA or on the body -- and
 ## is at work only while this body wears one and its senses are running, which a
@@ -3480,6 +3521,12 @@ func _update_sense_tiles(shown: bool) -> void:
 		tile.visible = true
 		var reading := _sense_reading(channel, worn) if worn != &"" else [0.0, 0.0]
 		tile.read(float(reading[0]), float(reading[1]), worn != &"" and running)
+		# A scope's sweep, as far out as the call's round trip has run: it reaches an
+		# echo's distance at the moment the echo lands (sense-tiles.md §7).
+		if tile is Scope and channel == Catalogue.PING:
+			var reach := _food.ping_range if worn != &"" else 0.0
+			(tile as Scope).at((1.0 - _food.ping_listen) * reach
+				if _food.ping_listen > 0.0 else -1.0, reach)
 
 
 ## **What a sense's tile shows**, `[glow, level]`, by its channel: the edge where

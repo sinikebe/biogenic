@@ -1298,3 +1298,10 @@ Starting values, for play to judge:
   stays lit, and `cilia.gd`'s `GLOW_*` how a lit organ looks.
 - **Is the call too quiet with nothing drawn as it leaves?** The hum is what says
   the organ is listening. The sound, when the game has one, is the other answer.
+
+### 14.7 Heard, and on a scope (2026-10-16)
+
+The call now beeps and each echo pips as it lands, as loud as it is strong
+(sound-and-touch.md §9). The ping's tile is widened into an A-scope, with each echo
+a spike at the distance it came from, under a µm scale (sense-tiles.md §7). Both
+read the latency §14.1 computes, and nothing else: no wave came back with them.
