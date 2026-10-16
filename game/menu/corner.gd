@@ -40,9 +40,12 @@ extends Control
 ## **The owner answered §11 as recommended** but for row 5, "world", and both of
 ## these stay one line to change. What the sheet holds besides the language (row
 ## 1, nothing for now): a section is a node of `Box`, between `Languages` and
-## `Warn`. Where the gear is in a run (row 2, on the pause screen): the pause
-## screen instances this with [member show_cluster]; with it off, a button of the
-## pause column calls [method open_settings] instead.
+## `Warn`. **The first is `Feel`**, sound and vibration (sound-and-touch.md §4):
+## settings that show nothing as they are set, belong to the whole app, and had no
+## home -- so this is where the sheet's own rule sends them. Where the gear is in
+## a run (row 2, on the pause screen): the pause screen instances this with
+## [member show_cluster]; with it off, a button of the pause column calls
+## [method open_settings] instead.
 ##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
@@ -62,6 +65,9 @@ const Readout := preload("res://game/mechanics/readout.gd")
 ## **A cell's figure, read-only**, loaded the first time a detailed view opens
 ## (cell_figure.gd says why).
 const CELL_FIGURE := "res://game/menu/cell_figure.gd"
+## **The sound and vibration switches** (docs/design/sound-and-touch.md §4): the
+## sheet throws them, and game/feel/feel.gd keeps and applies them.
+const Feel := preload("res://game/feel/feel.gd")
 
 ## The width of a language row: the sheet's 520 less its two margins of 24.
 const ROW_SIZE := Vector2(472.0, 56.0)
@@ -88,6 +94,16 @@ const GEAR_REST := 0.8
 const GEAR_HOT := 0.95
 const RING_ALPHA := 0.35
 const RING_WIDTH := 1.5
+## **A switch row** (sound-and-touch.md §4): its icon where a language row has its
+## mark, at this much of the ink, and the switch at its right end -- a track this
+## big, this far in, its knob inside it, teal and to the right while on.
+const ICON_ALPHA := 0.62
+const SWITCH_SIZE := Vector2(40.0, 22.0)
+const SWITCH_INSET := 22.0
+const SWITCH_GAP := 12.0
+const SWITCH_KNOB_R := 7.0
+const SWITCH_ON := Color(0.239, 0.863, 0.592, 0.85)
+const SWITCH_OFF_ALPHA := 0.5
 
 ## **The chip** (§1.2): as wide as its words and no wider than this, after which
 ## the name ends in "…". Its words start 18 px in, the caption and the name are
@@ -181,6 +197,8 @@ var cells_root := Cells.ROOT
 @onready var _caption: Label = $Settings/Panel/Box/Caption
 @onready var _languages: ScrollContainer = $Settings/Panel/Box/Languages
 @onready var _rows: VBoxContainer = $Settings/Panel/Box/Languages/Rows
+@onready var _sound: Button = $Settings/Panel/Box/Feel/Sound
+@onready var _vibration: Button = $Settings/Panel/Box/Feel/Vibration
 @onready var _warn: Label = $Settings/Panel/Box/Warn
 @onready var _close: Button = $Settings/Panel/Box/Close
 @onready var _drops: Control = $Drops
@@ -292,6 +310,7 @@ func _ready() -> void:
 		redraw.connect(_gear.queue_redraw)
 	_veil.gui_input.connect(_on_veil_input)
 	_close.pressed.connect(close_top)
+	_ready_feel()
 	_build_rows()
 	_ready_chip()
 	_ready_drops()
@@ -552,8 +571,75 @@ func _build_rows() -> void:
 	var ring: Array[Control] = []
 	for row: Button in _rows.get_children():
 		ring.append(row)
+	for row: Button in [_sound, _vibration]:
+		if row.visible:
+			ring.append(row)
 	ring.append(_close)
 	_trap_column(ring)
+
+
+## **The sound and vibration rows** (sound-and-touch.md §4): a tap throws the
+## switch, which is kept at once, as a language is. Vibration only where there is
+## a hand to buzz: a desktop has no row for it.
+func _ready_feel() -> void:
+	_vibration.visible = Feel.can_vibrate()
+	for row: Button in [_sound, _vibration]:
+		row.focus_mode = Control.FOCUS_ALL
+		_restyle(row, Vector2(ROW_TEXT_X, -1.0))
+		# Its words stop short of the switch, so a long one ends in "…" before it.
+		for state: StringName in [&"normal", &"hover", &"pressed", &"focus", &"disabled"]:
+			row.get_theme_stylebox(state).content_margin_right = SWITCH_INSET \
+				+ SWITCH_SIZE.x + SWITCH_GAP
+	_sound.draw.connect(_draw_switch.bind(_sound, true))
+	_vibration.draw.connect(_draw_switch.bind(_vibration, false))
+	_sound.pressed.connect(func() -> void:
+		Feel.set_sound(not Feel.sound_on)
+		_sound.queue_redraw())
+	_vibration.pressed.connect(func() -> void:
+		Feel.set_vibration(not Feel.vibration_on)
+		_vibration.queue_redraw())
+
+
+## A switch row's icon -- a speaker, or a phone shaking -- and its switch.
+func _draw_switch(row: Button, sound: bool) -> void:
+	var mid := row.size.y * 0.5
+	var ink := Color(INK, ICON_ALPHA)
+	if sound:
+		var body := PackedVector2Array([Vector2(MARK_X - 8.0, mid - 3.5),
+			Vector2(MARK_X - 4.5, mid - 3.5), Vector2(MARK_X + 0.5, mid - 7.5),
+			Vector2(MARK_X + 0.5, mid + 7.5), Vector2(MARK_X - 4.5, mid + 3.5),
+			Vector2(MARK_X - 8.0, mid + 3.5)])
+		row.draw_colored_polygon(body, ink)
+		row.draw_arc(Vector2(MARK_X + 1.0, mid), 6.5, -PI * 0.28, PI * 0.28, 12, ink,
+			RING_WIDTH, true)
+	else:
+		var phone := Rect2(MARK_X - 4.0, mid - 7.5, 8.0, 15.0)
+		row.draw_rect(phone, ink, false, RING_WIDTH, true)
+		for side: float in [-1.0, 1.0]:
+			var x := MARK_X + side * 8.0
+			row.draw_line(Vector2(x, mid - 4.0), Vector2(x, mid + 4.0), ink, RING_WIDTH, true)
+	var on := Feel.sound_on if sound else Feel.vibration_on
+	var track := Rect2(Vector2(row.size.x - SWITCH_INSET - SWITCH_SIZE.x,
+		mid - SWITCH_SIZE.y * 0.5), SWITCH_SIZE)
+	var r := SWITCH_SIZE.y * 0.5
+	var ends: Array[Vector2] = [track.position + Vector2(r, r),
+		track.position + Vector2(SWITCH_SIZE.x - r, r)]
+	if on:
+		row.draw_rect(Rect2(ends[0].x, track.position.y, ends[1].x - ends[0].x,
+			SWITCH_SIZE.y), SWITCH_ON, true, -1.0, true)
+		for end: Vector2 in ends:
+			row.draw_circle(end, r, SWITCH_ON, true, -1.0, true)
+		row.draw_circle(ends[1], SWITCH_KNOB_R, INK, true, -1.0, true)
+	else:
+		var line := Color(INK, RING_ALPHA)
+		row.draw_line(Vector2(ends[0].x, track.position.y),
+			Vector2(ends[1].x, track.position.y), line, RING_WIDTH, true)
+		row.draw_line(Vector2(ends[0].x, track.end.y), Vector2(ends[1].x, track.end.y),
+			line, RING_WIDTH, true)
+		row.draw_arc(ends[0], r, PI * 0.5, PI * 1.5, 16, line, RING_WIDTH, true)
+		row.draw_arc(ends[1], r, -PI * 0.5, PI * 0.5, 16, line, RING_WIDTH, true)
+		row.draw_circle(ends[0], SWITCH_KNOB_R, Color(INK, SWITCH_OFF_ALPHA), true, -1.0,
+			true)
 
 
 ## **A row tapped: that language, at once, and kept** (§2). The sheet stays open,
@@ -1516,6 +1602,16 @@ func _say() -> void:
 	# settings sheet. One lowercase word.
 	# ROOM: 472 px at 16 px
 	_caption.text = tr("language")
+	# TRANSLATORS: A row of the settings sheet, under the languages, with a switch
+	# at its right end: whether the game makes any sound. One lowercase word, in
+	# 20 px type.
+	# ROOM: 340 px at 20 px
+	_sound.text = tr("sound")
+	# TRANSLATORS: A row of the settings sheet, under "sound", with a switch at its
+	# right end, shown only on a phone: whether the game makes the phone vibrate in
+	# the hand (it does on each heartbeat). One lowercase word, in 20 px type.
+	# ROOM: 340 px at 20 px
+	_vibration.text = tr("vibration")
 	# TRANSLATORS: A button at the bottom of the settings sheet: close the sheet
 	# and go back to the screen under it. One lowercase word, in 20 px type on a
 	# button 232 px wide.

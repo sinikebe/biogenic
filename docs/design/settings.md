@@ -240,6 +240,12 @@ one setting, which drift apart. The language is the one setting that has no home
 yet, belongs to the whole app, and is the same wherever it is set. Owner row 1 has
 the alternatives.
 
+**Then sound and vibration (2026-10-16).** They pass the same test the language
+did. They show nothing as they are set, they belong to the whole app, and they had
+no home. So the sheet holds them too, in a `Feel` section between the languages and
+the warning: two switch rows, and vibration only on a phone. sound-and-touch.md §4
+has the layout.
+
 ---
 
 ## 3. Languages

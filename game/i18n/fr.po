@@ -40,6 +40,22 @@ msgstr "réglages"
 msgid "language"
 msgstr "langue"
 
+#. A row of the settings sheet, under the languages, with a switch at its
+#. right end: whether the game makes any sound. One lowercase word, in 20 px
+#. type.
+#. Room: at most 340 px in 20 px type; the English takes 60 px.
+#: game/menu/corner.gd
+msgid "sound"
+msgstr "son"
+
+#. A row of the settings sheet, under "sound", with a switch at its right end,
+#. shown only on a phone: whether the game makes the phone vibrate in the hand
+#. (it does on each heartbeat). One lowercase word, in 20 px type.
+#. Room: at most 340 px in 20 px type; the English takes 88 px.
+#: game/menu/corner.gd
+msgid "vibration"
+msgstr "vibration"
+
 #. A button at the bottom of the settings sheet: close the sheet and go back
 #. to the screen under it. One lowercase word, in 20 px type on a button 232
 #. px wide.

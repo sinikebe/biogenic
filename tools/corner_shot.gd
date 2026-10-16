@@ -53,6 +53,10 @@ const Drops := preload("res://game/normal/drops.gd")
 const RunState := preload("res://game/run_state.gd")
 const Cells := preload("res://game/normal/cells.gd")
 const CellSave := preload("res://game/normal/cell_save.gd")
+## The sheet's sound and vibration rows (docs/design/sound-and-touch.md §4):
+## `--handheld=1` shows the vibration row on a machine with no hand to buzz, and
+## `--sound=0` / `--vibration=0` draw a switch off, for this run only.
+const Feel := preload("res://game/feel/feel.gd")
 ## The worlds' numbers, as the harness's index gives them: a cell's place is
 ## checked against them (cells.md §1.4).
 const SEEDS: Array[int] = [1111, 2222, 3333]
@@ -111,6 +115,12 @@ func _ready() -> void:
 			pick = text.trim_prefix("--pick=")
 		elif text == "--close":
 			close = true
+		elif text.begins_with("--handheld="):
+			Feel.handheld = int(text.trim_prefix("--handheld="))
+		elif text.begins_with("--sound="):
+			Feel.sound_on = text.trim_prefix("--sound=") != "0"
+		elif text.begins_with("--vibration="):
+			Feel.vibration_on = text.trim_prefix("--vibration=") != "0"
 		elif text.begins_with("--out="):
 			out_path = text.trim_prefix("--out=")
 		elif text.begins_with("--wait="):
