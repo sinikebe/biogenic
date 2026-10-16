@@ -4388,10 +4388,14 @@ func _referee_bodies() -> void:
 	var alike := _ref_quirk(lookalike, true)
 	# And the stale body landing after the first frame, its resend late.
 	var late := _ref_quirk(dead_body, false)
-	_says(bool(quirk[0]) and bool(alike[0]) and bool(late[0]),
+	# **And a dead body with genes in its genes' own slots** (venom-rides.md): its
+	# riders are as stale as its tiers. The pond section found this one.
+	var fanged := _ref_quirk(dead_body, true, {&"cytostome": [[&"toxicyst", 2]]})
+	_says(bool(quirk[0]) and bool(alike[0]) and bool(late[0]) and bool(fanged[0]),
 		"referee: the dead body every build describes after a death is never fouled"
-		+ " -- %s; a dead body that looked like a gift: %s; landing late: %s"
-		% [str(quirk[1]), str(alike[1]), str(late[1])])
+		+ " -- %s; a dead body that looked like a gift: %s; landing late: %s; with"
+		% [str(quirk[1]), str(alike[1]), str(late[1])] + " venom in its mouth's slot: %s"
+		% str(fanged[1]))
 	# More bodies than the budget, at once: the seventh is refused.
 	var rate := Referee.new(0.0)
 	var taken := 0
@@ -4410,7 +4414,7 @@ func _referee_bodies() -> void:
 ## **The dead body, described after a death**, as every build does it: `[true
 ## if nothing fouled and the born body is what is worn, a note]`. [param early]
 ## puts the stale PERSON before the first state frame, as it lands.
-func _ref_quirk(dead_body: Dictionary, early: bool) -> Array:
+func _ref_quirk(dead_body: Dictionary, early: bool, riders: Dictionary = {}) -> Array:
 	var ref := _ref_arrived(0.0, Vector2.ZERO)
 	ref.judge_died(5.0, FoodField.Cause.STARVED, 0, true)
 	ref.take_fouls()
@@ -4418,11 +4422,11 @@ func _ref_quirk(dead_body: Dictionary, early: bool) -> Array:
 	ref.judge_enter(6.0, CellBody.BASE_RADIUS, false)
 	ref.arrive(6.0, Vector2(480.0, 0.0), CellBody.BASE_RADIUS)
 	if early:
-		ref.judge_person(6.02, false, dead_body, dead_body.keys(), true)
+		ref.judge_person(6.02, false, dead_body, dead_body.keys(), true, riders)
 	ref.claim(6.2, Vector2(480.0, 0.0), 0.0, CellBody.BASE_RADIUS, Vector2.ZERO, 0.0,
 		false)
 	if not early:
-		ref.judge_person(6.25, false, dead_body, dead_body.keys(), true)
+		ref.judge_person(6.25, false, dead_body, dead_body.keys(), true, riders)
 	ref.judge_person(6.3, false, Catalogue.born(), Catalogue.born().keys(), true)
 	var clean := ref.take_fouls().is_empty() and ref.worn == Catalogue.born()
 	# Its real gift, later, is still taken.
@@ -7428,13 +7432,13 @@ func _check_pond() -> void:
 	var genome_guest: Node = guest_run.get_node(^"Genome")
 	# **And a push and a dash** (automation.md §18.3 check 23), which its programs
 	# use on the autopilot below.
-	# **And the toxin, both forms** (dna-slots.md §20.3 check 11): venom on its
-	# flank and poison inside -- eight names -- so every word of the guest's from
+	# **And the toxin, both forms** (dna-slots.md §20.3 check 11; venom-rides.md):
+	# venom in its mouth's slot and poison inside, so every word of the guest's from
 	# here to the section's end is a venomous, poisonous body's.
 	var reentry := await _pond_reenter(guest_run, {&"cytostome": 3, &"cirrus": 1,
-		&"flagellum": 2, &"axoneme": 1, &"myoneme": 1, &"toxicyst": 1, &"veneneux": 1},
-		[&"cytostome", &"cirrus", &"flagellum", &"axoneme", &"myoneme", &"toxicyst"],
-		[host_pin], host_pond)
+		&"flagellum": 2, &"axoneme": 1, &"myoneme": 1, &"veneneux": 1},
+		[&"cytostome", &"cirrus", &"flagellum", &"axoneme", &"myoneme"],
+		[host_pin], host_pond, {&"cytostome": [[&"toxicyst", 1]]})
 	guest_home = guest_cell.position
 	guest_pin = [guest_cell, guest_home, 0.0]
 	pins = [host_pin, guest_pin]
@@ -7443,8 +7447,10 @@ func _check_pond() -> void:
 		return (Genome.tier_of(host_food.bodies()[FoodField.PERSON_SLOT].genome,
 			&"cytostome") == 3), 1.0, pins)
 	var guest_worn: Dictionary = host_food.bodies()[FoodField.PERSON_SLOT].genome
+	var guest_fangs := Riders.rider_at(host_food.bodies()[FoodField.PERSON_SLOT].riders,
+		&"cytostome", 0)
 	_says(reentry >= 0.0 and worn_three >= 0.0 and host_food.person() != null
-			and guest_worn.has(&"toxicyst") and guest_worn.has(&"veneneux"),
+			and guest_fangs == &"toxicyst" and guest_worn.has(&"veneneux"),
 		"pond: the guest leaves the pond, grows a tier-3 mouth, venom and poison alone"
 		+ " and swims back in %.2f s, and the host takes the body it arrives with"
 		% reentry)
@@ -8890,7 +8896,7 @@ func _pond_budget(seconds: float) -> int:
 ## [param room], the host's pond, is asked what it judged of that guest
 ## meanwhile, and a NOTE says so beside what the run was doing as its ENTER ran out.
 func _pond_reenter(run: Node, tiers: Dictionary, order: Array, pins: Array,
-		room: Object = null) -> float:
+		room: Object = null, riders: Dictionary = {}) -> float:
 	var pond: Object = run.get("_pond")
 	var food: Node = run.get_node(^"Food")
 	await _pond_until(func() -> bool:
@@ -8906,7 +8912,7 @@ func _pond_reenter(run: Node, tiers: Dictionary, order: Array, pins: Array,
 	var from := _now()
 	pond.mirror_ended()
 	food.leave_mirror()
-	(run.get_node(^"Genome")).express(tiers, order)
+	(run.get_node(^"Genome")).express(tiers, order, null, null, null, riders)
 	var in_again := func() -> bool:
 		return bool(pond.in_pond) and food.mirroring() \
 			and float(run.get("_water_beat")) < 0.0
@@ -9324,6 +9330,7 @@ func _referee_said(referees: Array) -> String:
 	var closest := {"movement": 0.0, "heading": 0.0, "shouts": 0.0, "arrivals": 0.0,
 		"bodies": 0.0}
 	var fouls := 0
+	var ruled: Array[String] = []
 	var speed := 0.0
 	var over := -INF
 	for referee: Object in referees:
@@ -9336,6 +9343,9 @@ func _referee_said(referees: Array) -> String:
 		closest["arrivals"] = maxf(closest["arrivals"], float(referee.enters.closest))
 		closest["bodies"] = maxf(closest["bodies"], float(referee.bodies.closest))
 		fouls += int(referee.fouled())
+		var struck: Dictionary = referee.get("struck")
+		for rule: Variant in struck:
+			ruled.append("%s %d" % [str(rule), int(struck[rule])])
 		speed = maxf(speed, float(referee.get("worst_speed")))
 		over = maxf(over, float(referee.get("worst_radius")))
 	var parts: Array[String] = []
@@ -9346,7 +9356,8 @@ func _referee_said(referees: Array) -> String:
 		calls.append("%s %.0f%%" % [budget, 100.0 * float(closest[budget])])
 	return "%d fouls over %d referee%s; judged %s; closest calls %s; fastest %.0f u/s,"\
 		% [fouls, referees.size(), "" if referees.size() == 1 else "s", ", ".join(parts),
-			", ".join(calls), speed] + " radius at most %+.2f of what it was fed" % over
+			", ".join(calls), speed] + " radius at most %+.2f of what it was fed" % over \
+		+ ("" if ruled.is_empty() else " -- struck: " + ", ".join(ruled))
 
 
 ## **How many snapshots [param seconds] of waiting must bring**, at least: the
@@ -9948,13 +9959,13 @@ func _check_server() -> void:
 	var b_genome: Node = b_run.get_node(^"Genome")
 	# And a second copy of its tail (automation.md §5.2), which it holds still below.
 	# And a push and a dash, which its programs use on the autopilot (check 23).
-	# **And the toxin, both forms** (dna-slots.md §20.3 check 11): venom at the
-	# back of its free arcs and poison inside -- eight names, for the room's
-	# referee and the other guest's mirror.
+	# **And the toxin, both forms** (dna-slots.md §20.3 check 11; venom-rides.md):
+	# venom in its mouth's slot and poison inside, for the room's referee and the
+	# other guest's mirror.
 	var b_brought := await _pond_reenter(b_run, {&"cytostome": 2, &"cirrus": 1,
-		&"flagellum": 2, &"palp": 1, &"axoneme": 1, &"myoneme": 1, &"toxicyst": 1,
-		&"veneneux": 1}, [&"cytostome", &"cirrus", &"flagellum", &"palp", &"axoneme",
-		&"myoneme", &"toxicyst"], [a_pin], pond)
+		&"flagellum": 2, &"palp": 1, &"axoneme": 1, &"myoneme": 1, &"veneneux": 1},
+		[&"cytostome", &"cirrus", &"flagellum", &"palp", &"axoneme", &"myoneme"],
+		[a_pin], pond, {&"cytostome": [[&"toxicyst", 1]]})
 	b_home = b_cell.position
 	b_pin = [b_cell, b_home, 0.0]
 	pins = [a_pin, b_pin]
