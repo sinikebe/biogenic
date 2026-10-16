@@ -62,12 +62,15 @@ uniform vec3 line_tint = vec3(0.62, 0.95, 0.88);
 uniform float day_light = 1.0;
 uniform float light_at_middle = 1.0;
 // Where the light is low the water's own glow -- grain, cloud, grid and the rim's
-// film -- falls toward `night_glow` of itself, never below, so the water still
-// reads as water at night. At night its tint turns toward `night_tint`, by the
-// surface light alone: depth only dims, night dims and cools. The UX/UI designer's
-// levers (§11).
-uniform float night_glow = 0.5;
+// film -- falls toward `night_glow` of itself, never below. At night its tint
+// moves `night_shift` of the way toward `night_tint`, by the surface light alone:
+// depth only dims, night dims and cools. **Both are small on purpose** (the owner,
+// 2026-10-16: "just a small change of light, nothing that can mask anything"), so
+// the water at night is the water by day, a shade dimmer and cooler. The UX/UI
+// designer's levers (§11).
+uniform float night_glow = 0.85;
 uniform vec3 night_tint = vec3(0.10, 0.40, 0.66);
+uniform float night_shift = 0.3;
 
 float hash21(vec2 p) {
 	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
@@ -148,7 +151,7 @@ void fragment() {
 		float s = clamp(1.0 - dist / max(drop_radius, 1.0), 0.0, 1.0);
 		float through = exp2(s * (2.0 - s) * log2(max(light_at_middle, 0.0001)));
 		float here = day_light * through;
-		vec3 tint = mix(night_tint, water_tint, day_light);
+		vec3 tint = mix(water_tint, night_tint, night_shift * (1.0 - day_light));
 		// The water's own glow and the rim's film, dimmed where the light is low
 		// and retinted by the hour; dry glass dims with the surface light alone.
 		// The meniscus line below is neither: nothing that says where something

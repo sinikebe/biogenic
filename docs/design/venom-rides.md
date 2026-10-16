@@ -29,8 +29,9 @@ The older specs keep their reasoning, which is still how the toxin got here.
    ring.
 3. **The sting's slot still takes venom**, for its dart. The owner's words name
    the mouth, but the sting's slot was the owner's own example the day before
-   (gene-sockets.md, the owner's quote). It is in the decision table that came
-   with this change. Taking it out is one line, the sting's `takes`.
+   (gene-sockets.md, the owner's quote). **Kept, at the owner's word** (2026-10-16,
+   the decision table that came with this change: "All recommended"). Taking it out
+   would be one line, the sting's `takes`.
 4. **A meal of a toxin still waits in the tray.** While it waits, everywhere it can
    go is lit at once: the inside, and every gene's slot that takes it. Tapped onto
    a slot round the body, it says `toxin goes inside, or in a lit gene's slot`.
