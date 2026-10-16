@@ -1635,6 +1635,10 @@ var _mirror_flocs := {}
 var _mirror_free := PackedInt32Array()
 ## The mirror's own clock: how far a floc has settled since it was told.
 var _mirror_t := 0.0
+## **The host's sky** (docs/design/daylight.md §5): the light at the surface of the
+## host's drop, as its newest snapshot said it ([method apply_pond]), held between
+## snapshots. Full light until the first one, which is one 20 Hz tick.
+var _host_light := 1.0
 ## The bodies a snapshot's send set, or the flocs in a guest's reach, are
 ## chosen from: one grid answer, never shared with another pass.
 var _send_ids := PackedInt32Array()
@@ -5313,6 +5317,7 @@ func become_mirror() -> void:
 	for i in range(PERSON_SLOT - 1, -1, -1):
 		_mirror_free.append(i)
 	_mirror_t = 0.0
+	_host_light = 1.0
 	_near.resize(0)
 	_stepped.resize(0)
 	_fresh_senses()
@@ -5588,12 +5593,20 @@ func flocs_in_reach(point: Vector2, reach: float = SEND_REACH) -> Array:
 ## and is harmed by them, until the next snapshot says again -- and never dies of
 ## its own count, since the host owns that death. Empty says nothing. Every other
 ## body's loads are only its flags, drawn at [constant MIRROR_SHOWN].
+##
+## **And [param daylight] is the host's sky** (docs/design/daylight.md §5): the light
+## at the surface of its drop -- or its room's -- held until the next snapshot. This
+## cell's light is it times what gets through the water over this cell under the
+## host's rim ([method light_at]): its own tank's food from light, its tile and the
+## water's tint. Not a number is held as it was.
 func apply_pond(your_wound: float, entries: Array,
-		your_loads := PackedFloat64Array()) -> void:
+		your_loads := PackedFloat64Array(), daylight := 1.0) -> void:
 	if not _mirror:
 		return
 	if is_finite(your_wound):
 		_cell.wound = clampf(your_wound, 0.0, 1.0)
+	if is_finite(daylight):
+		_host_light = clampf(daylight, 0.0, 1.0)
 	if not your_loads.is_empty():
 		_cell.restore_loads(your_loads)
 	var sent := {}
@@ -7103,20 +7116,23 @@ func drop_age() -> float:
 # reads the light -- no rule, no search, no spawn (§4).
 
 ## **Whether this water has a day**: a drop with [member daylight] on -- a solo
-## run's, a host's, a room, or a replay's picture of one. Today's water, with no
-## drop, is always in full light, and so is a guest: **a mirror's light is 1.0
-## until the pond carries the host's sky** (§5, the build's second phase), so a
-## guest in a friend's drop swims and pays in full light for now.
+## run's, a host's, a room, a guest's mirror of a host's once its ARRIVE gave it the
+## rim, or a replay's picture of one. Today's water, with no drop, is always in full
+## light.
 func _lit() -> bool:
-	return daylight and _drop != null and not _mirror
+	return daylight and _drop != null
 
 
 ## **The light at the surface now**, 0 to 1 (§2.1): drop.gd's day at the drop's
-## age, from where its day stood at age 0. A replay's is the recording's
-## ([method restore_daylight]). The literal 1.0 with no day ([method _lit]).
+## age, from where its day stood at age 0. **A guest's is the host's** (§5), as its
+## newest snapshot said it ([method apply_pond]): the host owns the sky. A replay's
+## is the recording's ([method restore_daylight]). The literal 1.0 with no day
+## ([method _lit]).
 func daylight_now() -> float:
 	if not _lit():
 		return 1.0
+	if _mirror:
+		return _host_light
 	if _replay:
 		return _replay_light
 	return _sky.surface(_day_origin + _t)
@@ -7124,9 +7140,10 @@ func daylight_now() -> float:
 
 ## **How far into the day the drop is**, in seconds into the cycle -- what a kept
 ## drop keeps as `day` (§6) -- or -1 where there is no day of this field's own to
-## say: today's water, a guest's mirror, a replay, or the light off.
+## say: today's water, a guest's mirror (the host's day is the host's), a replay,
+## or the light off.
 func day_time() -> float:
-	if not _lit() or _replay:
+	if not _lit() or _replay or _mirror:
 		return -1.0
 	return fposmod(_day_origin + _t, _sky.period())
 
@@ -7149,12 +7166,14 @@ func light_at(p: Vector2) -> float:
 ## [param t1]** (§2.3): what a step of that length is paid at. A far body
 ## stepped once in 32 frames and the player stepped every frame take one light
 ## this way, so the tank's arithmetic does not change. The literal 1.0 with no
-## day; a replay's is its recorded light, which never steps.
+## day. A guest's is the host's surface light held since its newest snapshot --
+## the steepest dawn moves it 0.00125 between two (§5) -- and a replay's its
+## recorded light: neither steps.
 func light_over(p: Vector2, t0: float, t1: float) -> float:
 	if not _lit():
 		return 1.0
-	if _replay:
-		return _replay_light * _through(p)
+	if _mirror or _replay:
+		return daylight_now() * _through(p)
 	return _sky.mean(_day_origin + t0, _day_origin + t1) * _through(p)
 
 
@@ -10549,8 +10568,8 @@ func rarity_line() -> String:
 ## **The light, for the dev app's readout** (docs/design/daylight.md §3.6): `[how
 ## far into the day the drop is, as a share of the day, the light where the cell
 ## is]` -- the share -1 where there is no day of this field's own to say (a
-## friend's drop seen from inside it, the light off), and nothing at all in today's
-## water. So the owner can say what time it was when something felt wrong. Asking
+## friend's drop seen from inside it, whose light is the host's, or the light off),
+## and nothing at all in today's water. So the owner can say what time it was when something felt wrong. Asking
 ## moves nothing.
 func daylight_counts() -> Array:
 	if _cell == null or (_drop == null and not _mirror):

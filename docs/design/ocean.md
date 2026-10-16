@@ -2035,9 +2035,10 @@ water, which only a tool opens now (`normal_mode.gd`'s `drop = 0`), keys its
 entries on its serials under the same cap.
 
 **2026-10-16, the light** (daylight.md §5): the host's drop has a day, and its sky
-is to ride in every POND snapshot -- two header bytes, `Wire.PROTOCOL` 10 -- in that
-page's second phase. Until it lands, a guest's mirror is in full light: it swims,
-pays and draws as it did before the day.
+rides in every POND snapshot: `daylight(u16, /65535)` after the loads, so the header
+is 12 bytes and the worst case 12 + 60 x 19 + 31 = 1,183, still one datagram, under
+`Wire.PROTOCOL` 10. A guest's light is the host's surface light times what gets
+through the water over its place under the host's rim.
 
 ### 10.5 What the referee must learn, and `Wire.RULES`
 

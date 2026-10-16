@@ -145,7 +145,18 @@ extends RefCounted
 ## all three as frames no writer of its own produces, so it is refused at HELLO by
 ## name, as 1 to 7 are. **`RULES` moves with it**: what a host's slots give it is a
 ## contact rule the host decides by.
-const PROTOCOL := 9
+##
+## **10: the host owns the sky** (docs/design/daylight.md §5). The drop has a day, and
+## the POND header gains two bytes after the loads: the light at the surface of the
+## host's drop -- or a server's room -- `daylight(u16, /65535)`, so a guest's light is
+## the host's times what gets through the water over its place, under the host's rim
+## from its ARRIVE. [constant POND_HEADER] goes from 10 to 12 and [constant POND_MAX]
+## from 1,181 to 1,183, still one datagram. A 9 would read byte 10 as the first body,
+## so it is refused at HELLO by name, as 1 to 8 are. **`RULES` does not move with
+## it**: the referee judges a guest's size, path, heading, arrivals, sister, body and
+## death, and starving is the guest's own to say; the light changes none of them, and
+## `sun` is neither judged nor a contact.
+const PROTOCOL := 10
 ## **The rules a host's referee judges a guest by, and the host decides every
 ## contact by, fingerprinted -- pinned** (net-hardening.md B.2, B.6;
 ## docs/design/gene-catalogue.md §11.3): SHA-256 of `game/net/rules.gd`'s text,
@@ -404,11 +415,17 @@ const BEARING_STEPS := 256
 
 # --- The POND snapshot (shared-pond.md §2, ocean.md §10.4) -------------------
 ## `kind | seq(u32) | your_wound(u8, /255) | count(u8) | your_harm(u8, /4) |
-## your_paralysis(u8, /4) | your_sleep(u8, /4)`. **The spare byte became three in
-## protocol 7** (docs/design/dna-slots.md §14.2): the stacks of each of
-## doses.gd's kinds the recipient carries, as the host counts them, at a quarter
-## stack to 63.75 -- against the largest dose there is, a swallow's 48.
-const POND_HEADER := 10
+## your_paralysis(u8, /4) | your_sleep(u8, /4) | daylight(u16, /65535)`. **The spare
+## byte became three in protocol 7** (docs/design/dna-slots.md §14.2): the stacks of
+## each of doses.gd's kinds the recipient carries, as the host counts them, at a
+## quarter stack to 63.75 -- against the largest dose there is, a swallow's 48.
+## **And two more in protocol 10** (docs/design/daylight.md §5): the light at the
+## surface of the host's drop, 0 to 1 in 65,535ths. At the steepest of dawn it moves
+## 0.025 a second, so 0.00125 between two snapshots; a 65,535th is far under that.
+const POND_HEADER := 12
+## Where the host's surface light sits in the header, and its steps.
+const POND_DAYLIGHT := 10
+const POND_DAYLIGHT_SCALE := 65535.0
 ## Stacks per step of a POND load byte.
 const POND_LOAD_SCALE := 4.0
 ## How many loads the header carries: doses.gd's KINDS, written out because this
@@ -443,7 +460,7 @@ const SEND_MAX := 60
 ## How many bodies one snapshot may carry: the send set and the person.
 const POND_BODIES_MAX := SEND_MAX + 1
 ## **The worst case, and the reason it is one datagram.** Sixty water bodies and
-## the person: 10 + 60 x 19 + 31 = 1,181 bytes, under ENet's 1,392-byte MTU, so a
+## the person: 12 + 60 x 19 + 31 = 1,183 bytes, under ENet's 1,392-byte MTU, so a
 ## snapshot is never fragmented and a lost fragment can never cost a whole one.
 const POND_MAX := POND_HEADER + (POND_BODIES_MAX - 1) * POND_BODY + POND_PERSON
 ## The person's id in a snapshot: no water body has it, since a drop numbers
@@ -823,9 +840,12 @@ static func shout(seq: int, at: Vector2, radius: float,
 ## end will not send, and the reader refuses a longer frame outright.
 ##
 ## [param your_loads] are the stacks of each kind the recipient carries, as the
-## host counts them; none written as none.
+## host counts them; none written as none. [param daylight] is the light at the
+## surface of the host's drop, 0 to 1 (docs/design/daylight.md §5), held to it; a
+## light that is not a number goes as full light, which is the water with no day.
 static func pond(seq: int, your_wound: float, bodies: Array,
-		your_loads: PackedFloat64Array = PackedFloat64Array()) -> PackedByteArray:
+		your_loads: PackedFloat64Array = PackedFloat64Array(),
+		daylight := 1.0) -> PackedByteArray:
 	var keep: Array = []
 	var size := POND_HEADER
 	for body: Variant in bodies:
@@ -859,6 +879,8 @@ static func pond(seq: int, your_wound: float, bodies: Array,
 		var stacks := your_loads[k] if k < your_loads.size() else 0.0
 		out[7 + k] = clampi(roundi(stacks * POND_LOAD_SCALE), 0, 255) \
 			if is_finite(stacks) else 0
+	var light := clampf(daylight, 0.0, 1.0) if is_finite(daylight) else 1.0
+	_put_u16(out, POND_DAYLIGHT, roundi(light * POND_DAYLIGHT_SCALE))
 	var at := POND_HEADER
 	for entry: Array in keep:
 		var flags := int(entry[Entry.FLAGS]) & 0xFF
@@ -1309,9 +1331,10 @@ static func take_shout(frame: PackedByteArray) -> Array:
 	return [Vector2(x, y), radius, reach]
 
 
-## `[seq, your_wound, bodies, your_loads]` out of a POND frame, each body an
-## Array indexed by [enum Entry], the loads the stacks of each kind the
-## recipient carries -- or an empty array, and the whole frame refused, for a
+## `[seq, your_wound, bodies, your_loads, daylight]` out of a POND frame, each body
+## an Array indexed by [enum Entry], the loads the stacks of each kind the
+## recipient carries and the daylight the host's surface light, 0 to 1, which any
+## two bytes are -- or an empty array, and the whole frame refused, for a
 ## short or overlong frame, one past [constant POND_MAX] bytes whatever it
 ## holds, a count past [constant POND_BODIES_MAX], a person that is not
 ## [constant PERSON_ID] or a water body that is, a non-finite float, or a motion
@@ -1360,7 +1383,8 @@ static func take_pond(frame: PackedByteArray) -> Array:
 	loads.resize(POND_LOADS)
 	for k in POND_LOADS:
 		loads[k] = float(frame[7 + k]) / POND_LOAD_SCALE
-	return [_take_u32(frame, 1), float(frame[5]) / POND_WOUND_SCALE, bodies, loads]
+	return [_take_u32(frame, 1), float(frame[5]) / POND_WOUND_SCALE, bodies, loads,
+		float(_take_u16(frame, POND_DAYLIGHT)) / POND_DAYLIGHT_SCALE]
 
 
 ## `[radius]` out of an ENTER, or empty. A radius no body could have is

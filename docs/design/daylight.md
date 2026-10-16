@@ -11,21 +11,28 @@ follows how much light reaches the cell; less light reaches it the deeper it is.
 **Light on the senses is the owner's later step.** This page designs nothing for it
 beyond the one call it will need (§9).
 
-**Status: phase 1, the light, built (2026-10-16); phase 2, the pond, designed, not
-built** (§10.2). Written from the code on `dev` at 838c997, with the venom-rides
+**Status: built, both phases (2026-10-16)**: phase 1, the light, and phase 2, the
+pond (§10.2). Written from the code on `dev` at 838c997, with the venom-rides
 change (807f553) on top of it. Nothing was prototyped or measured (the owner,
 2026-10-02: *"Don't measure in prototypes. I'll playtest."*). Every number below is
 a starting value with its reason. Balance waits for players.
 
-**As built in phase 1**, where it differs from the words below:
+**As built**, where it differs from the words below:
 
 - `food.gd`'s switch is `daylight`, as `--daylight=` names it, and GDScript will not
   give a method the same name, so the surface light it answers is `daylight_now()`.
   `light_at(p)`, `light_over(p, t0, t1)` and `restore_daylight(v)` are as written;
   `light_at_deepest()` hands the shader what reaches the middle, and `day_time()` the
   hour a kept drop keeps.
-- **A guest is in full light until phase 2**: a mirror's light is the literal 1.0,
-  so it swims, pays and is drawn as before the day.
+- **Phase 2, the pond**: a mirror keeps the host's surface light from each POND
+  snapshot (`apply_pond(..., daylight)`), full until the first, and answers it times
+  what gets through at its place under the host's rim -- for its tank, its tile and
+  the water's tint; it keeps no day of its own (`day_time()` is -1). A server's room
+  sends its own room's light, the same way. `Wire.PROTOCOL` is 10, `POND_HEADER` 12
+  and `POND_MAX` 1,183; `Wire.RULES` did not move. A guest's replay records the host's
+  light, so the truth pane is tinted as the guest saw it.
+- net_fuzz's saved corpus greets on `hello:10`, and its seven hand-written snapshots
+  carry full light after the loads, so each still says what it said.
 - A tank that cannot move is judged at the least light anywhere, `NIGHT_LIGHT` under
   the whole depth (0 today), rather than `NIGHT_LIGHT` alone.
 - The sun tile sits first in the row, beside the energy gauge (§3.3).
