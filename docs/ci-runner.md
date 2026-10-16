@@ -1,5 +1,9 @@
 # The self-hosted CI runner
 
+> **On hold** (the owner, 2026-10-16: *"I can't set the runner yet"*). The switch
+> is in the workflows and does nothing until `CI_RUNNER` is set. The whole plan
+> for going private, in order, is docs/going-private.md.
+
 The owner, 2026-10-16, on taking the repository private: *"A self hosted runner
 running of an LXC container"*, chosen over running the checks in the public
 releases repository, or paying for GitHub's minutes.
