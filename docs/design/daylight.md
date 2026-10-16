@@ -56,8 +56,9 @@ a starting value with its reason. Balance waits for players.
    player and every water cell read it through one function, averaged exactly over
    the step each one is paid for (§2.3).
 5. **What the player sees** (§3):
-   - in full vision, the water's own glow dims where light is low, and turns bluer
-     at night. Cells are drawn as bright as ever;
+   - in full vision, the water's own glow dims a little where light is low, and
+     cools a little at night: a small change that masks nothing, at the owner's
+     word. Cells are drawn as bright as ever;
    - a sun tile in the HUD row, in both views, while the line carries a plastid;
    - the energy gauge's rate already moves with the light;
    - the plastid's pause-screen line says its number is in full sun.
@@ -234,15 +235,22 @@ A born cell at rest pays 1.0 s a second. Each plastid copy after the first adds
 `water.gdshader` is additive over the membrane's near-black, so it cannot darken
 anything but its own glow. That is what changes, in the drop only:
 
-- **Where light is low, the water's glow dims**: grain, cloud, grid and the rim's
-  film, inside the water, times `mix(NIGHT_GLOW, 1, here)`. `here` is the light at
-  that fragment, surface × what gets through: the same two numbers as §2.
-- **At night the water's tint turns bluer**: `mix(NIGHT_TINT, water_tint,
-  day_light)`, by the surface light alone. Depth only dims; night dims and cools.
-  So the middle at noon and the rim at night do not look alike.
-- **Starting values** for the UX/UI designer, who owns the look and shoots it:
-  `NIGHT_GLOW` 0.5, `NIGHT_TINT` `vec3(0.10, 0.40, 0.66)` against today's
-  `water_tint` `vec3(0.10, 0.62, 0.52)`.
+> **A small change, at the owner's word** (2026-10-16, answering §12 row 2):
+> *"just a small change of light, nothing that can mask anything."* The rule below
+> stands; its two numbers are small. The first build's were a glow down to half and
+> a full turn to blue.
+
+- **Where light is low, the water's glow dims a little**: grain, cloud, grid and the
+  rim's film, inside the water, times `mix(NIGHT_GLOW, 1, here)`. `here` is the
+  light at that fragment, surface × what gets through: the same two numbers as §2.
+- **At night the water's tint cools a little**: it moves `NIGHT_SHIFT` of the way
+  toward `NIGHT_TINT`, `mix(water_tint, NIGHT_TINT, NIGHT_SHIFT × (1 − day_light))`,
+  by the surface light alone. Depth only dims; night dims and cools.
+- **Values**: `NIGHT_GLOW` **0.85**, so the glow never falls below 85% of today's;
+  `NIGHT_SHIFT` **0.3** toward `NIGHT_TINT` `vec3(0.10, 0.40, 0.66)`, against
+  today's `water_tint` `vec3(0.10, 0.62, 0.52)`. Over a whole frame, the rim at
+  night measures 0.93 of today's in green and 0.98 in red and blue. The middle at
+  noon measures 0.98, and at night 0.95.
 - **Untouched**: the meniscus line, the cells, every ring and mark `vision.gd`
   draws. Nothing that says where something is gets dimmer. The edge stays as
   readable at night as by day.
@@ -250,8 +258,8 @@ anything but its own glow. That is what changes, in the drop only:
 - **Cost**: one `exp2` and a few multiplies a fragment, inside the drop's branch,
   which already takes the distance to the centre.
 - **Shoot it** at 1280x720 and 2400x1080: noon at the rim, noon at the middle,
-  dusk, night. The middle at noon is about 0.63 of today's glow, and night about
-  0.5. Judge that the water still reads as water in all four.
+  dusk, night. Judge that every grain, floc and cell that shows by day shows at
+  night.
 
 ### 3.2 Point of view: nothing new on the membrane
 
@@ -462,7 +470,7 @@ draws nothing (`frame_readout.gd`).
 7. `game/normal/gene_stats.gd` and `game/normal/figure.gd`: `cell_items(...,
    light := 1.0)`.
 8. `game/vision/water.gdshader`: `day_light`, `light_at_middle`, `night_glow`,
-   `night_tint`. `game/vision/vision.gd`'s `_push_shader()` writes them from the
+   `night_tint`, `night_shift`. `game/vision/vision.gd`'s `_push_shader()` writes them from the
    field and `drop.gd`.
 9. `game/dev/frame_readout.gd`: the `day` and `light` rows.
 10. `game/normal/drop_save.gd`: `"day"` in `EXTRA`, the light's lines in
@@ -577,7 +585,9 @@ that no longer holds is rewritten at 12, under a note.
 ## 11. What to watch in the playtest
 
 - **Is night noticed** in full vision, without being explained? Is it too dark, or
-  too faint? Levers: `NIGHT_GLOW` and `NIGHT_TINT`, the UX/UI designer's.
+  too faint? Levers: `NIGHT_GLOW`, `NIGHT_SHIFT` and `NIGHT_TINT`, the UX/UI
+  designer's. The owner asked for a small change that masks nothing: never past
+  that.
 - **Does the middle read as deep water**, and the edge as the bright shallows?
 - **With a plastid, is the light found?** Watch whether the tile's bar and the
   gauge's rate are read, and whether you head for the edge by day.
@@ -607,6 +617,12 @@ players").
 |---|---|---|---|
 | 1 | What does "deeper" mean in a drop seen from above? | **Toward the drop's middle, where the water is thickest ✓ recommended** · a new up-and-down direction the cell swims in · no depth, only the time of day | With the first, the sun is strongest near the drop's edge and weakest in its middle, so a cell living on sun heads for the edge by day, with nothing new to steer. The second adds a third direction to swim and a control for it. The third lights the whole drop the same, and only day and night change it. |
 | 2 | What does night look like in full vision? | **The water's own glow dims where light is low, and turns bluer at night ✓ recommended** · the water dims with the time of day only, the same everywhere · nothing on screen, only the sun tile | With the first, the map shows both the night and where the bright shallows are, and every cell stays as bright as ever. With the second, night shows but the middle looks like the edge. With the third, a player without the sun gene never sees night. |
+
+**Answered, 2026-10-16**: *"All recommended but 3: just a small change of light,
+nothing that can mask anything."* The owner's table had three rows: the sting's
+venom (venom-rides.md, kept), this page's row 1, and this page's row 2 as its row 3.
+So row 1 stands as recommended, and row 2 is the recommended rule at a small
+strength (§3.1).
 
 - **Row 1.** The game has no up and down. The "level" gene that knew which way was
   up was retired because it said nothing about the water. A sinking control would
