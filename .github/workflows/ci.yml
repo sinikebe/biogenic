@@ -413,11 +413,17 @@ jobs:
         # its lobe reads 0.164 at 36 degrees wide (a level-1 eye's blur) where it
         # read 0.280 at 26. 68,461 lines, from 68,421.
         #
+        # **Re-pinned when grit came to stop the water too** (food.gd's
+        # `_separate_grit`, 2026-10-17), from 686c55a2...: the water changed on
+        # purpose. What bumps you off now puts a water cell back on its surface.
+        # The two traces agree to 0.52 s, where a cell that began inside a speck,
+        # 887 um off, is pushed out of it by 0.4 um. 68,422 lines, from 68,461.
+        #
         # The run prints about ten megabytes, so it goes to a file rather than a
         # variable. About twenty seconds.
         run: |
           set -uo pipefail
-          pinned="686c55a27fc7706ff918c48ccc8c1d9136e95005696330fcc4ca8ea3f9bf6ee5"
+          pinned="9167630d97526515cbb1842564cb97bcf845c59f5f69b0591b3ee34add5b02e3"
           log=$(mktemp)
           fail=0
           echo "--- seed 1, sixty seconds, R pressed at 20 s"
