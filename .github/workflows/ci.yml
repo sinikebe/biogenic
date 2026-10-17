@@ -265,7 +265,7 @@ jobs:
           if ! out=$(~/godot/godot --headless --path . --fixed-fps 60 \
                        --quit-after 660 res://tools/drive.tscn -- \
                        --size=1280x720 --seed=12345 \
-                       --radius=40 --genome="$genome" --trace=2.0 \
+                       --radius=42 --genome="$genome" --trace=2.0 \
                        --press=1.0:144,624,0 --press=1.2:1064,540,1 \
                        --press=1.6:1184,624,2 --lift=1.7:2 --slide=1.8:200,624,0 \
                        --lift=2.0:0 --lift=2.1:1 \
@@ -281,10 +281,11 @@ jobs:
             echo "::error::script errors under input"
             fail=1
           fi
-          # The cell is forced to DIVIDE_RADIUS, so it splits at once and the
-          # press at 3.0s is a held lean -- the turn hard over to starboard. A
-          # daughter is half the area, so r40 becomes r28.28: any r2x in the
-          # trace is a division that was answered.
+          # The cell is forced past its division radius -- r41.7 for the five
+          # genes it carries outside (docs/design/margin.md §1.1) -- so it splits
+          # at once and the press at 3.0s is a held lean -- the turn hard over to
+          # starboard. A daughter is half the area, so r42 becomes r29.70: any
+          # r2x in the trace is a division that was answered.
           if ! grep -qE "^\[trace\].*me r2[0-9]\." <<< "$out"; then
             printf '%s\n' "$out" | grep -E "^\[trace\]" || true
             echo "::error::no daughter was committed -- a held lean did not reach the division"
