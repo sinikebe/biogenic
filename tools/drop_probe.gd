@@ -394,10 +394,16 @@ class WatchedDrop extends "res://game/normal/food.gd":
 			and b.radius >= b.divide_at() - 0.01 and (i % Drop.LOD_EVERY) == tick
 		var serial := b.serial
 		super._step_one(i, b, tick)
+		meals_at_step[b.get_instance_id()] = b.meals
 		if due:
 			at_forty += 1
 			if b.serial == serial:
 				missed += 1
+
+	## **The meals each body had at its last step**, by its instance: a meal moves
+	## its hold a meal's worth from the rim, and its next step holds it there --
+	## a far body, stepped on its tick, may eat twice before it (check 4).
+	var meals_at_step := {}
 
 	## **Every division, judged** (checks 1 and 2): its mother at her division
 	## radius; two daughters at half her area, touching across her heading where she was and
@@ -434,14 +440,15 @@ class WatchedDrop extends "res://game/normal/food.gd":
 				_fault("daughter %d of %d: r%.2f hunger %.2f grace %.1f record %s" % [k,
 					mother[Descent.ID], d.radius, d.hunger, d.grace,
 					str([d.id, d.parent, d.generation, d.lineage])])
-		# Side by side, touching, across her heading -- unless the rim held one in.
+		# Side by side, touching, across her heading -- unless the film held one in
+		# at her hold (margin.md §2.1).
 		# To a hundredth: a place is kept in 32 bits, a few ten-thousandths out here.
 		var apart := pair[0].pos - pair[1].pos
 		var along := absf(apart.dot(Vector2(sin(heading), -cos(heading))))
 		var mid := (pair[0].pos + pair[1].pos) * 0.5
 		if absf(apart.length() - 2.0 * r) < 1e-2 and along < 1e-2 and mid.distance_to(at) < 1e-2:
 			pass
-		elif _drop.meniscus.depth(at) < 2.0 * r:
+		elif _drop.meniscus.depth(at) < Drop.hold(r) + r:
 			held_at_rim += 1
 		else:
 			_fault("daughters %.3f apart, %.3f along her heading, %.3f off her centre"
@@ -1475,9 +1482,25 @@ func _drop() -> void:
 			var d := _dist(at, players[turn])
 			if d >= hides[turn] and d <= hides[turn] + Drop.SPAWN_RING:
 				ringed += 1
+	# **A newborn's in the margin** (margin.md §2.3): every one in the band a run
+	# starts in, from a newborn's hold to MARGIN_START past it.
+	var from := Drop.hold(CellBody.BASE_RADIUS)
+	var newborns := 0
+	var off_band := 0
+	for round in 200:
+		for at: Vector2 in drop.spawn_candidates(players, hides, round % 2, true):
+			newborns += 1
+			var depth := drop.meniscus.depth(at)
+			if depth < from - 1e-3 or depth > from + Drop.MARGIN_START + 1e-3 \
+					or not Replenish.hidden(at, players, hides):
+				off_band += 1
 	_check(("spawn candidates: %d drawn, %d of them in the ring past the player whose"
-		+ " turn it is, %d inside a hide reach or past the rim") % [drawn, ringed, bad],
-		bad == 0 and drawn > 3000 and float(ringed) > 0.35 * float(drawn))
+		+ " turn it is, %d inside a hide reach or past the rim; %d drawn for a newborn,"
+		+ " %d of them outside the margin it starts in (%.0f to %.0f from the rim) or in"
+		+ " a hide reach") % [drawn, ringed, bad, newborns, off_band, from,
+		from + Drop.MARGIN_START],
+		bad == 0 and drawn > 3000 and float(ringed) > 0.35 * float(drawn)
+		and off_band == 0 and newborns > 1000)
 	# Where a run starts, against the same points chosen by hand.
 	var tried: Array = []
 	var food_near := func(p: Vector2, reach: float) -> int:
@@ -1494,7 +1517,8 @@ func _drop() -> void:
 	var deep := true
 	var clear := 0
 	for p: Vector2 in tried:
-		deep = deep and drop.meniscus.inside(p, Drop.START_INSET)
+		var depth := drop.meniscus.depth(p)
+		deep = deep and depth >= from - 1e-3 and depth <= from + Drop.MARGIN_START + 1e-3
 		if fmod(absf(p.x), 7.0) < 1.0:
 			continue
 		clear += 1
@@ -1509,8 +1533,9 @@ func _drop() -> void:
 		if fmod(absf(p.x), 7.0) >= 1.0 and absf(float(dread_at.call(p)) - least) <= 1e-6:
 			tied += 1
 	_check(("a run starts at the quietest of %d points: of the %d with no meal on top, the"
-		+ " %d that dread nothing tie and the one with most food (%d) wins; none within"
-		+ " %.0f of the rim") % [tried.size(), clear, tied, most, Drop.START_INSET],
+		+ " %d that dread nothing tie and the one with most food (%d) wins; all of them in"
+		+ " the margin, %.0f to %.0f from the rim") % [tried.size(), clear, tied, most, from,
+		from + Drop.MARGIN_START],
 		tried.size() == Drop.START_TRIES and start == want and deep and clear < tried.size()
 		and tied >= 2)
 	var pushed := drop.pushed_clear(OFF_CENTRE, OFF_CENTRE + Vector2(300.0, 400.0),
@@ -1518,48 +1543,52 @@ func _drop() -> void:
 	_check("a mouth that could swallow a newborn is moved out to %.0f from its start"
 		% _dist(pushed, OFF_CENTRE), absf(_dist(pushed, OFF_CENTRE)
 		- FoodField.DREAD_RANGE - Drop.START_PUSH) < 0.01)
-	# A start is drawn evenly over its disc: half of the draws within the radius
+	# A start is drawn evenly over its band: half of the draws within the radius
 	# that holds half its area. And one 1,100 µm in from the rim, with the mouth
-	# on the rim's side, pushes that mouth back inside, not out of the drop.
-	var disc := Drop.RADIUS - Drop.START_INSET
+	# on the rim's side, pushes that mouth back to its hold, not out of the drop.
+	var outer := Drop.RADIUS - from
+	var inner := Drop.RADIUS - from - Drop.MARGIN_START
+	var halves := sqrt((outer * outer + inner * inner) * 0.5)
 	var within := 0
 	var outside := 0
 	for i in 20000:
-		var d := _dist(drop.uniform_point(Drop.START_INSET), drop.meniscus.center)
-		if d <= disc / sqrt(2.0):
+		var d := _dist(drop.margin_point(), drop.meniscus.center)
+		if d <= halves:
 			within += 1
-		if d > disc + 1e-3:
+		if d > outer + 1e-3 or d < inner - 1e-3:
 			outside += 1
 	var edge_start := drop.meniscus.center + Vector2(Drop.RADIUS - 1100.0, 0.0)
 	var edge_push := drop.pushed_clear(edge_start, edge_start + Vector2(300.0, 0.0),
 		FoodField.DREAD_RANGE, 30.0)
-	_check(("a start is drawn evenly: %.3f of 20,000 within %.0f of the centre, which holds"
-		+ " half the disc, and %d past it; a mouth on the rim's side of a start 1,100 in"
-		+ " is pushed to %.1f inside the rim") % [float(within) / 20000.0,
-		disc / sqrt(2.0), outside, drop.meniscus.depth(edge_push)],
+	_check(("a start is drawn evenly over its band: %.3f of 20,000 within %.0f of the"
+		+ " centre, which holds half the band, and %d out of it; a mouth on the rim's side"
+		+ " of a start 1,100 in is pushed to %.1f inside the rim, where its hold is %.0f")
+		% [float(within) / 20000.0, halves, outside, drop.meniscus.depth(edge_push),
+			Drop.hold(30.0)],
 		absf(float(within) / 20000.0 - 0.5) <= 0.01 and outside == 0
-		and drop.meniscus.inside(edge_push, 30.0))
-	# **The review's S3**: the rim holds a pushed mouth back, and it must still
-	# end clear of dread's reach of the start. From a start as near the rim as
-	# one may be, mouths all round it at every distance inside dread's reach, of
-	# every size a body can be: each is slid along the rim until it clears.
+		and drop.keeps(edge_push, 30.0))
+	# **The review's S3**: the film holds a pushed mouth back at its hold, and it
+	# must still end clear of dread's reach of the start. From a start as near the
+	# rim as one may be -- a newborn's hold -- mouths all round it at every distance
+	# inside dread's reach, of every size a body can be: each is slid along its hold
+	# until it clears.
 	var nearest := INF
 	var held := 0
 	var escaped := 0
-	var worst_start := drop.meniscus.center + Vector2(0.0, -(Drop.RADIUS - Drop.START_INSET))
+	var worst_start := drop.meniscus.center + Vector2(0.0, -(Drop.RADIUS - from))
 	for k in 72:
 		for reach: float in [60.0, 700.0, 1350.0]:
 			for r: float in [13.0, 40.0]:
 				var mouth := worst_start + Vector2.from_angle(TAU * float(k) / 72.0) * reach
 				var put := drop.pushed_clear(worst_start, mouth, FoodField.DREAD_RANGE, r)
 				nearest = minf(nearest, _dist(put, worst_start))
-				if drop.meniscus.depth(put) < Drop.START_PUSH:
+				if drop.meniscus.depth(put) < Drop.hold(r) + Drop.START_PUSH:
 					held += 1
-				if not drop.meniscus.inside(put, r):
+				if not drop.keeps(put, r):
 					escaped += 1
 	_check(("S3: from a start %.0f inside the rim, 432 mouths moved out land at least %.0f"
-		+ " from it (dread reaches %.0f), %d of them slid along the rim, %d past it") % [
-		Drop.START_INSET, nearest, FoodField.DREAD_RANGE, held, escaped],
+		+ " from it (dread reaches %.0f), %d of them slid along their hold, %d past it") % [
+		from, nearest, FoodField.DREAD_RANGE, held, escaped],
 		nearest >= FoodField.DREAD_RANGE and held > 0 and escaped == 0)
 	# What a new thing is made with: a body made in play is fed, one of a first
 	# fill up to FIRST_HUNGER_MAX; a fallen floc fits a born cell's mouth and lasts
@@ -1878,12 +1907,26 @@ func _tank_edges() -> void:
 ## is the water before the day (docs/design/daylight.md §10.4), full light
 ## everywhere at every hour: what every identity gate runs, since an older pack
 ## had no day.
+## **How far in from the rim a desert to pose in starts** ([method _water]): past
+## the margin by more than any pose reaches toward the rim, and lit enough to see
+## by. The middle is the drop's darkest place, a quarter of the light, where an
+## eye sees nothing.
+const DESERT_DEPTH := 2400.0
+
+
 func _water(desert := 0.0, rules := true, tails := true, light := true) -> Array:
 	var cell := CellBody.new()
 	cell.radius = CellBody.BASE_RADIUS
 	var field := WatchedDrop.new()
 	field.process_mode = Node.PROCESS_MODE_DISABLED
 	field.desert = desert
+	# **A desert is cleared to pose in, so it is open water all round**: past the
+	# margin, DESERT_DEPTH in from the rim, where no body posed within 1,200 of the
+	# player is past its hold (margin.md §2.1) and the light is about 0.4 -- an eye
+	# sees by it. Without one, the game's own start, in the margin.
+	if desert > 0.0:
+		field.start_mode = &"edge"
+		field.edge_gap = DESERT_DEPTH
 	field.rules = rules
 	field.tails_beat = tails
 	field.daylight = light
@@ -2019,8 +2062,10 @@ func _spawns() -> void:
 
 # --- 4. Containment ------------------------------------------------------------------------
 
-## **After 1,800 frames no body's centre past `RADIUS - r`, the player's
-## included; no mote past the rim** (§3.1). A run started 120 inside the rim,
+## **After 1,800 frames no body's centre past its hold, `RADIUS - hold(r)`
+## (margin.md §2.1), the player's included -- a floc's past `RADIUS - r`, which
+## lies on the glass; no mote past the rim** (§3.1). A run started 120 inside its
+## hold,
 ## facing it, the cell pressing straight into it at a stroke's speed the whole
 ## time -- knocked at the rim's bearing, and at most once in SHORE_GAP -- with its
 ## grit, the authored first mote included, round it. Bodies are looked at every
@@ -2031,7 +2076,7 @@ func _containment() -> void:
 	var field := WatchedDrop.new()
 	field.process_mode = Node.PROCESS_MODE_DISABLED
 	field.start_mode = &"edge"
-	field.edge_gap = 120.0
+	field.edge_gap = Drop.hold(CellBody.BASE_RADIUS) + 120.0
 	field.grace = 1e6
 	field.contact_swallow = false
 	add_child(field)
@@ -2054,7 +2099,7 @@ func _containment() -> void:
 	for k in 24:
 		var along := out0.rotated(deg_to_rad((5.0 + 2.5 * float(k / 2)) * (1.0 if k % 2 == 0
 			else -1.0)))
-		var hungry := _pose(field, centre + along * (edge - 33.0), 30.0,
+		var hungry := _pose(field, centre + along * (edge - Drop.hold(30.0) - 3.0), 30.0,
 			{&"cytostome": 1, &"cirrus": 1, &"flagellum": 2}, atan2(along.x, -along.y), 0.9)
 		var hb: Object = (field.get("_cells") as Array)[hungry]
 		hb.set("calm", 0.0)
@@ -2071,15 +2116,23 @@ func _containment() -> void:
 		cell.position += cell.velocity / 60.0
 		field._process(1.0 / 60.0)
 		motes._process(1.0 / 60.0)
-		worst_cell = minf(worst_cell, edge - cell.radius - _dist(cell.position, centre))
+		worst_cell = minf(worst_cell,
+			edge - Drop.hold(cell.radius) - _dist(cell.position, centre))
 		for p: Vector2 in motes.points():
 			worst_mote = minf(worst_mote, edge - MotesField.MOTE_RADIUS - _dist(p, centre))
 		if f % 30 == 29:
 			for b: Object in field.get("_cells"):
 				if b.get("seeded"):
 					bodies_seen += 1
-					worst_body = minf(worst_body,
-						edge - float(b.get("radius")) - _dist(b.get("pos"), centre))
+					var r := float(b.get("radius"))
+					var keep := r if b.get("inert") else Drop.hold(r)
+					# Grown since its last step: held at its new hold on its next.
+					var since := int(field.meals_at_step.get(b.get_instance_id(), 0)) \
+						if int(b.get("stepped")) >= 0 else 0
+					var grown := int(b.get("meals")) - since
+					if grown > 0 and not b.get("inert"):
+						keep = Drop.hold(r - CellBody.GROWTH_PER_MEAL * float(grown))
+					worst_body = minf(worst_body, edge - keep - _dist(b.get("pos"), centre))
 	var gap := INF
 	var off_bearing := 0.0
 	for k in knocks.size():
@@ -2974,9 +3027,9 @@ func _determinism() -> void:
 ## ride their mouths, and drift brings the toxin as poison. Nothing else moved; the
 ## rules two builds agree on moved with venom's side and stern lines (`Wire.RULES`).
 const THREE_ONE_LINES: Array[String] = [
-	"[census] t 40  living 542 (drifters 450, hunters 92)  flocs 34  | hunters at r40 0, mean r 30.0, hunger 0.62  | could swallow r26/r34/r40 25/0/0  dread 0.38/0.00/0.00  genes 17  | spawned 638  died: swallowed 91 chewed 0 starved 5 (r40 0) poisoned 0  | grazed by the water 6, by drifters 1, dissolved 0, snow kept 6, remains 5  | runs 0 at you 0 misses 0 stings 3 dashes 0  floors: gene 0+0 drifter 0  | sum 2334272493",
-	"[lineage] t 40  hunters 92, born 0  generation mean 1.00 max 1  families 92 (largest 1)  dna apart 39  | cruise 56.5 notice 633 mouth 1.00 upkeep 1.00 genes worn 4.00 carried 4.25  tails 92 sighted 92 at r40 0  | divisions 0 (trade 0 drift 0 faithfully 0), daughters 0: tailless 0, given a sense 0  | the spawner's peers 4 (for the floor 4, for venom 0), drifters 79, left to births 0  | worn cytostome 1.00 cirrus 1.00 flagellum 1.00 stigma 0.32 ocellus 0.25 chemocyte 0.20 ampulla 0.24 axoneme 0.00 palp 0.00 myoneme 0.00 trichocyst 0.00 pellicle 0.00 veneneux 0.00 plastid 0.00 vacuole 0.00 crista 0.00 toxicyst 0.00 haptonema 0.00 lysosome 0.00  | commonest 29x cytostome:1,cirrus:1,flagellum:1,stigma:1 ; 23x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 22x cytostome:1,cirrus:1,flagellum:1,ampulla:1",
-	"[behaviour] t 40  hunters 92: on the founders' rules 92, other lists 0  | founders' rules fired 3173/8823/282/172/1514/16917/0  | meals of hunters with a nose 23, radar 24, laser 26  | stings 3, stuns 0, your wakes 0  | now holding a heading 38, resting 24, swimming 68, pushing 0, stunned 0, echoes in flight 45",
+	"[census] t 40  living 552 (drifters 457, hunters 95)  flocs 70  | hunters at r40 0, mean r 29.7, hunger 0.63  | could swallow r26/r34/r40 22/0/0  dread 0.35/0.00/0.00  genes 17  | spawned 648  died: swallowed 87 chewed 0 starved 9 (r40 0) poisoned 0  | grazed by the water 3, by drifters 0, dissolved 0, snow kept 34, remains 9  | runs 0 at you 0 misses 0 stings 6 dashes 0  floors: gene 0+0 drifter 0  | sum 907997993",
+	"[lineage] t 40  hunters 95, born 0  generation mean 1.00 max 1  families 95 (largest 1)  dna apart 37  | cruise 56.5 notice 623 mouth 1.00 upkeep 1.00 genes worn 4.00 carried 4.25  tails 95 sighted 95 at r40 0  | divisions 0 (trade 0 drift 0 faithfully 0), daughters 0: tailless 0, given a sense 0  | the spawner's peers 7 (for the floor 7, for venom 0), drifters 86, left to births 0  | worn cytostome 1.00 cirrus 1.00 flagellum 1.00 stigma 0.34 ocellus 0.22 chemocyte 0.27 ampulla 0.17 axoneme 0.00 palp 0.00 myoneme 0.00 trichocyst 0.00 pellicle 0.00 veneneux 0.00 plastid 0.00 vacuole 0.00 crista 0.00 toxicyst 0.00 haptonema 0.00 lysosome 0.00  | commonest 32x cytostome:1,cirrus:1,flagellum:1,stigma:1 ; 26x cytostome:1,cirrus:1,flagellum:1,chemocyte:1 ; 21x cytostome:1,cirrus:1,flagellum:1,ocellus:1",
+	"[behaviour] t 40  hunters 95: on the founders' rules 95, other lists 0  | founders' rules fired 3075/7271/262/116/2473/18491/0  | meals of hunters with a nose 34, radar 24, laser 21  | stings 6, stuns 0, your wakes 0  | now holding a heading 41, resting 22, swimming 73, pushing 0, stunned 0, echoes in flight 27",
 ]
 ## What phase 3-2's behaviour line adds after phase 3-1's, for a water whose
 ## rules never changed: one behaviour, every hunter on it, no change made.
@@ -3297,6 +3350,10 @@ func _rig(drop: bool, desert := 0.0) -> Array:
 	var field := WatchedDrop.new()
 	field.process_mode = Node.PROCESS_MODE_DISABLED
 	field.desert = desert
+	# A desert to pose in, in open water (see [method _water]).
+	if desert > 0.0:
+		field.start_mode = &"edge"
+		field.edge_gap = DESERT_DEPTH
 	rig.add_child(field)
 	var recorder := RecorderNode.new()
 	recorder.process_mode = Node.PROCESS_MODE_DISABLED
@@ -3995,6 +4052,7 @@ func _save_run() -> void:
 	var genome: Node = run.get("_genome")
 	var met: Node = run.get("_metabolism")
 	cell.radius = 34.0
+	_held_in_drop(run)
 	genome.call(&"express", {&"cytostome": 2, &"cirrus": 1, &"flagellum": 1, &"rhabdom": 1},
 		[&"cytostome", &"cirrus", &"flagellum", &"rhabdom"])
 	genome.call(&"integrate", &"stigma")
@@ -5123,10 +5181,22 @@ func _cells_views() -> void:
 ## first drifter still waiting. Then full vision plays on and the drop ages:
 ## **the cell resumes at its place, cleared round** -- nothing that could swallow
 ## it within dread's reach.
+## **A cell moved or grown by hand is held where its size is held** (margin.md
+## §2.1), as its own run holds it on its next frame -- so a place kept is a place
+## the water lets it be. A run starts in the margin, where a step toward the rim or
+## a few meals of growth is past it.
+func _held_in_drop(run: Node) -> void:
+	var cell: CellBody = run.get("_cell")
+	var rim: RefCounted = (run.get("_food") as Node).call(&"basin")
+	if rim != null:
+		cell.position = rim.call(&"contain", cell.position, Drop.hold(cell.radius))
+
+
 func _cells_place() -> void:
 	await _cells_world(1)
 	var blind := _cell_run(RunState.Mode.POV)
 	(blind.get("_cell") as CellBody).position += Vector2(520.0, -380.0)
+	_held_in_drop(blind)
 	var hunter := _cells_hunter(blind, Vector2(0.0, 110.0))
 	var place := _cells_place_of(blind)
 	var first := int(((blind.get("_food") as Node).call(&"player_state") as Dictionary)["first"])
@@ -5182,6 +5252,7 @@ func _cells_elsewhere() -> void:
 	for how: String in ["another world", "a gone world", "a friend's water"]:
 		var left := _cell_run(RunState.Mode.POV)
 		(left.get("_cell") as CellBody).position += Vector2(-640.0, 300.0)
+		_held_in_drop(left)
 		if how == "a friend's water":
 			left.call(&"_set_own_drop_aside")
 			(left.get("_food") as Node).call(&"become_mirror")
@@ -5306,6 +5377,7 @@ func _cells_order() -> void:
 	run.notification(NOTIFICATION_APPLICATION_PAUSED)
 	var food: Node = run.get("_food")
 	(run.get("_cell") as CellBody).position += Vector2(300.0, 200.0)
+	_held_in_drop(run)
 	food.set("_t", float(food.call(&"drop_age")) + 45.0)
 	var place := _cells_place_of(run)
 	var world := Drops.path_of(1, CELLS_ROOT)
@@ -6105,11 +6177,11 @@ const IDENTITY_DNA := {&"cytostome": 2, &"cirrus": 1, &"flagellum": 1, &"chemocy
 ## ride their mouths, and drift brings the toxin as poison. Nothing else moved; the
 ## rules two builds agree on moved with venom's side and stern lines (`Wire.RULES`).
 const IDENTITY_LINES: Array[String] = [
-	"[census] t 30  living 533 (drifters 437, hunters 96)  flocs 30  | hunters at r40 1, mean r 31.0, hunger 0.32  | could swallow r26/r34/r40 33/0/0  dread 0.44/0.01/0.00  genes 18  | spawned 653  died: swallowed 120 chewed 0 starved 0 (r40 0) poisoned 0  | grazed by the water 2, by drifters 0, dissolved 0, snow kept 2, remains 0  | runs 188 at you 0 misses 45 stings 4 dashes 0  floors: gene 0+0 drifter 0  | sum 2061691685",
-	"[census] t 60  living 523 (drifters 430, hunters 93)  flocs 23  | hunters at r40 31, mean r 36.8, hunger 0.42  | could swallow r26/r34/r40 84/1/0  dread 1.22/0.12/0.01  genes 18  | spawned 805  died: swallowed 281 chewed 1 starved 0 (r40 0) poisoned 0  | grazed by the water 8, by drifters 1, dissolved 0, snow kept 2, remains 0  | runs 477 at you 0 misses 180 stings 8 dashes 15  floors: gene 0+0 drifter 0  | sum 3897716758",
-	"[census] t 30  living 527 (drifters 414, hunters 113)  flocs 29  | hunters at r40 0, mean r 30.6, hunger 0.34  | could swallow r26/r34/r40 29/0/0  dread 0.41/0.00/0.00  genes 17  | spawned 656  died: swallowed 129 chewed 0 starved 0 (r40 0) poisoned 0  | grazed by the water 3, by drifters 0, dissolved 0, snow kept 2, remains 0  | runs 268 at you 0 misses 111 stings 0 dashes 1  floors: gene 0+0 drifter 0  | sum 2455471123",
-	"[census] t 60  living 528 (drifters 424, hunters 104)  flocs 24  | hunters at r40 23, mean r 36.3, hunger 0.46  | could swallow r26/r34/r40 98/5/2  dread 1.46/0.23/0.05  genes 17  | spawned 824  died: swallowed 291 chewed 5 starved 0 (r40 0) poisoned 0  | grazed by the water 9, by drifters 0, dissolved 0, snow kept 3, remains 0  | runs 595 at you 0 misses 268 stings 0 dashes 16  floors: gene 0+0 drifter 0  | sum 415299436",
-	"[census] t 30  living 526 (drifters 411, hunters 115)  flocs 26  | hunters at r40 0, mean r 30.6, hunger 0.34  | could swallow r26/r34/r40 35/0/0  dread 0.50/0.00/0.00  genes 17  | spawned 660  died: swallowed 133 chewed 1 starved 0 (r40 0) poisoned 0  | grazed by the water 5, by drifters 1, dissolved 0, snow kept 2, remains 0  | runs 251 at you 0 misses 102 stings 1 dashes 0  floors: gene 0+0 drifter 0  | sum 982470371",
+	"[census] t 30  living 537 (drifters 442, hunters 95)  flocs 56  | hunters at r40 0, mean r 30.4, hunger 0.35  | could swallow r26/r34/r40 26/1/0  dread 0.36/0.01/0.00  genes 18  | spawned 643  died: swallowed 104 chewed 2 starved 0 (r40 0) poisoned 0  | grazed by the water 4, by drifters 1, dissolved 0, snow kept 31, remains 0  | runs 250 at you 0 misses 121 stings 2 dashes 0  floors: gene 0+0 drifter 0  | sum 3740566428",
+	"[census] t 60  living 529 (drifters 437, hunters 92)  flocs 67  | hunters at r40 23, mean r 35.7, hunger 0.41  | could swallow r26/r34/r40 78/5/2  dread 1.07/0.13/0.04  genes 18  | spawned 783  died: swallowed 248 chewed 4 starved 2 (r40 0) poisoned 0  | grazed by the water 8, by drifters 2, dissolved 0, snow kept 45, remains 2  | runs 514 at you 0 misses 253 stings 5 dashes 9  floors: gene 0+0 drifter 0  | sum 1101607375",
+	"[census] t 30  living 530 (drifters 418, hunters 112)  flocs 43  | hunters at r40 0, mean r 30.8, hunger 0.33  | could swallow r26/r34/r40 37/0/0  dread 0.62/0.00/0.00  genes 18  | spawned 665  died: swallowed 135 chewed 0 starved 0 (r40 0) poisoned 0  | grazed by the water 6, by drifters 0, dissolved 0, snow kept 19, remains 0  | runs 246 at you 0 misses 104 stings 3 dashes 1  floors: gene 0+0 drifter 0  | sum 1104260407",
+	"[census] t 60  living 526 (drifters 422, hunters 104)  flocs 51  | hunters at r40 23, mean r 36.5, hunger 0.47  | could swallow r26/r34/r40 92/4/3  dread 1.93/0.20/0.03  genes 18  | spawned 824  died: swallowed 295 chewed 2 starved 1 (r40 0) poisoned 0  | grazed by the water 11, by drifters 0, dissolved 0, snow kept 31, remains 1  | runs 538 at you 0 misses 230 stings 8 dashes 12  floors: gene 0+0 drifter 0  | sum 3988263794",
+	"[census] t 30  living 534 (drifters 438, hunters 96)  flocs 49  | hunters at r40 0, mean r 30.8, hunger 0.34  | could swallow r26/r34/r40 31/0/0  dread 0.47/0.00/0.00  genes 17  | spawned 649  died: swallowed 115 chewed 0 starved 0 (r40 0) poisoned 0  | grazed by the water 2, by drifters 1, dissolved 0, snow kept 22, remains 0  | runs 216 at you 0 misses 90 stings 4 dashes 0  floors: gene 0+0 drifter 0  | sum 1959292797",
 ]
 
 
@@ -6185,9 +6257,17 @@ const IDENTITY_LINES: Array[String] = [
 ## with no room for what comes draws again. These, `PACK3_LINES`, `TAIL_LINES`,
 ## `DAYLIGHT_LINES`, `TAIL_TRACE` and `DEV_MEMBRANE` moved with it; the rules two
 ## builds agree on moved with `RADIUS_MAX` (`Wire.RULES`).
+## **Re-recorded when the drop's edge became a margin** (docs/design/margin.md §2),
+## from the check's own output, because the water changed on purpose: a body is held
+## 30 µm from the rim for every unit of its radius, the spawner keeps the margin three
+## times as full of food and makes its newborns there, a run starts there, and a
+## first fill draws each body only where it can be. These, `THREE_ONE_LINES`,
+## `IDENTITY_LINES`, `PACK3_LINES`, `TAIL_LINES`, `DAYLIGHT_LINES`, `PACK3_TRACE`,
+## `TAIL_TRACE` and `DEV_MEMBRANE` moved with it; the rules two builds agree on moved
+## with `drop.FILM` (`Wire.RULES`).
 const DEV_LINES: Array[String] = [
-	"[census] t 300  living 567 (drifters 429, hunters 138)  flocs 29  | hunters at r40 0, mean r 41.8, hunger 0.46  | could swallow r26/r34/r40 138/72/38  dread 2.53/1.10/0.53  genes 18  | spawned 2150  died: swallowed 1744 chewed 87 starved 53 (r40 0) poisoned 1  | grazed by the water 46, by drifters 2, dissolved 23, snow kept 16, remains 54  | runs 2865 at you 0 misses 1228 stings 74 dashes 280  floors: gene 0+8 drifter 0  | sum 2855984383",
-	"[lineage] t 300  hunters 138, born 137  generation mean 4.81 max 7  families 50 (largest 7)  dna apart 116  | cruise 96.7 notice 1210 mouth 1.31 upkeep 2.03 genes worn 6.55 carried 8.12  tails 104 sighted 138 at r40 0  | divisions 302 (trade 165 drift 137 faithfully 0), daughters 604: tailless 163, given a sense 81  | the spawner's peers 18 (for the floor 10, for venom 8), drifters 1577, left to births 0  | worn cytostome 1.31 cirrus 1.95 flagellum 1.93 stigma 0.93 ocellus 0.58 chemocyte 1.39 ampulla 0.55 axoneme 0.43 palp 0.49 myoneme 0.43 trichocyst 0.36 pellicle 0.60 veneneux 0.03 plastid 0.18 vacuole 0.70 crista 0.21 toxicyst 0.00 haptonema 0.71 lysosome 0.28  | commonest 2x cytostome:1,cirrus:3,flagellum:3,chemocyte:3,pellicle:3 ; 1x cytostome:1,chemocyte:1,axoneme:2,crista:3 ; 1x cytostome:1,chemocyte:2,ampulla:2,axoneme:1,pellicle:3",
+	"[census] t 300  living 549 (drifters 456, hunters 93)  flocs 53  | hunters at r40 0, mean r 38.1, hunger 0.34  | could swallow r26/r34/r40 74/36/18  dread 1.48/0.70/0.42  genes 18  | spawned 1800  died: swallowed 1309 chewed 52 starved 67 (r40 0) poisoned 0  | grazed by the water 65, by drifters 2, dissolved 90, snow kept 113, remains 67  | runs 2355 at you 0 misses 1110 stings 64 dashes 258  floors: gene 0+0 drifter 0  | sum 1232672087",
+	"[lineage] t 300  hunters 93, born 59  generation mean 2.86 max 6  families 68 (largest 4)  dna apart 73  | cruise 76.6 notice 1015 mouth 1.28 upkeep 1.49 genes worn 5.17 carried 6.66  tails 83 sighted 93 at r40 0  | divisions 177 (trade 86 drift 91 faithfully 0), daughters 354: tailless 98, given a sense 59  | the spawner's peers 70 (for the floor 70, for venom 0), drifters 1175, left to births 0  | worn cytostome 1.28 cirrus 1.39 flagellum 1.57 stigma 0.41 ocellus 0.43 chemocyte 0.73 ampulla 0.53 axoneme 0.13 palp 0.03 myoneme 0.29 trichocyst 0.12 pellicle 0.27 veneneux 0.03 plastid 0.15 vacuole 0.34 crista 0.15 toxicyst 0.00 haptonema 0.29 lysosome 0.10  | commonest 10x cytostome:1,cirrus:1,flagellum:1,chemocyte:1 ; 10x cytostome:1,cirrus:1,flagellum:1,stigma:1 ; 9x cytostome:1,cirrus:1,flagellum:1,ampulla:1",
 ]
 
 
@@ -6198,8 +6278,8 @@ const DEV_LINES: Array[String] = [
 ## changes them**: re-record them then from the check's own output, and say so in
 ## the commit.
 const DAYLIGHT_LINES: Array[String] = [
-	"[census] t 300  living 586 (drifters 411, hunters 175)  flocs 28  | hunters at r40 0, mean r 41.5, hunger 0.40  | could swallow r26/r34/r40 175/85/30  dread 3.16/1.19/0.39  genes 18  | spawned 2420  died: swallowed 2014 chewed 99 starved 64 (r40 0) poisoned 1  | grazed by the water 59, by drifters 1, dissolved 25, snow kept 18, remains 65  | runs 3416 at you 0 misses 1487 stings 92 dashes 383  floors: gene 0+0 drifter 0  | sum 912864882",
-	"[lineage] t 300  hunters 175, born 175  generation mean 4.70 max 8  families 62 (largest 8)  dna apart 157  | cruise 95.8 notice 1215 mouth 1.19 upkeep 1.95 genes worn 6.49 carried 8.07  tails 129 sighted 175 at r40 0  | divisions 344 (trade 167 drift 177 faithfully 0), daughters 688: tailless 172, given a sense 83  | the spawner's peers 10 (for the floor 10, for venom 0), drifters 1855, left to births 0  | worn cytostome 1.19 cirrus 2.05 flagellum 1.75 stigma 0.79 ocellus 0.61 chemocyte 1.19 ampulla 0.62 axoneme 0.60 palp 0.49 myoneme 0.29 trichocyst 0.38 pellicle 0.39 veneneux 0.11 plastid 0.31 vacuole 0.82 crista 0.46 toxicyst 0.00 haptonema 0.70 lysosome 0.14  | commonest 1x cytostome:1,ampulla:1,myoneme:3,trichocyst:2,pellicle:1,haptonema:1 ; 1x cytostome:1,ampulla:2,trichocyst:3,plastid:1 ; 1x cytostome:1,ampulla:3,axoneme:2,palp:1,trichocyst:3,vacuole:1,haptonema:3",
+	"[census] t 300  living 539 (drifters 445, hunters 94)  flocs 62  | hunters at r40 0, mean r 38.8, hunger 0.44  | could swallow r26/r34/r40 74/37/14  dread 1.60/0.70/0.31  genes 18  | spawned 1730  died: swallowed 1222 chewed 46 starved 86 (r40 0) poisoned 1  | grazed by the water 75, by drifters 2, dissolved 112, snow kept 134, remains 87  | runs 2436 at you 0 misses 1208 stings 77 dashes 243  floors: gene 0+3 drifter 0  | sum 2879113522",
+	"[lineage] t 300  hunters 94, born 64  generation mean 2.81 max 6  families 63 (largest 4)  dna apart 72  | cruise 78.2 notice 1002 mouth 1.22 upkeep 1.49 genes worn 5.24 carried 6.80  tails 75 sighted 94 at r40 0  | divisions 164 (trade 83 drift 81 faithfully 0), daughters 328: tailless 106, given a sense 61  | the spawner's peers 65 (for the floor 62, for venom 3), drifters 1110, left to births 0  | worn cytostome 1.22 cirrus 1.38 flagellum 1.40 stigma 0.28 ocellus 0.52 chemocyte 0.60 ampulla 0.45 axoneme 0.29 palp 0.17 myoneme 0.19 trichocyst 0.22 pellicle 0.40 veneneux 0.11 plastid 0.12 vacuole 0.29 crista 0.14 toxicyst 0.00 haptonema 0.44 lysosome 0.09  | commonest 10x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 8x cytostome:1,cirrus:1,flagellum:1,chemocyte:1 ; 7x cytostome:1,cirrus:1,flagellum:1,ampulla:1",
 ]
 
 
@@ -6347,7 +6427,7 @@ const MEMBRANE: Array[String] = ["concentration", "taste_level", "shadow", "shad
 ## in a cone. `dev` itself, at 56bfe46, read through this shorter list printed the
 ## digest the half circle put back on this branch did, 44d381088b303418: what is left
 ## did not move until the cone did.
-const DEV_MEMBRANE := "9b3f90c92045ed40f7f0827cdea286f1e3d527c003e5f0e7d63c43adb81ed427"
+const DEV_MEMBRANE := "2bf83deb879bedbd6eb09fbb8a23eb82ca4942f9823b5293d3f2003470e7224c"
 
 
 ## **1. With the rules off it is pack 2, the membrane** (behaviour.md §12.3):
@@ -7541,9 +7621,9 @@ func _modular() -> void:
 ## ride their mouths, and drift brings the toxin as poison. Nothing else moved; the
 ## rules two builds agree on moved with venom's side and stern lines (`Wire.RULES`).
 const PACK3_LINES: Array[String] = [
-	"[census] t 300  living 550 (drifters 458, hunters 92)  flocs 66  | hunters at r40 0, mean r 33.7, hunger 0.50  | could swallow r26/r34/r40 44/30/20  dread 0.92/0.56/0.39  genes 18  | spawned 1498  died: swallowed 810 chewed 11 starved 190 (r40 0) poisoned 0  | grazed by the water 78, by drifters 3, dissolved 87, snow kept 14, remains 190  | runs 0 at you 0 misses 0 stings 30 dashes 0  floors: gene 0+4 drifter 0  | sum 1301049554",
-	"[lineage] t 300  hunters 92, born 27  generation mean 1.60 max 5  families 84 (largest 4)  dna apart 46  | cruise 64.3 notice 717 mouth 1.29 upkeep 1.18 genes worn 4.52 carried 5.45  tails 89 sighted 92 at r40 0  | divisions 63 (trade 30 drift 33 faithfully 0), daughters 126: tailless 35, given a sense 27  | the spawner's peers 241 (for the floor 237, for venom 4), drifters 702, left to births 0  | worn cytostome 1.29 cirrus 1.21 flagellum 1.20 stigma 0.33 ocellus 0.37 chemocyte 0.25 ampulla 0.34 axoneme 0.07 palp 0.03 myoneme 0.04 trichocyst 0.04 pellicle 0.07 veneneux 0.02 plastid 0.02 vacuole 0.25 crista 0.08 toxicyst 0.00 haptonema 0.05 lysosome 0.04  | commonest 20x cytostome:1,cirrus:1,flagellum:1,stigma:1 ; 16x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 16x cytostome:1,cirrus:1,flagellum:1,ocellus:1",
-	"[behaviour] t 300  hunters 92: on the founders' rules 77, other lists 15  | founders' rules fired 26592/56282/2117/1358/9742/110815/541  | meals of hunters with a nose 187, radar 289, laser 354  | stings 30, stuns 0, your wakes 0  | now holding a heading 30, resting 39, swimming 52, pushing 3, stunned 0, echoes in flight 57  | behaviours 14, unchanged 83.7 %  | rules changed 63: nudge 26, replace 12, swap 11, copy 5, drop 9",
+	"[census] t 300  living 552 (drifters 458, hunters 94)  flocs 92  | hunters at r40 0, mean r 34.3, hunger 0.45  | could swallow r26/r34/r40 54/19/10  dread 0.92/0.39/0.22  genes 18  | spawned 1533  died: swallowed 869 chewed 15 starved 173 (r40 0) poisoned 0  | grazed by the water 80, by drifters 3, dissolved 159, snow kept 131, remains 173  | runs 0 at you 0 misses 0 stings 36 dashes 0  floors: gene 0+7 drifter 0  | sum 3424225548",
+	"[lineage] t 300  hunters 94, born 35  generation mean 1.64 max 5  families 82 (largest 4)  dna apart 60  | cruise 64.5 notice 752 mouth 1.17 upkeep 1.20 genes worn 4.48 carried 5.57  tails 83 sighted 94 at r40 0  | divisions 76 (trade 37 drift 39 faithfully 0), daughters 152: tailless 48, given a sense 56  | the spawner's peers 218 (for the floor 211, for venom 7), drifters 760, left to births 0  | worn cytostome 1.17 cirrus 1.18 flagellum 1.16 stigma 0.29 ocellus 0.31 chemocyte 0.22 ampulla 0.35 axoneme 0.07 palp 0.12 myoneme 0.13 trichocyst 0.07 pellicle 0.13 veneneux 0.03 plastid 0.12 vacuole 0.13 crista 0.05 toxicyst 0.00 haptonema 0.17 lysosome 0.02  | commonest 19x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 14x cytostome:1,cirrus:1,flagellum:1,chemocyte:1 ; 14x cytostome:1,cirrus:1,flagellum:1,stigma:1",
+	"[behaviour] t 300  hunters 94: on the founders' rules 72, other lists 22  | founders' rules fired 26356/59718/1966/1661/7582/99854/463  | meals of hunters with a nose 179, radar 311, laser 350  | stings 36, stuns 0, your wakes 0  | now holding a heading 34, resting 47, swimming 47, pushing 3, stunned 0, echoes in flight 60  | behaviours 17, unchanged 76.6 %  | rules changed 76: nudge 45, replace 13, swap 6, copy 7, drop 5",
 ]
 ## **The same five minutes in the game's water** (row 37), pinned as
 ## [constant DEV_LINES] pins pack 2's: [method _five_minutes]' drop, seed 1, as
@@ -7628,9 +7708,9 @@ const PACK3_LINES: Array[String] = [
 ## follows. With the light off this branch printed the old ones to the byte, and the
 ## player's trace did not move.
 const TAIL_LINES: Array[String] = [
-	"[census] t 300  living 551 (drifters 456, hunters 95)  flocs 62  | hunters at r40 0, mean r 34.8, hunger 0.56  | could swallow r26/r34/r40 60/26/11  dread 0.94/0.34/0.14  genes 18  | spawned 1683  died: swallowed 1001 chewed 6 starved 221 (r40 0) poisoned 0  | grazed by the water 111, by drifters 4, dissolved 83, snow kept 9, remains 221  | runs 0 at you 0 misses 0 stings 42 dashes 0  floors: gene 0+8 drifter 0  | sum 60361015",
-	"[lineage] t 300  hunters 95, born 33  generation mean 1.75 max 6  families 81 (largest 5)  dna apart 57  | cruise 69.1 notice 755 mouth 1.17 upkeep 1.21 genes worn 4.59 carried 5.62  tails 89 sighted 95 at r40 0  | divisions 96 (trade 49 drift 47 faithfully 0), daughters 192: tailless 44, given a sense 45  | the spawner's peers 232 (for the floor 224, for venom 8), drifters 896, left to births 0  | worn cytostome 1.17 cirrus 1.08 flagellum 1.31 stigma 0.33 ocellus 0.64 chemocyte 0.19 ampulla 0.26 axoneme 0.12 palp 0.05 myoneme 0.13 trichocyst 0.11 pellicle 0.09 veneneux 0.02 plastid 0.03 vacuole 0.17 crista 0.11 toxicyst 0.00 haptonema 0.19 lysosome 0.04  | commonest 27x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 15x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 11x cytostome:1,cirrus:1,flagellum:1,stigma:1",
-	"[behaviour] t 300  hunters 95: on the founders' rules 71, other lists 24  | founders' rules fired 28278/41103/2100/1750/8766/104118/1284  | meals of hunters with a nose 259, radar 288, laser 480  | stings 42, stuns 0, your wakes 0  | now holding a heading 35, resting 44, swimming 83, pushing 3, stunned 0, echoes in flight 49  | behaviours 23, unchanged 74.7 %  | rules changed 96: nudge 42, replace 23, swap 10, copy 7, drop 14",
+	"[census] t 300  living 548 (drifters 455, hunters 93)  flocs 102  | hunters at r40 0, mean r 34.9, hunger 0.46  | could swallow r26/r34/r40 55/30/20  dread 1.30/0.75/0.46  genes 18  | spawned 1770  died: swallowed 1135 chewed 11 starved 196 (r40 0) poisoned 0  | grazed by the water 118, by drifters 4, dissolved 135, snow kept 133, remains 196  | runs 0 at you 0 misses 0 stings 42 dashes 1  floors: gene 0+2 drifter 0  | sum 2047389632",
+	"[lineage] t 300  hunters 93, born 40  generation mean 1.74 max 5  families 81 (largest 3)  dna apart 56  | cruise 65.1 notice 780 mouth 1.31 upkeep 1.22 genes worn 4.33 carried 5.56  tails 79 sighted 93 at r40 0  | divisions 120 (trade 57 drift 63 faithfully 0), daughters 240: tailless 74, given a sense 54  | the spawner's peers 227 (for the floor 225, for venom 2), drifters 988, left to births 0  | worn cytostome 1.31 cirrus 1.05 flagellum 1.15 stigma 0.31 ocellus 0.38 chemocyte 0.40 ampulla 0.29 axoneme 0.11 palp 0.03 myoneme 0.11 trichocyst 0.06 pellicle 0.05 veneneux 0.02 plastid 0.13 vacuole 0.06 crista 0.04 toxicyst 0.00 haptonema 0.15 lysosome 0.05  | commonest 16x cytostome:1,cirrus:1,flagellum:1,stigma:1 ; 15x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 12x cytostome:1,cirrus:1,flagellum:1,chemocyte:1",
+	"[behaviour] t 300  hunters 93: on the founders' rules 68, other lists 25  | founders' rules fired 28588/42122/1465/1507/8240/92992/1184  | meals of hunters with a nose 308, radar 330, laser 484  | stings 42, stuns 0, your wakes 0  | now holding a heading 29, resting 46, swimming 83, pushing 3, stunned 0, echoes in flight 47  | behaviours 22, unchanged 73.1 %  | rules changed 120: nudge 71, replace 25, swap 8, copy 9, drop 7",
 ]
 ## **The player's seeded trace** ([method _tail_trace]): forty seconds of a cell
 ## stepped by its own drive, wearing a tail of two copies that nobody holds,
@@ -7677,8 +7757,8 @@ const TAIL_LINES: Array[String] = [
 ## **Re-recorded when venom came to ride** (venom-rides.md), from the check's own
 ## output: the water round the player changed on purpose -- its founders' venom rides
 ## their mouths, and the floor's too.
-const PACK3_TRACE := "dba078b12d533789b0378020f866dc99381fb203f67a467b92560bced9fac849"
-const TAIL_TRACE := "db81b25f73724aa940da2d19b24c26ffe587c095367bf0356695e88c95709159"
+const PACK3_TRACE := "c61199a22f307ca8f9ad51a1786d3ffcb280ec70d89a26113cf7787f6c241434"
+const TAIL_TRACE := "c8519be9814016faece638c8a6f1ce0a92a6c88d86fb296e1f7bae4d9920a8b3"
 ## A tail of two copies, the level a tail can be held still at, on a born body.
 const TWO_TAILS := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2}
 const ONE_TAIL := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
@@ -8354,8 +8434,8 @@ func _programs() -> void:
 ## **A player wearing [param tiers], its instincts wired**, in a drop of its own
 ## and stepped by hand: `[cell, genome, field, own, metabolism, water]`. Its
 ## organs as the run aims them ([method _your_organs]).
-func _own_player(tiers: Dictionary, desert := 3000.0) -> Array:
-	var water := _water(desert)
+func _own_player(tiers: Dictionary, desert := 3000.0, light := true) -> Array:
+	var water := _water(desert, true, true, light)
 	var field: WatchedDrop = water[0]
 	var cell: CellBody = water[1]
 	var genome := _your_organs(field, cell, tiers)
@@ -8394,7 +8474,11 @@ func _own_tick(own: RefCounted) -> void:
 ## game declares has a report of yours.
 func _instincts_read() -> void:
 	seed(91)
-	var player := _own_player(SENSES_ALL)
+	# **In full light**: the check is that you read what a water cell reads, not how
+	# far an eye sees by the light -- sight's own checks hold that. Its desert is
+	# past the margin (margin.md §2.1), where the light is under half and the eye
+	# would see none of the bodies posed for it.
+	var player := _own_player(SENSES_ALL, 3000.0, false)
 	var cell: CellBody = player[0]
 	var field: WatchedDrop = player[2]
 	var own: RefCounted = player[3]

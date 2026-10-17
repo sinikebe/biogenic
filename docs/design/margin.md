@@ -24,10 +24,15 @@ The decisions, all as recommended ("Agree on both"):
 | 5 | What sets a newborn's size? | **The genes its DNA carries** |
 | 6 | Can bodies grow past r40? | **Yes, up to about r57** |
 
+Row 2 as built (§2.2): the water *makes* its food richer in the margin rather than
+sweeping it there, and the light there is the drop's best rather than full. Food
+swept to the very edge would pile up where no mouth can follow, and a body is held
+back from the rim, where the light is full.
+
 Two phases, each its own pull request into `dev`:
 
 1. **The size floor** (§1). Status: **built**.
-2. **The margin** (§2). Status: to build, after phase 1.
+2. **The margin** (§2). Status: **built**.
 
 ---
 
@@ -43,8 +48,10 @@ Two phases, each its own pull request into `dev`:
 3. **So a strong lineage stays big.** Its daughters are born at r36.5 to r40 and never
    fit in the margin. A simple lineage's daughters are born at r28.3, as today.
 4. **The margin** is the thin film of water at the drop's edge, where a cell can only
-   go as far as the water is deep enough for its size. It is where food drifts and
-   the light is full, and where runs begin.
+   go as far as the water is deep enough for its size: 30 µm from the rim for every
+   unit of radius. The water keeps it three times as full of food, its light is the
+   best in the drop, and runs and the water's newcomers begin there. A giant never
+   enters it.
 
 ---
 
@@ -122,47 +129,82 @@ grow on, one fewer may make it divide at once. A meal never makes a body smaller
 
 ---
 
-## 2. The margin (phase 2)
+## 2. The margin
 
 ### 2.1 The film
 
 **A cell can only go where the water is at least as deep as it is thick.** At the
 drop's edge the water thins to nothing. Starting value: its depth rises 1 µm for
-every 15 µm in from the rim (water on clean glass spreads into a very flat film). So
-a body of radius r reaches no closer to the rim than **30 µm per unit of radius**:
+every 15 µm in from the rim, since water on clean glass spreads into a very flat
+film. A body is as thick as it is wide, so a body of radius r keeps its centre at
+least **30 µm per unit of radius** from the rim (`drop.gd`'s `FILM` and `hold(r)`):
 
-| Body | Closest to the rim |
+| Body | Its centre comes no closer to the rim than |
 |---|---|
-| a drifter, r13 | 390 µm |
+| a drifter, r13 to r21 | 390 to 630 µm |
 | a newborn, r26 to r28.3 | 780 to 850 µm |
 | r33 | 990 µm |
 | r40 | 1,200 µm |
-| a giant, r56.6 | 1,700 µm |
+| a giant, r56.6 | 1,697 µm (`MARGIN`) |
 
-It is the meniscus as it always was, read at each body's own size. Today's 240 µm
-shallows, where a drifting body turns back, moves with it.
+It is the meniscus as it always was, read at each body's own size. Everything that
+held a body inside the rim by its radius holds it at its hold now:
+- you and every water body, as you swim and as you are pushed;
+- a sister, a daughter and a body as it is made;
+- a body loaded from a save, and a guest arriving in a pond;
+- the host's referee.
 
-**Real.** In soil and thin water films, the thickness of the film decides which
+**Where the water stops being deep enough for you is your shore.** It lies at your
+hold less your radius, where your edge stops. Your senses find the edge of the drop
+there:
+- the eyespot's shadow;
+- the radar's echo;
+- the palps' touch;
+- the bump you feel when you swim into it.
+
+So point of view still feels the wall it bumps into. Today's shallows, where a
+drifting body turns back, is measured from each body's own hold.
+
+**Only small things reach the very edge.** The strip inside a newborn's hold, about a
+quarter of the drop, is drifters' water. The margin a giant never enters is about
+half of it.
+
+**Real.** In soil and in thin water films, the film's thickness decides which
 microbes can move and feed: big protists are shut out of thin films.
 
 ### 2.2 Why it is the best place to grow
 
-- **The light is full there** (daylight.md: all of it at the rim).
-- **Food drifts to the edge**: a drying drop carries what floats in it toward its
-  edge (the coffee-ring effect). Flocs and drifters drift slowly rimward, to where
-  each one's own size stops it.
+- **The food is there.** A drying drop carries what floats in it toward its edge (the
+  coffee-ring effect). Here the spawner keeps the margin a newborn can reach, from its
+  hold to `MARGIN`, `MARGIN_FOOD` (3) times as full of drifters as the open water.
+  It counts a place there as three times emptier when it chooses where to make the
+  next one (`food.gd`'s `_thinness_food`). Starting value.
+- **Made there, not swept there.** Food carried to the very edge would pile up where
+  nothing with a mouth can follow: a drifter's own hold, 390 µm, is inside every
+  newborn's. And a floc never moves: the wire tells a floc once, and every mirror and
+  replay keeps it where it fell. So the ring is in where the water makes its food, and
+  drifters wander as they always did.
+- **The light is best there**, though not full: daylight.md's light is all of it at
+  the rim, and a body is held back from the rim. At noon, at its hold, a drifter gets
+  0.84 of the surface light, a newborn 0.71, r40 0.61 and a giant 0.51.
 
 ### 2.3 Where runs begin
 
-A run's first cell, a cell back from a death, and the water's new arrivals start in
-the margin.
+- **A run's first cell, and a cell back from a death**, start in the band from a
+  newborn's hold to `MARGIN_START` (400 µm) past it: 780 to 1,180 µm from the rim
+  (`drop.gd`'s `margin_point`, `quiet_start`). So a run begins where nothing bigger
+  than about r39 can come. The quiet start's other rules stand: no food on top of
+  you, and nothing that could swallow you within dread's reach.
+- **The water's newcomers**, the newborns its spawner makes when the hunters are
+  short, come into the water in the same band (`spawn_candidates`, `newborn`).
+- A pond guest still arrives beside its friend, at its hold.
 
 ### 2.4 Drawn
 
-The film thinning toward the edge, and a faint line where the water gets too thin
-for you.
-
----
+- **The film** is lit across the margin, brighter toward the rim (the shader's
+  `drop_band` is `MARGIN`).
+- **Your shore** is a faint line, the meniscus line's colour at a third of its
+  strength, where your edge stops (`drop_shore`). It moves out as you grow.
 
 ## 3. Pins that moved, and why
 
@@ -205,6 +247,27 @@ Phase 1:
   as converted. Every body is re-derived from its genome, and a body past
   `RADIUS_MAX` is trimmed to it.
 
+Phase 2:
+
+- **`Wire.RULES`**: `drop.FILM` and the referee's hold, by a sample.
+- **The drop save's rules** gain `drop.FILM`. A drop kept before the film loads as
+  converted. A body past the rim is put back at its hold; one past its hold but inside
+  the rim is held by its own next step.
+- **drop_probe**:
+  - the seeded lines (the start, the spawner and the first fill moved);
+  - the start, spawner and S3 checks, judged in the margin band and at each hold;
+  - containment, judged at each body's hold, with a meal's hold allowed for each meal
+    since its last step;
+  - the tests that clear a desert to pose in, which start 2,400 µm in from the rim:
+    past the margin, and lit enough to see by;
+  - the read-parity check, which runs in full light, since its subject is parity, not
+    how far an eye sees.
+- **net_probe**:
+  - the referee's rim check, at the hold;
+  - the fed and dividing guests' pins, which follow their hold before the quickening is
+    skipped. The 2.4 s quickening does that in the water in real play.
+- **ci.yml's trace**: the cell starts in the margin.
+
 ---
 
 ## 4. What to watch when playing
@@ -223,6 +286,13 @@ All balance, which waits for players (`CLAUDE.md`).
   `RADIUS_MAX`.
 - **Slow lineages.** If carrying many genes stops being worth it, the lever is how
   much room a gene needs.
+- **The margin's size.** At `FILM` 30, about half the drop is a giant-free band, and
+  the quarter nearest the rim is drifters' water only. If the margin feels too wide or
+  too empty, the levers are `FILM` and `MARGIN_FOOD`.
+- **Newborns beside the start.** A run can start near the water's newborns. Their
+  mouths are just under the threshold the quiet start judges dread by, at a newborn's
+  radius, but just over the one the membrane feels, at your swallow size. This is
+  older than the margin; it shows more now that newborns are made where a run starts.
 - **You.** Your DNA fills as the water's does, by eating. A lineage of yours that
   fills its arcs is born at r36.5 and divides at r51.6. Born bigger means more slots
   at birth and a mouth that swallows more.

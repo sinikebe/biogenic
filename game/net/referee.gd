@@ -708,7 +708,7 @@ func judge_sister(now: float, at: Vector2, radius: float, present: bool) -> Arra
 				% far + " was last, where she could be %.0f -- put there" % could, now)
 			at = _claim_at + _toward(at - _claim_at) * could
 			if rim != null:
-				at = rim.contain(at, CellBody.daughter_radius(_out_radius))
+				at = rim.contain(at, _hold(CellBody.daughter_radius(_out_radius)))
 	_division_open = false
 	_sister_taken = true
 	_birth_open = true
@@ -746,7 +746,7 @@ func _sister_placed(now: float, at: Vector2, radius: float, mother: Vector2,
 			and not _rim_holds(at, mother):
 		place = mother + _toward(at - mother) * SISTER_DISTANCE
 		if rim != null:
-			place = rim.contain(place, size)
+			place = rim.contain(place, _hold(size))
 		off = true
 	if off and ring:
 		_foul(SISTER, WEIGHT_SISTER_OFF, "sister: r%.2f, %.0f units from her mother --"
@@ -758,14 +758,22 @@ func _sister_placed(now: float, at: Vector2, radius: float, mother: Vector2,
 	return [place, size]
 
 
+## **How far inside the rim a body of [param r] is held**: where the water is deep
+## enough for it (margin.md §2.1), the drop's film read at its size. The host
+## judges by its own: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
+static func _hold(r: float) -> float:
+	return FoodField.Drop.hold(r)
+
+
 ## **A sister the rim held back** (ocean.md §10.5): the guest's run puts her
 ## where the rim puts a daughter left SISTER_DISTANCE to her side -- anywhere on
-## the circle a daughter's centre keeps to that is no further than the ring from
-## her mother -- so a point there, within SISTER_RING, is where she was left.
+## the circle a daughter's centre keeps to that, her hold, that is no further than
+## the ring from her mother -- so a point there, within SISTER_RING, is where she
+## was left.
 func _rim_holds(at: Vector2, mother: Vector2) -> bool:
 	if rim == null:
 		return false
-	var circle := rim.radius - CellBody.daughter_radius(_out_radius)
+	var circle := rim.radius - _hold(CellBody.daughter_radius(_out_radius))
 	return absf(at.distance_to(rim.center) - circle) <= SISTER_RING \
 		and at.distance_to(mother) <= SISTER_DISTANCE + SISTER_RING
 
@@ -928,7 +936,7 @@ func claim(now: float, at: Vector2, heading: float, radius: float,
 		_follow.take(_applied_at.distance_to(towards), now))
 	# **Held inside the drop** (ocean.md §10.5): a clamp and not a foul.
 	if rim != null:
-		_applied_at = rim.contain(_applied_at, size)
+		_applied_at = rim.contain(_applied_at, _hold(size))
 	if began_out:
 		_frozen = _applied_at
 	# Which way.

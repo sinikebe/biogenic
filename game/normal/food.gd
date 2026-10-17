@@ -3897,10 +3897,12 @@ func _see(o: Observer, scan: PackedInt32Array, picture: bool) -> void:
 		pull += (o.forward * cos(bearing) + o.starboard * sin(bearing)) * level
 		if level >= SIGHT_COUNTS:
 			o.seen.append(i)
+	# The edge an eye sees is its shore, where the water gets too thin for it
+	# (margin.md §2.4).
 	if _drop != null:
-		var edge := _drop.meniscus.depth(o.pos)
+		var edge := _drop.shore_depth(o.pos, o.radius)
 		if edge < reach:
-			var near := _drop.meniscus.nearest_rim(o.pos)
+			var near := _drop.shore_point(o.pos, o.radius)
 			if absf(angle_difference(o.sight_mid, o.bearing_to(near))) <= o.sight_half:
 				var blocked := Drop.EDGE_SHADOW * Sight.haze(edge, core, reach)
 				shaded += blocked
@@ -4252,10 +4254,11 @@ func _call_of(o: Observer, scan: PackedInt32Array, out: Array,
 	# can meet, heard from its nearest point as one body EDGE_ECHO_RADIUS wide
 	# -- the widest, longest echo in the game. The hull, the bodies in the way
 	# and the returns' cap take their share of it exactly as of a body's.
+	# Heard where the water gets too thin for the caller, its shore (margin.md §2.4).
 	if _drop != null:
-		var edge := _drop.meniscus.depth(o.pos)
+		var edge := _drop.shore_depth(o.pos, o.radius)
 		if edge < o.ping_range:
-			found.append([maxf(edge, 0.0), _drop.meniscus.nearest_rim(o.pos),
+			found.append([maxf(edge, 0.0), _drop.shore_point(o.pos, o.radius),
 				Drop.EDGE_ECHO_RADIUS, true, 0.0])
 	if found.is_empty():
 		return
@@ -4549,12 +4552,13 @@ func _touch_of(o: Observer, scan: PackedInt32Array) -> void:
 		if d < best:
 			best = d
 			at = b.pos
-	# **And so is the meniscus** (the drop, §3.2): the nearest thing there is.
+	# **And so is the meniscus** (the drop, §3.2): the nearest thing there is --
+	# touched at its shore, where the water gets too thin for it (margin.md §2.4).
 	if _drop != null:
-		var edge := _drop.meniscus.depth(o.pos) - o.radius
+		var edge := _drop.shore_depth(o.pos, o.radius) - o.radius
 		if edge < best:
 			best = edge
-			at = _drop.meniscus.nearest_rim(o.pos)
+			at = _drop.shore_point(o.pos, o.radius)
 	if best >= o.touch_range:
 		return
 	o.touched = true
@@ -5122,7 +5126,7 @@ func place_person(at: Vector2, heading: float, body_radius: float,
 	# **Held inside the drop's rim** (ocean.md §10.5), as everything in it is:
 	# an honest guest's own run contains its cell the same way.
 	if _drop != null:
-		at = _drop.meniscus.contain(at, body_radius)
+		at = _drop.holds(at, body_radius)
 	var pb := _cells[slot]
 	if pb.person == null:
 		pb.person = Person.new()
@@ -5287,7 +5291,7 @@ func place_sister(at: Vector2, heading: float, body_radius: float,
 	# carrying [param brain], the list her cell ran (automation.md §6.3), or the
 	# founders' for null.
 	if _drop != null:
-		var index := _spawn(_drop.meniscus.contain(at, body_radius), false, false,
+		var index := _spawn(_drop.holds(at, body_radius), false, false,
 			body_radius, tiers)
 		_cells[index].heading = heading
 		_cells[index].brain = brain
@@ -6080,7 +6084,7 @@ func _step_person(delta: float, slot: int = PERSON_SLOT) -> void:
 	_carry_person(pb, p.age)
 	# Carried, and held inside the drop's rim, as their own run holds them.
 	if _drop != null:
-		pb.pos = _drop.meniscus.contain(pb.pos, pb.radius)
+		pb.pos = _drop.holds(pb.pos, pb.radius)
 	p.age += delta
 
 
@@ -6382,7 +6386,7 @@ func put_sister(bearing: float, distance: float, body_radius: float,
 			place_sister(at, _angle_of(side, 0.0), body_radius, tiers, dna, mother, brain,
 				riders)
 			return
-		at = _drop.meniscus.contain(at, body_radius)
+		at = _drop.holds(at, body_radius)
 		var index := _spawn(at, false, false, body_radius, tiers)
 		_cells[index].heading = _angle_of(side, _cells[index].heading)
 		_cells[index].brain = brain
@@ -6727,7 +6731,8 @@ var half_rate := true
 ## §4.4: a tank that cannot move is not stepped -- which changes no number.
 var skip_still := true
 ## Where a run starts: `quiet` (§8.1), `centre`, or `edge` -- [member edge_gap]
-## inside the rim, facing it -- for the renders.
+## inside the rim, facing it, and held at its hold if that is nearer (margin.md
+## §2.1) -- for the renders.
 var start_mode := &"quiet"
 var edge_gap := 380.0
 ## For the renders and the probes: this many flocs round the start, the last
@@ -6939,7 +6944,7 @@ func setup_drop(cell: CellBody) -> void:
 	# drifters and newborns by the one share (water-evolves.md §2), every tank at
 	# any level up to FIRST_HUNGER_MAX (§5.8), and some flocs already settled.
 	for k in Drop.target():
-		_spawn(_drop.uniform_point(Drop.FILL_INSET), randf() < DRIFTER_SHARE, true)
+		_fill_one()
 	for k in Drop.FIRST_FLOCS:
 		_spawn_floc(_drop.uniform_point(Drop.SNOW_INSET), Drop.floc_radius(), true)
 	_arm_the_founders()
@@ -7061,7 +7066,7 @@ func _make_room(cell: CellBody) -> void:
 	_reset_drop()
 	_made_for = PackedFloat64Array([CellBody.BASE_RADIUS, 0.0])
 	for k in Drop.target():
-		_spawn(_drop.uniform_point(Drop.FILL_INSET), randf() < DRIFTER_SHARE, true)
+		_fill_one()
 	for k in Drop.FIRST_FLOCS:
 		_spawn_floc(_drop.uniform_point(Drop.SNOW_INSET), Drop.floc_radius(), true)
 	_arm_the_founders()
@@ -7173,7 +7178,7 @@ func _push_person_drop(k: int) -> void:
 			continue
 		var normal := offset / d if d > 0.001 else -_forward(b.heading)
 		b.pos = m.contain(b.pos - normal * (overlap * (1.0 - _give_way(b.radius, pb.radius))
-			* PUSH_SHARE), b.radius)
+			* PUSH_SHARE), Drop.hold(b.radius))
 
 
 ## **How far a person's senses reach**, for the spawner's hide reach round
@@ -7317,8 +7322,13 @@ func drop_bodies() -> int:
 ## nothing yet, and nothing that has killed it.
 func _arrive() -> void:
 	died_to = -1
-	var at := _drop.meniscus.contain(_cell.position + Vector2(0.0, -FIRST_DISTANCE),
-		DRIFTER_MAX)
+	# Toward the middle when that is past where the water holds it: a run starts
+	# in the margin (margin.md §2.3), and the film must not pull it into view.
+	var at := _cell.position + Vector2(0.0, -FIRST_DISTANCE)
+	if not _drop.keeps(at, DRIFTER_MAX):
+		at = _cell.position + (_drop.meniscus.center - _cell.position).normalized() \
+			* FIRST_DISTANCE
+	at = _drop.holds(at, DRIFTER_MAX)
 	_first_index = _spawn(at, true)
 	_first_serial = _cells[_first_index].serial
 	_first_pending = true
@@ -7801,12 +7811,16 @@ func load_drop(cell: CellBody, state: Dictionary) -> Dictionary:
 		if not b.inert and b.radius > CellBody.RADIUS_MAX:
 			b.radius = CellBody.RADIUS_MAX
 			trimmed += 1
-		# Held inside by the test the running drop holds a body by (see
-		# [method _step_one]), so a body it left on the rim is not moved by a
-		# hair here: only a rim that is smaller than the one it was kept under.
+		# **Put back only from past the rim**: a rim smaller than the one it was
+		# kept under -- and then where the water is deep enough for it (margin.md
+		# §2.1). Past its hold but inside the rim -- a body grown a meal at its
+		# shore, which its next step holds, or one kept before the film -- it is
+		# left where it was kept, and its own step holds it, as the running drop's
+		# would: so a drop kept and loaded goes on as one that never stopped. A
+		# floc is held by no film: it lies on the glass where it fell.
 		var room := _drop.meniscus.radius - b.radius
 		if b.pos.distance_squared_to(_drop.meniscus.center) > room * room:
-			b.pos = _drop.meniscus.contain(b.pos, b.radius)
+			b.pos = _drop.meniscus.contain(b.pos, b.radius if b.inert else Drop.hold(b.radius))
 			contained += 1
 		b.aim = b.pos
 		b.flee_from = b.pos
@@ -8187,10 +8201,11 @@ func _step_one(i: int, b: Body, tick: int) -> void:
 		_divide(i, b)
 		return
 	_step_body(i, dt)
+	# Held where the water is deep enough for it (margin.md §2.1).
 	var m := _drop.meniscus
-	var room := m.radius - b.radius
+	var room := m.radius - Drop.hold(b.radius)
 	if b.pos.distance_squared_to(m.center) > room * room:
-		b.pos = m.contain(b.pos, b.radius)
+		b.pos = m.contain(b.pos, Drop.hold(b.radius))
 	_drop.grid.move(i, b.pos)
 
 
@@ -8590,9 +8605,11 @@ func _dash(b: Body) -> void:
 
 
 ## **A drifting body turns off the shore** (§3.1): heading outward inside the
-## shallows, toward the middle at up to SHORE_TURN, by how deep it is in them.
+## shallows, toward the middle at up to SHORE_TURN, by how deep it is in them --
+## measured from its own hold, where the water stops being deep enough for it
+## (margin.md §2.1).
 func _shore_turn(b: Body, delta: float) -> void:
-	var depth := _drop.meniscus.depth(b.pos)
+	var depth := maxf(_drop.meniscus.depth(b.pos) - Drop.hold(b.radius), 0.0)
 	if depth > Drop.SHALLOWS:
 		return
 	var out := b.pos - _drop.meniscus.center
@@ -9264,7 +9281,8 @@ func _move_ruled(b: Body, delta: float) -> void:
 			b.dash_v = 0.0
 	# **Holding on** (game/mechanics/grip.gd): a cling at the rim keeps it there.
 	if b.clinging and _drop != null:
-		pace = Grip.held_pace(pace, Grip.at_rim(_drop.meniscus, b.pos, b.radius, b.stat_tether))
+		pace = Grip.held_pace(pace, Grip.at_rim(_drop.meniscus, b.pos, Drop.hold(b.radius),
+			b.stat_tether))
 	b.pos += _forward(b.heading) * pace * delta
 	b.speed = pace
 
@@ -9529,7 +9547,7 @@ func _separate_drop() -> void:
 			if b.seeded and not b.inert:
 				_push_local(b, true)
 				# A body the cell shoulders at the rim is held there too.
-				b.pos = m.contain(b.pos, b.radius)
+				b.pos = m.contain(b.pos, Drop.hold(b.radius))
 		# **Each device moves only what it owns** (shared-pond.md §1.2): the
 		# other player gives way on their own device, by the same area share.
 		if _pond:
@@ -9568,15 +9586,17 @@ func _separate_drop() -> void:
 				if pull > 0.0:
 					var toward := -offset / d
 					var part := _give_way(other.radius, b.radius)
-					b.pos = m.contain(b.pos + toward * (pull * part * PUSH_SHARE), b.radius)
+					b.pos = m.contain(b.pos + toward * (pull * part * PUSH_SHARE),
+						Drop.hold(b.radius))
 					other.pos = m.contain(other.pos - toward * (pull * (1.0 - part) * PUSH_SHARE),
-						other.radius)
+						Drop.hold(other.radius))
 				continue
 			var normal := offset / d if d > 0.001 else _forward(b.heading)
 			var share := _give_way(other.radius, b.radius)
-			b.pos = m.contain(b.pos + normal * (overlap * share * PUSH_SHARE), b.radius)
+			b.pos = m.contain(b.pos + normal * (overlap * share * PUSH_SHARE),
+				Drop.hold(b.radius))
 			other.pos = m.contain(other.pos - normal * (overlap * (1.0 - share) * PUSH_SHARE),
-				other.radius)
+				Drop.hold(other.radius))
 
 
 ## **Grit is solid to the water as it is to you** (the owner, 2026-10-17: *"The water
@@ -9597,7 +9617,7 @@ func _separate_grit() -> void:
 				var b := _cells[j]
 				if b.seeded and not b.inert and b.person == null:
 					_off_grit(b, at)
-					b.pos = m.contain(b.pos, b.radius)
+					b.pos = m.contain(b.pos, Drop.hold(b.radius))
 		return
 	for i in _water:
 		var b := _cells[i]
@@ -9756,22 +9776,22 @@ func _stung(target: int, at: Vector2, wound: float, by: int) -> void:
 func _contain_player(knock: bool) -> void:
 	var m := _drop.meniscus
 	# **Holding on** (game/mechanics/grip.gd): a cling at the rim stops the cell there.
-	if _cell.clinging() and Grip.at_rim(m, _cell.position, _cell.radius,
-			_cell.stat(&"tether")):
+	var hold := Drop.hold(_cell.radius)
+	if _cell.clinging() and Grip.at_rim(m, _cell.position, hold, _cell.stat(&"tether")):
 		_cell.velocity = Vector2.ZERO
-	if m.inside(_cell.position, _cell.radius):
+	if m.inside(_cell.position, hold):
 		return
 	var out := (_cell.position - m.center).normalized()
 	var into := _cell.velocity.dot(out)
-	_cell.position = m.contain(_cell.position, _cell.radius)
+	_cell.position = m.contain(_cell.position, hold)
 	if not knock:
 		return
 	_cell.bump(-out, Drop.SHORE_RESTITUTION)
-	_cell.position = m.contain(_cell.position, _cell.radius)
+	_cell.position = m.contain(_cell.position, hold)
 	_stat(&"shore_frames")
 	if into > Drop.SHORE_FELT_SPEED and _shore_clock <= 0.0:
 		_shore_clock = Drop.SHORE_GAP
-		var rim := m.nearest_rim(_cell.position)
+		var rim := _drop.shore_point(_cell.position, _cell.radius)
 		_stat(&"shored")
 		shored.emit(_cell.bearing_to(rim),
 			clampf(sqrt(into / maxf(_cell.impulse_speed(), 1.0)), 0.35, 1.0), rim)
@@ -9786,9 +9806,10 @@ func _place_first() -> void:
 	if not b.seeded or b.serial != _first_serial:
 		return
 	var at := _cell.position + _cell.velocity.normalized() * FIRST_DISTANCE
-	if not _drop.meniscus.inside(at, FIRST_INSET):
+	if not _drop.meniscus.inside(at, maxf(FIRST_INSET, Drop.hold(b.radius))):
 		at = _cell.position + (_drop.meniscus.center - _cell.position).normalized() \
 			* FIRST_DISTANCE
+	at = _drop.holds(at, b.radius)
 	b.pos = at
 	b.aim = at
 	b.flee_from = at
@@ -9986,9 +10007,12 @@ func _make_one(players: PackedVector2Array, reaches: PackedFloat32Array) -> int:
 	var hides := PackedFloat32Array()
 	for k in players.size():
 		hides.append(Drop.hide_reach(reaches[k], DREAD_RANGE, not drifter))
+	# **A newborn comes into the water in the margin**, and **the food is kept
+	# fuller there** (margin.md §2.2, §2.3).
 	var candidates := _drop.spawn_candidates(players, hides,
-		turn if turn < players.size() else 0)
-	var pick := Replenish.thinnest(candidates, _thinness)
+		turn if turn < players.size() else 0, not drifter,
+		DRIFTER_MAX if drifter else CellBody.BASE_RADIUS)
+	var pick := Replenish.thinnest(candidates, _thinness_food if drifter else _thinness)
 	if pick < 0:
 		return -1
 	var index := _spawn(candidates[pick], drifter)
@@ -10031,9 +10055,19 @@ func _spawn_ahead(from: Vector2, heading: float, reach: float) -> int:
 	for attempt in AHEAD_TRIES:
 		var spread := AHEAD_SPREAD + AHEAD_WIDEN * float(attempt)
 		var at := from + _forward(heading + randf_range(-1.0, 1.0) * spread) * reach
-		if _drop.meniscus.inside(at, Drop.SPAWN_INSET):
+		if _drop.meniscus.inside(at, maxf(Drop.SPAWN_INSET, Drop.hold(DRIFTER_MAX))):
 			return _spawn(at, true)
 	return -1
+
+
+## **One body of a drop's first fill**: a drifter or a newborn by the one share
+## (water-evolves.md §2), anywhere it can be -- past its own hold (margin.md §2.1),
+## so the film piles nobody on its hold's circle, where a run starts.
+func _fill_one() -> void:
+	var drifter := randf() < DRIFTER_SHARE
+	var inset := maxf(Drop.FILL_INSET,
+		Drop.hold(DRIFTER_MAX if drifter else CellBody.BASE_RADIUS))
+	_spawn(_drop.uniform_point(inset), drifter, true)
 
 
 ## **The one door every new body comes in by** (§12) -- the spawner, the first
@@ -10083,6 +10117,10 @@ func _spawn(at: Vector2, drifter: bool, fill := false, body_radius := 0.0,
 		_give_back_by_peer(b)
 	# Expressed whole, as a run's first cell is: after the toxin, which is worn.
 	b.dna = b.genome.duplicate()
+	# **Where the water is deep enough for it** (margin.md §2.1): a point drawn
+	# before its size was is held at the hold its size has.
+	if _drop != null:
+		at = _drop.holds(at, b.radius)
 	b.pos = at
 	b.aim = at
 	b.flee_from = at
@@ -10203,7 +10241,7 @@ func _divide(i: int, b: Body) -> PackedInt32Array:
 				if body.has(gene) and not dna.has(gene):
 					dna[gene] = int(body[gene])
 			_stat(&"born_gifted")
-		var j := _spawn(_drop.meniscus.contain(points[k], r), false, false, r, body)
+		var j := _spawn(_drop.holds(points[k], r), false, false, r, body)
 		var d := _cells[j]
 		d.heading = heading
 		d.dna = dna
@@ -10406,6 +10444,14 @@ func _scan_reach() -> float:
 
 func _thinness(at: Vector2) -> int:
 	return _count_living_at(at, Drop.SPAWN_SCAN)
+
+
+## **How full a place is, for food** (margin.md §2.2): [method _thinness], counted
+## [constant Drop.MARGIN_FOOD] times emptier in the margin a newborn can reach -- so
+## the spawner keeps it that much fuller.
+func _thinness_food(at: Vector2) -> float:
+	var n := float(_thinness(at))
+	return n / Drop.MARGIN_FOOD if _drop.in_margin(at) else n
 
 
 func _count_living_at(at: Vector2, reach: float) -> int:

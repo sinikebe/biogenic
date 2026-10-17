@@ -277,6 +277,11 @@ screens of water, most of which a run never visits.
 point along a ray and the nearest point of the rim. The drop is a disc of
 `RADIUS` 6,000 with a band `SHALLOWS` 240 inside the rim.
 
+**Since the margin (docs/design/margin.md §2.1) a body is held at its hold, not its
+radius**: 30 µm from the rim for every unit of its radius, where the water is deep
+enough for it. Read `RADIUS - r` below as `RADIUS - hold(r)`. The shallows are
+measured from each body's hold, and its senses find the edge at its shore.
+
 - **A water body is contained**: after it moves, a centre past `RADIUS - r` is
   put back on that circle. Nothing is lost and nothing bounces.
 - **A drifting body turns off the shore** -- a drifter, or a hunter at rest or

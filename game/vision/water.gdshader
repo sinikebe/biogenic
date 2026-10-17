@@ -44,6 +44,11 @@ uniform float drop_on = 0.0;
 uniform vec2 drop_center = vec2(0.0, 0.0);
 uniform float drop_radius = 6000.0;
 uniform float drop_band = 240.0;
+// **Your shore** (docs/design/margin.md §2.4): how far inside the rim the water
+// gets too thin for you -- where your edge stops -- drawn as a faint line. 0 for
+// none.
+uniform float drop_shore = 0.0;
+uniform float shore_level = 0.16;
 // How bright the film gets at the rim, the line at its peak, and what is left
 // of the grid on dry glass.
 uniform float rim_level = 0.22;
@@ -163,7 +168,11 @@ void fragment() {
 		// GLSL ES 3.00 -- one driver draws it, another need not (§3.3).
 		float k = (dist - drop_radius) / (line_px * px_w);
 		float line = exp(-k * k);
-		col = mix(wet, glass, dry) + line_tint * line * line_level * lit;
+		// Your shore: the same line, fainter, where the water gets too thin for
+		// you. Nothing past it is yours to reach.
+		float ks = (dist - (drop_radius - drop_shore)) / (line_px * px_w);
+		float shore = drop_shore > 0.0 ? exp(-ks * ks) : 0.0;
+		col = mix(wet, glass, dry) + line_tint * (line * line_level + shore * shore_level) * lit;
 	}
 
 	// 8-bit dither, for the same reason the membrane needs one: wide dim
