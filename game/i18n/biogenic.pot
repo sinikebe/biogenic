@@ -644,6 +644,41 @@ msgstr ""
 #. line says which gene it names (its scientific name, never translated). It
 #. has to be short: prefer the shortest everyday word. The same words appear
 #. inside sentences such as "let go to swap eat and ping".
+#. entry: lysosome
+#. Room: at most 47 px in 13 px type; the English takes 37 px.
+#: game/genes/organs/lysosome.gd
+msgid "mend"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: lysosome
+#. Room: at most 440 px in 15 px type; the English takes 321 px.
+#: game/genes/organs/lysosome.gd
+msgid "patches your wounds, so a bite heals sooner"
+msgstr ""
+
+#. The mending gene (`lysosome`, shown as `mend`): a wound heals faster. "A
+#. wound mends in {} s, not {}" compares with a cell without it, in seconds
+#. for a whole wound to heal.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/lysosome.gd
+#, python-brace-format
+msgid "a wound mends in {} s, not {}"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
 #. The name of an action the player's cell can be told to do by one of its
 #. "instincts" (rules the player writes: "when <a sense reports something> ->
 #. <do this>"), on a small chip. Lowercase, a few short words. "dash": a burst
@@ -3275,19 +3310,19 @@ msgstr ""
 msgid "level %d"
 msgstr ""
 
-#. The line for the empty slot inside the body (the one slot in the middle of
-#. the body, not round it): nothing is there yet, and a toxin placed there
-#. becomes poison.
-#. Room: at most 520 px in 15 px type; the English takes 350 px.
+#. The line for an empty slot inside the body (the slots in the middle of the
+#. body, not round it): nothing is there yet, and the genes that can go there.
+#. `store` and `mend` are those genes' short words, as on their chips.
+#. Room: at most 520 px in 15 px type; the English takes 391 px.
 #: game/normal/figure.gd
-msgid "nothing inside yet · a toxin here becomes poison"
+msgid "nothing inside yet · store, mend or a toxin can go here"
 msgstr ""
 
-#. Under that line, for the empty inside slot: the slot is inside the cell's
-#. body, and a toxin is the only gene that can go there.
-#. Room: at most 560 px in 14 px type; the English takes 272 px.
+#. Under that line, for an empty inside slot: the slot is inside the cell's
+#. body, and a toxin placed there becomes poison.
+#. Room: at most 560 px in 14 px type; the English takes 318 px.
 #: game/normal/figure.gd
-msgid "inside your body · only a toxin goes here"
+msgid "inside your body · a toxin here becomes poison"
 msgstr ""
 
 #. The line for an empty slot on the body, in 15 px type, in the place where a
@@ -3836,9 +3871,9 @@ msgstr ""
 msgid "tap a lit slot · poison inside, venom in a gene's slot"
 msgstr ""
 
-#. When the player tries to put a gene other than a toxin into the slot inside
-#. the body: only a toxin works there. %s is the gene's short word, such as
-#. `swim`.
+#. When the player tries to put a gene that works outside the body into a slot
+#. inside it: only a few genes work there. %s is the gene's short word, such
+#. as `swim`.
 #. Room: at most 560 px in 14 px type, measured with your widest gene word in
 #. place of the placeholders; the English takes 178 px.
 #: game/normal/normal_mode.gd
@@ -3856,8 +3891,9 @@ msgstr ""
 msgid "%s goes inside, or in a lit gene's slot"
 msgstr ""
 
-#. When the player drags the poison gene from inside the body to one of the
-#. slots round it: it works only inside. %s is its word, `poison`.
+#. When the player tries to put a gene that works only inside the body, such
+#. as poison or store, into one of the slots round it. %s is its word, such as
+#. `poison` or `store`.
 #. Room: at most 560 px in 14 px type, measured with your widest gene word in
 #. place of the placeholders; the English takes 168 px.
 #: game/normal/normal_mode.gd
@@ -3910,7 +3946,7 @@ msgstr ""
 #. two genes' words; the last two say which one changes and what it becomes.
 #. Room: at most 560 px in 14 px type, measured with your widest gene word,
 #. your second widest, your second widest and your second widest in place of
-#. the placeholders; the English takes 382 px.
+#. the placeholders; the English takes 383 px.
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "let go to swap %s and %s · %s becomes %s"

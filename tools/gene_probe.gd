@@ -113,7 +113,7 @@ const SHIPPED: Array[StringName] = [
 	&"ocellus", &"chemocyte", &"ampulla",
 	&"axoneme", &"palp", &"myoneme",
 	&"trichocyst", &"pellicle", &"veneneux", &"plastid", &"vacuole", &"crista",
-	&"toxicyst", &"haptonema"]
+	&"toxicyst", &"haptonema", &"lysosome"]
 const SHIPPED_PLACELESS: Array[StringName] = [&"rhabdom", &"statocyst"]
 ## **The order each list a draw or a bit reads shipped in** -- catalogue.gd's
 ## `SHIPPED_ORDERS`, kept here as well so that a change there fails here: what a
@@ -127,7 +127,7 @@ const SHIPPED_LISTS := {
 	&"drifter": [&"cirrus", &"flagellum", &"stigma", &"chemocyte", &"ampulla",
 		&"ocellus", &"axoneme", &"palp", &"myoneme",
 		&"trichocyst", &"pellicle", &"veneneux", &"plastid", &"vacuole", &"crista",
-		&"haptonema"],
+		&"haptonema", &"lysosome"],
 	&"sense": [&"chemocyte", &"ampulla", &"ocellus", &"stigma"],
 	&"gift": [&"ocellus", &"ampulla", &"chemocyte", &"stigma"],
 	&"declares": [&"ocellus", &"ampulla", &"chemocyte", &"stigma", &"palp", &"myoneme",
@@ -222,16 +222,18 @@ const GATED := {"gd": "#", "tscn": ";", "tres": ";", "gdshader": "//"}
 ## today's plan to them, on purpose** -- as a new gene appends to [constant SHIPPED] --
 ## and its message says what to move: these and the rows, in the same commit, and the
 ## protocol with them ([constant PLAN_MOVED]).
-const SHIPPED_COUNTS: Array = [3, 7, 7, 1, 2, 7, 9, 3.5]
+const SHIPPED_COUNTS: Array = [3, 7, 7, 3, 2, 7, 11, 3.5]
 ## **The seats by column**: `x` is the ring's column, -1 to 1, which the figure
 ## spaces by however much room a gene's own slots need (figure.gd's `_lay_out`,
 ## placing.md §2); `y` is the row's offset, as written.
 const SHIPPED_SEATS: Array[Vector2] = [Vector2(0.0, -138.0), Vector2(1.0, 0.0),
 	Vector2(0.0, 168.0), Vector2(1.0, -138.0), Vector2(-1.0, -138.0),
-	Vector2(1.0, 168.0), Vector2(-1.0, 168.0), Vector2(0.0, 6.0)]
-const SHIPPED_NEIGHBOURS: Array = [[4, -1, 3, 7], [7, 3, -1, 5], [6, 7, 5, -1],
-	[0, -1, -1, 1], [-1, -1, 0, 6], [2, 1, -1, -1], [-1, 4, 2, -1], [-1, 0, 1, 2]]
-const SHIPPED_RING: Array[int] = [0, 3, 1, 5, 2, 6, 4, 7]
+	Vector2(1.0, 168.0), Vector2(-1.0, 168.0), Vector2(0.0, 6.0), Vector2(0.0, 62.0),
+	Vector2(0.0, -50.0)]
+const SHIPPED_NEIGHBOURS: Array = [[4, -1, 3, 9], [7, 3, -1, 5], [6, 8, 5, -1],
+	[0, -1, -1, 1], [-1, -1, 0, 6], [2, 1, -1, -1], [-1, 4, 2, -1], [-1, 9, 1, 8],
+	[-1, 7, 1, 2], [-1, 0, 1, 7]]
+const SHIPPED_RING: Array[int] = [0, 3, 1, 5, 2, 6, 4, 7, 8, 9]
 ## **Its rows** (§10.1), which the arcs, the ladder, the front and the stern are read
 ## off where today's is held to them. The broken plans each plan check is shown failing
 ## on are made from it too, and the synthetic plan's cell is kept under it ([method
@@ -256,6 +258,8 @@ const SHIPPED_PLAN: Array[Dictionary] = [
 	{"id": &"aft_port", "place": BodyPlan.OUTSIDE_PLACE, "anatomy": BodyPlan.SIDE_ANATOMY,
 		"arc": Vector2(-146.0, -118.0), "earned": 40.0},
 	{"id": &"inside", "place": BodyPlan.INSIDE_PLACE, "earned": BodyPlan.ALWAYS},
+	{"id": &"inside_2", "place": BodyPlan.INSIDE_PLACE, "earned": 33.0},
+	{"id": &"inside_3", "place": BodyPlan.INSIDE_PLACE, "earned": 40.0},
 ]
 const SHIPPED_RETIRED: Array[Dictionary] = []
 ## **What to move when today's plan changes**, said where it fails: the pins, and
@@ -2907,14 +2911,15 @@ func _plan() -> void:
 			row.erase("home")
 			break
 	broken["home slots"] = homeless
+	# One more slot inside than the figure has rows for (figure.gd's INSIDE_ROWS).
 	var crowded := SHIPPED_PLAN.duplicate(true)
-	crowded.append({"id": &"inside_two", "place": BodyPlan.INSIDE_PLACE,
+	crowded.append({"id": &"inside_more", "place": BodyPlan.INSIDE_PLACE,
 		"earned": BodyPlan.ALWAYS})
 	broken["no room"] = crowded
 	# Two more slots inside: a locus each on the choosing screen, which runs past the
 	# canvas's foot (and the pause figure has no seat for them either).
 	var tall := crowded.duplicate(true)
-	tall.append({"id": &"inside_three", "place": BodyPlan.INSIDE_PLACE,
+	tall.append({"id": &"inside_most", "place": BodyPlan.INSIDE_PLACE,
 		"earned": BodyPlan.ALWAYS})
 	broken["run off the canvas"] = tall
 	var missed: Array[String] = []

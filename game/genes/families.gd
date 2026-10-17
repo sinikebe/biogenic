@@ -18,7 +18,8 @@ extends RefCounted
 const Kinds := preload("res://game/genes/kinds.gd")
 
 ## The five, by the names an organ's file gives them. `metabolism` and not `inside`:
-## `inside` is the slot only a toxin goes in, and on screen (the owner, 2026-10-05).
+## `inside` is the place a few genes go in -- the toxin as poison, the store, the
+## mend -- and on screen (the owner, 2026-10-05; inside-genes.md).
 const EATING := &"eating"
 const MOVING := &"moving"
 const SENSING := &"sensing"

@@ -958,8 +958,8 @@ class Body:
 	var serial := 0
 	var meals := 0
 	## How far through this body something has chewed, 0..1. Mends on its own at
-	## [constant CellBody.MEND_SECONDS], exactly as the player's does -- except
-	## while it carries harm (docs/design/dna-slots.md §6.2).
+	## [constant CellBody.MEND_SECONDS], faster by its `mend`, exactly as the
+	## player's does -- except while it carries harm (docs/design/dna-slots.md §6.2).
 	var wound := 0.0
 	## **Its loads**, stacks of each of doses.gd's kinds -- the venom and poison
 	## it took, wearing off -- and the body whose stacks it took last, a slot or
@@ -1186,6 +1186,7 @@ class Body:
 	var stat_gape := 0.0
 	var stat_bite := 0.0
 	var stat_armor := 1.0
+	var stat_mend := 1.0
 	var stat_turn := 0.0
 	var stat_speed := 0.0
 	var stat_hold := 0
@@ -1214,6 +1215,7 @@ class Body:
 		stat_gape = Stats.of(g, &"gape")
 		stat_bite = Stats.of(g, &"bite")
 		stat_armor = Stats.of(g, &"armor")
+		stat_mend = Stats.of(g, &"mend")
 		stat_turn = Stats.of(g, &"turn_rate")
 		stat_speed = CellBody.speed_of(g)
 		stat_hold = CellBody.hold_level(g)
@@ -3377,7 +3379,7 @@ func _devour(b: Body, prey: Body) -> void:
 	b.radius += CellBody.GROWTH_PER_MEAL
 	b.meals += 1
 	Genome.integrate_into(b.genome, Genome.dominant_of(prey.genome),
-		CellBody.slots_for(b.radius))
+		CellBody.slots_for(b.radius), CellBody.inside_for(b.radius))
 	b.derive()
 	_changes += 1
 
@@ -6063,7 +6065,7 @@ func _step_person(delta: float, slot: int = PERSON_SLOT) -> void:
 	# the host decides every dose and owns their death (dna-slots.md §14.1),
 	# found at the top of their contacts, and POND tells their device what they
 	# carry.
-	pb.wound = CellBody.dosed(pb.loads, pb.wound, pb.radius, delta)
+	pb.wound = CellBody.dosed(pb.loads, pb.wound, pb.radius, delta, pb.stat_mend)
 	pb.bite = maxf(pb.bite - delta, 0.0)
 	p.dart_clock = maxf(p.dart_clock - delta, 0.0)
 	if p.first_hunt > 0.0:
@@ -8231,7 +8233,7 @@ func _tank(i: int, b: Body, dt: float) -> bool:
 ## body leaves the water with its remains, and the caller stops touching it. A
 ## body carrying nothing is mended as it always was, for one test.
 func _dose_step(i: int, b: Body, dt: float) -> bool:
-	b.wound = CellBody.dosed(b.loads, b.wound, b.radius, dt)
+	b.wound = CellBody.dosed(b.loads, b.wound, b.radius, dt, b.stat_mend)
 	if b.wound < 1.0:
 		return false
 	_consume(i, Cause.POISONED)
@@ -8271,7 +8273,8 @@ func _grow(b: Body, gene: StringName) -> void:
 	b.radius = minf(b.radius + CellBody.GROWTH_PER_MEAL, CellBody.DIVIDE_RADIUS)
 	b.meals += 1
 	var slots := CellBody.slots_for(b.radius)
-	var placed := Genome.integrate_into(b.dna, gene, slots)
+	var inside := CellBody.inside_for(b.radius)
+	var placed := Genome.integrate_into(b.dna, gene, slots, inside)
 	# **A meal with no room on the body goes into a gene's own slot** that takes it
 	# (docs/design/gene-sockets.md §4): an empty one, or one holding it below three
 	# copies. It used to be lost. Only then: a copy more, or a free body slot, comes
@@ -8282,7 +8285,7 @@ func _grow(b: Body, gene: StringName) -> void:
 		Riders.put(b.dna_riders, room[0], room[1], gene, 1)
 		_stat(&"rider_meals")
 	if not (births and _drop != null):
-		Genome.integrate_into(b.genome, gene, slots)
+		Genome.integrate_into(b.genome, gene, slots, inside)
 		if not room.is_empty() and b.genome.has(room[0]):
 			Riders.put(b.riders, room[0], room[1], gene, 1)
 		b.derive()
@@ -10281,7 +10284,8 @@ func _give_back_by_peer(b: Body) -> void:
 		_gene_floor.due.erase(gene)
 	var riders := Riders.copy(b.riders)
 	Drop.give_back(b.genome, gene, CellBody.slots_for(b.radius),
-		Catalogue.tagged(Catalogue.SENSE), randi(), randi() % 2 == 0, riders)
+		Catalogue.tagged(Catalogue.SENSE), randi(), randi() % 2 == 0, riders,
+		CellBody.inside_for(b.radius))
 	b.riders = riders
 	b.dna_riders = Riders.copy(riders)
 	b.derive()
@@ -10323,7 +10327,8 @@ func _arm_the_founders() -> void:
 				continue
 			var riders := Riders.copy(b.riders)
 			Drop.give_back(b.genome, gene, CellBody.slots_for(b.radius),
-				Catalogue.tagged(Catalogue.SENSE), randi(), randi() % 2 == 0, riders)
+				Catalogue.tagged(Catalogue.SENSE), randi(), randi() % 2 == 0, riders,
+				CellBody.inside_for(b.radius))
 			b.riders = riders
 			b.dna_riders = Riders.copy(riders)
 			b.dna = b.genome.duplicate()

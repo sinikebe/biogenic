@@ -1235,7 +1235,8 @@ static func default_order(tiers: Dictionary) -> Array:
 		if Genome.has_forms(gene) and not Genome.is_inside_form(gene):
 			out.append(gene)
 	for gene: StringName in tiers:
-		if not _homes.has(gene) and not Genome.has_forms(gene):
+		if not _homes.has(gene) and not Genome.has_forms(gene) \
+				and not Genome.is_inside_form(gene):
 			out.append(gene)
 	var inside := BodyPlan.INSIDE
 	for home: int in _home_slots:
@@ -1299,12 +1300,24 @@ static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		_draw_worn(canvas, sk, gene, copies, arc_for_slot(slot), clock, fade,
 			eye if StringName(eye.get("gene", &"")) == gene else NO_EYE, tail, flare,
 			float(glows.get(gene, 0.0)), glow_fade)
-	# **What is inside has no arc**: its beads are granules under the whole skin,
-	# and nothing at any one place.
-	for gene: StringName in tiers:
-		if Genome.is_inside_form(gene) and int(tiers[gene]) > 0:
-			_draw_granules(canvas, at, fwd, stb, r, gene, int(tiers[gene]), fade,
-				unit, float(dose.get("granules", 0.0)))
+	# **What is inside has no arc** (docs/design/inside-genes.md §4): an organelle
+	# lies inside the body, by the nucleus, one place each in the inside's order;
+	# anything else -- the poison's beads -- is granules under the whole skin, and
+	# nothing at any one place.
+	var seat := 0
+	for gene: StringName in Genome.inside_of(tiers):
+		var copies := int(tiers.get(gene, 0))
+		if gene == &"" or copies <= 0:
+			continue
+		if _look_of(gene)["shape"] == ORGANELLE:
+			sk.deep = INSIDE_DEEP
+			_draw_worn(canvas, sk, gene, copies, INSIDE_ARCS[seat % INSIDE_ARCS.size()],
+				clock, fade, NO_EYE, tail, 0.0, float(glows.get(gene, 0.0)), glow_fade)
+			sk.deep = 0.0
+			seat += 1
+		else:
+			_draw_granules(canvas, at, fwd, stb, r, gene, copies, fade, unit,
+				float(dose.get("granules", 0.0)))
 
 
 ## **One organ a body wears**, [param gene] at [param copies] on [param arc] of the
@@ -1540,6 +1553,9 @@ class Stretch extends RefCounted:
 	var steer := 0.0
 	var still := 0.0
 	var lit := 0.0
+	## How much deeper than its look says an organelle sits: an inside one's
+	## (docs/design/inside-genes.md §4), 0 on an arc.
+	var deep := 0.0
 
 
 ## **One organ, built and not yet drawn**: the strokes of its one
@@ -1645,6 +1661,19 @@ const ORGANELLE_SEATS := {
 }
 const ORGANELLE_STEPS := 18
 const ORGANELLE_MARK := 0.36
+## **A dense body** (a lysosome): smaller than a bubble, and its core this share of it.
+const DENSE_SIZE := 0.62
+const DENSE_CORE := 0.30
+## **Where an organelle inside the body sits** (docs/design/inside-genes.md §4): not
+## on its slot's arc -- the inside has none -- but at one of these stretches of skin,
+## [constant INSIDE_DEEP] of a radius deeper than its look's own depth, so it lies
+## between the skin and the nucleus. One each, in the inside's order: behind the
+## nucleus, then beside it to starboard and to port. **Not in front of it**: the two
+## arcs either side of the nose are the first a body earns, and an organelle worn
+## there sits under the skin at the front.
+const INSIDE_ARCS: Array[Vector2] = [Vector2(150.0, 210.0), Vector2(62.0, 112.0),
+	Vector2(-112.0, -62.0)]
+const INSIDE_DEEP := 0.14
 
 
 ## [param look] drawn: [param gene]'s resolved look, or a plain tuft for a gene this
@@ -2296,7 +2325,7 @@ static func _kind_plates(d: Drawn, sk: Stretch, look: Dictionary, tier: int,
 static func _kind_organelle(d: Drawn, sk: Stretch, look: Dictionary, tier: int) -> void:
 	var form: StringName = look["form"]
 	var size := float(look["size"]) * sk.unit
-	var depth := float(look["depth"])
+	var depth := float(look["depth"]) + sk.deep
 	for seat: Array in ORGANELLE_SEATS[clampi(tier, 1, ORGANELLE_SEATS.size())]:
 		var u: float = seat[0]
 		var at := _sk_inner(sk, u, depth + float(seat[1]))
@@ -2316,6 +2345,8 @@ static func _kind_organelle(d: Drawn, sk: Stretch, look: Dictionary, tier: int) 
 						+ across * (y * size * 0.50))
 				Kinds.FORM_STAR:
 					outline.append(at + Vector2(x, y) * (size * 0.70))
+				Kinds.FORM_DENSE:
+					outline.append(at + Vector2(x, y) * (size * DENSE_SIZE))
 				_:
 					outline.append(at + Vector2(x, y) * size)
 		match form:
@@ -2348,6 +2379,14 @@ static func _kind_organelle(d: Drawn, sk: Stretch, look: Dictionary, tier: int) 
 				d.paths.append(folds)
 			Kinds.FORM_LENS:
 				d.fills.append([outline.duplicate(), 0.85])
+			Kinds.FORM_DENSE:
+				# A lysosome: a small dense body, half filled, and a darker core.
+				d.fills.append([outline.duplicate(), 0.45])
+				var core := PackedVector2Array()
+				for k in ORGANELLE_STEPS:
+					core.append(at + Vector2.from_angle(TAU * float(k)
+						/ float(ORGANELLE_STEPS)) * (size * DENSE_CORE))
+				d.fills.append([core, 0.85])
 			_:
 				d.fills.append([outline.duplicate(), 0.12])
 		if form != Kinds.FORM_STACK:
@@ -3052,7 +3091,7 @@ static func draw_tile_organ(canvas: CanvasItem, gene: StringName, _tier: int,
 	canvas.draw_arc(centre, arc_r, TILE_ARC_FROM, TILE_ARC_TO, 32,
 		Color(tone, TILE_ARC_ALPHA * ink), TILE_ARC_WIDTH * scale, true)
 	var look := _look_of(gene)
-	if Genome.is_inside_form(gene):
+	if _granular(gene, look):
 		canvas.draw_circle(centre + Vector2(0.0, -arc_r * PIGMENT_SEAT),
 			TILE_PIGMENT * scale, Color(tone, 0.85 * ink), true, -1.0, true)
 		var mark := _bead_mark(look)
@@ -3066,6 +3105,13 @@ static func draw_tile_organ(canvas: CanvasItem, gene: StringName, _tier: int,
 	_build(d, sk, look, 1, 0.0, 1.0)
 	_paint(canvas, d, look, tone, alpha, TILE_ARC_WIDTH * scale * _tile_width(look), sk,
 		NO_EYE, 0.0, 1.0, false)
+
+
+## **Whether [param gene] is drawn as granules** -- an inside form that is no
+## organelle, the poison -- rather than by its kind: on a body under the whole skin,
+## on a tile seven beads round the dome. An organelle inside is drawn as itself.
+static func _granular(gene: StringName, look: Dictionary) -> bool:
+	return Genome.is_inside_form(gene) and look["shape"] != ORGANELLE
 
 
 ## An inside form's granules on a tile: seven, on an arc just outside the dome.
@@ -3100,7 +3146,7 @@ static func tile_bounds(gene: StringName) -> Rect2:
 		var a := lerpf(TILE_ARC_FROM, TILE_ARC_TO, float(k) / 32.0)
 		box = box.expand(Vector2(cos(a), sin(a)) * TILE_ARC_RADIUS)
 	box = box.grow(TILE_ARC_WIDTH * 0.5)
-	if Genome.is_inside_form(gene):
+	if _granular(gene, look):
 		box = box.merge(Rect2(Vector2(0.0, -TILE_ARC_RADIUS * PIGMENT_SEAT), Vector2.ZERO)
 			.grow(TILE_PIGMENT))
 		for granule: Vector2 in _tile_granules(Vector2.ZERO, TILE_ARC_RADIUS, 1.0):

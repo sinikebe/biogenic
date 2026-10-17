@@ -84,7 +84,7 @@ const ROWS := {
 		"judged": true, "contact": false, "group": &"dash_speed"},
 	&"dash_cost": {"none": 0.0, "better": LOWER, "combine": BEST, "unit": "s",
 		"judged": false, "contact": false, "group": &"dash_speed"},
-	# The body's own: its armour, its tank, its burn and its light.
+	# The body's own: its armour, its tank, its burn, its light and its mending.
 	&"armor": {"none": 1.0, "better": HIGHER, "combine": PRODUCT, "unit": "x size",
 		"judged": false, "contact": true, "group": &""},
 	&"store": {"none": 1.0, "better": HIGHER, "combine": PRODUCT, "unit": "x tank",
@@ -93,6 +93,10 @@ const ROWS := {
 		"judged": false, "contact": false, "group": &""},
 	&"sun": {"none": 0.0, "better": HIGHER, "combine": SUM, "unit": "of upkeep",
 		"judged": false, "contact": false, "group": &""},
+	# How fast a wound knits (docs/design/inside-genes.md §3): a multiplier on the
+	# mending rate. The host mends a person's wound, so it decides by it.
+	&"mend": {"none": 1.0, "better": HIGHER, "combine": PRODUCT, "unit": "x mending",
+		"judged": false, "contact": true, "group": &""},
 	# Touch.
 	&"touch_range": {"none": 0.0, "better": HIGHER, "combine": BEST, "unit": "µm",
 		"judged": false, "contact": false, "group": &""},

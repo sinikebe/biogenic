@@ -80,7 +80,7 @@ moon): every strain wears the toxin's colour, and its accent tells it (§3.3).
 | **moving** | going somewhere | `cirrus`, `flagellum`, `axoneme`, `myoneme` |
 | **sensing** | knowing what is there | `stigma`, `ocellus`, `chemocyte`, `ampulla`, `palp` |
 | **defending** | being costly to touch: armed or plated | `trichocyst`, `pellicle`, the toxin (`toxicyst`, `veneneux`) |
-| **metabolism** | living on less: making, storing and burning food | `plastid`, `vacuole`, `crista` |
+| **metabolism** | living on less: making, storing and burning food, and mending | `plastid`, `vacuole`, `crista`, `lysosome` |
 
 The owner's five words cover all seventeen keys. Only the fifth needs another name.
 `inside` is the place the owner named on 2026-10-03, the slot where a toxin becomes
@@ -418,6 +418,7 @@ always comes with its bite's hit.
 | `plastid` | sun | metabolism | 1 | `organelle` | form `lens`: solid | gold 52°, tuft of 8 |
 | `vacuole` | store | metabolism | 0 | `organelle` | form `bubble`: hollow | blue 232°, tuft of 2 |
 | `crista` | burn | metabolism | 2 | `organelle` | form `capsule`: a rod with a fold | brown 26°, tuft of 6 |
+| `lysosome` | mend | metabolism | 2 | `organelle` | form `dense`: a small dense body, darker core (inside-genes.md §4) | new, 2026-10-17 |
 
 Hue degrees are HSV, as `cilia.gd` writes them. The pairs that were too close today
 (`palp` and `crista` at 3.2°, `stigma` and `plastid` at 6.3°, `flagellum` and

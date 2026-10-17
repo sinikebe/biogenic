@@ -12,7 +12,8 @@ extends RefCounted
 ## ([member SLOT_MIN], [member SLOT_MAX]); where the inside starts and how much room
 ## it has ([member INSIDE], [member INSIDE_SLOTS]); the front and the stern
 ## ([member FRONT], [member STERN]); each slot's arc and bearing ([method arc],
-## [method bearing]); the home seats ([method home_slot], [method home_layout]).
+## [method bearing]); the home seats ([method home_slot], [method home_layout]); how
+## much of the inside a radius earns ([method inside_for]).
 ## `cell.gd`, `genome.gd`, `figure.gd` and `wire.gd` keep their own names for some
 ## of these, and read them again whenever the plan changes ([method listen]);
 ## `cilia.gd` holds this file's own lists, which are refilled in place; and
@@ -55,7 +56,8 @@ const OVOID_PINCH := 0.30
 
 ## **Every slot, in index order**: the outside ones first, as they are earned --
 ## the three every body has, then one a rung of the ladder `26 + 3.5k` -- and the
-## inside after them. A slot's index is where a genome's layout keeps it, and a
+## inside after them, earned the same way: one from birth, a second at r33 and a
+## third at forty (docs/design/inside-genes.md §1; the owner, 2026-10-17). A slot's index is where a genome's layout keeps it, and a
 ## save's stamp says which id each index was ([method stamp]).
 ##
 ## **Today's ladder is pinned at both ends**: three slots at birth (r26) and all
@@ -74,7 +76,8 @@ const OVOID_PINCH := 0.30
 ## - `arc`, outside: the skin it is, in ovoid parameter `t` degrees from the nose,
 ##   +90 starboard, 180 aft (§4.1 of genes-and-cilia.md). The cirrus's oars also
 ##   draw on the port side of theirs: that is the `oars` shape's, not the slot's;
-## - `earned`: the radius a body earns it at, [constant ALWAYS] for every body;
+## - `earned`: the radius a body earns it at, [constant ALWAYS] for every body --
+##   outside and inside alike;
 ## - `home`, where there is one: the gene a body is born wearing there, and which
 ##   a layout seats there first.
 ##
@@ -102,6 +105,8 @@ const TODAY: Array[Dictionary] = [
 	{"id": &"aft_port", "place": OUTSIDE_PLACE, "anatomy": SIDE_ANATOMY,
 		"arc": Vector2(-146.0, -118.0), "earned": 40.0},
 	{"id": &"inside", "place": INSIDE_PLACE, "earned": ALWAYS},
+	{"id": &"inside_2", "place": INSIDE_PLACE, "earned": 33.0},
+	{"id": &"inside_3", "place": INSIDE_PLACE, "earned": 40.0},
 ]
 ## **Slots that have left the plan**, each its last row, kept so a save that seated
 ## a gene in one knows where it was. None yet: a slot leaving [constant TODAY] moves
@@ -127,8 +132,10 @@ static var SLOT_MAX := 0
 ## **The first inside slot's index**: every slot from here on is inside the body,
 ## and every slot before it is an arc of the skin.
 static var INSIDE := 0
-## **How much room the inside has**: its slots.
+## **How much room the inside has**: its slots, the most any body has.
 static var INSIDE_SLOTS := 0
+## **The inside every body has**: its slots earned at any radius.
+static var INSIDE_MIN := 0
 ## Every slot, outside and in.
 static var SLOTS := 0
 ## **The front**: the outside slots whose anatomy is the front, in index order.
@@ -146,8 +153,10 @@ static var _retired: Array[Dictionary] = []
 static var _ids: Array[StringName] = []
 static var _index := {}
 static var _known := {}
-## The radius each outside slot is earned at, by index.
+## The radius each outside slot is earned at, by index; and each inside one, in
+## index order from [member INSIDE].
 static var _earned := PackedFloat64Array()
+static var _inside_earned := PackedFloat64Array()
 ## Each outside slot's arc and bearing, by index; and the arcs of the slots past
 ## the always ones, which an index out of the outside's range is given
 ## ([method arc]).
@@ -221,6 +230,18 @@ static func slots_for(radius: float) -> int:
 		if earned <= radius:
 			count += 1
 	return clampi(count, SLOT_MIN, SLOT_MAX)
+
+
+## **How many inside slots a body of [param radius] has earned**: every inside slot
+## earned at that radius or below, and never fewer than [member INSIDE_MIN] or more
+## than [member INSIDE_SLOTS]. A genome adds what its DNA already carries inside on
+## top (`genome.gd`'s `inside_room`), as a daughter keeps her mother's layout outside.
+static func inside_for(radius: float) -> int:
+	var count := 0
+	for earned: float in _inside_earned:
+		if earned <= radius:
+			count += 1
+	return clampi(count, INSIDE_MIN, INSIDE_SLOTS)
 
 
 ## **The arc of skin [param slot] is**, in ovoid `t` degrees. An index past the
@@ -442,6 +463,7 @@ static func _read(plan: Array, gone: Array) -> void:
 	_index.clear()
 	_known.clear()
 	_earned.clear()
+	_inside_earned.clear()
 	_rungs.clear()
 	_arcs.clear()
 	_bearings.clear()
@@ -454,6 +476,7 @@ static func _read(plan: Array, gone: Array) -> void:
 	SLOT_MIN = 0
 	SLOT_MAX = 0
 	INSIDE_SLOTS = 0
+	INSIDE_MIN = 0
 	HOME_SEATS = 0
 	for row: Dictionary in _retired:
 		_known[StringName(row["id"])] = row
@@ -471,6 +494,9 @@ static func _read(plan: Array, gone: Array) -> void:
 			HOME_SEATS = slot + 1
 		if StringName(row["place"]) == INSIDE_PLACE:
 			INSIDE_SLOTS += 1
+			_inside_earned.append(float(row["earned"]))
+			if float(row["earned"]) <= ALWAYS:
+				INSIDE_MIN += 1
 			continue
 		SLOT_MAX += 1
 		var earned := float(row["earned"])

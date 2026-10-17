@@ -63,12 +63,14 @@ const TIP_BEAD := &"bead"
 const TIP_BARB := &"barb"
 ## An organelle's forms: a solid lens (a plastid); a clear bubble (a vacuole); a
 ## long rod with a fold (a mitochondrion); a stack of flat cisternae; a bubble with
-## canals running out of it (a contractile vacuole).
+## canals running out of it (a contractile vacuole); a small dense body with a
+## darker core (a lysosome).
 const FORM_LENS := &"lens"
 const FORM_BUBBLE := &"bubble"
 const FORM_CAPSULE := &"capsule"
 const FORM_STACK := &"stack"
 const FORM_STAR := &"star"
+const FORM_DENSE := &"dense"
 
 # --- Accents (§3) -------------------------------------------------------------------
 
@@ -162,7 +164,7 @@ const ROWS := {
 		"count": {"default": 3, "range": [1, 6], "role": MAGNITUDE}}},
 	ORGANELLE: {"seat": SEAT_CENTRE, "mark": MARK_NONE, "params": {
 		"form": {"default": FORM_BUBBLE, "values": [FORM_LENS, FORM_BUBBLE, FORM_CAPSULE,
-			FORM_STACK, FORM_STAR], "role": STRUCTURAL},
+			FORM_STACK, FORM_STAR, FORM_DENSE], "role": STRUCTURAL},
 		"size": {"default": 0.17, "range": [0.10, 0.25], "role": MAGNITUDE},
 		"depth": {"default": 0.30, "range": [0.15, 0.45], "role": MAGNITUDE}}},
 }

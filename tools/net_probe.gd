@@ -1093,12 +1093,12 @@ func _check_sister_wire() -> void:
 		Wire.guest_cap(padded.call(0x20, Wire.EVENT_SISTER, past)),
 		Wire.guest_cap(padded.call(Wire.KIND_EVENT, Wire.EVENT_SISTER, Wire.SISTER_MIN)),
 		Wire.guest_cap(PackedByteArray())]
-	# **2189 is the pin a plan change moves**: the body plan's slot count is in every
+	# **2441 is the pin a plan change moves**: the body plan's slot count is in every
 	# size that holds a genome. The plan's fingerprint rides in the handshake's rules
 	# since protocol 8, so no protocol moves with it -- said where it fails. It was
 	# 1378 until protocol 9 added her DNA's riders (gene-sockets.md §6), which moved
-	# the protocol.
-	var pinned := Wire.SISTER_MAX == 2189
+	# the protocol, and 2189 until the inside grew to three slots (inside-genes.md).
+	var pinned := Wire.SISTER_MAX == 2441
 	_says(Wire.MOST_RULES == FoodField.Drop.MOST_RULES and alphabet
 			and Wire.RULE_BYTES.length() == 40 and Wire.RULE_BYTES_MAX == 128
 			and Wire.SISTER_MAX == Wire.EVENT_HEADER + 13 + 2 * Wire.TIERS_MAX + 1
@@ -1114,7 +1114,7 @@ func _check_sister_wire() -> void:
 		% Wire.SISTER_MIN + " to %d bytes, automation.md §10.3's sum, and the one"
 		% Wire.SISTER_MAX + " guest frame that may pass the %d every other keeps"
 		% Wire.GUEST_OTHER_MAX + " (caps read %s)" % str(caps) + ("" if pinned
-			else " -- the body plan's slots changed (%d genes cross now): move the 2189 here"
+			else " -- the body plan's slots changed (%d genes cross now): move the 2441 here"
 			% Wire.GENES_MAX + " and Wire.RULES in the same commit -- no Wire.PROTOCOL: the"
 			+ " plan is in the rules the handshake carries, and builds on other plans refuse"
 			+ " each other there (body_plan.gd)"))
@@ -1199,7 +1199,7 @@ func _check_sister_wire() -> void:
 			and biggest_said[5] == most.slice(0, Wire.MOST_RULES)
 			and biggest_said[6] == longest_riders,
 		"sister wire: SISTER_MAX, %d bytes, is the most the writer writes -- two"
-		% Wire.SISTER_MAX + " genomes of nine sixteen-letter genes, eight lines"
+		% Wire.SISTER_MAX + " genomes of %d sixteen-letter genes, eight lines" % Wire.GENES_MAX
 		+ " of 128 and the longest riders -- and handed more it writes no more: a gene"
 		+ " the wire cannot name, a ninth line, an empty one, one of 129 bytes and one in"
 		+ " capitals are left out")
@@ -2376,7 +2376,8 @@ func _limits_edges() -> void:
 		and Wire.CONTACT_MAX == contact_max.size() + Wire.EVENT_HEADER \
 		and Wire.POND_MAX == (cases[cases.size() - 1][1] as PackedByteArray).size() \
 		and Wire.GUEST_FRAME_MAX == Wire.SISTER_MAX and Wire.SISTER_MAX > Wire.PERSON_MAX \
-		and Wire.GUEST_OTHER_MAX == Wire.PERSON_MAX and Wire.HOST_FRAME_MAX == Wire.POND_MAX \
+		and Wire.GUEST_OTHER_MAX == Wire.PERSON_MAX \
+		and Wire.HOST_FRAME_MAX == maxi(Wire.POND_MAX, maxi(Wire.PERSON_MAX, Wire.GENOME_MAX)) \
 		and at_bound.size() == cases.size()
 	var later := not Wire.known(0x7E, 0) and not Wire.known(Wire.KIND_EVENT, 0x7F) \
 		and not Wire.size_ok(0x7E, 0, 8, false) \
@@ -5877,8 +5878,11 @@ func _pond_rings() -> void:
 	_says(int(apart[3]) == 0 and int(together[3]) == 0,
 		"pond-field: every disc kept a drifter every frame, over 4,200 frames"
 		+ " (%d misses)" % (int(apart[3]) + int(together[3])))
+	# **More than forty seeds**, so that none inside means something: the seeded water
+	# made 72 until the store moved inside and the mend came (inside-genes.md), and
+	# 60 since -- fewer of these cells die and are seeded again.
 	_says(int(apart[4]) == 0 and int(together[4]) == 0
-			and int(apart[5]) + int(together[5]) > 60,
+			and int(apart[5]) + int(together[5]) > 40,
 		"pond-field: no seed landed within RING_MIN of an anchor"
 		+ " (%d seeds, %d inside)" % [int(apart[5]) + int(together[5]),
 			int(apart[4]) + int(together[4])])
