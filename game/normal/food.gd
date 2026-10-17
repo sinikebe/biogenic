@@ -6732,7 +6732,8 @@ var half_rate := true
 var skip_still := true
 ## Where a run starts: `quiet` (§8.1), `centre`, or `edge` -- [member edge_gap]
 ## inside the rim, facing it, and held at its hold if that is nearer (margin.md
-## §2.1) -- for the renders.
+## §2.1) -- for the renders and the probes. A room's [method quiet_place] takes
+## it too.
 var start_mode := &"quiet"
 var edge_gap := 380.0
 ## For the renders and the probes: this many flocs round the start, the last
@@ -7193,11 +7194,12 @@ func _person_senses(pb: Body) -> float:
 ## **A quiet place in this drop for a born cell** (§8.1), without moving the
 ## drop or anything in it but what could swallow a born cell there: where a
 ## guest arrives in a room nobody is in (§10.3). Nobody watches an empty room,
-## so the clearing is seen by no one.
+## so the clearing is seen by no one. It follows [member start_mode], as a
+## run's start does.
 func quiet_place() -> Vector2:
 	if _drop == null:
 		return Vector2.ZERO
-	var at := _drop.quiet_start(_food_for_born, _dread_for_born)
+	var at := _start_point()
 	var mine := CellBody.swallow_radius_of(CellBody.BASE_RADIUS, Catalogue.born())
 	_count_ids.resize(0)
 	_drop.grid.query(at, DREAD_RANGE + Drop.GRID_SLACK, _count_ids)
