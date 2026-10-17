@@ -36,9 +36,18 @@ Every job's `runs-on` -- `ci.yml`, `release.yml`, `launcher-version.yml` and
   to `main` or `dev` (a release, the dev app's publish), the scheduled launcher
   sync and every manual run. It asks for the `self-hosted` label, which every
   self-hosted runner carries, so no variable is needed;
-- **a fork's pull request never does**, whatever the variables say. Its code is a
-  stranger's, and the runner sits on the owner's own machine. It runs on
-  GitHub's.
+- **a fork's pull request is sent to GitHub's machines**, whatever the variables
+  say. Its code is a stranger's, and the runner sits on the owner's own machine.
+
+**That is not a security boundary while the repository is public.** A pull request
+runs the workflow file from its own branch, so a fork can rewrite `runs-on` to name
+the runner and run anything on it. The template says it outright, since launcher
+2.7.1: never register a self-hosted runner on a public repository. What stands
+between a stranger and the runner until the repository goes private is GitHub's
+approval gate: Settings → Actions → General → "Approval for running fork pull
+request workflows from contributors", set to require approval for **all external
+contributors**, so no fork's workflow runs until the owner has read it. Going
+private removes the risk, since only collaborators can open pull requests there.
 
 **Publishing from the runner is slow**: the build takes under a minute, but the
 upload to GitHub's release server runs at about 1.5 Mbit/s, so a publish takes

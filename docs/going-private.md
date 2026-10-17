@@ -8,9 +8,10 @@ The owner, 2026-10-16:
 - then *"I can't set the runner yet. You'll have to hold this up while we keep
   working on genes"*.
 
-**Status: waiting on the template** (§3, step 2). The runner is up, the releases
-repository and its token exist, and the template issue is filed. The repository is
-still public, and every installed game still updates from it.
+**Status: ready for the switch** (§3, step 4). The runner is up, the releases
+repository and its token exist, and the template supports publishing elsewhere
+(launcher 2.7.1, synced 2026-10-17). The repository is still public, and every
+installed game still updates from it.
 
 ## 1. Decided
 
@@ -50,16 +51,20 @@ still public, and every installed game still updates from it.
 ## 3. To do, in this order
 
 1. **The runner.** Done (§2).
-2. **The template**, issue #93 (§4 below). The template's release scripts publish
-   to the repository they run in, and work out the patch note from that
-   repository's tags, so publishing elsewhere is theirs to support. Then the
-   launcher sync brings it here, and `release.yml` passes it `biogenic-releases`
-   and `RELEASE_TOKEN`.
+2. **The template.** Done: issue #93, answered by the template's #94 (launcher
+   2.7.1, synced 2026-10-17). `release.yml` reads the `RELEASE_REPO` repository
+   variable and the `RELEASE_TOKEN` secret, and with the variable unset publishes
+   here exactly as before. Its first step checks the releases repository and the
+   token in seconds. The patch note now starts at the commit in the previous
+   release's manifest, so no tag is needed in the code repository, and a releases
+   repository with no release yet starts from this one's latest.
 3. **The public releases repository and its token.** Done (§2).
-4. **The switch, in a release.** Once the template supports it, `update_repo` in
-   `launcher_config.tres` points at the new repo. So does `REPO` in
-   `server/install-server.sh` (and the two URLs in its header). That ships as a
-   release while this repo is still public.
+4. **The switch, in a release.** Set the repository variable `RELEASE_REPO` to
+   `sinikebe/biogenic-releases`, and point `update_repo` in
+   `launcher_config.tres` at it. So does `REPO` in `server/install-server.sh` (and
+   the two URLs in its header). That ships as a release while this repo is still
+   public. The dev app's publish goes there first, which is the token's first
+   test.
 5. **Wait.** Every installed copy has to launch once on that release to learn
    the new address, the owner's dev app included. A copy that does not will never
    see another update, and will need a manual reinstall.
