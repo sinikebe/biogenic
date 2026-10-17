@@ -2,7 +2,7 @@
   "_comment": "Written by ci/sync_launcher.sh. Do not edit addons/launcher/ or ci/ by hand -- the next sync overwrites them.",
   "source": "sinikebe/godot-launcher-template",
   "ref": "main",
-  "commit": "15839512882db2c25ec0eabcd25b7c006413b676",
-  "subject": "End an update check that stops partway, so the bar never stays on \"Checking\u2026\" (#101)",
-  "synced_at": "2026-10-17T07:37:58Z"
+  "commit": "4d5f5a5573a1e3be89234c4bb17988412a819c5f",
+  "subject": "Let the player cancel an update check or download (#102)",
+  "synced_at": "2026-10-17T10:53:42Z"
 }
