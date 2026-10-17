@@ -1912,6 +1912,11 @@ func _water(desert := 0.0, rules := true, tails := true, light := true) -> Array
 	var field := WatchedDrop.new()
 	field.process_mode = Node.PROCESS_MODE_DISABLED
 	field.desert = desert
+	# **A desert is cleared to pose in, so it is open water all round**: in the
+	# middle of the drop, where no body posed near the player is past its hold
+	# (margin.md §2.1). Without one, the game's own start, in the margin.
+	if desert > 0.0:
+		field.start_mode = &"centre"
 	field.rules = rules
 	field.tails_beat = tails
 	field.daylight = light
@@ -3332,6 +3337,9 @@ func _rig(drop: bool, desert := 0.0) -> Array:
 	var field := WatchedDrop.new()
 	field.process_mode = Node.PROCESS_MODE_DISABLED
 	field.desert = desert
+	# A desert to pose in, in open water: the middle (see [method _water]).
+	if desert > 0.0:
+		field.start_mode = &"centre"
 	rig.add_child(field)
 	var recorder := RecorderNode.new()
 	recorder.process_mode = Node.PROCESS_MODE_DISABLED
@@ -4030,6 +4038,7 @@ func _save_run() -> void:
 	var genome: Node = run.get("_genome")
 	var met: Node = run.get("_metabolism")
 	cell.radius = 34.0
+	_held_in_drop(run)
 	genome.call(&"express", {&"cytostome": 2, &"cirrus": 1, &"flagellum": 1, &"rhabdom": 1},
 		[&"cytostome", &"cirrus", &"flagellum", &"rhabdom"])
 	genome.call(&"integrate", &"stigma")
@@ -5158,10 +5167,22 @@ func _cells_views() -> void:
 ## first drifter still waiting. Then full vision plays on and the drop ages:
 ## **the cell resumes at its place, cleared round** -- nothing that could swallow
 ## it within dread's reach.
+## **A cell moved or grown by hand is held where its size is held** (margin.md
+## §2.1), as its own run holds it on its next frame -- so a place kept is a place
+## the water lets it be. A run starts in the margin, where a step toward the rim or
+## a few meals of growth is past it.
+func _held_in_drop(run: Node) -> void:
+	var cell: CellBody = run.get("_cell")
+	var rim: RefCounted = (run.get("_food") as Node).call(&"basin")
+	if rim != null:
+		cell.position = rim.call(&"contain", cell.position, Drop.hold(cell.radius))
+
+
 func _cells_place() -> void:
 	await _cells_world(1)
 	var blind := _cell_run(RunState.Mode.POV)
 	(blind.get("_cell") as CellBody).position += Vector2(520.0, -380.0)
+	_held_in_drop(blind)
 	var hunter := _cells_hunter(blind, Vector2(0.0, 110.0))
 	var place := _cells_place_of(blind)
 	var first := int(((blind.get("_food") as Node).call(&"player_state") as Dictionary)["first"])
@@ -5217,6 +5238,7 @@ func _cells_elsewhere() -> void:
 	for how: String in ["another world", "a gone world", "a friend's water"]:
 		var left := _cell_run(RunState.Mode.POV)
 		(left.get("_cell") as CellBody).position += Vector2(-640.0, 300.0)
+		_held_in_drop(left)
 		if how == "a friend's water":
 			left.call(&"_set_own_drop_aside")
 			(left.get("_food") as Node).call(&"become_mirror")

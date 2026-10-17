@@ -72,8 +72,8 @@ const PATH := "user://drop.save"
 ## is made for when nobody is in it, a radius and a sight a player (§10.3).
 ## `rim_radius` is the rim it was kept under, for the record: a load makes the
 ## drop at this build's `RADIUS` round `rim_centre`, and a body past a smaller
-## rim, or past where the water is deep enough for it (margin.md §2.1), is put
-## back there (§9.4).
+## rim is put back where the water is deep enough for it (§9.4; margin.md §2.1).
+## One past its hold but inside the rim is held by its own next step.
 const SHAPE := {
 	"format": TYPE_INT,
 	"rules": TYPE_STRING,
@@ -431,7 +431,7 @@ static func rules_text() -> String:
 	put.call("metabolism.ABSORB", Metabolism.ABSORB)
 	put.call("drop.RADIUS", Drop.RADIUS)
 	# Where a body is held, by its size (margin.md §2.1): a drop kept before the film
-	# is converted, and every body put back where the water is deep enough for it.
+	# is converted, and every body is held where the water is deep enough for it.
 	put.call("drop.FILM", Drop.FILM)
 	# **The light** (docs/design/daylight.md §6): its day and how deep it reaches are
 	# the metabolism every body with a `sun` runs, beside HUNGER_SECONDS and ABSORB.

@@ -7322,7 +7322,13 @@ func drop_bodies() -> int:
 ## nothing yet, and nothing that has killed it.
 func _arrive() -> void:
 	died_to = -1
-	var at := _drop.holds(_cell.position + Vector2(0.0, -FIRST_DISTANCE), DRIFTER_MAX)
+	# Toward the middle when that is past where the water holds it: a run starts
+	# in the margin (margin.md §2.3), and the film must not pull it into view.
+	var at := _cell.position + Vector2(0.0, -FIRST_DISTANCE)
+	if not _drop.keeps(at, DRIFTER_MAX):
+		at = _cell.position + (_drop.meniscus.center - _cell.position).normalized() \
+			* FIRST_DISTANCE
+	at = _drop.holds(at, DRIFTER_MAX)
 	_first_index = _spawn(at, true)
 	_first_serial = _cells[_first_index].serial
 	_first_pending = true
@@ -7805,15 +7811,16 @@ func load_drop(cell: CellBody, state: Dictionary) -> Dictionary:
 		if not b.inert and b.radius > CellBody.RADIUS_MAX:
 			b.radius = CellBody.RADIUS_MAX
 			trimmed += 1
-		# Held inside by the test the running drop holds a body by (see
-		# [method _step_one]), so a body it left at its hold is not moved by a
-		# hair here: only a rim that is smaller than the one it was kept under, or
-		# a drop kept before the film (margin.md §2.1). A floc is held by no film:
-		# it lies on the glass where it fell.
-		var keep := b.radius if b.inert else Drop.hold(b.radius)
-		var room := _drop.meniscus.radius - keep
+		# **Put back only from past the rim**: a rim smaller than the one it was
+		# kept under -- and then where the water is deep enough for it (margin.md
+		# §2.1). Past its hold but inside the rim -- a body grown a meal at its
+		# shore, which its next step holds, or one kept before the film -- it is
+		# left where it was kept, and its own step holds it, as the running drop's
+		# would: so a drop kept and loaded goes on as one that never stopped. A
+		# floc is held by no film: it lies on the glass where it fell.
+		var room := _drop.meniscus.radius - b.radius
 		if b.pos.distance_squared_to(_drop.meniscus.center) > room * room:
-			b.pos = _drop.meniscus.contain(b.pos, keep)
+			b.pos = _drop.meniscus.contain(b.pos, b.radius if b.inert else Drop.hold(b.radius))
 			contained += 1
 		b.aim = b.pos
 		b.flee_from = b.pos
@@ -9799,7 +9806,7 @@ func _place_first() -> void:
 	if not b.seeded or b.serial != _first_serial:
 		return
 	var at := _cell.position + _cell.velocity.normalized() * FIRST_DISTANCE
-	if not _drop.meniscus.inside(at, FIRST_INSET):
+	if not _drop.meniscus.inside(at, maxf(FIRST_INSET, Drop.hold(b.radius))):
 		at = _cell.position + (_drop.meniscus.center - _cell.position).normalized() \
 			* FIRST_DISTANCE
 	at = _drop.holds(at, b.radius)
