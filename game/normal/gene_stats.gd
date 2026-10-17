@@ -127,17 +127,26 @@ static func _tank(ctx: Dictionary) -> float:
 	return MetabolismNode.HUNGER_SECONDS * float(ctx.get("reserve", 1.0))
 
 
-## **The next level, for the end of a worn beam's costs line** (§5.2):
+## **The next level, for the end of a worn levelled organ's costs line** (§5.2):
 ## `level 2 after 40 strikes`. A strike is one different body in the beam in
 ## one second, at most the beam's `xp_cap` a second, which is exactly what earns.
-static func progress_item(level: int, to_next: float) -> Dictionary:
-	var strikes := maxf(ceilf(to_next), 1.0)
+## [param earns] is what the organ earns by (gene.gd's `levels`, `earns`):
+## `strike`, the beam's, or `sight`, a body an eye saw (docs/design/sight.md).
+static func progress_item(level: int, to_next: float, earns: StringName = &"strike") -> Dictionary:
+	var count := maxf(ceilf(to_next), 1.0)
+	if earns == &"sight":
+		# TRANSLATORS: The last item of the eyespot's costs line: the next level,
+		# and how many bodies it has to see to earn it -- one different body in
+		# view in one second counts once. The English has a singular for one and a
+		# plural for any other number: give the forms your language needs.
+		return Readout.item_n("level {} after {} body seen", "level {} after {} bodies seen",
+			int(count), [level + 1, count], [U.COUNT, U.COUNT])
 	# TRANSLATORS: The last item of the beam's costs line: the next level, and how
 	# many "strikes" earn it. A strike is one different body touched by the beam
 	# in one second. The English has a singular for one strike and a plural for
 	# any other number: give the forms your language needs.
 	return Readout.item_n("level {} after {} strike", "level {} after {} strikes",
-		int(strikes), [level + 1, strikes], [U.COUNT, U.COUNT])
+		int(count), [level + 1, count], [U.COUNT, U.COUNT])
 
 
 ## **The odds, with their percentage** (§5.4): `one copy · 55% of daughters

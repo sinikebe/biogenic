@@ -404,11 +404,19 @@ jobs:
         # light on the two traces agree to 47.02 s, where a body far off in the
         # water first stands elsewhere. 68,421 lines, as before.
         #
+        # **Re-pinned when the eyespot came to see** (docs/design/sight.md,
+        # 2026-10-16), from 69009c17...: the eye changed on purpose. It sees a
+        # field about its slot, as far as the light lets it and blurred by its
+        # level, and nothing behind a body. Diffed against dev at 8c15247, the
+        # traces agree to 50.12 s, where this run's cell first wears an eyespot:
+        # its lobe reads 0.164 at 36 degrees wide (a level-1 eye's blur) where it
+        # read 0.280 at 26. 68,461 lines, from 68,421.
+        #
         # The run prints about ten megabytes, so it goes to a file rather than a
         # variable. About twenty seconds.
         run: |
           set -uo pipefail
-          pinned="69009c17fb51b603301563f65e530652c4ace6001c181fc7f47503e9d2ede481"
+          pinned="686c55a27fc7706ff918c48ccc8c1d9136e95005696330fcc4ca8ea3f9bf6ee5"
           log=$(mktemp)
           fail=0
           echo "--- seed 1, sixty seconds, R pressed at 20 s"

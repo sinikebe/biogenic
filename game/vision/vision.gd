@@ -47,6 +47,7 @@ const GenomeNode := preload("res://game/normal/genome.gd")
 const SignalBus := preload("res://game/perception/signal_bus.gd")
 const Cilia := preload("res://game/vision/cilia.gd")
 const Afterglow := preload("res://game/mechanics/afterglow.gd")
+const Sight := preload("res://game/mechanics/sight.gd")
 ## How far a sweeping ray turns between two of the marks it holds: 2 degrees,
 ## the field's own sub-step, in radians.
 const GLOW_SPACING := 0.034906585
@@ -1214,6 +1215,14 @@ func _age_echo_marks(delta: float) -> void:
 			_echo_marks.remove_at(i)
 
 
+## **What the eyespot sees, in the water** (docs/design/sight.md): the same lit
+## field point of view draws (returns.gd's `_draw_sight`), much fainter here,
+## where every body is drawn anyway -- what it adds is where the eye is looking,
+## how far it sees in this light and what is hiding what. Laid down across the
+## eye's blur, as there.
+const SIGHT_ALPHA := 0.07
+
+
 ## A body-relative bearing turned back into a world direction. The one place
 ## this view undoes what the membrane did, which is exactly what makes the
 ## membrane checkable.
@@ -1249,6 +1258,7 @@ func _on_world_draw() -> void:
 	_draw_meals(a)
 	_draw_hits(a)
 	_draw_wakes(a)
+	_draw_sight(a)
 	_draw_beams(a)
 	_draw_ping(a)
 	_draw_cell(a)
@@ -1616,6 +1626,53 @@ func _draw_beams(a: float) -> void:
 			true, -1.0, true)
 		_world.draw_circle(_beam_glow.point(i), 3.4, Color(tone, 0.92 * fade),
 			true, -1.0, true)
+
+
+## **The eyespot's field** ([constant SIGHT_ALPHA]): each ray of the field's
+## picture from the skin to where something stopped it, as bright as the haze
+## leaves it at each distance -- whole to its core, nothing at its reach -- so a
+## ray stopped by a body is no brighter than the open water beside it. Exact, not
+## blurred: every body is drawn here anyway, and point of view is where the blur
+## is seen (returns.gd). Two triangle strips, handed to the server.
+func _draw_sight(a: float) -> void:
+	if _food_node == null:
+		return
+	var fan: PackedFloat32Array = _food_node.sight_fan
+	var n := fan.size()
+	var reach: float = _food_node.sight_reach
+	if n < 2 or reach <= 0.0:
+		return
+	var half: float = _food_node.sight_half
+	var step := 2.0 * half / float(n - 1)
+	var tone := Cilia.hue_on(Catalogue.LIGHT)
+	var seeing: float = _food_node.sight_seeing
+	var core: float = _food_node.sight_core * seeing
+	var lit := SIGHT_ALPHA * seeing * a
+	var low: float = _food_node.sight_mid - half
+	var origin := _cell.position
+	var skin := _cell.radius * 1.12
+	var points := PackedVector2Array()
+	var colors := PackedColorArray()
+	points.resize(3 * n)
+	colors.resize(3 * n)
+	for k in n:
+		var dir := _ray(low + step * float(k))
+		var run := maxf(fan[k], skin * 1.02)
+		var whole := clampf(core, skin * 1.01, run)
+		points[k] = origin + dir * skin
+		colors[k] = Color(tone, lit)
+		points[n + k] = origin + dir * whole
+		colors[n + k] = Color(tone, lit * Sight.haze(whole, core, reach))
+		points[2 * n + k] = origin + dir * run
+		colors[2 * n + k] = Color(tone, lit * Sight.haze(run, core, reach))
+	var indices := PackedInt32Array()
+	for row in 2:
+		var first := row * n
+		for k in n - 1:
+			indices.append_array([first + k, first + k + 1, first + n + k,
+				first + k + 1, first + n + k + 1, first + n + k])
+	RenderingServer.canvas_item_add_triangle_array(_world.get_canvas_item(),
+		indices, points, colors)
 
 
 ## **A sweep's hits, caught as they happen**, for [method _draw_beams] to hold.

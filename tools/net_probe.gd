@@ -5291,6 +5291,16 @@ func _pond_rig(from_seed: int, radius: float, tiers: Dictionary,
 	field.ping_through = cell.ping_through()
 	field.ping_tier = cell.ping_tier()
 	field.touch_range = Stats.at(&"touch_range", mini(cell.extra(&"palp"), 3))
+	# The eyespot looking ahead, at its tier as its level (docs/design/sight.md):
+	# an eye nobody aims sees nothing.
+	var sight := FoodField.sight_of(&"stigma" if int(tiers.get(&"stigma", 0)) > 0 else &"",
+		int(tiers.get(&"stigma", 0)))
+	field.sight_mid = 0.0
+	field.sight_half = float(sight[0])
+	field.sight_range = float(sight[1])
+	field.sight_core = float(sight[2])
+	field.sight_dark = float(sight[3])
+	field.sight_blur = float(sight[4])
 	_pond_nodes.append_array([genome, cell, field])
 	_pond_fields.append(field)
 	return field

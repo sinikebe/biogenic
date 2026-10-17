@@ -81,14 +81,11 @@ msgstr ""
 #. every body it meets. "The nearest {} answer" means the {} closest bodies
 #. send an answer (three to five, so always several); "passes a body" is how
 #. much of the pulse goes on past a body in its way.
-#. The shadow-sensing gene (`stigma`, shown as `see`): it feels the shadow of
-#. large bodies. "A bearing to within {}" means the direction of a body is
-#. known to within that many degrees.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
 #. joined with a middle dot into a line of at most 650 px; the longest English
 #. line takes 550 px.
-#: game/genes/organs/ampulla.gd game/genes/organs/stigma.gd
+#: game/genes/organs/ampulla.gd
 #, python-brace-format
 msgid "out to {} µm"
 msgstr ""
@@ -1154,17 +1151,18 @@ msgstr ""
 #. the English. "That side" is the side of the body where the gene's slot is.
 #. The `entry` line says which gene.
 #. entry: stigma
-#. Room: at most 440 px in 15 px type; the English takes 342 px.
+#. Room: at most 440 px in 15 px type; the English takes 308 px.
 #: game/genes/organs/stigma.gd
-msgid "feels the shadow of anything big, however dark"
+msgid "sees what is in front of it, sharper with use"
 msgstr ""
 
 #. The name of a sense on a small chip of the player's "instincts" (rules:
 #. "when <a sense reports something> -> <do this>"): what one organ of the
 #. cell reports. "beam": what the light the cell's ocellus casts lands on;
 #. "echo": what comes back of the cell's ping; "smell": the smell of food;
-#. "shadow": the shade of something big; "touch": something against the cell's
-#. skin, felt by its palps. Lowercase, one short word.
+#. "shadow": a body the cell's eyespot sees, dark against the light; "touch":
+#. something against the cell's skin, felt by its palps. Lowercase, one short
+#. word.
 #. entry: stigma.shadow
 #. Room: at most 112 px in 15 px type; the English takes 57 px.
 #: game/genes/organs/stigma.gd
@@ -1181,33 +1179,45 @@ msgstr ""
 #. twice in the cell's DNA, which is what lets the tail be held still. "For
 #. free" means it costs no food.
 #. entry: stigma.shadow
-#. Room: at most 856 px in 15 px type; the English takes 528 px.
+#. Room: at most 856 px in 15 px type; the English takes 509 px.
 #: game/genes/organs/stigma.gd
-msgid "shadow · the shade of anything your size or bigger: where, and how dark."
+msgid "shadow · what your eyespot sees in front of it: where, and how clearly."
 msgstr ""
 
-#. The shadow-sensing gene (`stigma`, shown as `see`): it feels the shadow of
-#. large bodies. "A bearing to within {}" means the direction of a body is
-#. known to within that many degrees.
+#. The seeing gene (`stigma`, shown as `see`): an eyespot. "{} either side" is
+#. how far round it sees from where it is worn, in degrees. "Sharp to within
+#. {}" is its blur: a thing narrower than that many degrees looks faint.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
 #. joined with a middle dot into a line of at most 650 px; the longest English
 #. line takes 550 px.
 #: game/genes/organs/stigma.gd
 #, python-brace-format
-msgid "feels bodies over {} × your size"
+msgid "sees {} either side"
 msgstr ""
 
-#. The shadow-sensing gene (`stigma`, shown as `see`): it feels the shadow of
-#. large bodies. "A bearing to within {}" means the direction of a body is
-#. known to within that many degrees.
+#. The seeing gene (`stigma`, shown as `see`): an eyespot. "{} either side" is
+#. how far round it sees from where it is worn, in degrees. "Sharp to within
+#. {}" is its blur: a thing narrower than that many degrees looks faint.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
 #. joined with a middle dot into a line of at most 650 px; the longest English
 #. line takes 550 px.
 #: game/genes/organs/stigma.gd
 #, python-brace-format
-msgid "a bearing to within {}"
+msgid "out to {} µm in full light, {} µm in none"
+msgstr ""
+
+#. The seeing gene (`stigma`, shown as `see`): an eyespot. "{} either side" is
+#. how far round it sees from where it is worn, in degrees. "Sharp to within
+#. {}" is its blur: a thing narrower than that many degrees looks faint.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/stigma.gd
+#, python-brace-format
+msgid "sharp to within {}"
 msgstr ""
 
 #. A gene's name as the player reads it on a chip beside three small dots: one
@@ -3373,6 +3383,21 @@ msgstr ""
 #, python-brace-format
 msgid "wearing it burns {} s a second"
 msgstr ""
+
+#. The last item of the eyespot's costs line: the next level, and how many
+#. bodies it has to see to earn it -- one different body in view in one second
+#. counts once. The English has a singular for one and a plural for any other
+#. number: give the forms your language needs.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "level {} after {} body seen"
+msgid_plural "level {} after {} bodies seen"
+msgstr[0] ""
+msgstr[1] ""
 
 #. The last item of the beam's costs line: the next level, and how many
 #. "strikes" earn it. A strike is one different body touched by the beam in

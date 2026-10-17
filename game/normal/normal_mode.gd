@@ -693,6 +693,9 @@ var _vision_cut := false
 var _beam_fan := RayFan.new()
 ## Different bodies the beam touched this second, which is its experience.
 var _beam_tally := Tally.new(int(Catalogue.number_for({}, &"beam_range", &"xp_cap", 0)))
+## Different bodies the eyespot saw this second, which is its experience
+## (docs/design/sight.md): its cap is the organ's, set as it earns.
+var _sight_tally := Tally.new(0)
 ## **What the membrane's beam lobe is still holding**, for a sweep: a hit that
 ## is only lit once a pass stays on the skin and fades over the revisit time,
 ## or a sweep reads as flicker (§4.3). Strength and bearing, as the bus takes
@@ -1660,6 +1663,7 @@ func _process(delta: float) -> void:
 	# cilia.gd's arcs -- and handed to the field, which delivers them.
 	_food.toxins = _toxins()
 	_aim_beam(delta)
+	_aim_sight()
 	# `chemocyte` and `ampulla`: how far this nose reaches and how often this
 	# electroreceptor fires. Scalars about the cell's own anatomy, handed to the
 	# field so it can answer in bearings -- the same contract as beam_range.
@@ -1706,6 +1710,9 @@ func _process(delta: float) -> void:
 	# sensations a minute for an organ it does not have.
 	var eye := _eyespot_tier() > 0
 	_bus.light(_food.shadow_bearing if eye else 0.0, _food.shadow if eye else 0.0)
+	# **Its lobe is as wide as its eye is blurred** (docs/design/sight.md): a
+	# level-1 eye says roughly where, a sharp one exactly.
+	_bus.sight_width(rad_to_deg(_food.sight_blur))
 	# The earned senses, beside organs() and for the same reason: a tier is a
 	# property of the organ, not of what it senses.
 	# The beam's by its level, held to the three rungs the membrane's lobe
@@ -1714,6 +1721,7 @@ func _process(delta: float) -> void:
 		_cell.tier_for(&"smell_range"), _cell.tier_for(&"ping_range"))
 	_post_beam(delta)
 	_earn_beam(delta)
+	_earn_sight(delta)
 	_post_pings(delta)
 	# The nose, the eyespot and the ping's organ glow with what each senses, on the
 	# body in both views: after the echoes that landed this frame are in.
@@ -1863,6 +1871,40 @@ func _aim_beam(delta: float) -> void:
 	_food.beam_fan_half = half
 
 
+## **Where this cell's eyespot looks, how far and how sharply**
+## (docs/design/sight.md): the arc it is worn on, its organ's field and reach, and
+## its blur at its level -- `food.gd`'s `sight_of`, which every water cell's eye
+## is read by too. Resolved here for the beam's reason: this file has the genome
+## and cilia.gd's arc table. An eyespot only the DNA carries is no eye.
+func _aim_sight() -> void:
+	var eye := _cell.on_channel(Catalogue.LIGHT)
+	var level := maxi(_genome.level_of(eye), 1) if eye != &"" else 0
+	var sight := FoodField.sight_of(eye, level)
+	_food.sight_mid = _slot_bearing_of(eye) if eye != &"" else 0.0
+	_food.sight_half = float(sight[0])
+	_food.sight_range = float(sight[1])
+	_food.sight_core = float(sight[2])
+	_food.sight_dark = float(sight[3])
+	_food.sight_blur = float(sight[4])
+
+
+## **The eyespot's experience** (docs/design/sight.md), as the beam's: one for
+## every different body it saw clearly enough in a second (food.gd's
+## SIGHT_COUNTS), capped by its own number, and only while this body wears it.
+func _earn_sight(delta: float) -> void:
+	var eye := _cell.on_channel(Catalogue.LIGHT)
+	if eye == &"":
+		_sight_tally.reset()
+		return
+	var cap: Variant = Catalogue.number(eye, &"xp_cap")
+	_sight_tally.cap = maxi(int(cap), 0) if cap != null else 0
+	for index: int in _food.sight_seen:
+		_sight_tally.touch(index)
+	var earned := _sight_tally.step(delta)
+	if earned > 0:
+		_earn(eye, float(earned))
+
+
 ## **The beam's experience** (beam-levels.md §2): one for every different body
 ## its rays touched in a second, capped, and only while this body wears it.
 ## Every body counts -- food, a hunter, a sister, the other player -- because
@@ -1889,7 +1931,7 @@ func _earn_beam(delta: float) -> void:
 ## asked: a daughter who inherits an open fork never levels into it, so she is
 ## not told again.
 ##
-## The one door experience comes in by -- the beam's tally, and
+## The one door experience comes in by -- the beam's tally, the eyespot's, and
 ## `tools/drive.gd --earn=`, which poses a level-up through it.
 func _earn(gene: StringName, amount: float) -> void:
 	var grown := _genome.progression(gene)

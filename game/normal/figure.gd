@@ -1574,7 +1574,8 @@ static func numbers_lines(gene: StringName, copies: int, level: int,
 		GeneStats.context(body, radius), slot)
 	if next != null:
 		(lines[1] as Array).append(
-			GeneStats.progress_item(next.level(), next.to_next()))
+			GeneStats.progress_item(next.level(), next.to_next(),
+				StringName(Catalogue.levels(gene).get("earns", &"strike"))))
 	return lines
 
 
