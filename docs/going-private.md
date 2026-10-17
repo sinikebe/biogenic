@@ -67,17 +67,24 @@ installed game still updates from it.
       2026-10-17**, into `dev`. A content update is enough: the launcher reads its
       config after mounting the content pack, and a running server updates itself
       the same way.
-   2. **A release to `main`, with `RELEASE_REPO` still unset**, so it is published
-      here, where every installed copy looks. Its build warns that it checks one
-      repository and is published to another: for this one release, that is the
-      point.
-   3. **Straight away**, the repository variable `RELEASE_REPO` is set to
-      `sinikebe/biogenic-releases`, and the Release workflow is run again on `main`
-      and on `dev` (Actions → Release → Run workflow), so the releases repository
-      holds both, with the patch notes players already have. Until then a copy
-      that took the release finds nothing to check, and the dev app, which takes
-      step 1 as soon as it merges, finds nothing on its `branch-dev` either.
-      This run is `RELEASE_TOKEN`'s first use.
+   2. **The dev app moves first, as a rehearsal.** Step 1's merge is published
+      here, and the dev app takes it -- the binary 12 it carries too -- and then
+      looks in `sinikebe/biogenic-releases`. The repository variable
+      `RELEASE_REPO_DEV` is set to `sinikebe/biogenic-releases`, and the Release
+      workflow is run again on `dev`: `branch-dev` is published there, and the dev
+      app finds it. That is `RELEASE_TOKEN`'s first use, the release-repository
+      check's and the new repository's, all before any player depends on them.
+      `RELEASE_REPO_DEV` is read by `dev`'s publish alone (`release.yml`).
+   3. **A release to `main`, with `RELEASE_REPO` still unset**, so it is
+      published here, where every installed copy looks. Its build warns that it
+      checks one repository and is published to another: for this one release,
+      that is the point.
+   4. **Straight away**, the repository variable `RELEASE_REPO` is set to
+      `sinikebe/biogenic-releases`, and the Release workflow is run again on
+      `main`, so the releases repository holds that release too, with the patch
+      notes players already have. Until then a copy that took the release finds
+      nothing to check. `RELEASE_REPO_DEV` can go once `RELEASE_REPO` is set: dev
+      follows it.
 5. **Wait.** Every installed copy has to launch once on that release to learn
    the new address, the owner's dev app included. A copy that does not will never
    see another update, and will need a manual reinstall.

@@ -58,7 +58,12 @@ env:
   # this repository. The RELEASE_REPO repository variable names a separate public
   # repository that holds only releases, for when the code goes private, with the
   # RELEASE_TOKEN secret to write there. Unset, everything publishes here as before.
-  RELEASE_REPO: ${{ vars.RELEASE_REPO || github.repository }}
+  #
+  # **RELEASE_REPO_DEV moves dev's publish alone, and first** (ours, 2026-10-17):
+  # the dev app makes the move before any player, as a rehearsal of it, while
+  # main's release that tells the players still has to be published here. Unset,
+  # dev follows RELEASE_REPO.
+  RELEASE_REPO: ${{ (github.ref_name == 'dev' && vars.RELEASE_REPO_DEV) || vars.RELEASE_REPO || github.repository }}
 
 jobs:
   release:
@@ -94,7 +99,7 @@ jobs:
         # seconds rather than after every export. Nothing to check, and nothing
         # called, while releases are published here (the template's).
         env:
-          GH_TOKEN: ${{ vars.RELEASE_REPO && vars.RELEASE_REPO != github.repository && secrets.RELEASE_TOKEN || github.token }}
+          GH_TOKEN: ${{ env.RELEASE_REPO != github.repository && secrets.RELEASE_TOKEN || github.token }}
           RELEASE_TOKEN_SET: ${{ secrets.RELEASE_TOKEN != '' }}
         run: bash ci/check_release_repo.sh
 
@@ -193,7 +198,7 @@ jobs:
       - name: Collect patch notes
         env:
           # Reads the latest release's manifest, from RELEASE_REPO.
-          GH_TOKEN: ${{ vars.RELEASE_REPO && vars.RELEASE_REPO != github.repository && secrets.RELEASE_TOKEN || github.token }}
+          GH_TOKEN: ${{ env.RELEASE_REPO != github.repository && secrets.RELEASE_TOKEN || github.token }}
         # Must run before the version stamp: prepare_build.sh bakes these notes
         # into the binary so the app can show its own changelog with no network.
         run: bash ci/collect_changes.sh
@@ -350,7 +355,7 @@ jobs:
         env:
           # github.token can write only to this repository; RELEASE_TOKEN is the
           # one that reaches a separate RELEASE_REPO.
-          GH_TOKEN: ${{ vars.RELEASE_REPO && vars.RELEASE_REPO != github.repository && secrets.RELEASE_TOKEN || github.token }}
+          GH_TOKEN: ${{ env.RELEASE_REPO != github.repository && secrets.RELEASE_TOKEN || github.token }}
           TAG: ${{ steps.version.outputs.tag }}
           VERSION_NAME: ${{ steps.version.outputs.version_name }}
           GAME_NAME: ${{ steps.version.outputs.game_name }}
