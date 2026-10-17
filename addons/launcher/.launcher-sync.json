@@ -2,7 +2,7 @@
   "_comment": "Written by ci/sync_launcher.sh. Do not edit addons/launcher/ or ci/ by hand -- the next sync overwrites them.",
   "source": "sinikebe/godot-launcher-template",
   "ref": "main",
-  "commit": "a0c21f342294bd614d24b7227769b87fcd408b30",
-  "subject": "Fix the background_shader docstring and two stale agent notes (#97)",
-  "synced_at": "2026-10-17T01:46:24Z"
+  "commit": "452a1f9ec5a584972dc1ee81fbf5cd5e6a21cfca",
+  "subject": "Bring the docs up to date with the launcher and the pipeline (#98)",
+  "synced_at": "2026-10-17T02:02:48Z"
 }
