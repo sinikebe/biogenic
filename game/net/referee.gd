@@ -121,9 +121,12 @@ const TURNING_MAX := 1.5
 ## A claimed radius may be this far over what the host has fed it, for the
 ## float32 on the wire.
 const RADIUS_SLACK := 0.05
-## **A daughter's radius**, `CellBody.daughter_radius(DIVIDE_RADIUS)` -- 40 over
-## the square root of two -- written out because a const cannot call a function.
-## `tools/net_probe.gd` holds the two to each other.
+## **The least a daughter is**, `CellBody.daughter_radius(DIVIDE_RADIUS)` -- 40
+## over the square root of two -- written out because a const cannot call a
+## function. `tools/net_probe.gd` holds the two to each other. A daughter is half
+## her mother's area, so a lineage that divides later is born bigger
+## (docs/design/margin.md §1.1): her size is her mother's out of the water, over
+## the same root.
 const DAUGHTER_RADIUS := 28.284271247461902
 ## While out of the water, dividing, a body is where it was: frozen to this.
 const OUT_STILL := 2.0
@@ -308,10 +311,14 @@ var _grant: Array = []
 ## ENTER that put this body here. Until then the body waits at the arrival.
 var arrived := false
 ## **What the host has fed this body to**: the ENTER's radius, then 4 for every
-## ATE sent, up to 40, and a daughter's after a birth. A claim over it fouls.
+## ATE sent, up to `CellBody.RADIUS_MAX`, and a daughter's after a birth. A claim
+## over it fouls. **It never needs the guest's DNA** (docs/design/margin.md §1.2):
+## a body grows past forty only where its genes need it to, and a guest that grows
+## on past its own division radius still earns every unit of it with a meal the
+## host sent.
 var expected := 0.0
 ## An arrival that was not a return from a death: its first frame's radius is
-## taken, up to 40 -- a guest swimming alone eats in the round trip of its own
+## taken, up to `CellBody.RADIUS_MAX` -- a guest swimming alone eats in the round trip of its own
 ## swap, and an arrival's body is one the host never saw grow anyway (B.6).
 var _reanchor := false
 var _anchors: Array = []
@@ -345,6 +352,11 @@ var _birth_until := -INF
 ## (#102).
 var _bonus_spent := false
 var _out := false
+## **The size the mother went out of the water at**: her first OUT frame's, never
+## under forty -- or, for a division heard of only from its SISTER, what the host
+## had fed her to. Her daughter is this over the square root of two, and the
+## mother's own OUT frames are judged against it.
+var _out_radius := CellBody.DIVIDE_RADIUS
 var _frozen := Vector2.ZERO
 var _division_open := false
 var _sister_taken := false
@@ -420,11 +432,11 @@ func stalled(seconds: float) -> void:
 # ---------------------------------------------------------------------------
 
 ## **The host sent this guest an ATE**: its body will be four units bigger, up
-## to forty. The host raises what it expects when it *sends* the meal, so the
+## to `CellBody.RADIUS_MAX`. The host raises what it expects when it *sends* the meal, so the
 ## guest's own radius can only lag behind it.
 func ate() -> void:
 	_meals += 1
-	expected = minf(expected + CellBody.GROWTH_PER_MEAL, CellBody.DIVIDE_RADIUS)
+	expected = minf(expected + CellBody.GROWTH_PER_MEAL, CellBody.RADIUS_MAX)
 
 
 ## **Tools only**: [param meals] ATEs the probe skipped by setting a radius by
@@ -480,9 +492,9 @@ func judge_enter(now: float, radius: float, present: bool) -> bool:
 			now)
 		return false
 	if radius < CellBody.BASE_RADIUS - RADIUS_EPSILON \
-			or radius > CellBody.DIVIDE_RADIUS + RADIUS_EPSILON:
+			or radius > CellBody.RADIUS_MAX + RADIUS_EPSILON:
 		_foul(ENTER, WEIGHT_ENTER, "arrival: at r%.2f, where a body is r%.0f to r%.0f"
-			% [radius, CellBody.BASE_RADIUS, CellBody.DIVIDE_RADIUS], now)
+			% [radius, CellBody.BASE_RADIUS, CellBody.RADIUS_MAX], now)
 		return false
 	if born and absf(radius - CellBody.BASE_RADIUS) > RADIUS_EPSILON:
 		_foul(ENTER, WEIGHT_ENTER, "arrival: back from a death at r%.2f, where a new"
@@ -652,12 +664,14 @@ func judge_person(now: float, new_body: bool, tiers: Dictionary, order: Array,
 ## [param present] is whether the host has a body for this guest now.
 ##
 ## Legal once for each division, and a division is known three ways:
-## - **Seen**: an OUT frame at r40 began it.
+## - **Seen**: an OUT frame at r40 or over began it, and she is exactly half its
+##   area.
 ## - **Unseen**: its OUT frames and its SISTER all landed in one host frame -- a
 ##   host frozen through the whole of the guest's out window, a phone switched
 ##   away and back -- and a host takes events before it carries state frames,
 ##   so the SISTER is heard first. Taken when the body is here, has arrived and
-##   has been fed to r40, which is everything one OUT frame would have proved.
+##   has been fed to r40, which is everything one OUT frame would have proved;
+##   she may be any daughter of a mother the host fed that far.
 ## - **Owed**: seen, and its body went before the SISTER landed (see
 ##   [member _sister_owed_by]).
 func judge_sister(now: float, at: Vector2, radius: float, present: bool) -> Array:
@@ -682,6 +696,7 @@ func judge_sister(now: float, at: Vector2, radius: float, present: bool) -> Arra
 		_out = true
 		_frozen_unknown = true
 		_meals_at_out = _meals
+		_out_radius = clampf(expected, CellBody.DIVIDE_RADIUS, CellBody.RADIUS_MAX)
 		# **Unseen, but not anywhere** (#102): the mother swam no further since
 		# her last frame than the movement budget allows -- a host stall is
 		# credited to it -- and her sister is born a ring's width from there.
@@ -693,30 +708,36 @@ func judge_sister(now: float, at: Vector2, radius: float, present: bool) -> Arra
 				% far + " was last, where she could be %.0f -- put there" % could, now)
 			at = _claim_at + _toward(at - _claim_at) * could
 			if rim != null:
-				at = rim.contain(at, DAUGHTER_RADIUS)
+				at = rim.contain(at, CellBody.daughter_radius(_out_radius))
 	_division_open = false
 	_sister_taken = true
 	_birth_open = true
 	_birth_until = now + BIRTH_WAIT
 	_bonus_spent = false
 	_born_by = -INF
+	var placed := _sister_placed(now, at, radius, _frozen, mother_seen)
 	# The daughter, and whatever the host fed her if her first frames beat the
-	# SISTER here: every meal sent since her mother was last seen out.
-	expected = minf(DAUGHTER_RADIUS + CellBody.GROWTH_PER_MEAL
-		* float(_meals - _meals_at_out), CellBody.DIVIDE_RADIUS)
-	return _sister_placed(now, at, radius, _frozen, mother_seen)
+	# SISTER here: every meal sent since her mother was last seen out. She is her
+	# sister's size: one division, two halves.
+	expected = minf(float(placed[1]) + CellBody.GROWTH_PER_MEAL
+		* float(_meals - _meals_at_out), CellBody.RADIUS_MAX)
+	return placed
 
 
 ## **Where a sister goes, and at what size**: a daughter's radius, and on the
 ## ring of [constant SISTER_DISTANCE] round [param mother] when where her mother
 ## stopped is known ([param ring]) -- put there, with a foul, when she was not.
+## Her size is half her mother's area when the mother was seen going out, and any
+## daughter's of a mother no bigger than the host fed her when she was not.
 func _sister_placed(now: float, at: Vector2, radius: float, mother: Vector2,
 		ring: bool) -> Array:
 	var place := at
 	var size := radius
 	var off := false
-	if absf(radius - DAUGHTER_RADIUS) > RADIUS_SLACK:
-		size = DAUGHTER_RADIUS
+	var most := CellBody.daughter_radius(_out_radius)
+	var least := most if ring else DAUGHTER_RADIUS
+	if not (radius >= least - RADIUS_SLACK and radius <= most + RADIUS_SLACK):
+		size = clampf(radius, least, most) if is_finite(radius) else most
 		off = true
 	# A distance that overflows float32 -- past about 1.8e19 -- is off the ring,
 	# and [method _toward] still finds her direction (#102).
@@ -725,15 +746,15 @@ func _sister_placed(now: float, at: Vector2, radius: float, mother: Vector2,
 			and not _rim_holds(at, mother):
 		place = mother + _toward(at - mother) * SISTER_DISTANCE
 		if rim != null:
-			place = rim.contain(place, DAUGHTER_RADIUS)
+			place = rim.contain(place, size)
 		off = true
 	if off and ring:
 		_foul(SISTER, WEIGHT_SISTER_OFF, "sister: r%.2f, %.0f units from her mother --"
-			% [radius, apart] + " put at r%.2f on the ring of %.0f" % [DAUGHTER_RADIUS,
+			% [radius, apart] + " put at r%.2f on the ring of %.0f" % [size,
 				SISTER_DISTANCE], now)
 	elif off:
 		_foul(SISTER, WEIGHT_SISTER_OFF, "sister: r%.2f -- made r%.2f" % [radius,
-			DAUGHTER_RADIUS], now)
+			size], now)
 	return [place, size]
 
 
@@ -744,7 +765,7 @@ func _sister_placed(now: float, at: Vector2, radius: float, mother: Vector2,
 func _rim_holds(at: Vector2, mother: Vector2) -> bool:
 	if rim == null:
 		return false
-	var circle := rim.radius - DAUGHTER_RADIUS
+	var circle := rim.radius - CellBody.daughter_radius(_out_radius)
 	return absf(at.distance_to(rim.center) - circle) <= SISTER_RING \
 		and at.distance_to(mother) <= SISTER_DISTANCE + SISTER_RING
 
@@ -785,10 +806,10 @@ func judge_shout(now: float, at: Vector2, radius: float, reach: float,
 	# its caller's size says, so a call from a guest with no body here is held
 	# to the numbers no honest call passes.
 	var reach_max := Stats.top(&"ping_range")
-	if radius > CellBody.DIVIDE_RADIUS + RADIUS_SLACK or reach > reach_max + RADIUS_SLACK:
+	if radius > CellBody.RADIUS_MAX + RADIUS_SLACK or reach > reach_max + RADIUS_SLACK:
 		_foul(SHOUT, WEIGHT_SHOUT, "shout: at r%.2f reaching %.0f, where no body is over"
 			% [radius, reach] + " r%.0f and no organ calls past %.0f" % [
-				CellBody.DIVIDE_RADIUS, reach_max], now)
+				CellBody.RADIUS_MAX, reach_max], now)
 		return false
 	if shouts.take(1.0, now) < 1.0:
 		_foul(SHOUT, WEIGHT_SHOUT, "shout: more often than what it wears calls", now)
@@ -826,7 +847,7 @@ func judge_shout(now: float, at: Vector2, radius: float, reach: float,
 ##   the same numbers allow, so a teleport is a walk at the cap.
 ## - **Which way**: the same, on [member turn].
 ## - **How big**: never over [member expected], and never under a new cell.
-## - **Out of the water**: only at r40, and then where it was.
+## - **Out of the water**: only at r40 or over, and then where it was.
 func claim(now: float, at: Vector2, heading: float, radius: float,
 		velocity: Vector2, turning: float, out: bool) -> Array:
 	judged["state"] = int(judged["state"]) + 1
@@ -836,12 +857,13 @@ func claim(now: float, at: Vector2, heading: float, radius: float,
 		if _stale_until == INF:
 			_stale_until = now + STALE_FOR
 	_await_birth(now)
-	# How big. A division's own OUT frames are its mother's, r40, even landing
-	# after her daughter's SISTER has set what the host expects next.
+	# How big. A division's own OUT frames are its mother's, the size she went
+	# out at, even landing after her daughter's SISTER has set what the host
+	# expects next.
 	if _reanchor:
 		_reanchor = false
-		expected = maxf(expected, minf(radius, CellBody.DIVIDE_RADIUS))
-	var bound := maxf(expected, CellBody.DIVIDE_RADIUS) if (out and _out) else expected
+		expected = maxf(expected, minf(radius, CellBody.RADIUS_MAX))
+	var bound := maxf(expected, _out_radius) if (out and _out) else expected
 	worst_radius = maxf(worst_radius, radius - bound)
 	var size := radius
 	if radius > bound + RADIUS_SLACK:
@@ -866,7 +888,7 @@ func claim(now: float, at: Vector2, heading: float, radius: float,
 	elif out:
 		if expected < CellBody.DIVIDE_RADIUS - RADIUS_SLACK:
 			_foul(OUT, WEIGHT_OUT, "dividing: out of the water at r%.2f, where only r%.0f"
-				% [expected, CellBody.DIVIDE_RADIUS] + " divides -- kept in it", now)
+				% [expected, CellBody.DIVIDE_RADIUS] + " or over divides -- kept in it", now)
 		else:
 			wet = false
 			_out = true
@@ -874,11 +896,14 @@ func claim(now: float, at: Vector2, heading: float, radius: float,
 			_division_open = true
 			_sister_taken = false
 			_meals_at_out = _meals
+			_out_radius = clampf(size, CellBody.DIVIDE_RADIUS, CellBody.RADIUS_MAX)
 	elif _out:
 		_out = false
 		_frozen_unknown = false
 		if not _sister_taken:
-			if radius < CellBody.DIVIDE_RADIUS - 1.0:
+			# A daughter is her mother over the square root of two: a dozen
+			# units under her at least.
+			if radius < _out_radius - 1.0:
 				_born_by = now + BIRTH_WAIT
 			else:
 				_division_open = false

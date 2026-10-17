@@ -396,7 +396,8 @@ func _read_division() -> Dictionary:
 		return out
 	var commit := _frame[RecorderNode.AT_COMMIT]
 	out["spread"] = _frame[RecorderNode.AT_SPREAD]
-	out["radius"] = CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)
+	# Half the mother's area, at the size she divided at.
+	out["radius"] = CellBody.daughter_radius(_frame[5])
 	var fades := [Run.DIVIDE_FADE_IDLE, Run.DIVIDE_FADE_IDLE]
 	var sheds := [0.0, 0.0]
 	if absf(commit) >= 2.0:

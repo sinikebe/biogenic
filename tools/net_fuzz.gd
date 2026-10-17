@@ -657,7 +657,7 @@ func _some_tail() -> PackedByteArray:
 func _valid_frame(from_host: bool, next := -1) -> PackedByteArray:
 	var seq := next if next >= 0 else _rng.randi_range(0, 0x7FFFFFFF)
 	var at := Vector2(_rng.randf_range(-5000.0, 5000.0), _rng.randf_range(-5000.0, 5000.0))
-	var radius := _rng.randf_range(CellBody.BASE_RADIUS, CellBody.DIVIDE_RADIUS)
+	var radius := _rng.randf_range(CellBody.BASE_RADIUS, CellBody.RADIUS_MAX)
 	var tiers := _tiers()
 	var choice := _rng.randi_range(0, 15)
 	match choice:
@@ -1075,7 +1075,7 @@ func _door_next(line: String, stage: Dictionary, seq: Dictionary,
 ## or only one of those, when [param only] says which.
 func _guest_frame(next: int, only := "") -> PackedByteArray:
 	var at := Vector2(_rng.randf_range(-3000.0, 3000.0), _rng.randf_range(-3000.0, 3000.0))
-	var radius := _rng.randf_range(CellBody.BASE_RADIUS, CellBody.DIVIDE_RADIUS)
+	var radius := _rng.randf_range(CellBody.BASE_RADIUS, CellBody.RADIUS_MAX)
 	var tiers := _tiers()
 	var pick := _rng.randi_range(0, 9)
 	if only == "state":
@@ -2353,7 +2353,7 @@ func _referee_plan(seed: int, run: int) -> Array:
 			2:
 				plan.append([dt, "arrive", Vector2(rng.randf_range(-4000.0, 4000.0),
 					rng.randf_range(-4000.0, 4000.0)), _f32(rng.randf_range(CellBody.BASE_RADIUS,
-						CellBody.DIVIDE_RADIUS))])
+						CellBody.RADIUS_MAX))])
 			3:
 				var tiers := _tiers_from(rng)
 				plan.append([dt, "person", rng.randf() < 0.5, tiers, tiers.keys()])
@@ -2478,7 +2478,7 @@ func _referee_run(plan: Array, only: Array) -> Array:
 				if not why.is_empty():
 					why = "a state frame placed the body at " + why
 				elif float(claimed[2]) < CellBody.BASE_RADIUS - 0.001 \
-						or float(claimed[2]) > CellBody.DIVIDE_RADIUS + 0.06:
+						or float(claimed[2]) > CellBody.RADIUS_MAX + 0.06:
 					why = "a state frame made the body r%.3f" % float(claimed[2])
 				elif (claimed[3] as Vector2).length() > Referee.SPEED_MAX + 0.01 \
 						or absf(float(claimed[4])) > Referee.TURNING_MAX + 0.001:
@@ -2501,8 +2501,10 @@ func _referee_run(plan: Array, only: Array) -> Array:
 				why = _finite_why(placed)
 				if not why.is_empty():
 					why = "a sister placed at " + why
-				elif not placed.is_empty() and absf(float(placed[1])
-						- Referee.DAUGHTER_RADIUS) > Referee.RADIUS_SLACK + 0.001:
+				elif not placed.is_empty() and not (float(placed[1])
+						>= Referee.DAUGHTER_RADIUS - Referee.RADIUS_SLACK - 0.001
+						and float(placed[1]) <= CellBody.daughter_radius(CellBody.RADIUS_MAX)
+							+ Referee.RADIUS_SLACK + 0.001):
 					why = "a sister made r%.3f" % float(placed[1])
 			"shout":
 				ref.judge_shout(now, step[2], float(step[3]), float(step[4]),
@@ -2564,7 +2566,7 @@ static func _wild_size(rng: RandomNumberGenerator) -> float:
 			return _f32([1.0e-30, 3.0e38, 1.0e20, 0.001][rng.randi_range(0, 3)])
 		1:
 			return _f32(rng.randf_range(0.001, 500.0))
-	return _f32(rng.randf_range(CellBody.BASE_RADIUS - 1.0, CellBody.DIVIDE_RADIUS + 1.0))
+	return _f32(rng.randf_range(CellBody.BASE_RADIUS - 1.0, CellBody.RADIUS_MAX + 1.0))
 
 
 # ---------------------------------------------------------------------------

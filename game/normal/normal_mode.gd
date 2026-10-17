@@ -238,8 +238,9 @@ const SLACK_REDRAW := 0.05
 # aperture. No number, no icon, no text in the playfield beyond one onboarding
 # line, and no new shader uniform.
 #
-# The warning is not a phase: it is continuous in radius, from
-# DIVIDE_WARN_RADIUS, and it is the nucleus doubling. Everything below is what
+# The warning is not a phase: it is continuous in radius, from two meals
+# before the body's division radius (`CellBody.warn_radius_of`), and it is the
+# nucleus doubling. Everything below is what
 # happens once the body has run out of arcs.
 
 ## QUICKEN still steers; PINCH stops the simulation, exactly as a death does.
@@ -1767,8 +1768,14 @@ func _process(delta: float) -> void:
 	# **Every arc full, and no room for one more organ.** Checked after the meal
 	# that grew the body, so the division is the consequence of the mouthful
 	# rather than of the frame after it.
-	if _split == Split.NONE and _cell.radius >= CellBody.DIVIDE_RADIUS:
+	if _split == Split.NONE and _cell.radius >= _divide_at():
 		_begin_split()
+
+
+## **Where this cell divides** (docs/design/margin.md §1.1): forty, or later when
+## the genes its DNA carries need each half bigger.
+func _divide_at() -> float:
+	return CellBody.divide_radius_of(_genome.dna())
 
 
 ## **The body goes slack with hunger** (docs/design/hunger.md §2.4): eased
@@ -2160,7 +2167,7 @@ func _hear_others() -> void:
 		# mark is held for as long as the caller's size says, and a host's
 		# referee is the only thing between a guest's call and here -- a guest
 		# has none over its host. Honest calls are never over either.
-		var radius := minf(float(said[1]), CellBody.DIVIDE_RADIUS)
+		var radius := minf(float(said[1]), CellBody.RADIUS_MAX)
 		var reach := minf(float(said[2]), Stats.top(&"ping_range"))
 		# A bodiless or organless shouter is not a thing a cell can hear, and
 		# it is also the one input that would divide by zero below. Both
@@ -2515,8 +2522,8 @@ func _read_lean() -> int:
 ## `bodies` is present only once there are two of them, and its presence is what
 ## tells a view to stop drawing the cell and draw the pair.
 func _push_division() -> void:
-	var double := smoothstep(CellBody.DIVIDE_WARN_RADIUS, CellBody.DIVIDE_RADIUS,
-		_cell.radius)
+	var divide_at := _divide_at()
+	var double := smoothstep(CellBody.warn_radius_of(divide_at), divide_at, _cell.radius)
 	if _split == Split.NONE and double <= 0.0:
 		if not _division.is_empty():
 			_division = {}
@@ -2535,7 +2542,7 @@ func _push_division() -> void:
 		if _split == Split.PART:
 			spread = clampf(_split_clock / DIVIDE_PART, 0.0, 1.0)
 		_division["spread"] = spread
-		_division["radius"] = CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)
+		_division["radius"] = CellBody.daughter_radius(_cell.radius)
 		var pair: Array = []
 		for side in 2:
 			pair.append({
@@ -2600,10 +2607,12 @@ func _be_born() -> void:
 	# sister, numbered as she comes into the water, is the same mother's child.
 	var mother := _record()
 	_set_record(Descent.child(_take_id(), mother))
+	# Half her mother's area, whatever size her lineage divides at.
+	var born_at := CellBody.daughter_radius(_cell.radius)
 	# A new body, not a starving one: the mother spent herself. Her place and
 	# her heading are kept, so nothing about the frame jumps.
 	_cell.reset(true)
-	_cell.radius = CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)
+	_cell.radius = born_at
 	_metabolism.reset()
 	_settle_gauges(1.0 - _metabolism.hunger)
 	# Born fed, so born full: none of her mother's creases.
@@ -2928,12 +2937,13 @@ func _on_eaten(nutrition: float, gene: StringName, _at: Vector2) -> void:
 	# first for the same reason, and genome.gd's docstring promises there is
 	# only one definition of this rule.
 	#
-	# **And it stops at DIVIDE_RADIUS**, because that is where the body runs out
-	# of arcs. A field cell is not clamped -- edibility.md §7 keeps the runaway
-	# and makes it killable from astern instead -- but the player's growth has
-	# somewhere else to go now, and it goes there.
-	_cell.radius = minf(_cell.radius + CellBody.GROWTH_PER_MEAL,
-		CellBody.DIVIDE_RADIUS)
+	# **And it stops where it divides**: forty, or later for a lineage whose genes
+	# need its daughters bigger (margin.md §1.1). A field cell is not clamped --
+	# edibility.md §7 keeps the runaway and makes it killable from astern instead
+	# -- but the player's growth has somewhere else to go now, and it goes there.
+	# Never smaller for a meal: a DNA that lost a gene since divides on this one.
+	_cell.radius = maxf(_cell.radius,
+		minf(_cell.radius + CellBody.GROWTH_PER_MEAL, _divide_at()))
 	_genome.integrate(gene)
 	# `fed` counts from here (automation.md §4.1): a cell, or one chewed apart.
 	_instincts.ate()
@@ -8966,7 +8976,7 @@ func _step_offer(delta: float) -> void:
 # Three things about the geometry are worth stating rather than deriving:
 #
 # - **Every slot outside and the inside, always.** A division fires only at
-#   `DIVIDE_RADIUS` 40, where `slots_for(40)` is every slot the plan has outside
+#   `DIVIDE_RADIUS` 40 or past it, where `slots_for` is every slot the plan has outside
 #   -- today seven -- and `Genome.mutated()` never changes the order's length;
 #   the inside is every cell's from birth, so it is the last locus on each strand
 #   (dna-slots-ux.md §3.8). So the column is fixed -- 480 px today -- at every
@@ -9365,7 +9375,7 @@ func _choose_say() -> void:
 			took = inherited.path if inherited != null else &""
 		_choose_lines = GeneStats.lines(gene, maxi(int(found[1]), 1), works_at, took,
 			GeneStats.context(_daughters[side]["body"],
-				CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)), slot)
+				CellBody.daughter_radius(_cell.radius)), slot)
 	_choose_numbers.queue_redraw()
 	if gene == &"":
 		_choose_name.text = ""

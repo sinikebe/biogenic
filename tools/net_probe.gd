@@ -3349,6 +3349,7 @@ func _check_referee() -> void:
 	_referee_radius()
 	_referee_dividing()
 	_referee_unseen()
+	_referee_giant()
 	_referee_bodies()
 	_referee_riders()
 	_referee_arrivals()
@@ -3606,6 +3607,7 @@ func _rules_text(doubts: Array = []) -> String:
 	put.call("cell.DIVIDE_RADIUS", CellBody.DIVIDE_RADIUS)
 	put.call("cell.DIVIDE_SPLIT", CellBody.DIVIDE_SPLIT)
 	put.call("cell.daughter_radius", CellBody.daughter_radius(CellBody.DIVIDE_RADIUS))
+	put.call("cell.RADIUS_MAX", CellBody.RADIUS_MAX)
 	put.call("cell.MEND_SECONDS", CellBody.MEND_SECONDS)
 	put.call("cell.mended(0.5,10)", CellBody.mended(0.5, 10.0))
 	put.call("cell.IMPULSE_KICK", CellBody.IMPULSE_KICK)
@@ -4277,6 +4279,86 @@ func _ref_out_at_forty() -> Referee:
 	return ref
 
 
+## A guest fed to the most a body grows, `CellBody.RADIUS_MAX`, and out of the
+## water there: a giant dividing.
+func _ref_giant_out() -> Referee:
+	var ref := _ref_arrived(0.0, Vector2.ZERO)
+	ref.credit_meals(8)
+	ref.claim(2.0, Vector2.ZERO, 0.0, CellBody.RADIUS_MAX, Vector2.ZERO, 0.0, false)
+	ref.claim(2.5, Vector2.ZERO, 0.0, CellBody.RADIUS_MAX, Vector2.ZERO, 0.0, true)
+	return ref
+
+
+## **A giant divides** (docs/design/margin.md §1.2): a lineage whose genes need its
+## daughters bigger grows past forty on the meals the host sent, and never past
+## `CellBody.RADIUS_MAX`; goes out of the water at its size; and its daughter is
+## half its area -- r40, for one out at r56.57 -- with no foul: her first frames
+## are a daughter's and not her mother back undivided, and her mother's last OUT
+## frame landing after her SISTER is her mother's. A sister at a newborn's
+## daughter's size is made hers, and fouls; a giant back in the water whole fouls;
+## and one heard of only from her SISTER may be any daughter of a mother the host
+## fed that far, and no bigger.
+func _referee_giant() -> void:
+	var giant := CellBody.RADIUS_MAX
+	var daughter := CellBody.daughter_radius(giant)
+	var ref := _ref_arrived(0.0, Vector2.ZERO)
+	ref.credit_meals(8)
+	var capped := float(ref.expected)
+	var home := Vector2(10.0, 0.0)
+	ref.claim(2.0, home, 0.0, giant, Vector2.ZERO, 0.0, false)
+	var out: Array = ref.claim(2.5, home, 0.0, giant, Vector2.ZERO, 0.0, true)
+	var sister := ref.judge_sister(4.0, home + Vector2(0.0, 560.0), daughter, true)
+	var tail: Array = ref.claim(4.02, home, 0.0, giant, Vector2.ZERO, 0.0, true)
+	var born := ref.judge_person(4.1, true, Catalogue.born(), Catalogue.born().keys(), true)
+	var first: Array = ref.claim(4.3, home, 0.0, daughter, Vector2.ZERO, 0.0, false)
+	var clean := ref.take_fouls().is_empty()
+	var expects := float(ref.expected)
+	# Her first frame landing before her SISTER: a daughter's, so waited for.
+	var early := _ref_giant_out()
+	early.claim(3.0, Vector2.ZERO, 0.0, daughter, Vector2.ZERO, 0.0, false)
+	var waited := early.take_fouls().is_empty()
+	# A newborn's daughter's size for a giant's: made hers, and fouled.
+	var small := _ref_giant_out()
+	var made := small.judge_sister(3.0, Vector2(0.0, 560.0), Referee.DAUGHTER_RADIUS, true)
+	var small_said := _ref_rules(small.take_fouls())
+	# Back in the water at r56.57, whole.
+	var whole := _ref_giant_out()
+	whole.claim(3.0, Vector2.ZERO, 0.0, giant, Vector2.ZERO, 0.0, false)
+	var whole_said := _ref_rules(whole.take_fouls())
+	# Unseen, fed to r50: a daughter of r46.7 is taken; one of r56.57 is too big.
+	var between := CellBody.daughter_radius(46.7)
+	var unseen := _ref_arrived(0.0, Vector2.ZERO)
+	unseen.credit_meals(6)
+	unseen.claim(2.0, Vector2.ZERO, 0.0, 50.0, Vector2.ZERO, 0.0, false)
+	var unseen_put := unseen.judge_sister(3.0, Vector2(0.0, 560.0), between, true)
+	var unseen_clean := unseen.take_fouls().is_empty()
+	var over := _ref_arrived(0.0, Vector2.ZERO)
+	over.credit_meals(6)
+	over.claim(2.0, Vector2.ZERO, 0.0, 50.0, Vector2.ZERO, 0.0, false)
+	var over_put := over.judge_sister(3.0, Vector2(0.0, 560.0), daughter, true)
+	var over_said := _ref_rules(over.take_fouls())
+	_says(is_equal_approx(capped, giant) and not bool(out[5]) and sister.size() == 2
+			and is_equal_approx(float(sister[1]), daughter) and not bool(tail[5])
+			and is_equal_approx(float(tail[2]), giant) and born == [true]
+			and bool(first[5]) and is_equal_approx(float(first[2]), daughter) and clean
+			and is_equal_approx(expects, daughter) and waited,
+		"referee: a giant fed eight meals is held at r%.2f, goes out of the water there,"
+		% capped + " and her SISTER at r%.2f, her mother's last OUT frame and her first"
+		% daughter + " are taken with no foul, early or late; the daughter is expected at"
+		+ " r%.2f" % expects)
+	_says(made.size() == 2 and is_equal_approx(float(made[1]), daughter)
+			and small_said == [Referee.SISTER] and whole_said == [Referee.OUT]
+			and unseen_put.size() == 2 and is_equal_approx(float(unseen_put[1]), between)
+			and unseen_clean and over_put.size() == 2
+			and is_equal_approx(float(over_put[1]), CellBody.daughter_radius(50.0))
+			and over_said == [Referee.SISTER],
+		"referee: a giant's sister at r%.2f is made r%.2f and fouls; a giant back in the"
+		% [Referee.DAUGHTER_RADIUS, float(made[1]) if made.size() == 2 else -1.0]
+		+ " water whole fouls; unseen, fed to r50, a sister at r%.2f is taken and one at"
+		% between + " r%.2f is made r%.2f and fouls" % [daughter,
+			float(over_put[1]) if over_put.size() == 2 else -1.0])
+
+
 ## **A division the host never saw, and one whose daughter went before her
 ## sister landed** (found in review). A phone host frozen through the whole of
 ## a guest's out window -- an app switch, a call screen -- hears the division
@@ -4470,7 +4552,7 @@ func _referee_arrivals() -> void:
 	var swimming := ref.judge_enter(1.0, 26.0, true)
 	var swimming_said := ref.take_fouls()
 	var ref2 := Referee.new(0.0)
-	var big := ref2.judge_enter(1.0, 45.0, false)
+	var big := ref2.judge_enter(1.0, 60.0, false)
 	var small := ref2.judge_enter(1.6, 20.0, false)
 	var sizes_said := _ref_rules(ref2.take_fouls())
 	var waiting := ref2.judge_enter(2.0, 26.0, true)
@@ -4511,7 +4593,7 @@ func _referee_arrivals() -> void:
 			and waiting and not not_born and not_born_said == [Referee.ENTER] and not next
 			and born_next and taken == int(Referee.ENTER_BANK) and rate_said == [Referee.ENTER]
 			and later,
-		"referee R8: an ENTER while swimming here is refused, %.0f point; r45 and"
+		"referee R8: an ENTER while swimming here is refused, %.0f point; r60 and"
 		% (float(swimming_said[0][1]) if not swimming_said.is_empty() else 0.0)
 		+ " r20 are refused; one while the last is still waiting is taken; after a"
 		+ " death it said itself every one must be r26 until one arrives; %d at once are"
@@ -4728,7 +4810,7 @@ func _referee_gaps() -> void:
 	var huge := caller.judge_shout(1.0, Vector2.ZERO, 3.0e38, 3.0e38, false)
 	var huge_said := _ref_rules(caller.take_fouls())
 	var reach_max: float = Stats.at(&"ping_range", Stats.table(&"ping_range").size() - 1)
-	var biggest := caller.judge_shout(2.0, Vector2(9000.0, 0.0), CellBody.DIVIDE_RADIUS,
+	var biggest := caller.judge_shout(2.0, Vector2(9000.0, 0.0), CellBody.RADIUS_MAX,
 		reach_max, false)
 	var biggest_clean := caller.take_fouls().is_empty()
 	# A new body said twice a second for 30 s with no body here, and a call
@@ -4937,12 +5019,12 @@ func _check_run() -> void:
 	marks.clear()
 	other.shout(SHOUT_FROM, 3.0e38, 3.0e38)
 	await _hold(cell, Vector2.ZERO, PI * 0.5, 0.5)
-	var longest := FoodField.PING_RING * 2.0 * CellBody.DIVIDE_RADIUS / FoodField.PING_SPEED
+	var longest := FoodField.PING_RING * 2.0 * CellBody.RADIUS_MAX / FoodField.PING_SPEED
 	var capped := not marks.is_empty() and float(marks[0]["hold"]) <= longest + 1e-4 \
 		and float(marks[0]["strength"]) <= 1.0
 	_says(capped, "a call at r3e38 reaching 3e38 is held as the biggest honest one:"
 		+ " %.2f s, where r%.0f's is %.2f s" % [float(marks[0]["hold"]) if not marks.is_empty()
-			else -1.0, CellBody.DIVIDE_RADIUS, longest])
+			else -1.0, CellBody.RADIUS_MAX, longest])
 
 	# ----------------------------------------------------------------------
 	# **The marker, all the way to the thing that draws it.** Everything above
@@ -6814,10 +6896,11 @@ func _drop_pond_kept() -> void:
 ## **The host's water divides, and the guest's mirror sees it** (lineage.md §8,
 ## §11.3): births are the host's water, and the wire carries them as it carries
 ## any body coming into reach -- no new field, no new message. A host's drop
-## with the other player in it, a mouth beside them posed a meal short of
-## DIVIDE_RADIUS, and a guest's mirror fed the host's own snapshots and GENOMEs
+## with the other player in it, a mouth beside them posed a meal short of its
+## division radius -- past forty, for the five genes it carries outside
+## (margin.md §1.1) -- and a guest's mirror fed the host's own snapshots and GENOMEs
 ## by id, as in [method _drop_pond_mirror]. Ten frames on the mouth is grown to
-## forty, and on the frame the host divides it the mirror loses the mother's id
+## it, and on the frame the host divides it the mirror loses the mother's id
 ## and holds her two daughters' -- each at half her area, where the host has her,
 ## under her own genome -- with **no foul**: every frame the mirror holds exactly
 ## the bodies sent, each with its genome, and nothing the host did reached the
@@ -6827,8 +6910,9 @@ func _drop_pond_births() -> void:
 	var at := _drop_point(host, 500.0)
 	_pond_person(host, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1})
 	var from := at + Vector2(250.0, 0.0)
-	var mother := _pond_pose(host, 9, CellBody.DIVIDE_RADIUS - CellBody.GROWTH_PER_MEAL,
-		{&"cytostome": 1, &"cirrus": 2, &"flagellum": 2, &"ampulla": 1}, from,
+	var genes := {&"cytostome": 1, &"cirrus": 2, &"flagellum": 2, &"ampulla": 1, &"stigma": 1}
+	var divides := CellBody.divide_radius_of(genes)
+	var mother := _pond_pose(host, 9, divides - CellBody.GROWTH_PER_MEAL, genes, from,
 		_pond_face(from, at))
 	var mother_id := int(mother.id)
 	var mirror := _pond_rig(87, 28.0, POND_SENSES)
@@ -6843,10 +6927,10 @@ func _drop_pond_births() -> void:
 	var daughters: Array[int] = []
 	var as_sent := 0
 	for frame in 40:
-		# Grown to forty on the tenth frame, as a meal would, if the water has not
-		# already fed it there: it divides on its next tick.
+		# Grown to its division on the tenth frame, as a meal would, if the water
+		# has not already fed it there: it divides on its next tick.
 		if frame == 10 and bool(mother.seeded) and int(mother.id) == mother_id:
-			mother.radius = CellBody.DIVIDE_RADIUS
+			mother.radius = divides
 			host.refresh(9)
 		host._process(POND_STEP)
 		var pb: Object = host.bodies()[FoodField.PERSON_SLOT]
@@ -6894,16 +6978,17 @@ func _drop_pond_births() -> void:
 			for id: int in daughters:
 				var m := int(slots.get(id, -1))
 				if m >= 0 and is_equal_approx(float(mirror.bodies()[m].radius),
-						CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)):
+						CellBody.daughter_radius(divides)):
 					as_sent += 1
 	var touched := int(host.get("touched_person"))
 	_says(problems.is_empty() and held_mother >= 0 and left == held_mother + 1
-			and arrived == left and as_sent == 2 and touched == 0,
+			and arrived == left and as_sent == 2 and touched == 0
+			and divides > CellBody.DIVIDE_RADIUS + 1.0,
 		"pond-field, the drop: the host's water divides and the guest's mirror sees it -- the"
 		+ " mother (id %d) held until frame %d, gone at frame %d, and her daughters %s"
 		% [mother_id, held_mother, left, str(daughters)]
 		+ " there from frame %d, %d of them at r%.2f under their own genomes; every frame"
-		% [arrived, as_sent, CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)]
+		% [arrived, as_sent, CellBody.daughter_radius(divides)]
 		+ " exactly the bodies sent, %d fouls, and the other player's slot touched %d times"
 		% [problems.size(), touched]
 		+ ("" if problems.is_empty() else " -- NOT: " + ", ".join(problems.slice(0, 4))))
@@ -7727,14 +7812,29 @@ func _check_pond() -> void:
 	host_pin = [host_cell, home, 0.0]
 	pins = [host_pin, guest_pin]
 	await _pond_until(func() -> bool: return false, 0.1, pins)
-	# **The guest grows to r40 on real meals** (B.5): its size is what the host
-	# fed it, so a radius set by hand would be clamped, and its OUT and its
-	# sister refused. The host is its own authority, and is set.
-	var fed := await _pond_feed(host_food, guest_cell, pins)
-	_says(fed >= 0 and is_equal_approx(float(guest_cell.radius), CellBody.DIVIDE_RADIUS),
-		"pond: the guest grows to r%.0f on %d meals the host's water fed it"
+	# **The guest's lineage carries a fifth gene outside** (margin.md §1.1), written
+	# into its DNA as a player places a meal's: so it divides past forty, and its
+	# daughters are born bigger than a newborn -- each half at the floor its DNA
+	# sets -- through the host's referee, which never sees the DNA, with no foul.
+	# The host's own carries four, and divides at forty.
+	if not (guest_genome.layout() as Array).has(&""):
+		guest_genome.bonus_slots += 1
+	guest_genome.integrate(&"palp")
+	guest_genome.place((guest_genome.layout() as Array).find(&""))
+	var guest_divides: float = guest_run.call(&"_divide_at")
+	var host_divides: float = host_run.call(&"_divide_at")
+	_says(guest_divides > CellBody.DIVIDE_RADIUS + 1.0
+			and is_equal_approx(host_divides, CellBody.DIVIDE_RADIUS),
+		"pond: a guest whose DNA carries five genes outside divides at r%.2f, the"
+		% guest_divides + " host with four at r%.2f" % host_divides)
+	# **The guest grows to its division on real meals** (B.5): its size is what
+	# the host fed it, so a radius set by hand would be clamped, and its OUT and
+	# its sister refused. The host is its own authority, and is set.
+	var fed := await _pond_feed(host_food, guest_cell, pins, guest_divides)
+	_says(fed >= 0 and is_equal_approx(float(guest_cell.radius), guest_divides),
+		"pond: the guest grows to r%.2f on %d meals the host's water fed it"
 		% [float(guest_cell.radius), fed])
-	host_cell.radius = CellBody.DIVIDE_RADIUS
+	host_cell.radius = host_divides
 	await _pond_until(func() -> bool:
 		return (int(host_run.get("_split")) != NormalMode.Split.NONE
 			and int(guest_run.get("_split")) != NormalMode.Split.NONE), 1.0, pins)
@@ -7819,7 +7919,9 @@ func _check_pond() -> void:
 		return (int(host_run.get("_split")) == NormalMode.Split.NONE
 			and int(guest_run.get("_split")) == NormalMode.Split.NONE
 			and sisters.size() >= 2), 3.0, [])
-	var daughter := CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)
+	# Half her mother's area: the host's at forty, the guest's past it.
+	var daughter := CellBody.daughter_radius(host_divides)
+	var guest_daughter := CellBody.daughter_radius(guest_divides)
 	# Each daughter as she is born -- the frame her `_split` comes back to NONE,
 	# before she has swum or fed -- and each as the other seat first sees her.
 	var born := {}
@@ -7831,7 +7933,8 @@ func _check_pond() -> void:
 			var cell: Node = run.get_node(^"Cell")
 			if not born.has(run) and int(run.get("_split")) == NormalMode.Split.NONE:
 				born[run] = [cell.position, float(cell.radius)]
-		if absf(float(host_food.bodies()[FoodField.PERSON_SLOT].radius) - daughter) < 0.01:
+		if absf(float(host_food.bodies()[FoodField.PERSON_SLOT].radius) - guest_daughter) \
+				< 0.01:
 			seen[guest_run] = true
 		if absf(float(guest_food.bodies()[FoodField.PERSON_SLOT].radius) - daughter) < 0.01:
 			seen[host_run] = true
@@ -7843,8 +7946,9 @@ func _check_pond() -> void:
 		# **A new slot in the drop is a slot too** (ocean.md §4): one past the
 		# end, which had no serial to change.
 		var renumbered: Array = [] if bool(sister["appended"]) else [int(sister["slot"])]
+		var hers := guest_daughter if int(sister["mother"]) == 0 else daughter
 		if not bool(sister["was_free"]) or sister["changed"] != renumbered \
-				or not is_equal_approx(float(sister["radius"]), daughter):
+				or not is_equal_approx(float(sister["radius"]), hers):
 			clean = false
 		if float(sister["clear"]) < FoodField.SISTER_CLEAR - 0.01:
 			clear_of = false
@@ -7857,9 +7961,10 @@ func _check_pond() -> void:
 	_says((host_born[0] as Vector2).distance_to(left_host) < 0.5
 			and (guest_born[0] as Vector2).distance_to(left_guest) < 0.5
 			and is_equal_approx(float(host_born[1]), daughter)
-			and is_equal_approx(float(guest_born[1]), daughter) and seen.size() == 2,
-		"pond: both dividers come back where they left, at r%.2f, and each is"
-		% daughter + " seen so on the other seat (born %.2f and %.2f units from"
+			and is_equal_approx(float(guest_born[1]), guest_daughter) and seen.size() == 2,
+		"pond: both dividers come back where they left, the host at r%.2f and the"
+		% daughter + " guest at r%.2f, half her mother's area, and each is"
+		% guest_daughter + " seen so on the other seat (born %.2f and %.2f units from"
 		% [(host_born[0] as Vector2).distance_to(left_host),
 			(guest_born[0] as Vector2).distance_to(left_guest)]
 		+ " the pinch, r%.2f and r%.2f; at the sister call the host was %s from it)"
@@ -9383,14 +9488,15 @@ func _fouls_of(referees: Array) -> int:
 	return fouls
 
 
-## **Feeds the guest [param cell] to r40 on real meals in the host's water**,
+## **Feeds the guest [param cell] to [param until] on real meals in the host's water**,
 ## one morsel at a time on the lip of its mouth -- facing north, as pinned --
 ## each one an ATE the host decides and the guest grows by. A wide mouth takes
 ## a morsel in its hollow for no meal, so the morsel is put on the lip itself.
 ## Returns the meals, or -1.
-func _pond_feed(host_food: Node, cell: Node, pins: Array) -> int:
+func _pond_feed(host_food: Node, cell: Node, pins: Array,
+		until: float = CellBody.DIVIDE_RADIUS) -> int:
 	var meals := 0
-	while float(cell.radius) < CellBody.DIVIDE_RADIUS - 0.01 and meals < 6:
+	while float(cell.radius) < until - 0.01 and meals < 6:
 		var was := float(cell.radius)
 		# The tip of the lip bow, dead ahead: cilia.gd's `_lip` at its middle.
 		var tip := was * Cilia.OVOID_ALONG * Cilia.GAPE_SEAT \

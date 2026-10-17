@@ -1933,7 +1933,8 @@ func _measure_screens() -> Dictionary:
 	var genes: Array = catalogue.call(&"live")
 	var levelled: Array = catalogue.call(&"levelled")
 	var tier_max := int(_script_const(genome, "TIER_MAX"))
-	var divide := float(_script_const(cell, "DIVIDE_RADIUS"))
+	# The biggest a body grows (margin.md §1.1), where its numbers are widest.
+	var biggest := float(_script_const(cell, "RADIUS_MAX"))
 	var sep := String(_script_const(readout, "SEP"))
 	if genes.is_empty() or tier_max < 1 or not _const_ids.has("GENERATIONS"):
 		return {}
@@ -2020,7 +2021,7 @@ func _measure_screens() -> Dictionary:
 			for suns in tier_max + 1:
 				for swims in tier_max + 1:
 					var body := {burn: burns, store: stores, sun: suns, swim: swims}
-					for radius: float in [divide, 6.0]:
+					for radius: float in [biggest, 6.0]:
 						for upkeep: float in [0.0, 0.1, 0.5, 1.0, 2.0]:
 							var text := sep + String(readout.call(&"plain",
 								stats.call(&"cell_items", radius, body, upkeep)))

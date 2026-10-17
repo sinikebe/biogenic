@@ -328,6 +328,9 @@ class WatchedDrop extends "res://game/normal/food.gd":
 	var held_at_rim := 0
 	var at_forty := 0
 	var missed := 0
+	## Divisions past forty: a mother whose genes need her daughters bigger
+	## (margin.md §1.1).
+	var past_forty := 0
 	## Expression, by copies: loci rolled and loci worn, one to three copies (the
 	## mouth, always worn, and the senses, which a gift may stand in for, apart).
 	var rolled := PackedInt32Array([0, 0, 0, 0])
@@ -374,11 +377,12 @@ class WatchedDrop extends "res://game/normal/food.gd":
 		if said.size() < 4:
 			said.append(what)
 
-	## A body at forty, stepped on its tick, divides on it -- or has died of
+	## A body at its division radius -- forty, or past it for a lineage whose genes
+	## need it (margin.md §1.1) -- stepped on its tick, divides on it, or has died of
 	## hunger first, in its tank. Either way it is not the body it was.
 	func _step_one(i: int, b: Body, tick: int) -> void:
 		var due := births and b.seeded and not b.inert and not b.drifter \
-			and b.radius >= CellBody.DIVIDE_RADIUS - 0.01 and (i % Drop.LOD_EVERY) == tick
+			and b.radius >= b.divide_at() - 0.01 and (i % Drop.LOD_EVERY) == tick
 		var serial := b.serial
 		super._step_one(i, b, tick)
 		if due:
@@ -386,8 +390,8 @@ class WatchedDrop extends "res://game/normal/food.gd":
 			if b.serial == serial:
 				missed += 1
 
-	## **Every division, judged** (checks 1 and 2): its mother at forty; two
-	## daughters at half her area, touching across her heading where she was and
+	## **Every division, judged** (checks 1 and 2): its mother at her division
+	## radius; two daughters at half her area, touching across her heading where she was and
 	## facing her way, fed, in their grace, new ids, her children; one carrying
 	## her DNA and one a single trade or drift of it, a sense given apart; each
 	## wearing a roll of what she carries, the mouth always, and a sense.
@@ -395,17 +399,20 @@ class WatchedDrop extends "res://game/normal/food.gd":
 		var mother := Descent.of(b.id, b.parent, b.generation, b.lineage)
 		var dna := b.dna.duplicate()
 		var radius := b.radius
+		var divides := b.divide_at()
 		var at := b.pos
 		var heading := b.heading
 		var list: Variant = b.brain
 		var slots: PackedInt32Array = super._divide(i, b)
 		divisions += 1
-		if radius < CellBody.DIVIDE_RADIUS - 0.01:
-			_fault("divided at r%.2f" % radius)
+		if radius < divides - 0.01:
+			_fault("divided at r%.2f, where it divides at r%.2f" % [radius, divides])
+		if divides > CellBody.DIVIDE_RADIUS + 0.01:
+			past_forty += 1
 		if slots.size() != 2:
 			_fault("%d daughters" % slots.size())
 			return slots
-		var r := CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)
+		var r := CellBody.daughter_radius(radius)
 		var pair: Array[Body] = [_cells[slots[0]], _cells[slots[1]]]
 		for k in 2:
 			var d := pair[k]
@@ -1653,7 +1660,7 @@ func _floor_by_class() -> void:
 ## widest body; `LOD_EVERY` even. A sense that one day reaches further fails
 ## here instead of being slowed where it is felt.
 func _lod() -> void:
-	var widest := CellBody.DIVIDE_RADIUS
+	var widest := CellBody.RADIUS_MAX
 	var ping := 0.0
 	for reach: float in Stats.table(&"ping_range"):
 		ping = maxf(ping, reach)
@@ -2079,7 +2086,8 @@ const SETTLED_WITHIN := 30
 ## **Five minutes of a drop** (§14.3), with a still ghost player in it, watched
 ## from inside:
 ##
-## - 5, growth: no body over DIVIDE_RADIUS, and none *made* with a mouth wider
+## - 5, growth: no body over its own division radius (margin.md §1.1) or
+##   `CellBody.RADIUS_MAX`, and none *made* with a mouth wider
 ##   than a newborn's, 21.3 (water-evolves.md §1) -- a grown one may have it (row 5);
 ## - 6, the floors (docs/design/gene-rarity.md §11.3): every common and uncommon
 ##   variety carried at every count -- a form as its variety -- and one found short
@@ -2112,6 +2120,7 @@ func _five_minutes() -> void:
 	var cell: CellBody = water[1]
 	var biggest := 0.0
 	var at_forty := 0
+	var over := 0
 	var floor_checks := 0
 	var floor_missed := 0
 	var seen := {}
@@ -2128,8 +2137,13 @@ func _five_minutes() -> void:
 		for b: Object in field.get("_cells"):
 			if b.get("seeded") and not b.get("inert"):
 				biggest = maxf(biggest, float(b.get("radius")))
-				if float(b.get("radius")) >= CellBody.DIVIDE_RADIUS - 1e-3:
+				if b.get("drifter"):
+					continue
+				var divides: float = b.call(&"divide_at")
+				if float(b.get("radius")) >= divides - 1e-3:
 					at_forty += 1
+				if float(b.get("radius")) > divides + 1e-3:
+					over += 1
 	var living := 0
 	var venomous := 0
 	for b: Object in field.get("_cells"):
@@ -2140,11 +2154,12 @@ func _five_minutes() -> void:
 	# What the water makes from nothing is a newborn (water-evolves.md §1): no
 	# mouth it makes is wider than a born cell's at BASE_RADIUS.
 	var newborn := CellBody.gape_of(Catalogue.born(), CellBody.BASE_RADIUS)
-	_check(("5. growth: five minutes of a drop, the biggest body r%.2f (DIVIDE_RADIUS %.0f;"
-		+ " %d looks at one there, %d ticks at forty), and of %d bodies made the widest"
-		+ " mouth %.2f, at most a newborn's (%.2f)") % [biggest, CellBody.DIVIDE_RADIUS,
-		at_forty, field.at_forty, field.made, field.made_gape, newborn],
-		biggest <= CellBody.DIVIDE_RADIUS + 1e-4 and at_forty + field.at_forty > 0
+	_check(("5. growth: five minutes of a drop, the biggest body r%.2f (RADIUS_MAX %.2f;"
+		+ " %d looks at one at its division radius, %d ticks there, %d over it), and of %d"
+		+ " bodies made the widest mouth %.2f, at most a newborn's (%.2f)") % [biggest,
+		CellBody.RADIUS_MAX, at_forty, field.at_forty, over, field.made, field.made_gape,
+		newborn],
+		biggest <= CellBody.RADIUS_MAX + 1e-4 and over == 0 and at_forty + field.at_forty > 0
 		and field.made_gape > 0.0 and field.made_gape <= newborn + 1e-4 and field.made > 1000)
 	var floor_made := int(field.stats.get(&"gene_floor", 0))
 	_check(("6. the floors: at %d gene counts a common or uncommon variety carried by nobody"
@@ -2264,7 +2279,7 @@ func _lineage_summary(field: WatchedDrop, named: String, seen: Dictionary) -> Di
 	var out := seen.duplicate()
 	out["name"] = named
 	for key: String in ["divisions", "born", "faults", "body_faults", "said", "kinds",
-			"held_at_rim", "at_forty", "missed", "rolled", "worn", "meals_judged",
+			"held_at_rim", "at_forty", "missed", "past_forty", "rolled", "worn", "meals_judged",
 			"meal_faults", "graced_runs", "runs_at_born", "graced_eaten", "peers_over_floor",
 			"made_kinds", "runs_begun", "rule_divisions", "doors", "off_founders", "rules",
 			"drifter_steps", "drifter_moved", "rest_steps", "rest_swam", "rest_carried",
@@ -2419,15 +2434,17 @@ func _lineage() -> void:
 	var enough := runs.size() == 2 and composed.size() == 1 \
 		and runs.all(func(run: Dictionary) -> bool: return int(run["divisions"]) >= 50)
 	_check(("lineage 1. a division is the player's: %d divisions in two drops' five minutes"
-		+ " (%s), every mother at r40 and every body at forty on its tick divided on it (%d"
-		+ " ticks, %d missed); %d daughters at r%.2f touching across her heading where she"
-		+ " was (%d held in by the rim), fed, in their grace, new ids, her children; one"
-		+ " faithful and one"
+		+ " (%s), every mother at her division radius -- %d past forty, for the genes"
+		+ " she carries (margin.md §1.1) -- and every body there on its tick divided on"
+		+ " it (%d ticks, %d missed); %d daughters at half her area touching across her"
+		+ " heading where she was (%d held in by the rim), fed, in their grace, new ids,"
+		+ " her children; one faithful and one"
 		+ " changed: %s, never a shift; %d faults%s") % [sum.call("divisions"), ", ".join(each),
-		sum.call("at_forty"), sum.call("missed"), sum.call("born"),
-		CellBody.daughter_radius(CellBody.DIVIDE_RADIUS), sum.call("held_at_rim"), str(kinds),
+		sum.call("past_forty"), sum.call("at_forty"), sum.call("missed"), sum.call("born"),
+		sum.call("held_at_rim"), str(kinds),
 		sum.call("faults"), "" if said.is_empty() else " -- " + "; ".join(said)],
 		enough and sum.call("faults") == 0 and sum.call("missed") == 0
+		and sum.call("past_forty") > 0
 		and sum.call("at_forty") >= sum.call("divisions")
 		and sum.call("born") == 2 * sum.call("divisions")
 		and kinds.keys().all(func(kind: StringName) -> bool:
@@ -4046,7 +4063,7 @@ func _save_rules() -> void:
 		elif kinds[k] == 1 and far < 0:
 			far = k
 	var radius: PackedFloat64Array = rows["radius"]
-	radius[big] = CellBody.DIVIDE_RADIUS + 6.0
+	radius[big] = CellBody.RADIUS_MAX + 6.0
 	rows["radius"] = radius
 	var at: PackedVector2Array = rows["at"]
 	at[far] = field.basin().get(&"center") + Vector2(Drop.RADIUS + 400.0, 0.0)
@@ -4079,12 +4096,12 @@ func _save_rules() -> void:
 		+ " the rim put back inside (%s), a tank kept at %.3f; the log says %s -- and under"
 		+ " the same rules %s; the fingerprint's %d tables by name (%s)") % [
 		str(back.get("rules", "?")).left(8), DropSave.rules().left(8),
-		str(derived), CellBody.DIVIDE_RADIUS + 6.0, float(b.get("radius")), 400.0, str(inside),
+		str(derived), CellBody.RADIUS_MAX + 6.0, float(b.get("radius")), 400.0, str(inside),
 		float(b.get("hunger")), "CONVERTED" if line.contains("CONVERTED") else "NOTHING",
 		"it does not" if not calm.contains("CONVERTED") else "IT DOES TOO", names.size(),
 		"yes" if names == by_name else "NO: " + ",".join(names.slice(0, 4))],
 		names == by_name and names.size() >= 20
-		and not back.is_empty() and derived and float(b.get("radius")) == CellBody.DIVIDE_RADIUS
+		and not back.is_empty() and derived and float(b.get("radius")) == CellBody.RADIUS_MAX
 		and inside and float(b.get("hunger")) == 0.625 and int(done.get("trimmed", 0)) == 1
 		and int(done.get("contained", 0)) >= 1 and line.contains("CONVERTED")
 		and not calm.contains("CONVERTED"))
@@ -6638,7 +6655,7 @@ func _no_magic() -> void:
 	var reach := maxf(maxf(Stats.at(&"smell_range", 2), Stats.at(&"ping_range", 2)),
 		maxf(Stats.at(&"beam_range", 2), float(FoodField.sight_of(&"stigma", 1)[1]))) \
 		+ 2.0 * Drop.GRID_SLACK \
-		+ CellBody.DIVIDE_RADIUS
+		+ CellBody.RADIUS_MAX
 	var taken := 0
 	for i in cells.size():
 		var b: Object = cells[i]
@@ -8787,7 +8804,8 @@ func _instincts_autopilot() -> void:
 	_ap_key(KEY_R, false)
 	await _ap_frames(2)
 	var dividing := cell.autopilot
-	cell.radius = CellBody.DIVIDE_RADIUS
+	var grown_to: float = run.call(&"_divide_at")
+	cell.radius = grown_to
 	var split_born := false
 	var leaned := false
 	# By the clock, not by frames: the division's phases run on real time, and
@@ -8806,7 +8824,7 @@ func _instincts_autopilot() -> void:
 	_ap_key(KEY_D, false)
 	await _ap_frames(4)
 	var kept: bool = dividing and split_born and cell.autopilot \
-		and cell.radius < CellBody.DIVIDE_RADIUS
+		and cell.radius < grown_to
 	said.append("off with the last program off %s, off at a death %s, kept through a division"
 		% [str(last_off), str(death_off)] + " %s%s" % [str(kept), "" if kept
 		else " (on before %s, born %s, on after %s, radius %.1f)" % [str(dividing),

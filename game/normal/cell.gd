@@ -160,15 +160,17 @@ static func _read_plan() -> void:
 # --- The end of a body, and the beginning of two -----------------------------
 # docs/design/lifecycle.md §2. **Forty is where a body runs out of places to put
 # an organ**: slots_for(40) is SLOT_MAX, every arc the body plan gives a body.
-# Growth past it is the one thing a cell can do that buys nothing it can pass on,
-# so the player's radius clamps here and the body divides instead.
+# Growth past it buys nothing it can pass on, so a body divides there instead --
+# unless its genes need each daughter bigger than half of forty, when it grows on
+# until each half has that room (docs/design/margin.md §1.1).
 #
 # The old justifications for 40 -- "nothing left in the water can eat you" and
 # "the genome fills on the same meal" -- are both withdrawn by
 # docs/design/edibility.md §4 and by measurement respectively. The capacity
 # argument stands on its own and is the only one left.
 
-## Where a body divides, and where its radius stops.
+## Where a body divides, and where its radius stops, for a lineage whose genes fit
+## a newborn: the least any body divides at ([method divide_radius_of]).
 ## The host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const DIVIDE_RADIUS := 40.0
 ## Two meals out, and where the nucleus starts to double.
@@ -187,9 +189,55 @@ const DIVIDE_WARN_RADIUS := 32.0
 const DIVIDE_SPLIT := 0.5
 
 
-## What each daughter of a body of [param mother_radius] is born at.
+## **The most any body grows** (docs/design/margin.md §1.1): the division radius of
+## a lineage whose daughters need forty, so each half is born at forty -- 56.57.
+## The host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
+const RADIUS_MAX := 56.568542494923804
+
+
+## What each daughter of a body of [param mother_radius] is born at: half her
+## area, always.
 static func daughter_radius(mother_radius: float = DIVIDE_RADIUS) -> float:
 	return mother_radius * sqrt(DIVIDE_SPLIT)
+
+
+## **The room the gift brings with it**: one slot outside, which every newborn has
+## for the sense it is given (genome.gd's `bonus_slots`; drop.gd's `give_sense`). So
+## a newborn carries four genes outside on three arcs, and a lineage needs no more
+## room than that for four.
+const GIFT_ROOM := 1
+
+
+## **The least a body carrying [param dna] may be** (docs/design/margin.md §1.1):
+## the radius whose slots -- and the gift's -- hold every gene it carries, round the
+## body and in it: `body_plan.gd`'s ladder read backwards, and never under
+## [constant BASE_RADIUS]. A gene that only rides takes no slot of the body's and
+## needs no room.
+static func floor_radius(dna: Dictionary) -> float:
+	var outside := 0
+	var inside := 0
+	for gene: Variant in dna:
+		var place := Catalogue.place_of(StringName(gene))
+		if place == Catalogue.Gene.INSIDE:
+			inside += 1
+		elif place != Catalogue.Gene.RIDING:
+			outside += 1
+	return maxf(BASE_RADIUS, BodyPlan.radius_for(outside - GIFT_ROOM, inside))
+
+
+## **Where a body carrying [param dna] divides**: at [constant DIVIDE_RADIUS], or
+## later, where each half of it is still at its floor -- so a lineage that carries
+## much is born big, every generation (margin.md §1.1). Never past
+## [constant RADIUS_MAX].
+static func divide_radius_of(dna: Dictionary) -> float:
+	return clampf(floor_radius(dna) / sqrt(DIVIDE_SPLIT), DIVIDE_RADIUS, RADIUS_MAX)
+
+
+## **Where the nucleus starts to double** for a body that divides at
+## [param divide_at]: two meals before it, as [constant DIVIDE_WARN_RADIUS] is
+## before forty.
+static func warn_radius_of(divide_at: float) -> float:
+	return divide_at - (DIVIDE_RADIUS - DIVIDE_WARN_RADIUS)
 
 # --- Drive -----------------------------------------------------------------
 # What the drive does with what the genome buys. **Every number a gene buys is

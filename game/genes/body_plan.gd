@@ -62,8 +62,9 @@ const OVOID_PINCH := 0.30
 ##
 ## **Today's ladder is pinned at both ends**: three slots at birth (r26) and all
 ## seven at forty, `cell.gd`'s DIVIDE_RADIUS -- every arc a body has, which is why
-## forty is where a body divides -- and four rungs between need a step in `(2.8,
-## 3.5]`, of which 3.5 is the top. **Four-times growth left it as it was**: what it
+## forty is where a body divides, unless its genes need its daughters bigger
+## (`radius_for`; docs/design/margin.md §1.1) -- and four rungs between need a
+## step in `(2.8, 3.5]`, of which 3.5 is the top. **Four-times growth left it as it was**: what it
 ## changed is that capacity stops binding in the first generation, and the arcs and
 ## the expression roll bind instead; from generation two a newborn is over capacity
 ## anyway (lifecycle.md §3.1), which is where the swap decision lives. A plan with
@@ -242,6 +243,23 @@ static func inside_for(radius: float) -> int:
 		if earned <= radius:
 			count += 1
 	return clampi(count, INSIDE_MIN, INSIDE_SLOTS)
+
+
+## **The least radius whose slots hold [param outside] genes round the body and
+## [param inside] in it**: the slot ladder read backwards (docs/design/margin.md
+## §1.1), the larger of the two -- 0 where the slots every body has hold them, and
+## the last rung where more are asked for than the plan has.
+static func radius_for(outside: int, inside: int) -> float:
+	var need := 0.0
+	if outside > SLOT_MIN and not _earned.is_empty():
+		var rungs := Array(_earned)
+		rungs.sort()
+		need = maxf(need, float(rungs[clampi(outside, 1, rungs.size()) - 1]))
+	if inside > INSIDE_MIN and not _inside_earned.is_empty():
+		var rooms := Array(_inside_earned)
+		rooms.sort()
+		need = maxf(need, float(rooms[clampi(inside, 1, rooms.size()) - 1]))
+	return need
 
 
 ## **The arc of skin [param slot] is**, in ovoid `t` degrees. An index past the
