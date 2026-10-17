@@ -2,7 +2,7 @@
   "_comment": "Written by ci/sync_launcher.sh. Do not edit addons/launcher/ or ci/ by hand -- the next sync overwrites them.",
   "source": "sinikebe/godot-launcher-template",
   "ref": "main",
-  "commit": "4d5f5a5573a1e3be89234c4bb17988412a819c5f",
-  "subject": "Let the player cancel an update check or download (#102)",
-  "synced_at": "2026-10-17T10:53:42Z"
+  "commit": "c8f10b55ddbb90d31beefb143752857adcd03462",
+  "subject": "Fade from the launcher into the game on Play (#105)",
+  "synced_at": "2026-10-17T13:06:34Z"
 }
