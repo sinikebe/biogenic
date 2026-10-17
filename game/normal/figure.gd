@@ -133,6 +133,16 @@ const RING_CELLS: Array[Vector2i] = [Vector2i(1, 0), Vector2i(2, 0), Vector2i(2,
 ## there would read as a place on the skin.
 const INSIDE_SEAT := Vector2(0.0, 6.0)
 const RING_MIDDLE := Vector2i(1, 1)
+## **The inside's slots, one above the other** (docs/design/inside-genes.md §5): the
+## first on [constant INSIDE_SEAT], where the one inside slot always was, the second
+## below it and the third above, a chip's height apart -- so no two chips share a
+## pixel a finger could press, and each keeps its 48 px and more. A slot not earned
+## yet is not drawn: a newborn's body carries one chip, as it always did.
+const INSIDE_PITCH := 56.0
+## **How many inside chips the body has room for**: three rows, from just under the
+## mouth's bow to just over the tail. A plan with more inside slots crowds the
+## figure ([member CROWDED]), and the gene probe says so.
+const INSIDE_ROWS := 3
 
 ## **Chip centres from the body's centre, by slot index** -- laid out from the body
 ## plan (`body_plan.gd`, gene-catalogue.md §10.2): each outside slot in the ring's
@@ -167,9 +177,11 @@ const NEIGHBOUR_SIDES: Array = [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]
 ## the `numbers` switch -- and on the pause screen, `light`.
 static var SLOT_RING: Array[int] = []
 ## **The slots the ring has no cell of their own for**: an outside slot whose
-## nearest cell another already took, or an inside one past the middle's one. Each
-## is seated somewhere so nothing breaks, but a plan that makes one fails the gene
-## probe's layout check rather than overlapping in silence (§10.4). Empty today.
+## nearest cell another already took. Each is seated somewhere so nothing breaks,
+## but a plan that makes one fails the gene probe's layout check rather than
+## overlapping in silence (§10.4). Empty today. **The inside is one only past its
+## [constant INSIDE_ROWS]**: every inside slot is the middle's, one above the other
+## ([constant INSIDE_PITCH]).
 static var CROWDED: Array[int] = []
 
 
@@ -198,33 +210,56 @@ static func _lay_out() -> void:
 	var cells: Array[Vector2i] = []
 	var taken := {}
 	CROWDED.clear()
+	# The middle is the inside's, all of it: an outside slot never lands there.
+	if BodyPlan.INSIDE_SLOTS > 0:
+		taken[RING_MIDDLE] = BodyPlan.INSIDE
 	for slot in BodyPlan.SLOTS:
 		var cell := RING_MIDDLE
 		if slot < BodyPlan.INSIDE:
 			var turn := wrapf(BodyPlan.bearing(slot), 0.0, TAU)
 			cell = RING_CELLS[posmod(roundi(turn / (TAU / RING_CELLS.size())),
 				RING_CELLS.size())]
-		if taken.has(cell):
-			CROWDED.append(slot)
-			cell = _free_cell(taken, cell)
-		taken[cell] = slot
+			if taken.has(cell):
+				CROWDED.append(slot)
+				cell = _free_cell(taken, cell)
+			taken[cell] = slot
 		cells.append(cell)
 	SLOT_SEAT.clear()
+	# The inside's column, top to bottom: its slots by their row.
+	var column: Array[int] = []
+	for slot in range(BodyPlan.INSIDE, BodyPlan.SLOTS):
+		column.append(slot)
+	column.sort_custom(func(a: int, b: int) -> bool: return inside_row(a) < inside_row(b))
+	for slot in range(BodyPlan.INSIDE + INSIDE_ROWS, BodyPlan.SLOTS):
+		CROWDED.append(slot)
 	for slot in cells.size():
 		var cell := cells[slot]
-		SLOT_SEAT.append(INSIDE_SEAT if cell == RING_MIDDLE
-			else Vector2(RING_X[cell.x], RING_Y[cell.y]))
+		SLOT_SEAT.append(INSIDE_SEAT + Vector2(0.0, INSIDE_PITCH * float(inside_row(slot)))
+			if slot >= BodyPlan.INSIDE else Vector2(RING_X[cell.x], RING_Y[cell.y]))
 	SLOT_NEIGHBOUR.clear()
 	var ways: Array[Vector2i] = [Vector2i(-1, 0), Vector2i(0, -1), Vector2i(1, 0),
 		Vector2i(0, 1)]
 	for slot in cells.size():
 		var sides: Array = []
 		for way: Vector2i in ways:
+			# **Up and down the inside's column first**: only its top and bottom slots
+			# lead out of it. A screen steps past a slot not earned yet the same way
+			# (normal_mode.gd's `_wire_focus`), so a newborn's arrows go as they did.
+			if slot >= BodyPlan.INSIDE and way.x == 0:
+				var row := column.find(slot) + way.y
+				if row >= 0 and row < column.size():
+					sides.append(column[row])
+					continue
 			var at := cells[slot] + way
 			var to := -1
 			while at.x >= 0 and at.x < RING_X.size() and at.y >= 0 and at.y < RING_Y.size():
 				if taken.has(at):
 					to = int(taken[at])
+					# Into the inside from above is its top slot, from below its
+					# bottom one, and from a side its first, in the middle.
+					if at == RING_MIDDLE:
+						to = column[0] if way.y > 0 else column[column.size() - 1] \
+							if way.y < 0 else BodyPlan.INSIDE
 					break
 				at += way
 			sides.append(to)
@@ -236,6 +271,30 @@ static func _lay_out() -> void:
 		return wrapf(BodyPlan.bearing(a), 0.0, TAU) < wrapf(BodyPlan.bearing(b), 0.0, TAU))
 	for slot in range(BodyPlan.INSIDE, BodyPlan.SLOTS):
 		SLOT_RING.append(slot)
+
+
+## **Where an arrow goes from [param slot]**, [param way] one of [constant
+## NEIGHBOUR_SIDES]' indices: [member SLOT_NEIGHBOUR]'s, stepping on past an inside
+## slot [param live] says is not earned yet, so a body with one inside slot moves
+## between the nose, its inside and the tail as it always did. -1 for nothing.
+static func neighbour(slot: int, way: int, live: Callable) -> int:
+	var to := int(SLOT_NEIGHBOUR[slot][way])
+	for step in SLOT_NEIGHBOUR.size():
+		if to < BodyPlan.INSIDE or bool(live.call(to)):
+			break
+		to = int(SLOT_NEIGHBOUR[to][way])
+	return to
+
+
+## **Which row of the inside's column [param slot] sits on**, about the first: 0
+## for the first, then 1 below it, -1 above, 2, -2 and so on.
+static func inside_row(slot: int) -> int:
+	var k := slot - BodyPlan.INSIDE
+	if k <= 0:
+		return 0
+	@warning_ignore("integer_division")
+	var away := (k + 1) / 2
+	return away if k % 2 == 1 else -away
 
 
 ## The free cell of the ring nearest [param cell] round it, the middle last.
@@ -564,15 +623,15 @@ const GAUGE_RADIUS := 2
 const GAUGE_TRACK := Color(0.855, 0.953, 0.933, 0.14)
 const GAUGE_FILL_ALPHA := 0.85
 
-## TRANSLATORS: The line for the empty slot inside the body (the one slot in the
-## middle of the body, not round it): nothing is there yet, and a toxin placed
-## there becomes poison.
+## TRANSLATORS: The line for an empty slot inside the body (the slots in the
+## middle of the body, not round it): nothing is there yet, and the genes that can
+## go there. `store` and `mend` are those genes' short words, as on their chips.
 ## ROOM: 520 px at 15 px
-const EXPLAIN_INSIDE := "nothing inside yet · a toxin here becomes poison"
-## TRANSLATORS: Under that line, for the empty inside slot: the slot is inside the
-## cell's body, and a toxin is the only gene that can go there.
+const EXPLAIN_INSIDE := "nothing inside yet · store, mend or a toxin can go here"
+## TRANSLATORS: Under that line, for an empty inside slot: the slot is inside the
+## cell's body, and a toxin placed there becomes poison.
 ## ROOM: 560 px at 14 px
-const HINT_INSIDE := "inside your body · only a toxin goes here"
+const HINT_INSIDE := "inside your body · a toxin here becomes poison"
 
 ## The second, weaker channel behind the rungs: a gene the body does not wear
 ## draws its word and its organ fainter. Honest about which one does the work.
@@ -779,7 +838,7 @@ static func explain_empty(slot: int) -> String:
 
 
 ## The hint under an empty [param slot]: nothing to pass on from there -- or,
-## inside, that only a toxin goes there.
+## inside, what a toxin becomes there.
 static func hint_empty(slot: int) -> String:
 	if GenomeNode.is_inside(slot):
 		return String(TranslationServer.translate(HINT_INSIDE))

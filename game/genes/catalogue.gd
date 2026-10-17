@@ -46,6 +46,7 @@ const ORGANS: Array[GDScript] = [
 	preload("res://game/genes/organs/vacuole.gd"),
 	preload("res://game/genes/organs/crista.gd"),
 	preload("res://game/genes/organs/haptonema.gd"),
+	preload("res://game/genes/organs/lysosome.gd"),
 	# Retired, and kept known for good (§4.4).
 	preload("res://game/genes/organs/rhabdom.gd"),
 	preload("res://game/genes/organs/statocyst.gd"),

@@ -5268,8 +5268,8 @@ const ACT_ARM_FORMS := "tap a lit slot · poison inside, venom in a gene's slot"
 ## `swim works only outside` is true, short, and teaches the rule from the other
 ## side.
 ##
-## TRANSLATORS: When the player tries to put a gene other than a toxin into the
-## slot inside the body: only a toxin works there. %s is the gene's short word,
+## TRANSLATORS: When the player tries to put a gene that works outside the body
+## into a slot inside it: only a few genes work there. %s is the gene's short word,
 ## such as `swim`.
 ## ROOM: 560 px at 14 px with word
 const ACT_FACES_OUT := "%s works only outside"
@@ -5281,8 +5281,9 @@ const ACT_FACES_OUT := "%s works only outside"
 ## such as the mouth's. %s is its word while it waits, `toxin`.
 ## ROOM: 560 px at 14 px with word
 const ACT_NOT_OUTSIDE := "%s goes inside, or in a lit gene's slot"
-## TRANSLATORS: When the player drags the poison gene from inside the body to one of
-## the slots round it: it works only inside. %s is its word, `poison`.
+## TRANSLATORS: When the player tries to put a gene that works only inside the body,
+## such as poison or store, into one of the slots round it. %s is its word, such as
+## `poison` or `store`.
 ## ROOM: 560 px at 14 px with word
 const ACT_ONLY_INSIDE := "%s works only inside"
 ## TRANSLATORS: A slot is chosen for a waiting gene, but that gene already has the
@@ -5349,6 +5350,8 @@ var _slot_chips: Array[Control] = []
 ## How many of the slots outside are live: the ones the body has earned, or the
 ## whole layout a newborn inherits. The rest are drawn and dead.
 var _slot_count := 0
+## How many of the slots inside are live, the same way (genome.gd's `inside_room`).
+var _inside_count := 1
 
 
 ## Rebuilds the figure's chips and the tray from the genome as it is right now.
@@ -5415,6 +5418,9 @@ func _build_genome_strip() -> void:
 	# always live.
 	_slot_count = mini(maxi(_genome.slots(), _genome.layout().size()),
 		GenomeNode.INSIDE)
+	# **The inside's count**, which grows as the outside's does (inside-genes.md
+	# §1): earned by the body's radius, or carried by its DNA already.
+	_inside_count = _genome.inside_room()
 	_slot_chips.clear()
 	_slot_chips.resize(Figure.SLOT_SEAT.size())
 	for slot in Figure.SLOT_SEAT.size():
@@ -5428,8 +5434,7 @@ func _build_genome_strip() -> void:
 		# `moving-a-gene.md` §2.4 -- and the body drawn in the middle now says
 		# where every organ is, with a word wherever that disagrees.
 		var chip := _make_slot(gene, int(dna.get(gene, 0)),
-			int(body.get(gene, 0)), slot, slot < _slot_count
-			or GenomeNode.is_inside(slot))
+			int(body.get(gene, 0)), slot, _live_index(slot))
 		_figure_slots.add_child(chip)
 		_slot_chips[slot] = chip
 	# **And every gene's own slots beside it** (placing.md §2).
@@ -5490,7 +5495,7 @@ func _wire_focus() -> void:
 	for chip in live:
 		var slot := int(chip.get_meta(&"slot"))
 		for way in Figure.NEIGHBOUR_SIDES.size():
-			var to := int(Figure.SLOT_NEIGHBOUR[slot][way])
+			var to := Figure.neighbour(slot, way, _slot_live)
 			var neighbour: Control = _slot_chips[to] if _slot_live(to) else chip
 			if way == 0 and _slot_live(to) and _sock_chips.has(to):
 				var theirs: Array = _sock_chips[to]
@@ -5537,12 +5542,19 @@ func _wire_focus() -> void:
 
 
 ## True when [param slot] is one of this figure's live slots: earned, or
-## inherited -- and the inside, which every cell has from birth. The keys' one
-## test, and a drop's.
+## inherited -- outside, and inside alike. The keys' one test, and a drop's.
 func _slot_live(slot: int) -> bool:
 	if slot < 0 or slot >= _slot_chips.size() or _slot_chips[slot] == null:
 		return false
-	return slot < _slot_count or GenomeNode.is_inside(slot)
+	return _live_index(slot)
+
+
+## Whether [param slot] is live by the counts alone: one of the outside's
+## [member _slot_count], or of the inside's [member _inside_count].
+func _live_index(slot: int) -> bool:
+	if GenomeNode.is_inside(slot):
+		return slot < GenomeNode.INSIDE + _inside_count
+	return slot < _slot_count
 
 
 ## **What the figure's chips stand for** (dna-slots-ux.md §3.1): the DNA's
@@ -5921,14 +5933,15 @@ func _move_line(from: int, to: int) -> String:
 
 
 ## **Why [param gene] cannot go where it is pointed** (dna-slots-ux.md §3.4): a gene
-## that faces out works only outside; one with no outside form -- the toxin --
-## goes inside or in a gene's slot when it is [param waiting], and works only
-## inside when it is the poison in the DNA.
+## that faces out works only outside; one with no outside form works only inside --
+## and the toxin, which rides as well, goes inside or in a gene's slot when it is
+## [param waiting].
 func _faces_line(gene: StringName, waiting: bool) -> String:
 	if GenomeNode.form_in(gene, GenomeNode.OUTSIDE_PLACE) != &"":
 		return tr(ACT_FACES_OUT) % _word(gene)
-	return tr(ACT_NOT_OUTSIDE) % _carried_word(gene) if waiting \
-		else tr(ACT_ONLY_INSIDE) % _word(gene)
+	if waiting and GenomeNode.form_in(gene, Catalogue.Gene.RIDING) != &"":
+		return tr(ACT_NOT_OUTSIDE) % _carried_word(gene)
+	return tr(ACT_ONLY_INSIDE) % _word(gene)
 
 
 ## **A refused `Shift`+arrow says why** (dna-slots-ux.md §3.4), for
@@ -6461,7 +6474,11 @@ func _make_slot(gene: StringName, tier: int, body_tier: int, slot: int,
 	if not live:
 		node.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		node.focus_mode = Control.FOCUS_NONE
-		node.draw.connect(Figure.draw_unearned.bind(node))
+		# **An inside slot not earned yet is not drawn at all** (inside-genes.md §5):
+		# it would sit on the body, which is the mirror. One outside is drawn faint,
+		# on the ring, where growing will bring it.
+		if not GenomeNode.is_inside(slot):
+			node.draw.connect(Figure.draw_unearned.bind(node))
 		return node
 
 	# **Every live slot takes input, gene in hand or not.** Selecting is what the
@@ -8502,7 +8519,7 @@ var _offer_open := false
 var _offer_key := false
 ## Where the finger is, in canvas px.
 var _offer_at := Vector2.ZERO
-## The free slot that is lit -- [member GenomeNode.INSIDE] for the inside --
+## The free slot that is lit -- the first empty inside one for the inside --
 ## or -1 for none: a finger that never left the body, or one back inside it
 ## when the inside is not offered.
 var _offer_aim := -1
@@ -8574,14 +8591,16 @@ func _offer_free() -> Array[int]:
 
 ## **Whether the inside is offered too** (dna-slots-ux.md §3.7): while the gene
 ## the body opened for -- or, before it opens, the head of the queue -- would
-## be written into a free inside slot as a form not carried yet. So only a
-## toxin, and only into an empty inside: nothing there is written over, as
-## nothing is under any bud, and the pause screen can still move it out.
+## be written into a free inside slot as a form not carried yet. So only a gene
+## that works inside -- the toxin, the store, the mend -- and only into an empty
+## inside slot: nothing there is written over, as nothing is under any bud, and
+## the pause screen can still move it out.
 func _offer_inside() -> bool:
 	var gene := _offer_gene if _offer_gene != &"" else _genome.held_sample
-	if gene == &"" or not _genome.inside_layout().has(&""):
+	var free := _genome.free_inside()
+	if gene == &"" or free < 0:
 		return false
-	return _genome.placing(gene, GenomeNode.INSIDE)[0] == GenomeNode.PLACE_WRITE
+	return _genome.placing(gene, free)[0] == GenomeNode.PLACE_WRITE
 
 
 ## `[centre, heading, radius]` of the player's body on the screen, in canvas px,
@@ -8616,7 +8635,7 @@ func _offer_aim_at(at: Vector2) -> int:
 		return -1
 	var reach: Vector2 = at - body[0]
 	if reach.length() <= _offer_hit(body):
-		return GenomeNode.INSIDE if _offer_left and _offer_inside() else -1
+		return _genome.free_inside() if _offer_left and _offer_inside() else -1
 	_offer_left = true
 	var bearing := atan2(reach.x, -reach.y) - float(body[1])
 	var best := -1
@@ -8637,7 +8656,7 @@ func _offer_aim_at(at: Vector2) -> int:
 func _offer_default() -> int:
 	var best := _offer_nearest_nose()
 	if best < 0 and _offer_inside():
-		return GenomeNode.INSIDE
+		return _genome.free_inside()
 	return best
 
 
@@ -8725,10 +8744,10 @@ func _offer_place() -> void:
 	if slot < 0 or which < 0:
 		return
 	# **The inside, asked again now as every bud is**: still offered -- still a
-	# toxin, still an empty inside -- or nothing.
+	# gene that works inside, still an empty inside slot -- or nothing.
 	if GenomeNode.is_inside(slot):
 		if _offer_inside():
-			_genome.place(slot, which)
+			_genome.place(_genome.free_inside(), which)
 		return
 	if not _offer_free().has(slot):
 		return
@@ -8808,7 +8827,7 @@ func _offer_keys(key: InputEventKey) -> bool:
 	# `ui_up` and `ui_down` as well.
 	if key.keycode == KEY_S or key.keycode == KEY_DOWN:
 		if key.pressed and not key.echo and _offer_inside():
-			_offer_aim = GenomeNode.INSIDE
+			_offer_aim = _genome.free_inside()
 		return true
 	if key.keycode == KEY_W or key.keycode == KEY_UP:
 		if key.pressed and not key.echo and GenomeNode.is_inside(_offer_aim):
@@ -8985,8 +9004,11 @@ static func _choose_loci() -> int:
 	return GenomeNode.INSIDE + GenomeNode.INSIDE_SLOTS
 
 
-## One locus, along the strand, and therefore one lobe of the weave.
-const CHOOSE_PITCH := 48.0
+## One locus, along the strand, and therefore one lobe of the weave. **44, and
+## not the 48 it was**: the inside's two more slots (docs/design/inside-genes.md
+## §5) make ten loci, and at 48 their words ran 34 px past the foot of a 720 px
+## canvas -- the shortest one there is.
+const CHOOSE_PITCH := 44.0
 ## The lead-in and the tail, in lobes: the chromosome arrives and leaves rather
 ## than starting mid-lens. One each, against the old pause strand's two,
 ## because there is no held sample to park off the head of this one.

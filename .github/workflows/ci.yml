@@ -419,11 +419,18 @@ jobs:
         # The two traces agree to 0.52 s, where a cell that began inside a speck,
         # 887 um off, is pushed out of it by 0.4 um. 68,422 lines, from 68,461.
         #
+        # **Re-pinned when the store moved inside and the mend came**
+        # (docs/design/inside-genes.md, 2026-10-17), from 9167630d...: the water
+        # changed on purpose. `lysosome` joins the drifters' draws and `store`
+        # takes no arc. Against dev at c7d9a13 the traces agree to 0.52 s, the
+        # first line, where drifter 11 now carries a beam, not a ping.
+        # 68,572 lines, from 68,422.
+        #
         # The run prints about ten megabytes, so it goes to a file rather than a
         # variable. About twenty seconds.
         run: |
           set -uo pipefail
-          pinned="9167630d97526515cbb1842564cb97bcf845c59f5f69b0591b3ee34add5b02e3"
+          pinned="b1cfee733b68db668eb87e7bf8937bc7bc15b7cbf503adc6c9bd2b64c36ef740"
           log=$(mktemp)
           fail=0
           echo "--- seed 1, sixty seconds, R pressed at 20 s"

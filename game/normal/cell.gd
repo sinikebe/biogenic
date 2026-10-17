@@ -589,15 +589,16 @@ func restore_loads(kept: PackedFloat64Array) -> void:
 ## wore off this step go into the wound -- [constant HARM_PER_STACK] a stack,
 ## diluted by the body's [param body_radius] -- and **the wound mends only for
 ## the part of the step after the harm ran out**: a body carrying harm does not
-## mend. [param loads] are worn in place.
+## mend. [param loads] are worn in place. [param mend] is how much faster than
+## [constant MEND_SECONDS] it mends (the `mend` stat, docs/design/inside-genes.md §3).
 static func dosed(loads: PackedFloat64Array, hurt: float, body_radius: float,
-		delta: float) -> float:
+		delta: float, mend: float = 1.0) -> float:
 	if not Doses.any(loads):
-		return mended(hurt, delta)
+		return mended(hurt, delta, mend)
 	var worn := Doses.wear(loads, delta, DOSE_TAU_BY_KIND, DOSE_GONE)
 	var harmed := clampf(hurt + worn[0] * HARM_PER_STACK
 		* Doses.felt(1.0, body_radius, DOSE_SIZE), 0.0, 1.0)
-	return mended(harmed, worn[1])
+	return mended(harmed, worn[1], mend)
 
 
 func _process(delta: float) -> void:
@@ -622,7 +623,7 @@ func _process(delta: float) -> void:
 	# this way is found by the field, at the top of its contacts with this cell,
 	# which is where every death of this cell is told -- on a guest never, since
 	# the host owns that death and the next snapshot's wound is the truth.
-	wound = dosed(loads, wound, radius, delta)
+	wound = dosed(loads, wound, radius, delta, stat(&"mend"))
 
 	_omega = lerpf(_omega, steer * turn_rate(), 1.0 - exp(-delta / turn_response()))
 	# Ornstein-Uhlenbeck-ish drift: a heading nudge that wanders instead of
@@ -1054,14 +1055,20 @@ static func flank(theta: float) -> float:
 ## A wound knitting up over [param delta] seconds. Every body in the water uses
 ## this one -- the player's through [method _process], the field's through
 ## food.gd -- so there is one definition of how fast a cell recovers.
-static func mended(hurt: float, delta: float) -> float:
-	return clampf(hurt - delta / MEND_SECONDS, 0.0, 1.0)
+static func mended(hurt: float, delta: float, mend: float = 1.0) -> float:
+	return clampf(hurt - delta * mend / MEND_SECONDS, 0.0, 1.0)
 
 
 ## **How many outside slots a body of [param body_radius] has earned**: the body
 ## plan's count -- every slot earned at that radius or below.
 static func slots_for(body_radius: float) -> int:
 	return BodyPlan.slots_for(body_radius)
+
+
+## **How many slots inside a body of [param body_radius] has earned**: one from
+## birth and more as it grows (`body_plan.gd`'s `inside_for`; inside-genes.md §1).
+static func inside_for(body_radius: float) -> int:
+	return BodyPlan.inside_for(body_radius)
 
 
 ## **The realised speed of a body's tail**, from what it wears, [param tiers]:

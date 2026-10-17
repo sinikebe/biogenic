@@ -29,6 +29,11 @@ and, answering this document's first draft and the screen's (§22):
 > mouth's, and the sting's. The seven slots round the body refuse it, so venom at
 > the front, on a side or at the stern (§3, §5) is gone. The rest stands.
 
+> **Superseded in part, 2026-10-17** (docs/design/inside-genes.md): the inside grows
+> with the cell, one slot from birth, a second at r33 and a third at forty, and
+> `store` and the new `mend` sit there with the toxin's poison. §2.2's "how many:
+> one" and its toxin-only rule, and §19's first hook, are that page's now.
+
 **Revised to those answers.** The first draft put two places on the seven
 slots round the body: the three at the front were the mouth's, the other four
 the body's. The owner's precision replaces that. **There are two places, in the

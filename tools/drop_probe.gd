@@ -555,7 +555,8 @@ class WatchedDrop extends "res://game/normal/food.gd":
 		super._grow(b, gene)
 		if not births:
 			return
-		Genome.integrate_into(expect, gene, CellBody.slots_for(b.radius))
+		Genome.integrate_into(expect, gene, CellBody.slots_for(b.radius),
+			CellBody.inside_for(b.radius))
 		meals_judged += 1
 		if var_to_bytes(b.genome) != body or var_to_bytes(b.dna) != var_to_bytes(expect):
 			meal_faults += 1
@@ -2926,9 +2927,9 @@ func _determinism() -> void:
 ## ride their mouths, and drift brings the toxin as poison. Nothing else moved; the
 ## rules two builds agree on moved with venom's side and stern lines (`Wire.RULES`).
 const THREE_ONE_LINES: Array[String] = [
-	"[census] t 40  living 542 (drifters 447, hunters 95)  flocs 34  | hunters at r40 0, mean r 29.5, hunger 0.68  | could swallow r26/r34/r40 17/0/0  dread 0.26/0.00/0.00  genes 16  | spawned 628  died: swallowed 84 chewed 0 starved 2 (r40 0) poisoned 0  | grazed by the water 2, by drifters 0, dissolved 0, snow kept 4, remains 2  | runs 0 at you 0 misses 0 stings 2 dashes 0  floors: gene 0+0 drifter 0  | sum 3017086443",
-	"[lineage] t 40  hunters 95, born 0  generation mean 1.00 max 1  families 95 (largest 1)  dna apart 32  | cruise 56.5 notice 636 mouth 1.00 upkeep 1.00 genes worn 4.00 carried 4.15  tails 95 sighted 95 at r40 0  | divisions 0 (trade 0 drift 0 faithfully 0), daughters 0: tailless 0, given a sense 0  | the spawner's peers 4 (for the floor 4, for venom 0), drifters 69, left to births 0  | worn cytostome 1.00 cirrus 1.00 flagellum 1.00 stigma 0.32 ocellus 0.24 chemocyte 0.20 ampulla 0.24 axoneme 0.00 palp 0.00 myoneme 0.00 trichocyst 0.00 pellicle 0.00 veneneux 0.00 plastid 0.00 vacuole 0.00 crista 0.00 toxicyst 0.00 haptonema 0.00  | commonest 30x cytostome:1,cirrus:1,flagellum:1,stigma:1 ; 23x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 23x cytostome:1,cirrus:1,flagellum:1,ocellus:1",
-	"[behaviour] t 40  hunters 95: on the founders' rules 95, other lists 0  | founders' rules fired 2616/8597/281/140/1580/17694/0  | meals of hunters with a nose 18, radar 23, laser 23  | stings 2, stuns 0, your wakes 0  | now holding a heading 42, resting 22, swimming 73, pushing 0, stunned 0, echoes in flight 40",
+	"[census] t 40  living 542 (drifters 450, hunters 92)  flocs 34  | hunters at r40 0, mean r 30.0, hunger 0.62  | could swallow r26/r34/r40 25/0/0  dread 0.38/0.00/0.00  genes 17  | spawned 638  died: swallowed 91 chewed 0 starved 5 (r40 0) poisoned 0  | grazed by the water 6, by drifters 1, dissolved 0, snow kept 6, remains 5  | runs 0 at you 0 misses 0 stings 3 dashes 0  floors: gene 0+0 drifter 0  | sum 2334272493",
+	"[lineage] t 40  hunters 92, born 0  generation mean 1.00 max 1  families 92 (largest 1)  dna apart 39  | cruise 56.5 notice 633 mouth 1.00 upkeep 1.00 genes worn 4.00 carried 4.25  tails 92 sighted 92 at r40 0  | divisions 0 (trade 0 drift 0 faithfully 0), daughters 0: tailless 0, given a sense 0  | the spawner's peers 4 (for the floor 4, for venom 0), drifters 79, left to births 0  | worn cytostome 1.00 cirrus 1.00 flagellum 1.00 stigma 0.32 ocellus 0.25 chemocyte 0.20 ampulla 0.24 axoneme 0.00 palp 0.00 myoneme 0.00 trichocyst 0.00 pellicle 0.00 veneneux 0.00 plastid 0.00 vacuole 0.00 crista 0.00 toxicyst 0.00 haptonema 0.00 lysosome 0.00  | commonest 29x cytostome:1,cirrus:1,flagellum:1,stigma:1 ; 23x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 22x cytostome:1,cirrus:1,flagellum:1,ampulla:1",
+	"[behaviour] t 40  hunters 92: on the founders' rules 92, other lists 0  | founders' rules fired 3173/8823/282/172/1514/16917/0  | meals of hunters with a nose 23, radar 24, laser 26  | stings 3, stuns 0, your wakes 0  | now holding a heading 38, resting 24, swimming 68, pushing 0, stunned 0, echoes in flight 45",
 ]
 ## What phase 3-2's behaviour line adds after phase 3-1's, for a water whose
 ## rules never changed: one behaviour, every hunter on it, no change made.
@@ -6049,11 +6050,11 @@ const IDENTITY_DNA := {&"cytostome": 2, &"cirrus": 1, &"flagellum": 1, &"chemocy
 ## ride their mouths, and drift brings the toxin as poison. Nothing else moved; the
 ## rules two builds agree on moved with venom's side and stern lines (`Wire.RULES`).
 const IDENTITY_LINES: Array[String] = [
-	"[census] t 30  living 536 (drifters 440, hunters 96)  flocs 30  | hunters at r40 0, mean r 30.9, hunger 0.33  | could swallow r26/r34/r40 36/0/0  dread 0.41/0.00/0.00  genes 17  | spawned 652  died: swallowed 116 chewed 0 starved 0 (r40 0) poisoned 0  | grazed by the water 3, by drifters 0, dissolved 0, snow kept 3, remains 0  | runs 188 at you 0 misses 45 stings 4 dashes 3  floors: gene 0+0 drifter 0  | sum 1197185537",
-	"[census] t 60  living 529 (drifters 437, hunters 92)  flocs 23  | hunters at r40 25, mean r 36.7, hunger 0.41  | could swallow r26/r34/r40 85/3/1  dread 1.24/0.16/0.05  genes 17  | spawned 801  died: swallowed 270 chewed 2 starved 0 (r40 0) poisoned 0  | grazed by the water 10, by drifters 3, dissolved 0, snow kept 6, remains 0  | runs 415 at you 0 misses 134 stings 6 dashes 15  floors: gene 0+0 drifter 0  | sum 4202494941",
-	"[census] t 30  living 529 (drifters 416, hunters 113)  flocs 30  | hunters at r40 0, mean r 30.5, hunger 0.36  | could swallow r26/r34/r40 27/0/0  dread 0.41/0.00/0.00  genes 16  | spawned 655  died: swallowed 126 chewed 0 starved 0 (r40 0) poisoned 0  | grazed by the water 3, by drifters 0, dissolved 0, snow kept 3, remains 0  | runs 291 at you 0 misses 135 stings 3 dashes 0  floors: gene 0+0 drifter 0  | sum 3400557791",
-	"[census] t 60  living 531 (drifters 426, hunters 105)  flocs 28  | hunters at r40 26, mean r 36.1, hunger 0.49  | could swallow r26/r34/r40 94/5/2  dread 1.43/0.16/0.02  genes 16  | spawned 821  died: swallowed 287 chewed 3 starved 0 (r40 0) poisoned 0  | grazed by the water 7, by drifters 0, dissolved 0, snow kept 5, remains 0  | runs 588 at you 0 misses 266 stings 4 dashes 14  floors: gene 0+0 drifter 0  | sum 1691645250",
-	"[census] t 30  living 531 (drifters 415, hunters 116)  flocs 28  | hunters at r40 0, mean r 30.4, hunger 0.34  | could swallow r26/r34/r40 33/0/0  dread 0.46/0.00/0.00  genes 16  | spawned 660  died: swallowed 129 chewed 0 starved 0 (r40 0) poisoned 0  | grazed by the water 5, by drifters 0, dissolved 0, snow kept 3, remains 0  | runs 262 at you 0 misses 107 stings 1 dashes 0  floors: gene 0+0 drifter 0  | sum 2590044321",
+	"[census] t 30  living 533 (drifters 437, hunters 96)  flocs 30  | hunters at r40 1, mean r 31.0, hunger 0.32  | could swallow r26/r34/r40 33/0/0  dread 0.44/0.01/0.00  genes 18  | spawned 653  died: swallowed 120 chewed 0 starved 0 (r40 0) poisoned 0  | grazed by the water 2, by drifters 0, dissolved 0, snow kept 2, remains 0  | runs 188 at you 0 misses 45 stings 4 dashes 0  floors: gene 0+0 drifter 0  | sum 2061691685",
+	"[census] t 60  living 523 (drifters 430, hunters 93)  flocs 23  | hunters at r40 31, mean r 36.8, hunger 0.42  | could swallow r26/r34/r40 84/1/0  dread 1.22/0.12/0.01  genes 18  | spawned 805  died: swallowed 281 chewed 1 starved 0 (r40 0) poisoned 0  | grazed by the water 8, by drifters 1, dissolved 0, snow kept 2, remains 0  | runs 477 at you 0 misses 180 stings 8 dashes 15  floors: gene 0+0 drifter 0  | sum 3897716758",
+	"[census] t 30  living 527 (drifters 414, hunters 113)  flocs 29  | hunters at r40 0, mean r 30.6, hunger 0.34  | could swallow r26/r34/r40 29/0/0  dread 0.41/0.00/0.00  genes 17  | spawned 656  died: swallowed 129 chewed 0 starved 0 (r40 0) poisoned 0  | grazed by the water 3, by drifters 0, dissolved 0, snow kept 2, remains 0  | runs 268 at you 0 misses 111 stings 0 dashes 1  floors: gene 0+0 drifter 0  | sum 2455471123",
+	"[census] t 60  living 528 (drifters 424, hunters 104)  flocs 24  | hunters at r40 23, mean r 36.3, hunger 0.46  | could swallow r26/r34/r40 98/5/2  dread 1.46/0.23/0.05  genes 17  | spawned 824  died: swallowed 291 chewed 5 starved 0 (r40 0) poisoned 0  | grazed by the water 9, by drifters 0, dissolved 0, snow kept 3, remains 0  | runs 595 at you 0 misses 268 stings 0 dashes 16  floors: gene 0+0 drifter 0  | sum 415299436",
+	"[census] t 30  living 526 (drifters 411, hunters 115)  flocs 26  | hunters at r40 0, mean r 30.6, hunger 0.34  | could swallow r26/r34/r40 35/0/0  dread 0.50/0.00/0.00  genes 17  | spawned 660  died: swallowed 133 chewed 1 starved 0 (r40 0) poisoned 0  | grazed by the water 5, by drifters 1, dissolved 0, snow kept 2, remains 0  | runs 251 at you 0 misses 102 stings 1 dashes 0  floors: gene 0+0 drifter 0  | sum 982470371",
 ]
 
 
@@ -6123,8 +6124,8 @@ const IDENTITY_LINES: Array[String] = [
 ## ride their mouths, and drift brings the toxin as poison. Nothing else moved; the
 ## rules two builds agree on moved with venom's side and stern lines (`Wire.RULES`).
 const DEV_LINES: Array[String] = [
-	"[census] t 300  living 630 (drifters 421, hunters 209)  flocs 23  | hunters at r40 0, mean r 31.1, hunger 0.36  | could swallow r26/r34/r40 117/31/21  dread 1.54/0.58/0.31  genes 17  | spawned 2265  died: swallowed 2000 chewed 137 starved 62 (r40 0) poisoned 13  | grazed by the water 61, by drifters 2, dissolved 27, snow kept 8, remains 75  | runs 3511 at you 0 misses 1696 stings 123 dashes 245  floors: gene 0+0 drifter 0  | sum 3687594613",
-	"[lineage] t 300  hunters 209, born 209  generation mean 5.92 max 10  families 58 (largest 9)  dna apart 182  | cruise 88.3 notice 1100 mouth 1.33 upkeep 1.78 genes worn 5.73 carried 7.38  tails 155 sighted 209 at r40 0  | divisions 577 (trade 285 drift 292 faithfully 0), daughters 1154: tailless 358, given a sense 202  | the spawner's peers 10 (for the floor 10, for venom 0), drifters 1700, left to births 0  | worn cytostome 1.33 cirrus 1.67 flagellum 1.86 stigma 0.66 ocellus 0.51 chemocyte 0.87 ampulla 0.69 axoneme 0.20 palp 0.36 myoneme 0.25 trichocyst 0.37 pellicle 0.38 veneneux 0.12 plastid 0.36 vacuole 0.38 crista 0.36 toxicyst 0.00 haptonema 0.59  | commonest 1x cytostome:1,ampulla:1,veneneux:3,plastid:3 ; 1x cytostome:1,ampulla:2,palp:3,myoneme:1,trichocyst:3,pellicle:1 ; 1x cytostome:1,chemocyte:1,palp:2,pellicle:1",
+	"[census] t 300  living 659 (drifters 410, hunters 249)  flocs 18  | hunters at r40 0, mean r 31.3, hunger 0.35  | could swallow r26/r34/r40 150/31/17  dread 2.07/0.62/0.26  genes 18  | spawned 2509  died: swallowed 2284 chewed 150 starved 62 (r40 0) poisoned 11  | grazed by the water 74, by drifters 1, dissolved 17, snow kept 7, remains 73  | runs 3787 at you 0 misses 1754 stings 162 dashes 488  floors: gene 0+0 drifter 0  | sum 3724432384",
+	"[lineage] t 300  hunters 249, born 249  generation mean 6.20 max 10  families 64 (largest 19)  dna apart 226  | cruise 84.8 notice 1070 mouth 1.35 upkeep 1.88 genes worn 6.22 carried 7.99  tails 169 sighted 249 at r40 0  | divisions 657 (trade 317 drift 340 faithfully 0), daughters 1314: tailless 375, given a sense 203  | the spawner's peers 10 (for the floor 10, for venom 0), drifters 1944, left to births 0  | worn cytostome 1.35 cirrus 1.67 flagellum 1.53 stigma 0.73 ocellus 0.57 chemocyte 1.01 ampulla 0.50 axoneme 0.37 palp 0.32 myoneme 0.35 trichocyst 0.34 pellicle 0.65 veneneux 0.12 plastid 0.44 vacuole 0.59 crista 0.26 toxicyst 0.00 haptonema 0.69 lysosome 0.27  | commonest 2x cytostome:1,cirrus:3,flagellum:3,stigma:3,trichocyst:3,haptonema:3 ; 1x cytostome:1,ampulla:2,trichocyst:1,vacuole:1,crista:1 ; 1x cytostome:1,chemocyte:1,myoneme:1,pellicle:1,vacuole:1,lysosome:1",
 ]
 
 
@@ -6135,8 +6136,8 @@ const DEV_LINES: Array[String] = [
 ## changes them**: re-record them then from the check's own output, and say so in
 ## the commit.
 const DAYLIGHT_LINES: Array[String] = [
-	"[census] t 300  living 635 (drifters 410, hunters 225)  flocs 20  | hunters at r40 1, mean r 31.5, hunger 0.38  | could swallow r26/r34/r40 148/33/22  dread 2.01/0.69/0.34  genes 17  | spawned 2457  died: swallowed 2245 chewed 148 starved 63 (r40 0) poisoned 7  | grazed by the water 64, by drifters 1, dissolved 27, snow kept 12, remains 70  | runs 3754 at you 0 misses 1724 stings 159 dashes 396  floors: gene 0+0 drifter 0  | sum 3190558466",
-	"[lineage] t 300  hunters 225, born 225  generation mean 6.16 max 10  families 66 (largest 11)  dna apart 189  | cruise 92.9 notice 1158 mouth 1.37 upkeep 1.88 genes worn 5.92 carried 7.39  tails 164 sighted 225 at r40 1  | divisions 641 (trade 316 drift 325 faithfully 0), daughters 1282: tailless 375, given a sense 210  | the spawner's peers 10 (for the floor 10, for venom 0), drifters 1892, left to births 0  | worn cytostome 1.37 cirrus 1.75 flagellum 1.77 stigma 0.56 ocellus 0.58 chemocyte 1.03 ampulla 0.64 axoneme 0.44 palp 0.50 myoneme 0.25 trichocyst 0.31 pellicle 0.61 veneneux 0.11 plastid 0.39 vacuole 0.33 crista 0.24 toxicyst 0.00 haptonema 0.63  | commonest 2x cytostome:1,cirrus:3,flagellum:3,ampulla:1,palp:3,haptonema:3 ; 2x cytostome:1,cirrus:3,flagellum:3,chemocyte:2,crista:2,haptonema:3 ; 1x cytostome:1,ampulla:1,trichocyst:3,vacuole:1",
+	"[census] t 300  living 626 (drifters 403, hunters 223)  flocs 36  | hunters at r40 0, mean r 31.8, hunger 0.39  | could swallow r26/r34/r40 159/35/17  dread 1.82/0.52/0.24  genes 18  | spawned 2462  died: swallowed 2240 chewed 129 starved 88 (r40 0) poisoned 5  | grazed by the water 69, by drifters 4, dissolved 23, snow kept 9, remains 93  | runs 4063 at you 0 misses 1994 stings 194 dashes 536  floors: gene 0+0 drifter 0  | sum 825926249",
+	"[lineage] t 300  hunters 223, born 223  generation mean 6.17 max 11  families 65 (largest 10)  dna apart 197  | cruise 93.3 notice 1167 mouth 1.38 upkeep 1.90 genes worn 6.11 carried 7.86  tails 150 sighted 223 at r40 0  | divisions 626 (trade 322 drift 304 faithfully 0), daughters 1252: tailless 415, given a sense 197  | the spawner's peers 10 (for the floor 10, for venom 0), drifters 1897, left to births 0  | worn cytostome 1.38 cirrus 1.85 flagellum 1.74 stigma 0.40 ocellus 0.96 chemocyte 0.91 ampulla 0.62 axoneme 0.44 palp 0.27 myoneme 0.33 trichocyst 0.45 pellicle 0.35 veneneux 0.17 plastid 0.26 vacuole 0.48 crista 0.18 toxicyst 0.00 haptonema 0.86 lysosome 0.17  | commonest 2x cytostome:1,cirrus:1,flagellum:2,stigma:3,myoneme:1,haptonema:1 ; 1x cytostome:1,ampulla:1,myoneme:1,vacuole:1,crista:2,haptonema:2 ; 1x cytostome:1,ampulla:2,axoneme:1,vacuole:1,haptonema:3,lysosome:1",
 ]
 
 
@@ -6284,7 +6285,7 @@ const MEMBRANE: Array[String] = ["concentration", "taste_level", "shadow", "shad
 ## in a cone. `dev` itself, at 56bfe46, read through this shorter list printed the
 ## digest the half circle put back on this branch did, 44d381088b303418: what is left
 ## did not move until the cone did.
-const DEV_MEMBRANE := "76f8fd53b88e4a938dd3922570aa086b79c48e7d5c1d5801cb38328886f2093e"
+const DEV_MEMBRANE := "c1f492d41f49dff4d90d0200d63513be1a630f05616fbc666c6036623aedfaaf"
 
 
 ## **1. With the rules off it is pack 2, the membrane** (behaviour.md §12.3):
@@ -7478,9 +7479,9 @@ func _modular() -> void:
 ## ride their mouths, and drift brings the toxin as poison. Nothing else moved; the
 ## rules two builds agree on moved with venom's side and stern lines (`Wire.RULES`).
 const PACK3_LINES: Array[String] = [
-	"[census] t 300  living 553 (drifters 458, hunters 95)  flocs 77  | hunters at r40 0, mean r 30.2, hunger 0.50  | could swallow r26/r34/r40 42/4/2  dread 0.68/0.15/0.07  genes 17  | spawned 1369  died: swallowed 727 chewed 28 starved 197 (r40 0) poisoned 1  | grazed by the water 77, by drifters 2, dissolved 85, snow kept 13, remains 198  | runs 0 at you 0 misses 0 stings 34 dashes 0  floors: gene 0+3 drifter 0  | sum 1611088657",
-	"[lineage] t 300  hunters 95, born 44  generation mean 2.14 max 8  families 76 (largest 4)  dna apart 57  | cruise 70.6 notice 813 mouth 1.12 upkeep 1.23 genes worn 4.44 carried 5.46  tails 83 sighted 95 at r40 0  | divisions 137 (trade 60 drift 77 faithfully 0), daughters 274: tailless 87, given a sense 69  | the spawner's peers 168 (for the floor 165, for venom 3), drifters 646, left to births 0  | worn cytostome 1.12 cirrus 1.14 flagellum 1.28 stigma 0.24 ocellus 0.45 chemocyte 0.29 ampulla 0.32 axoneme 0.20 palp 0.04 myoneme 0.12 trichocyst 0.08 pellicle 0.06 veneneux 0.04 plastid 0.11 vacuole 0.16 crista 0.01 toxicyst 0.00 haptonema 0.17  | commonest 16x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 15x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 12x cytostome:1,cirrus:1,flagellum:1,chemocyte:1",
-	"[behaviour] t 300  hunters 95: on the founders' rules 62, other lists 33  | founders' rules fired 19242/49345/1867/1146/6803/93617/1377  | meals of hunters with a nose 184, radar 247, laser 341  | stings 34, stuns 0, your wakes 0  | now holding a heading 31, resting 41, swimming 53, pushing 5, stunned 0, echoes in flight 51  | behaviours 29, unchanged 65.3 %  | rules changed 137: nudge 66, replace 25, swap 17, copy 17, drop 12",
+	"[census] t 300  living 550 (drifters 455, hunters 95)  flocs 68  | hunters at r40 0, mean r 30.3, hunger 0.49  | could swallow r26/r34/r40 46/10/6  dread 0.66/0.12/0.05  genes 18  | spawned 1369  died: swallowed 735 chewed 16 starved 199 (r40 0) poisoned 1  | grazed by the water 70, by drifters 2, dissolved 100, snow kept 10, remains 200  | runs 0 at you 0 misses 0 stings 35 dashes 0  floors: gene 0+3 drifter 0  | sum 3701778488",
+	"[lineage] t 300  hunters 95, born 56  generation mean 2.33 max 7  families 71 (largest 4)  dna apart 64  | cruise 67.2 notice 959 mouth 1.25 upkeep 1.25 genes worn 4.66 carried 5.72  tails 77 sighted 95 at r40 0  | divisions 132 (trade 71 drift 61 faithfully 0), daughters 264: tailless 77, given a sense 64  | the spawner's peers 186 (for the floor 183, for venom 3), drifters 628, left to births 0  | worn cytostome 1.25 cirrus 1.15 flagellum 1.07 stigma 0.19 ocellus 0.33 chemocyte 0.55 ampulla 0.42 axoneme 0.23 palp 0.15 myoneme 0.04 trichocyst 0.11 pellicle 0.13 veneneux 0.05 plastid 0.09 vacuole 0.21 crista 0.09 toxicyst 0.00 haptonema 0.16 lysosome 0.02  | commonest 12x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 11x cytostome:1,cirrus:1,flagellum:1,chemocyte:1 ; 10x cytostome:1,cirrus:1,flagellum:1,ocellus:1",
+	"[behaviour] t 300  hunters 95: on the founders' rules 58, other lists 37  | founders' rules fired 18026/50306/2182/960/8429/95846/1013  | meals of hunters with a nose 202, radar 271, laser 274  | stings 35, stuns 0, your wakes 0  | now holding a heading 39, resting 47, swimming 47, pushing 7, stunned 0, echoes in flight 68  | behaviours 25, unchanged 61.1 %  | rules changed 132: nudge 78, replace 22, swap 11, copy 9, drop 12",
 ]
 ## **The same five minutes in the game's water** (row 37), pinned as
 ## [constant DEV_LINES] pins pack 2's: [method _five_minutes]' drop, seed 1, as
@@ -7565,9 +7566,9 @@ const PACK3_LINES: Array[String] = [
 ## follows. With the light off this branch printed the old ones to the byte, and the
 ## player's trace did not move.
 const TAIL_LINES: Array[String] = [
-	"[census] t 300  living 553 (drifters 457, hunters 96)  flocs 75  | hunters at r40 0, mean r 30.3, hunger 0.51  | could swallow r26/r34/r40 44/7/4  dread 0.48/0.06/0.03  genes 17  | spawned 1532  died: swallowed 890 chewed 5 starved 242 (r40 0) poisoned 0  | grazed by the water 117, by drifters 4, dissolved 96, snow kept 20, remains 242  | runs 0 at you 0 misses 0 stings 29 dashes 0  floors: gene 0+6 drifter 0  | sum 3897636447",
-	"[lineage] t 300  hunters 96, born 58  generation mean 2.50 max 10  families 66 (largest 5)  dna apart 63  | cruise 65.5 notice 798 mouth 1.22 upkeep 1.26 genes worn 4.44 carried 5.62  tails 68 sighted 96 at r40 0  | divisions 158 (trade 77 drift 81 faithfully 0), daughters 316: tailless 123, given a sense 55  | the spawner's peers 182 (for the floor 176, for venom 6), drifters 795, left to births 0  | worn cytostome 1.22 cirrus 1.32 flagellum 1.01 stigma 0.39 ocellus 0.22 chemocyte 0.40 ampulla 0.40 axoneme 0.20 palp 0.09 myoneme 0.17 trichocyst 0.07 pellicle 0.02 veneneux 0.02 plastid 0.15 vacuole 0.17 crista 0.07 toxicyst 0.00 haptonema 0.15  | commonest 19x cytostome:1,cirrus:1,flagellum:1,stigma:1 ; 7x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 7x cytostome:1,cirrus:1,flagellum:1,chemocyte:1",
-	"[behaviour] t 300  hunters 96: on the founders' rules 58, other lists 38  | founders' rules fired 21480/37998/2271/1481/9190/94629/2890  | meals of hunters with a nose 254, radar 376, laser 307  | stings 29, stuns 0, your wakes 0  | now holding a heading 35, resting 39, swimming 90, pushing 5, stunned 0, echoes in flight 57  | behaviours 31, unchanged 60.4 %  | rules changed 158: nudge 91, replace 37, swap 9, copy 12, drop 9",
+	"[census] t 300  living 550 (drifters 456, hunters 94)  flocs 66  | hunters at r40 0, mean r 30.4, hunger 0.41  | could swallow r26/r34/r40 43/8/5  dread 0.68/0.19/0.06  genes 17  | spawned 1501  died: swallowed 890 chewed 11 starved 229 (r40 0) poisoned 0  | grazed by the water 120, by drifters 6, dissolved 78, snow kept 11, remains 229  | runs 0 at you 0 misses 0 stings 42 dashes 0  floors: gene 0+3 drifter 0  | sum 487763674",
+	"[lineage] t 300  hunters 94, born 68  generation mean 3.16 max 10  families 59 (largest 7)  dna apart 75  | cruise 68.0 notice 904 mouth 1.22 upkeep 1.30 genes worn 4.82 carried 6.47  tails 69 sighted 94 at r40 0  | divisions 179 (trade 95 drift 84 faithfully 0), daughters 358: tailless 123, given a sense 80  | the spawner's peers 139 (for the floor 136, for venom 3), drifters 807, left to births 0  | worn cytostome 1.22 cirrus 0.87 flagellum 1.17 stigma 0.40 ocellus 0.33 chemocyte 0.52 ampulla 0.45 axoneme 0.13 palp 0.23 myoneme 0.04 trichocyst 0.09 pellicle 0.23 veneneux 0.00 plastid 0.14 vacuole 0.33 crista 0.12 toxicyst 0.00 haptonema 0.36 lysosome 0.11  | commonest 10x cytostome:1,cirrus:1,flagellum:1,chemocyte:1 ; 8x cytostome:1,cirrus:1,flagellum:1,stigma:1 ; 5x cytostome:1,cirrus:1,flagellum:1,ocellus:1",
+	"[behaviour] t 300  hunters 94: on the founders' rules 42, other lists 52  | founders' rules fired 18237/34644/1581/1286/6688/80769/1473  | meals of hunters with a nose 219, radar 337, laser 365  | stings 42, stuns 0, your wakes 0  | now holding a heading 29, resting 48, swimming 76, pushing 3, stunned 0, echoes in flight 71  | behaviours 46, unchanged 44.7 %  | rules changed 179: nudge 102, replace 27, swap 21, copy 18, drop 11",
 ]
 ## **The player's seeded trace** ([method _tail_trace]): forty seconds of a cell
 ## stepped by its own drive, wearing a tail of two copies that nobody holds,
@@ -7614,8 +7615,8 @@ const TAIL_LINES: Array[String] = [
 ## **Re-recorded when venom came to ride** (venom-rides.md), from the check's own
 ## output: the water round the player changed on purpose -- its founders' venom rides
 ## their mouths, and the floor's too.
-const PACK3_TRACE := "899af66883a2ff3f83f41eda739dd17da2b09ac007d7edbe50891242e015fe33"
-const TAIL_TRACE := "317cee8d6644ea2c17920be6b966e8411f3f1aa306c81f9a10bf62ad1e0be30b"
+const PACK3_TRACE := "dba078b12d533789b0378020f866dc99381fb203f67a467b92560bced9fac849"
+const TAIL_TRACE := "f53568d61b74f6305e25d60138f0d901c200537c584ca1be277dce528caaf8d0"
 ## A tail of two copies, the level a tail can be held still at, on a born body.
 const TWO_TAILS := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2}
 const ONE_TAIL := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
@@ -9744,8 +9745,11 @@ const HARM := 0
 ## so the 214 trials that bring it are left out of the digest altogether, and the
 ## other 3,786 are what `dev` at 838c997 draws -- the same function run on its own
 ## genome.gd, with those trials left out too, gives this digest to the byte.
-const DEV_MUTATIONS := "4c9bdc4d9cab121cc2bb124abc894703f060dd8099caa82601e9d9c970c9a46d"
-const DEV_MUTATIONS_CAME := 214
+## **Re-recorded when the store moved inside and the mend came** (inside-genes.md
+## §6), from the check's own output: drift may bring `lysosome` now, and a store that
+## comes takes no arc, so the draws after the first that brought either differ.
+const DEV_MUTATIONS := "9a2e43e16d33fb9be12696107f4f7262ff434ea8990b78ed7e9a892fc51f757d"
+const DEV_MUTATIONS_CAME := 199
 ## **What `dev`'s water draws** (d08b0c3), for [method draw_digest]'s 3,000
 ## bodies: the digest of those that drew no toxin, and how many drew it. Worked
 ## out on `dev`'s own food.gd; a draw may differ from it only on a body that drew
@@ -10932,7 +10936,7 @@ func _dna_saves() -> void:
 	var worn: Array = genome2.call(&"body_layout")
 	var converted: bool = bool(dev.get("_resumed")) \
 		and int((genome2.call(&"dna") as Dictionary).get(&"veneneux", 0)) == 2 \
-		and layout.size() > 3 and layout[3] == &"" and inside == [&"veneneux"] \
+		and layout.size() > 3 and layout[3] == &"" and inside == [&"veneneux", &"", &""] \
 		and int(genome2.call(&"tier", &"veneneux")) == 2 and worn[3] == &"" \
 		and int(genome2.call(&"slot_of", &"veneneux")) == -1
 	var nothing_carried := not Doses.any((dev.get("_cell") as CellBody).loads)

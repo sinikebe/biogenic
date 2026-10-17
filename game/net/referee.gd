@@ -549,7 +549,8 @@ func arrive(now: float, at: Vector2, radius: float) -> Array:
 	if bool(grant[0]):
 		return []
 	var away := maxf(now - float(grant[3]), 0.0)
-	return [CellBody.mended(float(grant[1]), away), maxf(float(grant[2]) - away, 0.0)]
+	return [CellBody.mended(float(grant[1]), away, Stats.of(worn, &"mend")),
+		maxf(float(grant[2]) - away, 0.0)]
 
 
 ## **A PERSON**: `[]` to leave it unread, or `[new_body]` to apply it -- a new

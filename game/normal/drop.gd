@@ -570,11 +570,14 @@ static func takes_back(tiers: Dictionary, gene: StringName,
 ## does, inside. Outside on the body it takes an arc, as the old gene did: a peer
 ## with no room outside gives up a gene for it -- `pick` chooses which -- but never
 ## one of its body plan or of [param senses], so it stays a cell that can live;
-## with nothing else to give up, it takes a bonus slot. Nothing, for a peer that
-## carries it in any form, or that may not take it ([method takes_back]).
+## with nothing else to give up, it takes a bonus slot. **Inside it takes a slot of
+## the [param inside_room] the peer's radius earns** (inside-genes.md §1), giving up an inside
+## gene for it -- `pick` again -- when that is full, and over its room with none to
+## give. Nothing, for a peer that carries it in any form, or that may not take it
+## ([method takes_back]).
 static func give_back(tiers: Dictionary, gene: StringName, slots: int,
 		senses: Array[StringName], pick: int, inside: bool,
-		riders: Dictionary = {}) -> void:
+		riders: Dictionary = {}, inside_room: int = -1) -> void:
 	if not takes_back(tiers, gene, riders):
 		return
 	if not inside and Genome.is_riding_form(Catalogue.rides_as(gene)):
@@ -586,6 +589,14 @@ static func give_back(tiers: Dictionary, gene: StringName, slots: int,
 	var form := Genome.form_in(gene, Genome.INSIDE_PLACE if inside else Genome.OUTSIDE_PLACE)
 	if form == &"":
 		form = Genome.forms_of(gene)[0]
+	if Genome.is_inside_form(form) and inside_room >= 0 \
+			and Genome.count_inside(tiers) >= inside_room:
+		var held: Array[StringName] = []
+		for other: StringName in tiers:
+			if Genome.is_inside_form(other):
+				held.append(other)
+		if not held.is_empty():
+			tiers.erase(held[posmod(pick, held.size())])
 	if not Genome.is_inside_form(form) and Genome.count_outside(tiers) >= slots:
 		var plan := peer_plan()
 		var spare: Array[StringName] = []

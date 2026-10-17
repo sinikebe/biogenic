@@ -178,7 +178,7 @@ const PROTOCOL := 10
 ## until this is moved, saying that no [constant PROTOCOL] bump goes with it. A build
 ## on new rules plays every build on its own rules, and none on the old ones until
 ## they update: that is what moving it means.
-const RULES := "227baab28a8556fda9efaeddddd6c3d51a9761a9f029589889ff1b01ccb04606"
+const RULES := "4d6ea6f8585351ccc3bb68a59d47410df1a5016eaa8cbfc3662fd4b9549b8bdd"
 
 # --- Frame kinds. Byte 0 of every frame. ------------------------------------
 ## Guest to host, first thing after the transport connects: *this is what I
@@ -501,12 +501,13 @@ enum Entry { ID, MEALS, FLAGS, AT, HEADING, RADIUS, WOUND, SPEED,
 ## is inert in every rule, which is the shipped retirement behaviour.
 ##
 ## The decoder refuses the whole message on more genes than [member GENES_MAX]
-## -- every slot the body plan has, today seven outside and one inside, and one
+## -- every slot the body plan has, today seven outside and three inside, and one
 ## more: a held sample, or a gift worn over an organ still worn -- on a name
 ## outside 1 to [constant NAME_MAX] bytes of `a-z`, or on an order longer than
 ## [member ORDER_MAX], the slots outside: the order is the worn layout, outside
 ## only, because an inside form is inside by its name. Tiers clamp to
-## 0..[constant TIER_TOP]. Nine since protocol 7, and every bound after it follows
+## 0..[constant TIER_TOP]. Nine since protocol 7, eleven since the inside grew to three
+## slots (inside-genes.md), and every bound after it follows
 ## (docs/design/dna-slots.md §14.2).
 ##
 ## **The two counts are the body plan's** (docs/design/gene-catalogue.md §10.2),
@@ -596,7 +597,7 @@ const CLEAR_SIZE := EVENT_HEADER + 4
 ## why a host of this build refuses it. Protocol 8's is 39: the prefix and the
 ## rules' tail ([constant TAIL_SIZE]). Longer, and the host hangs up before
 ## the handshake with no sentence at all; longer than [member GUEST_OTHER_MAX]
-## (1,101), and it is the oversize cut, which bars the caller's address for a
+## (1,317), and it is the oversize cut, which bars the caller's address for a
 ## minute (net-hardening.md A.2).
 const HANDSHAKE_MAX := 64
 ## **Every size that holds a genome or an order is a static var**, worked out in
@@ -604,7 +605,7 @@ const HANDSHAKE_MAX := 64
 ## constants in all but name, and change only with the plan.
 ##
 ## A worn genome at its longest: the count, then [member GENES_MAX] genes of
-## `len | a name of NAME_MAX letters | tier`. 163 bytes. An unknown name is
+## `len | a name of NAME_MAX letters | tier`. 199 bytes. An unknown name is
 ## legal and inert, so the bound follows the format and not today's longest
 ## gene, which has ten letters.
 static var TIERS_MAX := 0
@@ -613,14 +614,14 @@ static var TIERS_MAX := 0
 static var ORDER_BYTES_MAX := 0
 ## **Riders at their longest** (docs/design/gene-sockets.md §6): the count, then
 ## [member GENES_MAX] hosts of `len | name | slots`, and [constant SOCKETS_MAX]
-## slots of `len | name | copies` each. 811 bytes. A real body has a handful.
+## slots of `len | name | copies` each. 991 bytes. A real body has a handful.
 static var RIDERS_BYTES_MAX := 0
 ## PERSON: the header, the new-body byte, a genome, an order and since protocol 9
-## the riders -- 10 bytes with nothing worn, 1,101 at the most the format holds. A
+## the riders -- 10 bytes with nothing worn, 1,317 at the most the format holds. A
 ## real one is at most 194 and its riders.
 const PERSON_MIN := EVENT_HEADER + 1 + 1 + 1 + 1
 static var PERSON_MAX := 0
-## GENOME: the body's id and meals, a genome and its riders. 13 to 985.
+## GENOME: the body's id and meals, a genome and its riders. 13 to 1,201.
 const GENOME_MIN := EVENT_HEADER + 5 + 1 + 1
 static var GENOME_MAX := 0
 ## CONTACT: an ATE carries its gene's name, a KILLED its cause. 20 to 37.
@@ -628,19 +629,21 @@ const CONTACT_MAX := CONTACT_SIZE + 1 + NAME_MAX
 ## SISTER: a place, a heading, a radius and a genome -- and since protocol 6 a
 ## second genome, her DNA, and her list: a count of rules to [constant
 ## MOST_RULES], then each line as `len | ASCII` -- and since protocol 9 her DNA's
-## riders. 23 bytes with nothing worn, carried, run or riding; 2,189 at the most the
-## format holds, two genomes of nine sixteen-letter genes, eight lines of
+## riders. 23 bytes with nothing worn, carried, run or riding; 2,441 at the most the
+## format holds, two genomes of eleven sixteen-letter genes, eight lines of
 ## [constant RULE_BYTES_MAX] and the longest riders. A real one is under a
-## kilobyte: a DNA holds eight genes of ten letters at most, and today's longest
+## kilobyte: a DNA holds ten genes of ten letters at most, and today's longest
 ## line is under ninety bytes.
 const SISTER_MIN := EVENT_HEADER + 13 + 1 + 1 + 1 + 1
 static var SISTER_MAX := 0
 ## **The most either side ever writes in one frame**: a guest's longest SISTER
 ## -- since protocol 6, longer than its longest PERSON, [member PERSON_MAX] --
-## and a host's POND. A receiver reads no byte past the first of anything
-## longer.
+## and a host's longest frame: its POND, or a guest's PERSON or a GENOME it passes
+## on, whichever the plan makes longest -- the PERSON since the inside grew to
+## three slots (docs/design/inside-genes.md), where it was the POND. A receiver
+## reads no byte past the first of anything longer.
 static var GUEST_FRAME_MAX := 0
-const HOST_FRAME_MAX := POND_MAX
+static var HOST_FRAME_MAX := POND_MAX
 ## **The most a guest writes in any frame but a SISTER**: its longest PERSON,
 ## which was every guest frame's cap before protocol 6. Only a SISTER needs
 ## more -- her list rides in it -- so a guest frame of any other kind past this
@@ -668,6 +671,7 @@ static func _read_plan() -> void:
 		+ RIDERS_BYTES_MAX
 	GUEST_FRAME_MAX = SISTER_MAX
 	GUEST_OTHER_MAX = PERSON_MAX
+	HOST_FRAME_MAX = maxi(POND_MAX, maxi(PERSON_MAX, GENOME_MAX))
 
 
 # ---------------------------------------------------------------------------
