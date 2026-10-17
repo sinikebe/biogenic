@@ -611,7 +611,9 @@ extends Node
 ##                           where the run starts: somewhere quiet (§8.1, the
 ##                           game's), the middle, or --edge-gap= inside the rim
 ##                           facing it, for the renders
-##   --edge-gap=<units>      default 380
+##   --edge-gap=<units>      default 380; a cell started nearer the rim than its
+##                           hold is held there (margin.md §2.1): a newborn's
+##                           is 780
 ##   --flocs-near=<n>        n flocs 220-520 units round the start, the last one
 ##                           caught settling (§7.6's render)
 ##   --desert=<units>        everything alive within it of the start taken away

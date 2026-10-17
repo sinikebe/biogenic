@@ -6731,7 +6731,8 @@ var half_rate := true
 ## §4.4: a tank that cannot move is not stepped -- which changes no number.
 var skip_still := true
 ## Where a run starts: `quiet` (§8.1), `centre`, or `edge` -- [member edge_gap]
-## inside the rim, facing it -- for the renders.
+## inside the rim, facing it, and held at its hold if that is nearer (margin.md
+## §2.1) -- for the renders.
 var start_mode := &"quiet"
 var edge_gap := 380.0
 ## For the renders and the probes: this many flocs round the start, the last
