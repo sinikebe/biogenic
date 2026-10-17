@@ -76,7 +76,8 @@ jobs:
           java-version: "17"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
+        # Pinned to a commit (the template's): a third-party action runs as this job.
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           packages: "platform-tools build-tools;34.0.0"
 
@@ -1007,8 +1008,11 @@ jobs:
           exit "$fail"
 
       - name: Check the shell scripts
+        # Installed only when missing (the template's): the runner of our own has it.
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          if ! command -v shellcheck >/dev/null; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          fi
           shellcheck --severity=warning ci/*.sh server/*.sh
 
       - name: Upload build for inspection
