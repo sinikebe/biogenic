@@ -247,6 +247,27 @@ Phase 1:
   as converted. Every body is re-derived from its genome, and a body past
   `RADIUS_MAX` is trimmed to it.
 
+Phase 2:
+
+- **`Wire.RULES`**: `drop.FILM` and the referee's hold, by a sample.
+- **The drop save's rules** gain `drop.FILM`. A drop kept before the film loads as
+  converted. A body past the rim is put back at its hold; one past its hold but inside
+  the rim is held by its own next step.
+- **drop_probe**:
+  - the seeded lines (the start, the spawner and the first fill moved);
+  - the start, spawner and S3 checks, judged in the margin band and at each hold;
+  - containment, judged at each body's hold, with a meal's hold allowed for each meal
+    since its last step;
+  - the tests that clear a desert to pose in, which start 2,400 µm in from the rim:
+    past the margin, and lit enough to see by;
+  - the read-parity check, which runs in full light, since its subject is parity, not
+    how far an eye sees.
+- **net_probe**:
+  - the referee's rim check, at the hold;
+  - the fed and dividing guests' pins, which follow their hold before the quickening is
+    skipped. The 2.4 s quickening does that in the water in real play.
+- **ci.yml's trace**: the cell starts in the margin.
+
 ---
 
 ## 4. What to watch when playing
@@ -265,6 +286,13 @@ All balance, which waits for players (`CLAUDE.md`).
   `RADIUS_MAX`.
 - **Slow lineages.** If carrying many genes stops being worth it, the lever is how
   much room a gene needs.
+- **The margin's size.** At `FILM` 30, about half the drop is a giant-free band, and
+  the quarter nearest the rim is drifters' water only. If the margin feels too wide or
+  too empty, the levers are `FILM` and `MARGIN_FOOD`.
+- **Newborns beside the start.** A run can start near the water's newborns. Their
+  mouths are just under the threshold the quiet start judges dread by, at a newborn's
+  radius, but just over the one the membrane feels, at your swallow size. This is
+  older than the margin; it shows more now that newborns are made where a run starts.
 - **You.** Your DNA fills as the water's does, by eating. A lineage of yours that
   fills its arcs is born at r36.5 and divides at r51.6. Born bigger means more slots
   at birth and a mouth that swallows more.
