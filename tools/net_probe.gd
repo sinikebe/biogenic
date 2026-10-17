@@ -10394,6 +10394,10 @@ func _check_server() -> void:
 	b_home = b_cell.position
 	b_pin = [b_cell, b_home, 0.0]
 	pins = [a_pin, b_pin]
+	# Where its own run would hold it: the checks below pose bodies beside it,
+	# and the room has it at its hold, not past it.
+	await _pond_hold_pins(food, pins)
+	b_home = b_pin[1]
 	var b_three := await _pond_until(func() -> bool:
 		return Genome.tier_of(food.bodies()[slot_b].genome, &"cytostome") == 3,
 		1.0, pins)

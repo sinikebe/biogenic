@@ -5377,6 +5377,7 @@ func _cells_order() -> void:
 	run.notification(NOTIFICATION_APPLICATION_PAUSED)
 	var food: Node = run.get("_food")
 	(run.get("_cell") as CellBody).position += Vector2(300.0, 200.0)
+	_held_in_drop(run)
 	food.set("_t", float(food.call(&"drop_age")) + 45.0)
 	var place := _cells_place_of(run)
 	var world := Drops.path_of(1, CELLS_ROOT)
