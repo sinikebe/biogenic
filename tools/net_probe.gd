@@ -7845,6 +7845,7 @@ func _check_pond() -> void:
 	await _pond_until(func() -> bool:
 		return (int(host_run.get("_split")) != NormalMode.Split.NONE
 			and int(guest_run.get("_split")) != NormalMode.Split.NONE), 1.0, pins)
+	await _pond_hold_pins(host_food, pins)
 	# The quickening is the one phase still in the water, and nothing here is
 	# about it: both go straight to the pinch.
 	for run: Node in [host_run, guest_run]:
@@ -9530,6 +9531,21 @@ func _pond_feed(host_food: Node, cell: Node, pins: Array,
 	return meals
 
 
+## **Every pinned cell held where the water holds its size** (margin.md §2.1), and a
+## quarter of a second for the host to follow: what the quickening, which the
+## division checks skip, does in the water. A cell pinned at its shore that grew a
+## meal of its own -- the margin is full of food -- is held a meal further in, and
+## must be there before it leaves the water: once out, it may not move.
+func _pond_hold_pins(food: Node, pins: Array) -> void:
+	var rim: RefCounted = food.basin()
+	if rim != null:
+		for pin: Array in pins:
+			var cell: Node = pin[0]
+			pin[1] = rim.call(&"contain", pin[1], FoodField.Drop.hold(float(cell.radius)))
+			cell.position = pin[1]
+	await _pond_until(func() -> bool: return false, 0.25, pins)
+
+
 ## Retires every water body within [param reach] of the segment from
 ## [param from] to [param to], so a glide along it meets nothing.
 func _pond_clear_line(food: Node, from: Vector2, to: Vector2, reach: float) -> void:
@@ -10896,6 +10912,7 @@ func _server_sisters(pond: Object, food: Node, first: Node, second: Node) -> Arr
 	await _pond_until(func() -> bool:
 		return runs.all(func(run: Node) -> bool:
 			return int(run.get("_split")) != NormalMode.Split.NONE), 1.0, pins)
+	await _pond_hold_pins(food, pins)
 	await _pond_until(func() -> bool:
 		for run: Node in runs:
 			if int(run.get("_split")) == NormalMode.Split.QUICKEN:
