@@ -74,13 +74,14 @@ func reset() -> void:
 
 
 ## **The thinnest of [param candidates]**: the index of the one
-## [param count] -- a callable taking a point and returning how full it is --
-## says holds the fewest, the first of them on a tie; -1 for none.
+## [param count] -- a callable taking a point and returning how full it is, a
+## count or a weighed one -- says holds the fewest, the first of them on a tie;
+## -1 for none.
 static func thinnest(candidates: PackedVector2Array, count: Callable) -> int:
 	var best := -1
-	var fewest := 0
+	var fewest := 0.0
 	for i in candidates.size():
-		var n := int(count.call(candidates[i]))
+		var n := float(count.call(candidates[i]))
 		if best < 0 or n < fewest:
 			best = i
 			fewest = n

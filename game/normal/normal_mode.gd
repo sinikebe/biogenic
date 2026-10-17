@@ -1246,7 +1246,8 @@ func _open_drop() -> Dictionary:
 			var at: Vector2 = (cell["body"]["at"] as Vector2) + moved
 			# A content pack may have shrunk the rim since.
 			var rim: RefCounted = _food.basin()
-			_cell.position = rim.call(&"contain", at, _cell.radius) if rim != null else at
+			_cell.position = rim.call(&"contain", at, FoodField.Drop.hold(_cell.radius)) \
+				if rim != null else at
 			var moved_on := float(kept["drop"]["age"]) != float(where["age"])
 			_food.resume_player(cell["water"], moved_on)
 			print("[cells] %s, slot %d: resumed where it was left, the drop %.0f away under it%s"
@@ -9856,7 +9857,7 @@ func _leave_sister(bearing: float, body: Dictionary, dna: Dictionary,
 	var at := _cell.position + dir * SISTER_DISTANCE
 	var rim: RefCounted = _food.basin()
 	if rim != null:
-		at = rim.call(&"contain", at, _cell.radius)
+		at = rim.call(&"contain", at, FoodField.Drop.hold(_cell.radius))
 	var brain: Variant = _sister_brain()
 	_pond.sister(at, atan2(dir.x, -dir.y), _cell.radius, body, dna,
 		Rulebook.lines_of(brain) if brain != null else PackedStringArray(), riders)

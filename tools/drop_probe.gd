@@ -434,14 +434,15 @@ class WatchedDrop extends "res://game/normal/food.gd":
 				_fault("daughter %d of %d: r%.2f hunger %.2f grace %.1f record %s" % [k,
 					mother[Descent.ID], d.radius, d.hunger, d.grace,
 					str([d.id, d.parent, d.generation, d.lineage])])
-		# Side by side, touching, across her heading -- unless the rim held one in.
+		# Side by side, touching, across her heading -- unless the film held one in
+		# at her hold (margin.md §2.1).
 		# To a hundredth: a place is kept in 32 bits, a few ten-thousandths out here.
 		var apart := pair[0].pos - pair[1].pos
 		var along := absf(apart.dot(Vector2(sin(heading), -cos(heading))))
 		var mid := (pair[0].pos + pair[1].pos) * 0.5
 		if absf(apart.length() - 2.0 * r) < 1e-2 and along < 1e-2 and mid.distance_to(at) < 1e-2:
 			pass
-		elif _drop.meniscus.depth(at) < 2.0 * r:
+		elif _drop.meniscus.depth(at) < Drop.hold(r) + r:
 			held_at_rim += 1
 		else:
 			_fault("daughters %.3f apart, %.3f along her heading, %.3f off her centre"
@@ -1475,9 +1476,25 @@ func _drop() -> void:
 			var d := _dist(at, players[turn])
 			if d >= hides[turn] and d <= hides[turn] + Drop.SPAWN_RING:
 				ringed += 1
+	# **A newborn's in the margin** (margin.md §2.3): every one in the band a run
+	# starts in, from a newborn's hold to MARGIN_START past it.
+	var from := Drop.hold(CellBody.BASE_RADIUS)
+	var newborns := 0
+	var off_band := 0
+	for round in 200:
+		for at: Vector2 in drop.spawn_candidates(players, hides, round % 2, true):
+			newborns += 1
+			var depth := drop.meniscus.depth(at)
+			if depth < from - 1e-3 or depth > from + Drop.MARGIN_START + 1e-3 \
+					or not Replenish.hidden(at, players, hides):
+				off_band += 1
 	_check(("spawn candidates: %d drawn, %d of them in the ring past the player whose"
-		+ " turn it is, %d inside a hide reach or past the rim") % [drawn, ringed, bad],
-		bad == 0 and drawn > 3000 and float(ringed) > 0.35 * float(drawn))
+		+ " turn it is, %d inside a hide reach or past the rim; %d drawn for a newborn,"
+		+ " %d of them outside the margin it starts in (%.0f to %.0f from the rim) or in"
+		+ " a hide reach") % [drawn, ringed, bad, newborns, off_band, from,
+		from + Drop.MARGIN_START],
+		bad == 0 and drawn > 3000 and float(ringed) > 0.35 * float(drawn)
+		and off_band == 0 and newborns > 1000)
 	# Where a run starts, against the same points chosen by hand.
 	var tried: Array = []
 	var food_near := func(p: Vector2, reach: float) -> int:
@@ -1494,7 +1511,8 @@ func _drop() -> void:
 	var deep := true
 	var clear := 0
 	for p: Vector2 in tried:
-		deep = deep and drop.meniscus.inside(p, Drop.START_INSET)
+		var depth := drop.meniscus.depth(p)
+		deep = deep and depth >= from - 1e-3 and depth <= from + Drop.MARGIN_START + 1e-3
 		if fmod(absf(p.x), 7.0) < 1.0:
 			continue
 		clear += 1
@@ -1509,8 +1527,9 @@ func _drop() -> void:
 		if fmod(absf(p.x), 7.0) >= 1.0 and absf(float(dread_at.call(p)) - least) <= 1e-6:
 			tied += 1
 	_check(("a run starts at the quietest of %d points: of the %d with no meal on top, the"
-		+ " %d that dread nothing tie and the one with most food (%d) wins; none within"
-		+ " %.0f of the rim") % [tried.size(), clear, tied, most, Drop.START_INSET],
+		+ " %d that dread nothing tie and the one with most food (%d) wins; all of them in"
+		+ " the margin, %.0f to %.0f from the rim") % [tried.size(), clear, tied, most, from,
+		from + Drop.MARGIN_START],
 		tried.size() == Drop.START_TRIES and start == want and deep and clear < tried.size()
 		and tied >= 2)
 	var pushed := drop.pushed_clear(OFF_CENTRE, OFF_CENTRE + Vector2(300.0, 400.0),
@@ -1518,48 +1537,52 @@ func _drop() -> void:
 	_check("a mouth that could swallow a newborn is moved out to %.0f from its start"
 		% _dist(pushed, OFF_CENTRE), absf(_dist(pushed, OFF_CENTRE)
 		- FoodField.DREAD_RANGE - Drop.START_PUSH) < 0.01)
-	# A start is drawn evenly over its disc: half of the draws within the radius
+	# A start is drawn evenly over its band: half of the draws within the radius
 	# that holds half its area. And one 1,100 µm in from the rim, with the mouth
-	# on the rim's side, pushes that mouth back inside, not out of the drop.
-	var disc := Drop.RADIUS - Drop.START_INSET
+	# on the rim's side, pushes that mouth back to its hold, not out of the drop.
+	var outer := Drop.RADIUS - from
+	var inner := Drop.RADIUS - from - Drop.MARGIN_START
+	var halves := sqrt((outer * outer + inner * inner) * 0.5)
 	var within := 0
 	var outside := 0
 	for i in 20000:
-		var d := _dist(drop.uniform_point(Drop.START_INSET), drop.meniscus.center)
-		if d <= disc / sqrt(2.0):
+		var d := _dist(drop.margin_point(), drop.meniscus.center)
+		if d <= halves:
 			within += 1
-		if d > disc + 1e-3:
+		if d > outer + 1e-3 or d < inner - 1e-3:
 			outside += 1
 	var edge_start := drop.meniscus.center + Vector2(Drop.RADIUS - 1100.0, 0.0)
 	var edge_push := drop.pushed_clear(edge_start, edge_start + Vector2(300.0, 0.0),
 		FoodField.DREAD_RANGE, 30.0)
-	_check(("a start is drawn evenly: %.3f of 20,000 within %.0f of the centre, which holds"
-		+ " half the disc, and %d past it; a mouth on the rim's side of a start 1,100 in"
-		+ " is pushed to %.1f inside the rim") % [float(within) / 20000.0,
-		disc / sqrt(2.0), outside, drop.meniscus.depth(edge_push)],
+	_check(("a start is drawn evenly over its band: %.3f of 20,000 within %.0f of the"
+		+ " centre, which holds half the band, and %d out of it; a mouth on the rim's side"
+		+ " of a start 1,100 in is pushed to %.1f inside the rim, where its hold is %.0f")
+		% [float(within) / 20000.0, halves, outside, drop.meniscus.depth(edge_push),
+			Drop.hold(30.0)],
 		absf(float(within) / 20000.0 - 0.5) <= 0.01 and outside == 0
-		and drop.meniscus.inside(edge_push, 30.0))
-	# **The review's S3**: the rim holds a pushed mouth back, and it must still
-	# end clear of dread's reach of the start. From a start as near the rim as
-	# one may be, mouths all round it at every distance inside dread's reach, of
-	# every size a body can be: each is slid along the rim until it clears.
+		and drop.keeps(edge_push, 30.0))
+	# **The review's S3**: the film holds a pushed mouth back at its hold, and it
+	# must still end clear of dread's reach of the start. From a start as near the
+	# rim as one may be -- a newborn's hold -- mouths all round it at every distance
+	# inside dread's reach, of every size a body can be: each is slid along its hold
+	# until it clears.
 	var nearest := INF
 	var held := 0
 	var escaped := 0
-	var worst_start := drop.meniscus.center + Vector2(0.0, -(Drop.RADIUS - Drop.START_INSET))
+	var worst_start := drop.meniscus.center + Vector2(0.0, -(Drop.RADIUS - from))
 	for k in 72:
 		for reach: float in [60.0, 700.0, 1350.0]:
 			for r: float in [13.0, 40.0]:
 				var mouth := worst_start + Vector2.from_angle(TAU * float(k) / 72.0) * reach
 				var put := drop.pushed_clear(worst_start, mouth, FoodField.DREAD_RANGE, r)
 				nearest = minf(nearest, _dist(put, worst_start))
-				if drop.meniscus.depth(put) < Drop.START_PUSH:
+				if drop.meniscus.depth(put) < Drop.hold(r) + Drop.START_PUSH:
 					held += 1
-				if not drop.meniscus.inside(put, r):
+				if not drop.keeps(put, r):
 					escaped += 1
 	_check(("S3: from a start %.0f inside the rim, 432 mouths moved out land at least %.0f"
-		+ " from it (dread reaches %.0f), %d of them slid along the rim, %d past it") % [
-		Drop.START_INSET, nearest, FoodField.DREAD_RANGE, held, escaped],
+		+ " from it (dread reaches %.0f), %d of them slid along their hold, %d past it") % [
+		from, nearest, FoodField.DREAD_RANGE, held, escaped],
 		nearest >= FoodField.DREAD_RANGE and held > 0 and escaped == 0)
 	# What a new thing is made with: a body made in play is fed, one of a first
 	# fill up to FIRST_HUNGER_MAX; a fallen floc fits a born cell's mouth and lasts
@@ -2019,8 +2042,10 @@ func _spawns() -> void:
 
 # --- 4. Containment ------------------------------------------------------------------------
 
-## **After 1,800 frames no body's centre past `RADIUS - r`, the player's
-## included; no mote past the rim** (§3.1). A run started 120 inside the rim,
+## **After 1,800 frames no body's centre past its hold, `RADIUS - hold(r)`
+## (margin.md §2.1), the player's included -- a floc's past `RADIUS - r`, which
+## lies on the glass; no mote past the rim** (§3.1). A run started 120 inside its
+## hold,
 ## facing it, the cell pressing straight into it at a stroke's speed the whole
 ## time -- knocked at the rim's bearing, and at most once in SHORE_GAP -- with its
 ## grit, the authored first mote included, round it. Bodies are looked at every
@@ -2031,7 +2056,7 @@ func _containment() -> void:
 	var field := WatchedDrop.new()
 	field.process_mode = Node.PROCESS_MODE_DISABLED
 	field.start_mode = &"edge"
-	field.edge_gap = 120.0
+	field.edge_gap = Drop.hold(CellBody.BASE_RADIUS) + 120.0
 	field.grace = 1e6
 	field.contact_swallow = false
 	add_child(field)
@@ -2054,7 +2079,7 @@ func _containment() -> void:
 	for k in 24:
 		var along := out0.rotated(deg_to_rad((5.0 + 2.5 * float(k / 2)) * (1.0 if k % 2 == 0
 			else -1.0)))
-		var hungry := _pose(field, centre + along * (edge - 33.0), 30.0,
+		var hungry := _pose(field, centre + along * (edge - Drop.hold(30.0) - 3.0), 30.0,
 			{&"cytostome": 1, &"cirrus": 1, &"flagellum": 2}, atan2(along.x, -along.y), 0.9)
 		var hb: Object = (field.get("_cells") as Array)[hungry]
 		hb.set("calm", 0.0)
@@ -2071,15 +2096,17 @@ func _containment() -> void:
 		cell.position += cell.velocity / 60.0
 		field._process(1.0 / 60.0)
 		motes._process(1.0 / 60.0)
-		worst_cell = minf(worst_cell, edge - cell.radius - _dist(cell.position, centre))
+		worst_cell = minf(worst_cell,
+			edge - Drop.hold(cell.radius) - _dist(cell.position, centre))
 		for p: Vector2 in motes.points():
 			worst_mote = minf(worst_mote, edge - MotesField.MOTE_RADIUS - _dist(p, centre))
 		if f % 30 == 29:
 			for b: Object in field.get("_cells"):
 				if b.get("seeded"):
 					bodies_seen += 1
-					worst_body = minf(worst_body,
-						edge - float(b.get("radius")) - _dist(b.get("pos"), centre))
+					var r := float(b.get("radius"))
+					var keep := r if b.get("inert") else Drop.hold(r)
+					worst_body = minf(worst_body, edge - keep - _dist(b.get("pos"), centre))
 	var gap := INF
 	var off_bearing := 0.0
 	for k in knocks.size():

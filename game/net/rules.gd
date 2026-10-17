@@ -208,10 +208,13 @@ static func text() -> String:
 	# player that fits on contact (row 15), armour makes a body bigger to a mouth
 	# (row 5).
 	put.call("drop.FLOC_GROWTH", FoodField.Drop.FLOC_GROWTH)
-	var held: Vector2 = FoodField.Drop.new().meniscus.contain(Vector2(7000.0, 125.0),
+	# Held where the water is deep enough for a daughter (margin.md §2.1): the film
+	# per unit of radius, and the rim's hold, by a sample.
+	put.call("drop.FILM", FoodField.Drop.FILM)
+	var held: Vector2 = FoodField.Drop.new().holds(Vector2(7000.0, 125.0),
 		Referee.DAUGHTER_RADIUS)
-	put.call("drop.contain(7000,125;r28.28).x", held.x)
-	put.call("drop.contain(7000,125;r28.28).y", held.y)
+	put.call("drop.holds(7000,125;r28.28).x", held.x)
+	put.call("drop.holds(7000,125;r28.28).y", held.y)
 	put.call("food.swallows_player(not hunting, on contact)",
 		FoodField.swallows_player(false, FoodField.CONTACT_SWALLOW, 20.0, 30.0))
 	put.call("food.armoured_size(r30, pellicle 2)",

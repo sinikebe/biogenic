@@ -3627,10 +3627,13 @@ func _rules_text(doubts: Array = []) -> String:
 	# player that fits on contact, hunting or not (row 15), and armour makes a body
 	# bigger to a mouth (row 5).
 	put.call("drop.FLOC_GROWTH", FoodField.Drop.FLOC_GROWTH)
-	var held: Vector2 = FoodField.Drop.new().meniscus.contain(Vector2(7000.0, 125.0),
+	# Held where the water is deep enough for a daughter (margin.md §2.1): the film
+	# per unit of radius, and the rim's hold, by a sample.
+	put.call("drop.FILM", FoodField.Drop.FILM)
+	var held: Vector2 = FoodField.Drop.new().holds(Vector2(7000.0, 125.0),
 		Referee.DAUGHTER_RADIUS)
-	put.call("drop.contain(7000,125;r28.28).x", held.x)
-	put.call("drop.contain(7000,125;r28.28).y", held.y)
+	put.call("drop.holds(7000,125;r28.28).x", held.x)
+	put.call("drop.holds(7000,125;r28.28).y", held.y)
 	put.call("food.swallows_player(not hunting, on contact)",
 		FoodField.swallows_player(false, FoodField.CONTACT_SWALLOW, 20.0, 30.0))
 	put.call("food.armoured_size(r30, pellicle 2)",
@@ -4211,16 +4214,19 @@ func _referee_dividing() -> void:
 		+ " is expected at what she was fed")
 
 
-## **The host's drop's rim, at its referee** (ocean.md §10.5): a claim past the
-## rim is held at it -- a clamp, never a foul, since an honest guest's own run
-## holds its cell there too -- and a sister the rim held back is taken where the
-## guest's run put her, unfouled, when the same sister with no rim is fouled;
-## one off the ring and off the rim is put on the ring, inside it, and fouled.
+## **The host's drop's rim, at its referee** (ocean.md §10.5): a claim past where
+## the water is deep enough for it -- its hold, margin.md §2.1 -- is held there, a
+## clamp, never a foul, since an honest guest's own run holds its cell there too;
+## and a sister her hold held back is taken where the guest's run put her,
+## unfouled, when the same sister with no rim is fouled; one off the ring and past
+## her hold is put on the ring, at her hold, and fouled.
 func _referee_rim() -> void:
 	var centre := Vector2(1234.0, -567.0)
 	var rim := FoodField.Drop.new(centre).meniscus
-	# A claim 25 units past the edge, at walking pace.
-	var edge := centre + Vector2(rim.radius - CellBody.BASE_RADIUS - 10.0, 0.0)
+	var hold := FoodField.Drop.hold(CellBody.BASE_RADIUS)
+	var daughter := FoodField.Drop.hold(Referee.DAUGHTER_RADIUS)
+	# A claim 15 units past its hold, at walking pace.
+	var edge := centre + Vector2(rim.radius - hold - 10.0, 0.0)
 	var walker := _ref_arrived(0.0, edge)
 	walker.set_rim(centre, rim.radius)
 	var past := edge + Vector2(25.0, 0.0)
@@ -4228,34 +4234,35 @@ func _referee_rim() -> void:
 		0.0, false)
 	var walker_said := walker.take_fouls()
 	var at := held[0] as Vector2
-	# A division 140 from the edge; her side of her mother is past the rim.
-	var mother := centre + Vector2(rim.radius - 140.0, 0.0)
-	var side := Vector2(0.6, 0.8)
-	var kept := rim.contain(mother + side * Referee.SISTER_DISTANCE, Referee.DAUGHTER_RADIUS)
+	# A division 100 inside her mother's hold; her side of her mother is past hers.
+	var mother := centre + Vector2(rim.radius - FoodField.Drop.hold(40.0) - 100.0, 0.0)
+	var side := Vector2(0.9, sqrt(1.0 - 0.81))
+	var kept := rim.contain(mother + side * Referee.SISTER_DISTANCE, daughter)
 	var ref := _ref_near_rim(mother, centre, rim.radius)
 	var taken := ref.judge_sister(3.0, kept, Referee.DAUGHTER_RADIUS, true)
 	var taken_said := ref.take_fouls()
 	var bare := _ref_near_rim(mother, centre, 0.0)
 	bare.judge_sister(3.0, kept, Referee.DAUGHTER_RADIUS, true)
 	var bare_said := _ref_rules(bare.take_fouls())
-	# Off the ring and off the rim: 300 out, on her side.
+	# Off the ring and past her hold: 300 out, on her side.
 	var stray := _ref_near_rim(mother, centre, rim.radius)
 	var put := stray.judge_sister(3.0, mother + side * 300.0, Referee.DAUGHTER_RADIUS, true)
 	var stray_said := stray.take_fouls()
-	_says(walker_said.is_empty() and rim.inside(at, CellBody.BASE_RADIUS)
-			and at.distance_to(rim.contain(past, CellBody.BASE_RADIUS)) < 0.01
+	_says(walker_said.is_empty() and rim.inside(at, hold)
+			and at.distance_to(rim.contain(past, hold)) < 0.01
+			and kept.distance_to(mother + side * Referee.SISTER_DISTANCE) > 1.0
 			and taken.size() == 2 and (taken[0] as Vector2).distance_to(kept) < 0.01
 			and taken_said.is_empty() and bare_said == [Referee.SISTER]
 			and put.size() == 2 and (put[0] as Vector2).distance_to(kept) < 0.5
-			and rim.inside(put[0], Referee.DAUGHTER_RADIUS)
+			and rim.inside(put[0], daughter)
 			and _ref_rules(stray_said) == [Referee.SISTER]
 			and float(stray_said[0][1]) == Referee.WEIGHT_SISTER_OFF,
-		"referee, the drop: a claim %.0f past the rim is held %.1f inside it with %d"
-		% [past.distance_to(centre) - rim.radius + CellBody.BASE_RADIUS,
-			rim.radius - CellBody.BASE_RADIUS - at.distance_to(centre), walker_said.size()]
-		+ " fouls; a sister the rim held back, %.0f from her mother, is taken there with"
+		"referee, the drop: a claim %.0f past its hold is held %.1f inside it with %d"
+		% [past.distance_to(centre) - rim.radius + hold,
+			rim.radius - hold - at.distance_to(centre), walker_said.size()]
+		+ " fouls; a sister her hold held back, %.0f from her mother, is taken there with"
 		% kept.distance_to(mother) + " %d fouls (%s with no rim); one off the ring and"
-		% [taken_said.size(), bare_said] + " the rim is put on the ring inside it and"
+		% [taken_said.size(), bare_said] + " past her hold is put on the ring at it and"
 		+ " fouled %s" % [_ref_rules(stray_said)])
 
 
@@ -9511,6 +9518,15 @@ func _pond_feed(host_food: Node, cell: Node, pins: Array,
 		if grew < 0.0:
 			return -1
 		meals += 1
+		# **Its pin follows its hold** (margin.md §2.1): a body grown a meal is held
+		# 120 further from the rim, and its own run puts it there -- so a cell
+		# pinned by its shore is pinned where the water still holds it.
+		var rim: RefCounted = host_food.basin()
+		if rim != null:
+			for pin: Array in pins:
+				if pin[0] == cell:
+					pin[1] = rim.call(&"contain", pin[1], FoodField.Drop.hold(cell.radius))
+					cell.position = pin[1]
 	return meals
 
 

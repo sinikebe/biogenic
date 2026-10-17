@@ -1102,7 +1102,11 @@ func _push_shader() -> void:
 	if rim != null:
 		_shader.set_shader_parameter("drop_center", rim.get(&"center"))
 		_shader.set_shader_parameter("drop_radius", float(rim.get(&"radius")))
-		_shader.set_shader_parameter("drop_band", FoodField.Drop.SHALLOWS)
+		# **The film** (docs/design/margin.md §2.4): lit across the margin, thinning
+		# to the rim, and a faint line where it gets too thin for you.
+		_shader.set_shader_parameter("drop_band", FoodField.Drop.MARGIN)
+		_shader.set_shader_parameter("drop_shore",
+			FoodField.Drop.hold(_cell.radius) - _cell.radius if _cell != null else 0.0)
 		# **The light** (docs/design/daylight.md §3.1): the surface light now and
 		# what reaches the drop's middle, the field's -- so the water dims and cools
 		# with the same two numbers the plastid is paid by. Both 1 with no day.
