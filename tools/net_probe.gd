@@ -10090,6 +10090,15 @@ func _check_server() -> void:
 	var net: Node = server.session()
 	_tally_on(net)
 	var food: Node = server.food()
+	# **From the middle of the drop, as the pond section's host starts** (its
+	# note says why). A room nobody is in takes its first guest at a quiet place,
+	# and since the margin (margin.md §2.1) that is 780 to 1,180 units in from
+	# the rim. Everything after it happens within a few hundred units of it, so
+	# a guest that ate while pinned could be held past where the water is deep
+	# enough for it, the room holding it 2 units off where its own screen had
+	# it: the arrival beside it measured 477.8, and the poses after it fell
+	# short. The rim is not what this section is about.
+	food.set("start_mode", &"centre")
 	var pond: Object = server.pond()
 	_says(int(net.link) == NetSession.Link.LISTENING and food.pond_open()
 			and food.in_drop() and int(food.drop_bodies()) > FoodField.COUNT
