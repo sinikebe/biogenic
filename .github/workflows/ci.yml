@@ -426,11 +426,19 @@ jobs:
         # first line, where drifter 11 now carries a beam, not a ping.
         # 68,572 lines, from 68,422.
         #
+        # **Re-pinned when lineages that carry much came to stay big**
+        # (docs/design/margin.md §1, 2026-10-17), from b1cfee73...: the water
+        # changed on purpose. A body divides where each half has the room its
+        # genes need, so a heavy lineage grows past forty. Against dev at 21044f9
+        # the traces agree to 21.70 s, where cell 251, carrying five genes
+        # outside, is fed to r41.72 where dev's stopped at r40.
+        # 68,558 lines, from 68,572.
+        #
         # The run prints about ten megabytes, so it goes to a file rather than a
         # variable. About twenty seconds.
         run: |
           set -uo pipefail
-          pinned="b1cfee733b68db668eb87e7bf8937bc7bc15b7cbf503adc6c9bd2b64c36ef740"
+          pinned="e18d12330dd35945fa1c6516f6d6ca50a38673801bdece01b5590f927d43a65a"
           log=$(mktemp)
           fail=0
           echo "--- seed 1, sixty seconds, R pressed at 20 s"

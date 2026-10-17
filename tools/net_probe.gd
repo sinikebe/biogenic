@@ -7812,11 +7812,11 @@ func _check_pond() -> void:
 	host_pin = [host_cell, home, 0.0]
 	pins = [host_pin, guest_pin]
 	await _pond_until(func() -> bool: return false, 0.1, pins)
-	# **The guest's lineage carries a fifth gene outside** (margin.md §1.1), written
-	# into its DNA as a player places a meal's: so it divides past forty, and its
+	# **The guest's lineage carries a gene more** (margin.md §1.1), written into its
+	# DNA as a player places a meal's: so it divides past forty, and its
 	# daughters are born bigger than a newborn -- each half at the floor its DNA
 	# sets -- through the host's referee, which never sees the DNA, with no foul.
-	# The host's own carries four, and divides at forty.
+	# The host's own carries what a newborn does, and divides at forty.
 	if not (guest_genome.layout() as Array).has(&""):
 		guest_genome.bonus_slots += 1
 	guest_genome.integrate(&"palp")
@@ -7825,8 +7825,8 @@ func _check_pond() -> void:
 	var host_divides: float = host_run.call(&"_divide_at")
 	_says(guest_divides > CellBody.DIVIDE_RADIUS + 1.0
 			and is_equal_approx(host_divides, CellBody.DIVIDE_RADIUS),
-		"pond: a guest whose DNA carries five genes outside divides at r%.2f, the"
-		% guest_divides + " host with four at r%.2f" % host_divides)
+		"pond: a guest whose DNA is written a gene more divides past forty, at r%.2f,"
+		% guest_divides + " and the host, whose genes fit a newborn, at r%.2f" % host_divides)
 	# **The guest grows to its division on real meals** (B.5): its size is what
 	# the host fed it, so a radius set by hand would be clamped, and its OUT and
 	# its sister refused. The host is its own authority, and is set.

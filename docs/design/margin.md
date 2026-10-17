@@ -91,7 +91,7 @@ generation, whatever the roll gave her.
 **When a cell divides is judged as it eats**, as before: on the meal that takes it to
 its division radius. Its DNA can change in its life -- a placed gene, one written
 over -- and its division radius moves with it: a gene that needs more room lets it
-grow on, one fewer may make it divide on the next meal.
+grow on, one fewer may make it divide at once. A meal never makes a body smaller.
 
 ### 1.2 What it changes
 
@@ -168,12 +168,42 @@ for you.
 
 Phase 1:
 
-- **gene_probe**: none of its own; the ladder's couplings to r40 still hold.
-- **drop_probe**: the seeded lines (heavier lineages divide later and bigger), and its
-  checks of a division at forty, now at each body's own division radius.
-- **net_probe**: the referee's size bounds and the daughter's size.
-- **`Wire.RULES`**: the floor's ladder and `RADIUS_MAX`.
-- **ci.yml's trace**.
+- **gene_probe**: none; the ladder's couplings to r40 still hold.
+- **drop_probe**: the seeded lines, since heavier lineages divide later and bigger.
+  Its checks of a division at forty now judge each body at its own division radius.
+  The growth check holds every body under `RADIUS_MAX` and its own division radius.
+  The save check trims to `RADIUS_MAX`. Lineage 1 counts the divisions past forty and
+  wants some. Check 5 wants fifty divisions on rules where it wanted a hundred: the
+  seeded drop makes 96 now, every kind of change among them. The kept room (checks 12,
+  lineage 8 and 7) is kept once a family carries a list of its own, 40 s in or the
+  first second after, where it was kept at 40 s with none. The floors (check 6, rarity
+  3) count apart a variety short twice running that the floor gave all it owed in
+  between: the water took a carrier back, and the floor had answered.
+- **Drift draws again when it leaves no room** (`genome.gd`'s `_drift_room`). A drift
+  drew the gene that goes first. When that was an inside gene, and what came faced
+  out onto a full ring, the drift gave up. With every gene at one copy, a trade had
+  nothing to give either, so the division changed nothing, though lineage.md §3.1
+  says every one changes a daughter. Lineages born big fill their DNA sooner, and
+  the drop probe's lineage 1 caught one. Now the gene that goes is drawn again among
+  those that leave room. Only with none of those does the drift not apply.
+- **net_probe**:
+  - the referee's size bounds: an arrival at r45 is a body's size now, so its refusal
+    test asks r60;
+  - the biggest honest call is r56.57's;
+  - the water mother in "the host's water divides" carries five genes outside and
+    divides at r41.7;
+  - in the pond's honest run, the guest writes a gene more into its DNA and divides
+    past forty, through the host's referee, with no foul;
+  - a check of its own, "a giant divides": seen, early, late, unseen, too small,
+    whole.
+- **net_fuzz**: radii and sisters up to `RADIUS_MAX`'s.
+- **`Wire.RULES`**: `cell.RADIUS_MAX`. The floor's ladder is the body plan's, already
+  in the rules by its fingerprint.
+- **ci.yml's trace**: the water's heavier lineages grow past forty. The first line
+  that moves is a water cell at r42 where dev's stopped at r40.
+- **The drop save's rules** gain `cell.RADIUS_MAX`, so a drop kept before this loads
+  as converted. Every body is re-derived from its genome, and a body past
+  `RADIUS_MAX` is trimmed to it.
 
 ---
 
@@ -181,7 +211,18 @@ Phase 1:
 
 All balance, which waits for players (`CLAUDE.md`).
 
+- **Most lineages grow past forty.** A water cell writes nearly every meal into its
+  DNA, so within a generation or two most lineages carry more than a newborn's room.
+  In the drop probe's two seeded five-minute drops, 426 of 440
+  divisions were past forty. So the floor sorts lineages by age as much as by
+  strength: a young lineage is small, an old one big. For the margin (§2) that is the
+  point: a newcomer grows up and out. If the water feels like a sea of giants, the
+  levers are `GIFT_ROOM` (how many genes ride free), the ladder the floor reads, and
+  `RADIUS_MAX`.
 - **Giants.** If r57 apex cells own the water, the levers are the floor's ladder and
   `RADIUS_MAX`.
 - **Slow lineages.** If carrying many genes stops being worth it, the lever is how
   much room a gene needs.
+- **You.** Your DNA fills as the water's does, by eating. A lineage of yours that
+  fills its arcs is born at r36.5 and divides at r51.6. Born bigger means more slots
+  at birth and a mouth that swallows more.
