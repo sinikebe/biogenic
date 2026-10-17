@@ -6944,7 +6944,7 @@ func setup_drop(cell: CellBody) -> void:
 	# drifters and newborns by the one share (water-evolves.md §2), every tank at
 	# any level up to FIRST_HUNGER_MAX (§5.8), and some flocs already settled.
 	for k in Drop.target():
-		_spawn(_drop.uniform_point(Drop.FILL_INSET), randf() < DRIFTER_SHARE, true)
+		_fill_one()
 	for k in Drop.FIRST_FLOCS:
 		_spawn_floc(_drop.uniform_point(Drop.SNOW_INSET), Drop.floc_radius(), true)
 	_arm_the_founders()
@@ -7066,7 +7066,7 @@ func _make_room(cell: CellBody) -> void:
 	_reset_drop()
 	_made_for = PackedFloat64Array([CellBody.BASE_RADIUS, 0.0])
 	for k in Drop.target():
-		_spawn(_drop.uniform_point(Drop.FILL_INSET), randf() < DRIFTER_SHARE, true)
+		_fill_one()
 	for k in Drop.FIRST_FLOCS:
 		_spawn_floc(_drop.uniform_point(Drop.SNOW_INSET), Drop.floc_radius(), true)
 	_arm_the_founders()
@@ -10058,6 +10058,16 @@ func _spawn_ahead(from: Vector2, heading: float, reach: float) -> int:
 		if _drop.meniscus.inside(at, maxf(Drop.SPAWN_INSET, Drop.hold(DRIFTER_MAX))):
 			return _spawn(at, true)
 	return -1
+
+
+## **One body of a drop's first fill**: a drifter or a newborn by the one share
+## (water-evolves.md §2), anywhere it can be -- past its own hold (margin.md §2.1),
+## so the film piles nobody on its hold's circle, where a run starts.
+func _fill_one() -> void:
+	var drifter := randf() < DRIFTER_SHARE
+	var inset := maxf(Drop.FILL_INSET,
+		Drop.hold(DRIFTER_MAX if drifter else CellBody.BASE_RADIUS))
+	_spawn(_drop.uniform_point(inset), drifter, true)
 
 
 ## **The one door every new body comes in by** (§12) -- the spawner, the first

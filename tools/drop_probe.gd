@@ -394,14 +394,16 @@ class WatchedDrop extends "res://game/normal/food.gd":
 			and b.radius >= b.divide_at() - 0.01 and (i % Drop.LOD_EVERY) == tick
 		var serial := b.serial
 		super._step_one(i, b, tick)
+		meals_at_step[b.get_instance_id()] = b.meals
 		if due:
 			at_forty += 1
 			if b.serial == serial:
 				missed += 1
 
-	## **When each body last grew**, by its instance: a meal moves its hold a meal's
-	## worth from the rim, and its next step holds it there (check 4).
-	var grew_at := {}
+	## **The meals each body had at its last step**, by its instance: a meal moves
+	## its hold a meal's worth from the rim, and its next step holds it there --
+	## a far body, stepped on its tick, may eat twice before it (check 4).
+	var meals_at_step := {}
 
 	## **Every division, judged** (checks 1 and 2): its mother at her division
 	## radius; two daughters at half her area, touching across her heading where she was and
@@ -574,7 +576,6 @@ class WatchedDrop extends "res://game/normal/food.gd":
 		var body := var_to_bytes(b.genome)
 		var expect := b.dna.duplicate()
 		super._grow(b, gene)
-		grew_at[b.get_instance_id()] = _frame
 		if not births:
 			return
 		Genome.integrate_into(expect, gene, CellBody.slots_for(b.radius),
@@ -1906,17 +1907,26 @@ func _tank_edges() -> void:
 ## is the water before the day (docs/design/daylight.md §10.4), full light
 ## everywhere at every hour: what every identity gate runs, since an older pack
 ## had no day.
+## **How far in from the rim a desert to pose in starts** ([method _water]): past
+## the margin by more than any pose reaches toward the rim, and lit enough to see
+## by. The middle is the drop's darkest place, a quarter of the light, where an
+## eye sees nothing.
+const DESERT_DEPTH := 2400.0
+
+
 func _water(desert := 0.0, rules := true, tails := true, light := true) -> Array:
 	var cell := CellBody.new()
 	cell.radius = CellBody.BASE_RADIUS
 	var field := WatchedDrop.new()
 	field.process_mode = Node.PROCESS_MODE_DISABLED
 	field.desert = desert
-	# **A desert is cleared to pose in, so it is open water all round**: in the
-	# middle of the drop, where no body posed near the player is past its hold
-	# (margin.md §2.1). Without one, the game's own start, in the margin.
+	# **A desert is cleared to pose in, so it is open water all round**: past the
+	# margin, DESERT_DEPTH in from the rim, where no body posed within 1,200 of the
+	# player is past its hold (margin.md §2.1) and the light is about 0.4 -- an eye
+	# sees by it. Without one, the game's own start, in the margin.
 	if desert > 0.0:
-		field.start_mode = &"centre"
+		field.start_mode = &"edge"
+		field.edge_gap = DESERT_DEPTH
 	field.rules = rules
 	field.tails_beat = tails
 	field.daylight = light
@@ -2117,8 +2127,11 @@ func _containment() -> void:
 					var r := float(b.get("radius"))
 					var keep := r if b.get("inert") else Drop.hold(r)
 					# Grown since its last step: held at its new hold on its next.
-					if int(field.grew_at.get(b.get_instance_id(), -1)) >= int(b.get("stepped")):
-						keep = Drop.hold(r - CellBody.GROWTH_PER_MEAL)
+					var since := int(field.meals_at_step.get(b.get_instance_id(), 0)) \
+						if int(b.get("stepped")) >= 0 else 0
+					var grown := int(b.get("meals")) - since
+					if grown > 0 and not b.get("inert"):
+						keep = Drop.hold(r - CellBody.GROWTH_PER_MEAL * float(grown))
 					worst_body = minf(worst_body, edge - keep - _dist(b.get("pos"), centre))
 	var gap := INF
 	var off_bearing := 0.0
@@ -3337,9 +3350,10 @@ func _rig(drop: bool, desert := 0.0) -> Array:
 	var field := WatchedDrop.new()
 	field.process_mode = Node.PROCESS_MODE_DISABLED
 	field.desert = desert
-	# A desert to pose in, in open water: the middle (see [method _water]).
+	# A desert to pose in, in open water (see [method _water]).
 	if desert > 0.0:
-		field.start_mode = &"centre"
+		field.start_mode = &"edge"
+		field.edge_gap = DESERT_DEPTH
 	rig.add_child(field)
 	var recorder := RecorderNode.new()
 	recorder.process_mode = Node.PROCESS_MODE_DISABLED
