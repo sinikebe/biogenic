@@ -7,6 +7,10 @@ Status: shader and every signal state below were rendered under GL Compatibility
 at 1280x720 and 2400x1080 and looked at. Numbers in this document are measured
 off those renders, not intended.
 
+> **Vision came, 2026-10-16** (docs/design/sight.md): the eyespot sees, and point
+> of view draws its field in the interior this page kept for it -- the water lit
+> in the eye's field, dark where a body is in the way. Still no body is drawn.
+
 ## 1. The decision
 
 **The edge of the screen is the cell's membrane.** The viewport is not a window

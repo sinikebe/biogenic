@@ -22,13 +22,13 @@ extends RefCounted
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
 const Genome := preload("res://game/normal/genome.gd")
-## For the venom switch and nothing else. cilia -> genome -> cell already runs
-## this way, and cell.gd preloads no view, so there is no cycle.
-const CellBody := preload("res://game/normal/cell.gd")
 ## The kinds of load, by name and index. doses.gd preloads nothing.
 const Doses := preload("res://game/mechanics/doses.gd")
 ## Every gene, in order: which forms deliver a dose. Preloads nothing of game/.
 const Catalogue := preload("res://game/genes/catalogue.gd")
+## The genes in genes' own slots: which the mouth's lips carry. Preloads the
+## catalogue alone.
+const Riders := preload("res://game/genes/riders.gd")
 ## **The body plan** (docs/design/gene-catalogue.md §10): every slot's arc and
 ## bearing, the home seats and the body's shape. It preloads nothing.
 const BodyPlan := preload("res://game/genes/body_plan.gd")
@@ -769,25 +769,41 @@ static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 	var layout := order if not order.is_empty() else default_order(tiers)
 	_draw_fringe(canvas, at, fwd, stb, r, tiers, clock, fade, steer, unit, layout,
 		eye, tail, dose, lit)
-	if not riders.is_empty():
-		_draw_riders(canvas, at, fwd, stb, r, layout, riders, fade, unit)
 	var mouth := Catalogue.worn_provider(tiers, &"gape")
+	# **The venom in the mouth's own slot is fangs on its lips** (gene-sockets.md §5.3),
+	# as venom at the front was before it rode: it rides on the bite, so it is drawn
+	# on the organ every encounter is read off, and not as a bead.
+	var fangs := _lip_rider(riders, mouth)
+	if not riders.is_empty():
+		_draw_riders(canvas, at, fwd, stb, r, layout, riders, fade, unit,
+			mouth if fangs != &"" else &"")
 	draw_gape(canvas, at, fwd, stb, r, gape, mouth, int(tiers.get(mouth, 0)),
 		not is_self and gape > viewer_radius, fade, unit)
-	# **Venom at the front is on the lips**, drawn after them: a bite-riding organ
-	# (a look's `lips`) worn in a front slot, or worn nowhere, rides on the bite
-	# (food.gd's `toxins_of` reads the same layout the same way). A body with no
-	# mouth draws none.
-	if gape <= 0.0:
+	# Drawn after the lips. A body with no mouth draws none.
+	if gape <= 0.0 or fangs == &"":
 		return
-	for gene: StringName in tiers:
-		if not bool(_look_of(gene).get("lips", false)) or Genome.is_inside_form(gene):
-			continue
-		var tier := int(tiers[gene])
-		var worn := layout.find(gene)
-		if tier > 0 and (worn < 0 or Genome.is_front(worn)):
-			_draw_fangs(canvas, at, fwd, stb, r, gape, gene, tier, fade, unit,
-				float(dose.get("fangs", 0.0)))
+	_draw_fangs(canvas, at, fwd, stb, r, gape, fangs, Riders.copies_at(riders, mouth,
+		_lip_socket(riders, mouth)), fade, unit, float(dose.get("fangs", 0.0)))
+
+
+## **The rider in [param mouth]'s own slots that is drawn on its lips**: the first
+## whose look rides the bite (a look's `lips` -- the toxin's venom), or &"".
+static func _lip_rider(riders: Dictionary, mouth: StringName) -> StringName:
+	var socket := _lip_socket(riders, mouth)
+	return Riders.rider_at(riders, mouth, socket) if socket >= 0 else &""
+
+
+## Which of [param mouth]'s own slots holds a rider drawn on its lips, or -1.
+static func _lip_socket(riders: Dictionary, mouth: StringName) -> int:
+	if mouth == &"" or not riders.has(mouth):
+		return -1
+	var held: Array = Riders.of(riders, mouth)
+	for k in held.size():
+		var one: Variant = held[k]
+		if one is Array and StringName(one[0]) != &"" \
+				and bool(_look_of(StringName(one[0])).get("lips", false)):
+			return k
+	return -1
 
 
 ## **What rides in a body's genes' own slots** (docs/design/gene-sockets.md §5.3):
@@ -796,8 +812,11 @@ static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 ## the body's, host to slots (riders.gd); a host worn on no outside arc draws its
 ## beads at the nose, as a toxin worn nowhere rides on the bite. Two riders on one
 ## host sit side by side along the skin.
+## [param lips] is the mouth whose lip-riding venom is drawn as fangs instead, whose
+## beads leave that one out.
 static func _draw_riders(canvas: CanvasItem, at: Vector2, fwd: Vector2, stb: Vector2,
-		r: float, layout: Array, riders: Dictionary, fade: float, unit: float) -> void:
+		r: float, layout: Array, riders: Dictionary, fade: float, unit: float,
+		lips: StringName = &"") -> void:
 	var bead := maxf(r * RIDER_BEAD, RIDER_BEAD_MIN * unit)
 	for host: Variant in riders:
 		var slot := layout.find(host)
@@ -806,8 +825,11 @@ static func _draw_riders(canvas: CanvasItem, at: Vector2, fwd: Vector2, stb: Vec
 		var out := fwd * cos(bearing) + stb * sin(bearing)
 		var along := out.orthogonal()
 		var held: Array = []
-		for one: Variant in riders[host]:
-			if one is Array and StringName(one[0]) != &"":
+		var skip := _lip_socket(riders, host) if StringName(host) == lips else -1
+		var each: Array = riders[host]
+		for k in each.size():
+			var one: Variant = each[k]
+			if one is Array and StringName(one[0]) != &"" and k != skip:
 				held.append(StringName(one[0]))
 		for k in held.size():
 			var spread := (float(k) - float(held.size() - 1) * 0.5) * bead * RIDER_PITCH
@@ -1213,7 +1235,8 @@ static func default_order(tiers: Dictionary) -> Array:
 		if Genome.has_forms(gene) and not Genome.is_inside_form(gene):
 			out.append(gene)
 	for gene: StringName in tiers:
-		if not _homes.has(gene) and not Genome.has_forms(gene):
+		if not _homes.has(gene) and not Genome.has_forms(gene) \
+				and not Genome.is_inside_form(gene):
 			out.append(gene)
 	var inside := BodyPlan.INSIDE
 	for home: int in _home_slots:
@@ -1267,23 +1290,34 @@ static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		if copies <= 0:
 			continue
 		var flare := 0.0
-		# **An organ that rides the bite is on the lips at the front** -- the toxin's
-		# venom, today -- and is drawn with the gape; on a side or the stern it is
-		# barbs on the arc it guards, unless the switch has made a side venom inert,
-		# when it draws nothing.
+		# **An organ that rides the bite is drawn with the gape**, never on an arc:
+		# the toxin's venom, which a body wears only in its mouth's slot now -- or
+		# on an arc in a replay recorded before it rode, as barbs there.
 		if bool(_look_of(gene).get("lips", false)):
-			if slot >= Genome.INSIDE or Genome.is_front(slot) or not CellBody.VENOM_SIDES:
+			if slot >= Genome.INSIDE or Genome.is_front(slot):
 				continue
 			flare = float(dose.get("guard", 0.0))
 		_draw_worn(canvas, sk, gene, copies, arc_for_slot(slot), clock, fade,
 			eye if StringName(eye.get("gene", &"")) == gene else NO_EYE, tail, flare,
 			float(glows.get(gene, 0.0)), glow_fade)
-	# **What is inside has no arc**: its beads are granules under the whole skin,
-	# and nothing at any one place.
-	for gene: StringName in tiers:
-		if Genome.is_inside_form(gene) and int(tiers[gene]) > 0:
-			_draw_granules(canvas, at, fwd, stb, r, gene, int(tiers[gene]), fade,
-				unit, float(dose.get("granules", 0.0)))
+	# **What is inside has no arc** (docs/design/inside-genes.md §4): an organelle
+	# lies inside the body, by the nucleus, one place each in the inside's order;
+	# anything else -- the poison's beads -- is granules under the whole skin, and
+	# nothing at any one place.
+	var seat := 0
+	for gene: StringName in Genome.inside_of(tiers):
+		var copies := int(tiers.get(gene, 0))
+		if gene == &"" or copies <= 0:
+			continue
+		if _look_of(gene)["shape"] == ORGANELLE:
+			sk.deep = INSIDE_DEEP
+			_draw_worn(canvas, sk, gene, copies, INSIDE_ARCS[seat % INSIDE_ARCS.size()],
+				clock, fade, NO_EYE, tail, 0.0, float(glows.get(gene, 0.0)), glow_fade)
+			sk.deep = 0.0
+			seat += 1
+		else:
+			_draw_granules(canvas, at, fwd, stb, r, gene, copies, fade, unit,
+				float(dose.get("granules", 0.0)))
 
 
 ## **One organ a body wears**, [param gene] at [param copies] on [param arc] of the
@@ -1519,6 +1553,9 @@ class Stretch extends RefCounted:
 	var steer := 0.0
 	var still := 0.0
 	var lit := 0.0
+	## How much deeper than its look says an organelle sits: an inside one's
+	## (docs/design/inside-genes.md §4), 0 on an arc.
+	var deep := 0.0
 
 
 ## **One organ, built and not yet drawn**: the strokes of its one
@@ -1624,6 +1661,19 @@ const ORGANELLE_SEATS := {
 }
 const ORGANELLE_STEPS := 18
 const ORGANELLE_MARK := 0.36
+## **A dense body** (a lysosome): smaller than a bubble, and its core this share of it.
+const DENSE_SIZE := 0.62
+const DENSE_CORE := 0.30
+## **Where an organelle inside the body sits** (docs/design/inside-genes.md §4): not
+## on its slot's arc -- the inside has none -- but at one of these stretches of skin,
+## [constant INSIDE_DEEP] of a radius deeper than its look's own depth, so it lies
+## between the skin and the nucleus. One each, in the inside's order: behind the
+## nucleus, then beside it to starboard and to port. **Not in front of it**: the two
+## arcs either side of the nose are the first a body earns, and an organelle worn
+## there sits under the skin at the front.
+const INSIDE_ARCS: Array[Vector2] = [Vector2(150.0, 210.0), Vector2(62.0, 112.0),
+	Vector2(-112.0, -62.0)]
+const INSIDE_DEEP := 0.14
 
 
 ## [param look] drawn: [param gene]'s resolved look, or a plain tuft for a gene this
@@ -2275,7 +2325,7 @@ static func _kind_plates(d: Drawn, sk: Stretch, look: Dictionary, tier: int,
 static func _kind_organelle(d: Drawn, sk: Stretch, look: Dictionary, tier: int) -> void:
 	var form: StringName = look["form"]
 	var size := float(look["size"]) * sk.unit
-	var depth := float(look["depth"])
+	var depth := float(look["depth"]) + sk.deep
 	for seat: Array in ORGANELLE_SEATS[clampi(tier, 1, ORGANELLE_SEATS.size())]:
 		var u: float = seat[0]
 		var at := _sk_inner(sk, u, depth + float(seat[1]))
@@ -2295,6 +2345,8 @@ static func _kind_organelle(d: Drawn, sk: Stretch, look: Dictionary, tier: int) 
 						+ across * (y * size * 0.50))
 				Kinds.FORM_STAR:
 					outline.append(at + Vector2(x, y) * (size * 0.70))
+				Kinds.FORM_DENSE:
+					outline.append(at + Vector2(x, y) * (size * DENSE_SIZE))
 				_:
 					outline.append(at + Vector2(x, y) * size)
 		match form:
@@ -2327,6 +2379,14 @@ static func _kind_organelle(d: Drawn, sk: Stretch, look: Dictionary, tier: int) 
 				d.paths.append(folds)
 			Kinds.FORM_LENS:
 				d.fills.append([outline.duplicate(), 0.85])
+			Kinds.FORM_DENSE:
+				# A lysosome: a small dense body, half filled, and a darker core.
+				d.fills.append([outline.duplicate(), 0.45])
+				var core := PackedVector2Array()
+				for k in ORGANELLE_STEPS:
+					core.append(at + Vector2.from_angle(TAU * float(k)
+						/ float(ORGANELLE_STEPS)) * (size * DENSE_CORE))
+				d.fills.append([core, 0.85])
 			_:
 				d.fills.append([outline.duplicate(), 0.12])
 		if form != Kinds.FORM_STACK:
@@ -3031,7 +3091,7 @@ static func draw_tile_organ(canvas: CanvasItem, gene: StringName, _tier: int,
 	canvas.draw_arc(centre, arc_r, TILE_ARC_FROM, TILE_ARC_TO, 32,
 		Color(tone, TILE_ARC_ALPHA * ink), TILE_ARC_WIDTH * scale, true)
 	var look := _look_of(gene)
-	if Genome.is_inside_form(gene):
+	if _granular(gene, look):
 		canvas.draw_circle(centre + Vector2(0.0, -arc_r * PIGMENT_SEAT),
 			TILE_PIGMENT * scale, Color(tone, 0.85 * ink), true, -1.0, true)
 		var mark := _bead_mark(look)
@@ -3045,6 +3105,13 @@ static func draw_tile_organ(canvas: CanvasItem, gene: StringName, _tier: int,
 	_build(d, sk, look, 1, 0.0, 1.0)
 	_paint(canvas, d, look, tone, alpha, TILE_ARC_WIDTH * scale * _tile_width(look), sk,
 		NO_EYE, 0.0, 1.0, false)
+
+
+## **Whether [param gene] is drawn as granules** -- an inside form that is no
+## organelle, the poison -- rather than by its kind: on a body under the whole skin,
+## on a tile seven beads round the dome. An organelle inside is drawn as itself.
+static func _granular(gene: StringName, look: Dictionary) -> bool:
+	return Genome.is_inside_form(gene) and look["shape"] != ORGANELLE
 
 
 ## An inside form's granules on a tile: seven, on an arc just outside the dome.
@@ -3079,7 +3146,7 @@ static func tile_bounds(gene: StringName) -> Rect2:
 		var a := lerpf(TILE_ARC_FROM, TILE_ARC_TO, float(k) / 32.0)
 		box = box.expand(Vector2(cos(a), sin(a)) * TILE_ARC_RADIUS)
 	box = box.grow(TILE_ARC_WIDTH * 0.5)
-	if Genome.is_inside_form(gene):
+	if _granular(gene, look):
 		box = box.merge(Rect2(Vector2(0.0, -TILE_ARC_RADIUS * PIGMENT_SEAT), Vector2.ZERO)
 			.grow(TILE_PIGMENT))
 		for granule: Vector2 in _tile_granules(Vector2.ZERO, TILE_ARC_RADIUS, 1.0):

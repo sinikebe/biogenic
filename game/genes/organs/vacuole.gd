@@ -2,6 +2,11 @@ extends "res://game/genes/gene.gd"
 ## `vacuole`: **a bigger tank**. Hunger rises more slowly, because there is more
 ## of you to run down.
 ##
+## **Inside, and only inside** (docs/design/inside-genes.md §2; the owner,
+## 2026-10-17): a vacuole is a sac in the cell, and its tank faces nowhere, so it
+## sits in the inside slots and never on an arc. A save that wore it on one moves
+## it inside (`genome.gd`'s `_put_in_place`).
+##
 ## No class_name, for the reason signal_bus.gd gives. Preload it by path.
 
 ## The readout's items (game/mechanics/readout.gd, which preloads nothing): what
@@ -40,9 +45,10 @@ const EXPLAINS := {&"vacuole": "a bigger tank, so hunger takes longer to reach y
 func _init() -> void:
 	organ = &"vacuole"
 	order = 14
+	place = INSIDE
 	provides = {&"store": STORE_BY_TIER}
 	water = {"rarity": &"uncommon", "drifter": true}
-	# **Its look** (gene-looks.md §6): a clear bubble under the skin, one for each
+	# **Its look** (gene-looks.md §6): a clear bubble inside the cell, one for each
 	# copy. Metabolism's shade 0.
 	family = METABOLISM
 	look = {"shape": ORGANELLE, "shade": 0, "form": Kinds.FORM_BUBBLE}

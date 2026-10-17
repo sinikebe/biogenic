@@ -15,6 +15,12 @@ and, answering the first drafts:
 > "Just a precision for 3 : We need add body internal slots. Those express
 > inside the body. The direction slots express outside the body."
 
+> **Superseded in part, 2026-10-16** (docs/design/venom-rides.md), at the owner's
+> word: *"Remove toxin outside. Toxin can only be in eat or inside body."* A toxin
+> goes inside, as poison, or into a gene's own slot that takes it, as venom: the
+> mouth's, and the sting's. The seven slots round the body refuse it, so venom at
+> the front, on a side or at the stern (§3, §5) is gone. The rest stands.
+
 This is the screen and the look for `dna-slots.md` (the mechanics, revision 3),
 its §10 item by item and its §10.2 redo list. Every owner's row, 1 to 15, is
 answered as recommended. Row 3's precision makes the two places **outside**
@@ -266,6 +272,10 @@ shoot.
 ---
 
 ## 3. The pause screen
+
+> **Superseded in part, 2026-10-16** (docs/design/placing.md): a tap only chooses a
+> slot, and a button under the figure writes, saying what it writes. Wherever this
+> section says "tap again", read the button.
 
 ### 3.1 The inside slot
 

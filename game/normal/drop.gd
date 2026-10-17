@@ -5,12 +5,13 @@ extends RefCounted
 ## only this water makes -- and a second water is a second file like it.
 ##
 ## **What it knows**: the drop, its edge (the meniscus), its snow of detritus
-## (flocs), how many live in it, and four decisions: **what is short**,
+## (flocs), its day and how deep its light reaches (docs/design/daylight.md), how
+## many live in it, and four decisions: **what is short**,
 ## **whose turn it is**, **where a run starts** and **what a new body is made
 ## of** (§13). **What it does not know** is how the arithmetic works: the rim
 ## is a `basin.gd`, nearness a `space_grid.gd`, the spawner's debt a
-## `replenish.gd` and the snow a `snowfall.gd`, all in game/mechanics/ and none
-## of them knowing it is water. Nor does it draw or run a cell: food.gd's
+## `replenish.gd`, the snow a `snowfall.gd` and the day a `daylight.gd`, all in
+## game/mechanics/ and none of them knowing it is water. Nor does it draw or run a cell: food.gd's
 ## `_seed_drifter`, `_seed_peer` and `_draw_genome` make the body, to the plan,
 ## the gift and the gene pool decided here.
 ##
@@ -28,18 +29,49 @@ const Replenish := preload("res://game/mechanics/replenish.gd")
 const Snowfall := preload("res://game/mechanics/snowfall.gd")
 const FloorQueue := preload("res://game/mechanics/floor_queue.gd")
 const Rulebook := preload("res://game/mechanics/rulebook.gd")
+const Daylight := preload("res://game/mechanics/daylight.gd")
 const Genome := preload("res://game/normal/genome.gd")
+## A body's sizes, which the margin is read at (margin.md §2). cell.gd preloads no
+## drop, so there is no cycle.
+const CellBody := preload("res://game/normal/cell.gd")
 ## The genes there are (docs/design/gene-catalogue.md): the born cell's body plan.
 const Catalogue := preload("res://game/genes/catalogue.gd")
+## The genes in genes' own slots: where a peer's venom goes. Preloads the
+## catalogue alone.
+const Riders := preload("res://game/genes/riders.gd")
 
 # --- Size and shape (§2) -----------------------------------------------------
 
 ## The meniscus: 6 mm from the middle, a drop 12 mm across (row 1). One world
 ## unit is one µm.
 const RADIUS := 6000.0
-## The band inside the rim where the water thins: full vision's lit film, and
-## where a drifting body turns back rather than grind along the edge (§3).
+## The band inside a body's own hold where a drifting body turns back rather
+## than grind along the edge (§3; margin.md §2.1: measured from the hold).
 const SHALLOWS := 240.0
+
+# --- The margin: the film at the rim (docs/design/margin.md §2) -------------------
+
+## **How close to the rim a body comes, per unit of its radius** (margin.md §2.1).
+## The water thins toward the rim, 1 µm deeper for every 15 µm in -- water spreads
+## very flat on clean glass -- and a body goes only where the water is at least as
+## deep as it is thick, its diameter. So its centre stops 30 µm from the rim for
+## every unit of radius: a drifter of r13 at 390, a newborn at 780, r40 at 1,200
+## and the biggest at 1,697. It is the meniscus as it always was, read at each
+## body's own size. A starting value: balance waits for players.
+const FILM := 30.0
+## **The margin**: the band a body of `cell.gd`'s RADIUS_MAX never enters --
+## FILM × 56.57, 1,697 -- where only lineages that carry little can go.
+const MARGIN := FILM * CellBody.RADIUS_MAX
+## **How much fuller of food the margin is kept** than the open water (§2.2): the
+## spawner counts a place there as this many times emptier, so it fills it that
+## much more -- the coffee-ring effect, a drying drop carrying what floats in it
+## toward its edge -- where a newborn can reach it, past its own hold. A starting
+## value.
+const MARGIN_FOOD := 3.0
+## **Where a run, a return and the water's newcomers start** (§2.3): this deep past
+## a newborn's hold, at most -- so a run begins where nothing bigger than about
+## r39 can come.
+const MARGIN_START := 400.0
 
 # --- The edge: the meniscus (§3) ------------------------------------------------
 
@@ -55,8 +87,32 @@ const SHORE_GAP := 0.6
 ## widest, longest echo in the game.
 const EDGE_ECHO_RADIUS := 80.0
 ## A `stigma` sees the rim as a shadow this deep at the closest, against a
-## body's 1, fading to nothing at food.gd's SHADOW_RANGE.
+## body's 1, fading to nothing where the eyespot stops seeing (food.gd's `_see`).
 const EDGE_SHADOW := 0.6
+
+# --- The light: a day, a night, and depth (docs/design/daylight.md §2) ----------
+
+## **The day**, ten minutes in four spans, starting at dawn: a minute of dawn,
+## five of day, a minute of dusk and three of night (§2.1). Ten, so a sitting
+## meets a night; day longer than night, so night is a phase to get through; three
+## minutes of night, longer than a full tank at rest, and short enough to wait out.
+## Starting values: balance waits for players (§11).
+const DAY_DAWN := 60.0
+const DAY_LIGHT := 300.0
+const DAY_DUSK := 60.0
+const DAY_NIGHT := 180.0
+## **Night is dark for the sun**: real moonlight drives no photosynthesis. A
+## floor, if play ever wants one.
+const NIGHT_LIGHT := 0.0
+## **What reaches the drop's deepest point**, its middle, as a share of what falls
+## on it (§2.2): a quarter, so half the light is lost about 1,757 µm in from the
+## rim and the middle still makes something by day. The drop is a lens -- a film at
+## its rim, thickest in its middle -- and the light falls off with the water over a
+## place as Beer-Lambert has it (`basin.gd`'s `column`, `daylight.gd`'s `through`).
+const LIGHT_AT_MIDDLE := 0.25
+## **Where a new drop's day starts**: the end of dawn, so a new player meets five
+## minutes of full day first. A drop kept before the light opens here too (§6).
+const DAY_BEGINS := 60.0
 
 # --- Everything in it, all the time (§4) --------------------------------------
 
@@ -193,9 +249,9 @@ const FIRST_FLOCS := 30
 
 # --- Where a run starts (§8.1) --------------------------------------------------
 
-## Points drawn for a start, each at least this far inside the rim...
+## Points drawn for a start, each in the margin a newborn starts in -- from its
+## hold to MARGIN_START past it (margin.md §2.3)...
 const START_TRIES := 64
-const START_INSET := 1000.0
 ## ...none with anything edible within this: the first meal is found, not
 ## handed over...
 const START_CLEAR := 400.0
@@ -262,6 +318,13 @@ func _init(center := Vector2.ZERO) -> void:
 
 
 # --- The drop's own arithmetic ---------------------------------------------------
+
+## **This water's day** (docs/design/daylight.md §2.1): the cycle of
+## [constant DAY_DAWN], [constant DAY_LIGHT], [constant DAY_DUSK] and
+## [constant DAY_NIGHT], at [constant NIGHT_LIGHT] between dusk and dawn.
+static func daylight() -> Daylight:
+	return Daylight.new(DAY_DAWN, DAY_LIGHT, DAY_DUSK, DAY_NIGHT, NIGHT_LIGHT)
+
 
 ## **How many live in the drop**: its density over its area, 554.
 static func target() -> int:
@@ -502,10 +565,17 @@ static func daughter_behaviours(list: Rulebook.Behaviour, vocab: Rulebook.Vocabu
 ## to one that wears another variant of it -- **the floor never gives a body a second
 ## strain beside the one it wears**. The gene waits for the next peer. Every organ
 ## today holds its variants side by side, so only the first rule ever answers.
-static func takes_back(tiers: Dictionary, gene: StringName) -> bool:
+static func takes_back(tiers: Dictionary, gene: StringName,
+		riders: Dictionary = {}) -> bool:
 	for form: StringName in Genome.forms_of(gene):
 		if int(tiers.get(form, 0)) > 0:
 			return false
+	# **Nor one whose gene's slot carries it** -- the venom in its mouth's.
+	var rider := Catalogue.rides_as(gene)
+	for host: Variant in riders:
+		for one: Variant in riders[host]:
+			if one is Array and StringName(one[0]) == rider:
+				return false
 	var organ := Catalogue.organ_of(gene)
 	if not Catalogue.one_variant(organ):
 		return true
@@ -519,20 +589,41 @@ static func takes_back(tiers: Dictionary, gene: StringName) -> bool:
 
 ## **A gene the floor gives back through a peer** (`floor_by_peers`, the toxin's
 ## every strain; gene-catalogue.md §6.4): [param gene], a variety, at tier 1, and
-## [param inside] -- the coin -- in its inside form, or outside in its outside one
+## [param inside] -- the coin -- in its inside form, or else where it goes outside
 ## (docs/design/dna-slots.md §9); a gene of one place in the one it has. Inside
-## takes no arc. Outside takes one, as the old gene did: a peer with no room
-## outside gives up a gene for it -- `pick` chooses which -- but never one of its
-## body plan or of [param senses], so it stays a cell that can live; with nothing
-## else to give up, it takes a bonus slot. Nothing, for a peer that carries it in
-## any form, or that may not take it ([method takes_back]).
+## takes no arc. **A gene whose outside form only rides** -- the toxin, whose venom
+## goes nowhere but a gene's slot since 2026-10-16 -- goes into the first of
+## [param riders]' slots that takes it, the mouth's, at one copy; with no slot that
+## does, inside. Outside on the body it takes an arc, as the old gene did: a peer
+## with no room outside gives up a gene for it -- `pick` chooses which -- but never
+## one of its body plan or of [param senses], so it stays a cell that can live;
+## with nothing else to give up, it takes a bonus slot. **Inside it takes a slot of
+## the [param inside_room] the peer's radius earns** (inside-genes.md §1), giving up an inside
+## gene for it -- `pick` again -- when that is full, and over its room with none to
+## give. Nothing, for a peer that carries it in any form, or that may not take it
+## ([method takes_back]).
 static func give_back(tiers: Dictionary, gene: StringName, slots: int,
-		senses: Array[StringName], pick: int, inside: bool) -> void:
-	if not takes_back(tiers, gene):
+		senses: Array[StringName], pick: int, inside: bool,
+		riders: Dictionary = {}, inside_room: int = -1) -> void:
+	if not takes_back(tiers, gene, riders):
 		return
+	if not inside and Genome.is_riding_form(Catalogue.rides_as(gene)):
+		var room := Riders.room_for(riders, tiers, gene)
+		if not room.is_empty():
+			Riders.put(riders, room[0], room[1], gene, 1)
+			return
+		inside = true
 	var form := Genome.form_in(gene, Genome.INSIDE_PLACE if inside else Genome.OUTSIDE_PLACE)
 	if form == &"":
 		form = Genome.forms_of(gene)[0]
+	if Genome.is_inside_form(form) and inside_room >= 0 \
+			and Genome.count_inside(tiers) >= inside_room:
+		var held: Array[StringName] = []
+		for other: StringName in tiers:
+			if Genome.is_inside_form(other):
+				held.append(other)
+		if not held.is_empty():
+			tiers.erase(held[posmod(pick, held.size())])
 	if not Genome.is_inside_form(form) and Genome.count_outside(tiers) >= slots:
 		var plan := peer_plan()
 		var spare: Array[StringName] = []
@@ -545,6 +636,61 @@ static func give_back(tiers: Dictionary, gene: StringName, slots: int,
 
 
 # --- Where things go ------------------------------------------------------------------
+
+## **The closest a body of radius [param r] comes to the rim**, centre to rim
+## ([constant FILM]): what it passes to the meniscus's `contain` and `inside`
+## where a point once passed its radius.
+static func hold(r: float) -> float:
+	return FILM * maxf(r, 0.0)
+
+
+## **A body of [param r] at [param p], held where the water is deep enough for it.**
+func holds(p: Vector2, r: float) -> Vector2:
+	return meniscus.contain(p, hold(r))
+
+
+## **Whether a body of [param r] at [param p] is where the water is deep enough.**
+func keeps(p: Vector2, r: float) -> bool:
+	return meniscus.inside(p, hold(r))
+
+
+## **How far a body of [param r] at [param p] is from its shore**: the line where
+## the water gets too thin for it -- its edge's, at its hold -- which its senses
+## find as the edge of the drop (margin.md §2.4). [param r] away when it is held
+## there, as a body was from the rim before the film.
+func shore_depth(p: Vector2, r: float) -> float:
+	return meniscus.depth(p) - (hold(r) - maxf(r, 0.0))
+
+
+## **The nearest point of the shore of a body of [param r] at [param p].**
+func shore_point(p: Vector2, r: float) -> Vector2:
+	var off := p - meniscus.center
+	var out := off.normalized() if off.length_squared() > 0.0 else Vector2.RIGHT
+	return meniscus.center + out * maxf(meniscus.radius - (hold(r) - maxf(r, 0.0)), 0.0)
+
+
+## **Whether [param p] is in the margin where a newborn can reach**: past a newborn's
+## hold and short of the biggest body's (§2.2).
+func in_margin(p: Vector2) -> bool:
+	var depth := meniscus.depth(p)
+	return depth >= hold(CellBody.BASE_RADIUS) and depth <= MARGIN
+
+
+## **A point where a run starts** (§2.3): evenly over the band from a newborn's hold
+## to [constant MARGIN_START] past it.
+func margin_point() -> Vector2:
+	var from := hold(CellBody.BASE_RADIUS)
+	return band_point(from, from + MARGIN_START)
+
+
+## **A point drawn evenly over the band from [param from] to [param to] inside the
+## rim**, by area.
+func band_point(from: float, to: float) -> Vector2:
+	var outer := maxf(RADIUS - from, 0.0)
+	var inner := clampf(RADIUS - to, 0.0, outer)
+	var reach := sqrt(lerpf(inner * inner, outer * outer, randf()))
+	var angle := randf_range(-PI, PI)
+	return meniscus.center + Vector2(cos(angle), sin(angle)) * reach
 
 ## A point drawn evenly over the drop, at least [param inset] inside the rim.
 func uniform_point(inset: float) -> Vector2:
@@ -560,9 +706,17 @@ func uniform_point(inset: float) -> Vector2:
 ## [param players] are where the players are and [param hides] their hide
 ## reaches for the kind being made. The spawner takes the thinnest of what is
 ## left ([method Replenish.thinnest]); with nothing left, nothing is made.
+##
+## **A newborn ([param newborn]) comes into the water in the margin** (margin.md
+## §2.3): every point drawn for one is in the band a run starts in, the ring's
+## kept only when they fall in it. **And every point is past the hold** of the
+## biggest body that may be made there, [param biggest] -- so the film never moves
+## it after it was found hidden.
 func spawn_candidates(players: PackedVector2Array, hides: PackedFloat32Array,
-		turn: int) -> PackedVector2Array:
+		turn: int, newborn := false, biggest := 0.0) -> PackedVector2Array:
 	var out := PackedVector2Array()
+	var from := hold(CellBody.BASE_RADIUS)
+	var inset := maxf(SPAWN_INSET, hold(biggest))
 	for t in SPAWN_TRIES:
 		var at := Vector2.ZERO
 		if t % 2 == 1 and not players.is_empty():
@@ -571,17 +725,23 @@ func spawn_candidates(players: PackedVector2Array, hides: PackedFloat32Array,
 			var angle := randf_range(-PI, PI)
 			at = players[k] + Vector2(cos(angle), sin(angle)) \
 				* randf_range(hide, hide + SPAWN_RING)
-			if not meniscus.inside(at, SPAWN_INSET):
+			if not meniscus.inside(at, inset):
 				continue
+			if newborn:
+				var depth := meniscus.depth(at)
+				if depth < from or depth > from + MARGIN_START:
+					continue
+		elif newborn:
+			at = margin_point()
 		else:
-			at = uniform_point(SPAWN_INSET)
+			at = uniform_point(inset)
 		if Replenish.hidden(at, players, hides):
 			out.append(at)
 	return out
 
 
-## **Where a run starts** (§8.1, row 9): of [constant START_TRIES] points at
-## least [constant START_INSET] inside the rim, those with anything edible
+## **Where a run starts** (§8.1, row 9; margin.md §2.3): of [constant START_TRIES]
+## points in the margin a newborn starts in ([method margin_point]), those with anything edible
 ## within [constant START_CLEAR] thrown away, the one where a born cell would
 ## feel the least dread; ties to the most food within [constant START_FOOD].
 ## [param food_near] takes a point and a reach and says how much edible lies
@@ -592,7 +752,7 @@ func quiet_start(food_near: Callable, dread_at: Callable) -> Vector2:
 	var least := INF
 	var most := -1
 	for t in START_TRIES:
-		var at := uniform_point(START_INSET)
+		var at := margin_point()
 		if int(food_near.call(at, START_CLEAR)) > 0:
 			continue
 		var dread := float(dread_at.call(at))
@@ -608,25 +768,25 @@ func quiet_start(food_near: Callable, dread_at: Callable) -> Vector2:
 
 ## **Where a body at [param at] that could swallow a newborn starting at
 ## [param start] is moved**: straight out from the start to [param reach] --
-## dread's -- and [constant START_PUSH] more, held inside the rim at its
-## [param r].
+## dread's -- and [constant START_PUSH] more, held where the water is deep enough
+## for its [param r] ([method hold]).
 ##
-## **And slid along the rim when the rim holds it back** (the review's S3). A
-## start may be as little as [constant START_INSET] inside the rim, less than
-## the push, so a mouth on the rim's side of it is put back on the circle
-## `RADIUS - r` -- which can still be inside dread's reach of the start. It is
-## slid along that circle, on the side it was on, to the nearest point clear
-## of the start by the whole push. From anywhere a start can be there is one:
-## the far side of the circle is `RADIUS - r` and more from it.
+## **And slid along its hold when the film holds it back** (the review's S3). A
+## start is in the margin, nearer the rim than the push, so a mouth on the rim's
+## side of it is put back on the circle `RADIUS - hold(r)` -- which can still be
+## inside dread's reach of the start. It is slid along that circle, on the side it
+## was on, to the nearest point clear of the start by the whole push. From
+## anywhere a start can be there is one: the far side of the circle is
+## `RADIUS - hold(r)` and more from it.
 func pushed_clear(start: Vector2, at: Vector2, reach: float, r: float) -> Vector2:
 	var off := at - start
 	var away := off.normalized() if off.length_squared() > 1e-6 else Vector2.RIGHT
 	var clear := reach + START_PUSH
-	var put := meniscus.contain(start + away * clear, r)
+	var put := holds(start + away * clear, r)
 	if put.distance_to(start) >= clear - 1e-3:
 		return put
 	var centre := meniscus.center
-	var ring := maxf(meniscus.radius - maxf(r, 0.0), 0.0)
+	var ring := maxf(meniscus.radius - hold(r), 0.0)
 	var from := start - centre
 	var s := from.length()
 	if s <= 1e-3 or ring <= 0.0:
@@ -637,7 +797,7 @@ func pushed_clear(start: Vector2, at: Vector2, reach: float, r: float) -> Vector
 	var bearing := from.angle()
 	var side := angle_difference(bearing, (put - centre).angle())
 	var turn := acos(most) * (-1.0 if side < 0.0 else 1.0)
-	return meniscus.contain(centre + Vector2.from_angle(bearing + turn) * ring, r)
+	return holds(centre + Vector2.from_angle(bearing + turn) * ring, r)
 
 
 ## **The drop moves by [param by]**: its rim and its grid with it. Every body

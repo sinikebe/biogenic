@@ -573,7 +573,7 @@ func _arrival_origin(g: Guest) -> Vector2:
 ## along the world horizontal -- east, then west -- and then round the circle
 ## in [constant ARRIVAL_STEP_DEG] steps, the first spot clear of every body in
 ## the water by both radii and [constant ARRIVAL_CLEAR]. Nothing clear, the
-## first side anyway: a crowded arrival is still an arrival.
+## first spot in the water anyway: a crowded arrival is still an arrival.
 func arrival_point(near: Vector2, radius: float) -> Vector2:
 	var angles: Array[float] = [0.0, PI]
 	var step := deg_to_rad(ARRIVAL_STEP_DEG)
@@ -582,17 +582,26 @@ func arrival_point(near: Vector2, radius: float) -> Vector2:
 	# spot either side of it is tried before anything steeper.
 	for k: int in [1, 5, 7, 11, 2, 4, 8, 10, 3, 9]:
 		angles.append(step * float(k))
-	# **Inside the drop's rim** (ocean.md §10.2), a spot past it passed over as
-	# one on a body is.
+	# **Inside the drop's rim** (ocean.md §10.2) -- where the water is deep enough
+	# for it (margin.md §2.1) -- a spot past it passed over as one on a body is.
+	# Nothing clear, the first spot in the water: by a friend in the margin, half
+	# of them can be past where the water is deep enough for the one arriving.
 	var rim: RefCounted = _food.basin()
+	var first := Vector2.INF
 	for angle: float in angles:
 		var at := near + Vector2(cos(angle), sin(angle)) * ARRIVAL
-		if rim != null and not rim.call(&"inside", at, radius + ARRIVAL_CLEAR):
+		if rim != null and not rim.call(&"inside", at,
+				FoodField.Drop.hold(radius) + ARRIVAL_CLEAR):
 			continue
 		if _clear(at, radius):
 			return at
+		if not first.is_finite():
+			first = at
+	if first.is_finite():
+		return first
 	var fallback := near + Vector2(ARRIVAL, 0.0)
-	return rim.call(&"contain", fallback, radius) if rim != null else fallback
+	return rim.call(&"contain", fallback, FoodField.Drop.hold(radius)) if rim != null \
+		else fallback
 
 
 func _clear(at: Vector2, radius: float) -> bool:
@@ -717,8 +726,12 @@ func _flush_guest(g: Guest) -> void:
 	# §14.1): the guest's cell wears its own loads between snapshots, and obeys
 	# these at each one.
 	var loads: PackedFloat64Array = pb.loads if pb != null else PackedFloat64Array()
-	var size: int = _net.send_pond(wound, bodies, loads) if g.id == 0 \
-		else _net.send_pond_to(g.id, wound, bodies, loads)
+	# **And the sky** (docs/design/daylight.md §5): the light at the surface of this
+	# drop -- a phone host's, or a server's room's own -- which the guest's light is,
+	# times what gets through the water over it.
+	var sky: float = _food.daylight_now()
+	var size: int = _net.send_pond(wound, bodies, loads, sky) if g.id == 0 \
+		else _net.send_pond_to(g.id, wound, bodies, loads, sky)
 	pond_bytes_max = maxi(pond_bytes_max, size)
 	ponds_sent += 1
 	if pb != null:
@@ -1031,7 +1044,7 @@ func apply_newest() -> bool:
 	var said := Wire.take_pond(frame)
 	if said.is_empty():
 		return false
-	_food.apply_pond(float(said[1]), said[2], said[3])
+	_food.apply_pond(float(said[1]), said[2], said[3], float(said[4]))
 	return true
 
 

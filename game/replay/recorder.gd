@@ -222,7 +222,13 @@ const PERSON_FLOATS := 8
 const PERSON_LOADS := 5
 const PERSON_WET := 6
 const PERSON_QUIET := 7
-const STRIDE := AT_PERSON + PERSON_FLOATS
+## **The light at the surface** (docs/design/daylight.md §7): the field's
+## `daylight_now()`, so the replay's field answers it and the world view tints the
+## truth pane as the run was tinted. What got through to a place is worked out
+## again from the recorded place under the recorded rim. A quantity, so it lerps;
+## 1 where there was no day. One float, 14.4 KB more ring over the minute.
+const AT_DAYLIGHT := AT_PERSON + PERSON_FLOATS
+const STRIDE := AT_DAYLIGHT + 1
 
 ## Further than this between two recorded frames is a body being recycled to the
 ## far side of the water, not a body moving. Lerping across it would draw a
@@ -475,6 +481,7 @@ func capture(delta: float) -> void:
 	_ring[at + AT_SIGHT] = _glow_on(_soma.lit, Catalogue.LIGHT) if _soma != null else 0.0
 	_ring[at + AT_ECHO] = _glow_on(_soma.lit, Catalogue.PING) if _soma != null else 0.0
 	_ring[at + AT_DELTA] = delta
+	_ring[at + AT_DAYLIGHT] = _food.daylight_now() if _food != null else 1.0
 	_capture_division(at)
 
 	_when[_head] = _clock

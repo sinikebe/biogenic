@@ -184,6 +184,9 @@ extends Node
 
 const SpaceGrid := preload("res://game/mechanics/space_grid.gd")
 const Basin := preload("res://game/mechanics/basin.gd")
+## **The day** (docs/design/daylight.md §2): a light on a cycle, and how much of it
+## gets through.
+const Daylight := preload("res://game/mechanics/daylight.gd")
 const Replenish := preload("res://game/mechanics/replenish.gd")
 const Snowfall := preload("res://game/mechanics/snowfall.gd")
 ## The gene floor's queue and budget (docs/design/gene-rarity.md §3.3).
@@ -277,7 +280,16 @@ class WatchedDrop extends "res://game/normal/food.gd":
 	var counts := 0
 	var lost_genes := 0
 	var still_short := 0
+	## **Short again, and the water's doing**: a variety short at two counts running
+	## that the floor gave all it owed between them -- a drifter or a peer -- and the
+	## water took a carrier back meanwhile, eaten or starved. The floor answered;
+	## counted apart from [member still_short], which is the floor's to answer for.
+	var short_again := 0
 	var _short_before: Array = []
+	## What each short variety was down to at the last count, and what the floor
+	## has given of it since, by variety.
+	var _short_had := {}
+	var _floor_gave := {}
 	## **The floor by class** (docs/design/gene-rarity.md §3.3, §11.3): the varieties
 	## a class keeps at one carrier found short three counts running, each variety's
 	## counts running short so far, and the drifters made -- against which the floor's
@@ -325,6 +337,9 @@ class WatchedDrop extends "res://game/normal/food.gd":
 	var held_at_rim := 0
 	var at_forty := 0
 	var missed := 0
+	## Divisions past forty: a mother whose genes need her daughters bigger
+	## (margin.md §1.1).
+	var past_forty := 0
 	## Expression, by copies: loci rolled and loci worn, one to three copies (the
 	## mouth, always worn, and the senses, which a gift may stand in for, apart).
 	var rolled := PackedInt32Array([0, 0, 0, 0])
@@ -371,20 +386,27 @@ class WatchedDrop extends "res://game/normal/food.gd":
 		if said.size() < 4:
 			said.append(what)
 
-	## A body at forty, stepped on its tick, divides on it -- or has died of
+	## A body at its division radius -- forty, or past it for a lineage whose genes
+	## need it (margin.md §1.1) -- stepped on its tick, divides on it, or has died of
 	## hunger first, in its tank. Either way it is not the body it was.
 	func _step_one(i: int, b: Body, tick: int) -> void:
 		var due := births and b.seeded and not b.inert and not b.drifter \
-			and b.radius >= CellBody.DIVIDE_RADIUS - 0.01 and (i % Drop.LOD_EVERY) == tick
+			and b.radius >= b.divide_at() - 0.01 and (i % Drop.LOD_EVERY) == tick
 		var serial := b.serial
 		super._step_one(i, b, tick)
+		meals_at_step[b.get_instance_id()] = b.meals
 		if due:
 			at_forty += 1
 			if b.serial == serial:
 				missed += 1
 
-	## **Every division, judged** (checks 1 and 2): its mother at forty; two
-	## daughters at half her area, touching across her heading where she was and
+	## **The meals each body had at its last step**, by its instance: a meal moves
+	## its hold a meal's worth from the rim, and its next step holds it there --
+	## a far body, stepped on its tick, may eat twice before it (check 4).
+	var meals_at_step := {}
+
+	## **Every division, judged** (checks 1 and 2): its mother at her division
+	## radius; two daughters at half her area, touching across her heading where she was and
 	## facing her way, fed, in their grace, new ids, her children; one carrying
 	## her DNA and one a single trade or drift of it, a sense given apart; each
 	## wearing a roll of what she carries, the mouth always, and a sense.
@@ -392,17 +414,20 @@ class WatchedDrop extends "res://game/normal/food.gd":
 		var mother := Descent.of(b.id, b.parent, b.generation, b.lineage)
 		var dna := b.dna.duplicate()
 		var radius := b.radius
+		var divides := b.divide_at()
 		var at := b.pos
 		var heading := b.heading
 		var list: Variant = b.brain
 		var slots: PackedInt32Array = super._divide(i, b)
 		divisions += 1
-		if radius < CellBody.DIVIDE_RADIUS - 0.01:
-			_fault("divided at r%.2f" % radius)
+		if radius < divides - 0.01:
+			_fault("divided at r%.2f, where it divides at r%.2f" % [radius, divides])
+		if divides > CellBody.DIVIDE_RADIUS + 0.01:
+			past_forty += 1
 		if slots.size() != 2:
 			_fault("%d daughters" % slots.size())
 			return slots
-		var r := CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)
+		var r := CellBody.daughter_radius(radius)
 		var pair: Array[Body] = [_cells[slots[0]], _cells[slots[1]]]
 		for k in 2:
 			var d := pair[k]
@@ -415,14 +440,15 @@ class WatchedDrop extends "res://game/normal/food.gd":
 				_fault("daughter %d of %d: r%.2f hunger %.2f grace %.1f record %s" % [k,
 					mother[Descent.ID], d.radius, d.hunger, d.grace,
 					str([d.id, d.parent, d.generation, d.lineage])])
-		# Side by side, touching, across her heading -- unless the rim held one in.
+		# Side by side, touching, across her heading -- unless the film held one in
+		# at her hold (margin.md §2.1).
 		# To a hundredth: a place is kept in 32 bits, a few ten-thousandths out here.
 		var apart := pair[0].pos - pair[1].pos
 		var along := absf(apart.dot(Vector2(sin(heading), -cos(heading))))
 		var mid := (pair[0].pos + pair[1].pos) * 0.5
 		if absf(apart.length() - 2.0 * r) < 1e-2 and along < 1e-2 and mid.distance_to(at) < 1e-2:
 			pass
-		elif _drop.meniscus.depth(at) < 2.0 * r:
+		elif _drop.meniscus.depth(at) < Drop.hold(r) + r:
 			held_at_rim += 1
 		else:
 			_fault("daughters %.3f apart, %.3f along her heading, %.3f off her centre"
@@ -552,7 +578,8 @@ class WatchedDrop extends "res://game/normal/food.gd":
 		super._grow(b, gene)
 		if not births:
 			return
-		Genome.integrate_into(expect, gene, CellBody.slots_for(b.radius))
+		Genome.integrate_into(expect, gene, CellBody.slots_for(b.radius),
+			CellBody.inside_for(b.radius))
 		meals_judged += 1
 		if var_to_bytes(b.genome) != body or var_to_bytes(b.dna) != var_to_bytes(expect):
 			meal_faults += 1
@@ -605,12 +632,23 @@ class WatchedDrop extends "res://game/normal/food.gd":
 			return
 		var gene := Genome.variety(StringName(b.genome.keys()[0]))
 		var by_floor := int(stats.get(&"gene_floor", 0)) > given
+		if by_floor:
+			_floor_gave[gene] = int(_floor_gave.get(gene, 0)) + 1
 		var kinds: Dictionary = floor_kinds if by_floor else drawn_kinds
 		var organs: Dictionary = floor_organs if by_floor else drawn_organs
 		var kind := Catalogue.rarity_of(gene)
 		kinds[kind] = int(kinds.get(kind, 0)) + 1
 		var organ := Catalogue.organ_rarity(Catalogue.organ_of(gene))
 		organs[organ] = int(organs.get(organ, 0)) + 1
+
+	## The floor's gift through a peer (the toxin's), by variety, as above.
+	func _give_back_by_peer(b: Body) -> void:
+		var gene := _peer_short()
+		var given := int(stats.get(&"gene_floor_peer", 0))
+		super._give_back_by_peer(b)
+		if int(stats.get(&"gene_floor_peer", 0)) > given:
+			var kind := Genome.variety(gene)
+			_floor_gave[kind] = int(_floor_gave.get(kind, 0)) + 1
 
 	func _drop_lose(index: int, cause: int) -> void:
 		var b: Body = _cells[index]
@@ -684,8 +722,9 @@ class WatchedDrop extends "res://game/normal/food.gd":
 
 	## A run begins: at something its own senses find, by the tables and not by
 	## the field's own function -- the whole reach of its nose, radar, beam and
-	## palp, a floc by nose, beam or palp alone, its eyespot's for a body big
-	## enough to cast a shadow, and touch.
+	## palp, a floc by nose, beam or palp alone, its eyespot's for a body in its
+	## field and its reach in the light there (docs/design/sight.md: what is in the
+	## way is the field's to know), and touch.
 	func _start_run(b: Body, target: int, serial: int) -> void:
 		runs_begun += 1
 		var at: Vector2 = _cell.position if target == TARGET_PLAYER else _cells[target].pos
@@ -696,14 +735,23 @@ class WatchedDrop extends "res://game/normal/food.gd":
 		var ping := Stats.of(g, &"ping_range")
 		var beam := Stats.of(g, &"beam_range")
 		var touch := Stats.of(g, &"touch_range")
-		var eye := SHADOW_RANGE if Genome.tier_of(g, &"stigma") > 0 else 0.0
 		var d := b.pos.distance_to(at)
+		var eye := Catalogue.worn_on(g, Catalogue.LIGHT)
+		var sight := FoodField.sight_of(eye, Genome.tier_of(g, eye))
+		var by_eye := false
+		if eye != &"" and d > 0.0 \
+				and d - size < float(sight[1]) * Sight.seeing(light_at(b.pos), float(sight[3])):
+			var off := at - b.pos
+			var rel := atan2(off.dot(Vector2(cos(b.heading), sin(b.heading))),
+				off.dot(Vector2(sin(b.heading), -cos(b.heading))))
+			var mid := Cilia.slot_bearing(Cilia.default_order(g).find(eye))
+			by_eye = absf(angle_difference(mid, rel)) \
+				<= float(sight[0]) + asin(minf(size / d, 1.0)) + 0.001
 		var found := d <= b.radius + size
 		if floc:
 			found = found or d <= maxf(smell, maxf(beam, touch))
 		else:
-			found = found or d <= maxf(maxf(smell, ping), maxf(beam, touch)) \
-				or (d <= eye and size >= SHADOW_MIN_RATIO * b.radius)
+			found = found or d <= maxf(maxf(smell, ping), maxf(beam, touch)) or by_eye
 		if not found:
 			blind_runs += 1
 		# **No run begins at a body in its grace** (check 5): the player's, or a
@@ -743,8 +791,7 @@ class WatchedDrop extends "res://game/normal/food.gd":
 		var carriers := {}
 		for b in _cells:
 			if b.seeded and not b.inert:
-				for gene: StringName in b.genome:
-					var kind := Genome.variety(gene)
+				for kind: StringName in carried_kinds(b):
 					carriers[kind] = int(carriers.get(kind, 0)) + 1
 		for gene: StringName in Catalogue.drifters():
 			var n := int(carriers.get(gene, 0))
@@ -763,8 +810,29 @@ class WatchedDrop extends "res://game/normal/food.gd":
 			if n == 0:
 				lost_genes += 1
 			if n < keeps and _short_before.has(gene):
-				still_short += 1
+				if int(_floor_gave.get(gene, 0)) < keeps - int(_short_had.get(gene, 0)):
+					still_short += 1
+				else:
+					short_again += 1
+			if n < keeps:
+				_short_had[gene] = n
 		_short_before = _gene_floor.short.duplicate()
+		_floor_gave.clear()
+
+	## **The varieties water body [param b] carries**, each once: every gene it
+	## wears, as its variety, and every form in its genes' slots that only rides --
+	## the venom in its mouth's (the owner, 2026-10-16) -- as the floor counts them
+	## (food.gd's `_carriers`).
+	static func carried_kinds(b: Object) -> Dictionary:
+		var kinds := {}
+		for gene: StringName in b.get("genome"):
+			kinds[Genome.variety(gene)] = true
+		var riders: Dictionary = b.get("riders")
+		for host: Variant in riders:
+			for one: Variant in riders[host]:
+				if one is Array and Genome.is_riding_form(StringName(one[0])):
+					kinds[Genome.variety(StringName(one[0]))] = true
+		return kinds
 
 
 func _ready() -> void:
@@ -809,6 +877,17 @@ func _ready() -> void:
 	if OS.get_cmdline_user_args().has("--sockets-only"):
 		_gene_slots()
 		print("[drop-probe] NOTE --sockets-only: %d failed" % _failed)
+		get_tree().quit(0 if _failed == 0 else 1)
+		return
+	# `--daylight-only` is for working on the light (docs/design/daylight.md §10.3):
+	# its own section, check 10 and the drops its check 5 and the lineage checks read,
+	# and nothing else. CI never passes it, and it never prints ALL PASS.
+	if OS.get_cmdline_user_args().has("--daylight-only"):
+		_tank()
+		_five_minutes()
+		_lineage()
+		_daylight()
+		print("[drop-probe] NOTE --daylight-only: %d failed" % _failed)
 		get_tree().quit(0 if _failed == 0 else 1)
 		return
 	# `--cells-only` is for working on your cells (docs/design/cells.md §6.3): the
@@ -856,6 +935,7 @@ func _ready() -> void:
 	await _sister_lineage()
 	await _dna_slots()
 	_rarity_draws()
+	_daylight()
 	print("[drop-probe] ALL PASS" if _failed == 0
 		else "[drop-probe] FAILED %d" % _failed)
 	get_tree().quit(0 if _failed == 0 else 1)
@@ -1359,23 +1439,32 @@ func _drop() -> void:
 		and blind.size() == 4 and int(blind[Catalogue.tagged(Catalogue.SENSE)[3]]) == 1
 		and sighted.size() == 4)
 	# **The toxin back through a peer, at either place** (dna-slots.md §9, §20.3
-	# check 8): venom takes an arc as the old gene did, poison takes none.
+	# check 8): venom into the mouth's slot -- it rides, and takes no arc -- poison
+	# inside, where it takes none either.
 	var full := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"ampulla": 1, &"crista": 2}
-	Drop.give_back(full, TOXIN, 5, Catalogue.tagged(Catalogue.SENSE), 3, false)
-	var bare := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"chemocyte": 1}
-	Drop.give_back(bare, TOXIN, 3, Catalogue.tagged(Catalogue.SENSE), 3, false)
+	var full_riders := {}
+	Drop.give_back(full, TOXIN, 5, Catalogue.tagged(Catalogue.SENSE), 3, false, full_riders)
+	var mouthless := {&"cirrus": 1, &"flagellum": 1, &"chemocyte": 1}
+	var mouthless_riders := {}
+	Drop.give_back(mouthless, TOXIN, 3, Catalogue.tagged(Catalogue.SENSE), 3, false,
+		mouthless_riders)
 	var inside := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"ampulla": 1, &"crista": 2}
 	Drop.give_back(inside, TOXIN, 5, Catalogue.tagged(Catalogue.SENSE), 3, true)
-	var carried := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"toxicyst": 2}
-	Drop.give_back(carried, TOXIN, 5, Catalogue.tagged(Catalogue.SENSE), 3, true)
-	_check("venom back through a full peer takes a spare slot, never the plan or a sense"
-		+ " (%s); with none spare, a bonus one (%s); poison takes no slot (%s); and a"
-		% [str(full.keys()), str(bare.keys()), str(inside.keys())]
+	var carried := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
+	var carried_riders := {&"cytostome": [[&"toxicyst", 2]]}
+	Drop.give_back(carried, TOXIN, 5, Catalogue.tagged(Catalogue.SENSE), 3, true,
+		carried_riders)
+	_check("venom back through a peer goes into its mouth's slot, its genes untouched (%s, %s);"
+		% [str(full.keys()), str(Riders.by_name(full_riders))]
+		+ " with no mouth, poison (%s); poison takes no slot (%s); and a"
+		% [str(mouthless.keys()), str(inside.keys())]
 		+ " peer carrying either form is given nothing (%s)" % str(carried.keys()),
-		full.has(&"toxicyst") and not full.has(&"crista") and full.has(&"ampulla")
-		and full.size() == 5 and bare.size() == 5 and bare.has(&"toxicyst")
+		full.size() == 5 and not full.has(&"toxicyst")
+		and Riders.by_name(full_riders) == {"cytostome": [["toxicyst", 1]]}
+		and mouthless.has(TOXIN) and mouthless_riders.is_empty()
 		and inside.has(TOXIN) and inside.has(&"crista") and inside.size() == 6
-		and carried.size() == 4 and not carried.has(TOXIN))
+		and carried.size() == 3 and not carried.has(TOXIN)
+		and Riders.by_name(carried_riders) == {"cytostome": [["toxicyst", 2]]})
 	# Where a new body may go: out of every player's reach, and in the drop.
 	var players := PackedVector2Array([OFF_CENTRE + Vector2(1500.0, -800.0),
 		OFF_CENTRE + Vector2(-4500.0, 3000.0)])
@@ -1393,9 +1482,25 @@ func _drop() -> void:
 			var d := _dist(at, players[turn])
 			if d >= hides[turn] and d <= hides[turn] + Drop.SPAWN_RING:
 				ringed += 1
+	# **A newborn's in the margin** (margin.md §2.3): every one in the band a run
+	# starts in, from a newborn's hold to MARGIN_START past it.
+	var from := Drop.hold(CellBody.BASE_RADIUS)
+	var newborns := 0
+	var off_band := 0
+	for round in 200:
+		for at: Vector2 in drop.spawn_candidates(players, hides, round % 2, true):
+			newborns += 1
+			var depth := drop.meniscus.depth(at)
+			if depth < from - 1e-3 or depth > from + Drop.MARGIN_START + 1e-3 \
+					or not Replenish.hidden(at, players, hides):
+				off_band += 1
 	_check(("spawn candidates: %d drawn, %d of them in the ring past the player whose"
-		+ " turn it is, %d inside a hide reach or past the rim") % [drawn, ringed, bad],
-		bad == 0 and drawn > 3000 and float(ringed) > 0.35 * float(drawn))
+		+ " turn it is, %d inside a hide reach or past the rim; %d drawn for a newborn,"
+		+ " %d of them outside the margin it starts in (%.0f to %.0f from the rim) or in"
+		+ " a hide reach") % [drawn, ringed, bad, newborns, off_band, from,
+		from + Drop.MARGIN_START],
+		bad == 0 and drawn > 3000 and float(ringed) > 0.35 * float(drawn)
+		and off_band == 0 and newborns > 1000)
 	# Where a run starts, against the same points chosen by hand.
 	var tried: Array = []
 	var food_near := func(p: Vector2, reach: float) -> int:
@@ -1412,7 +1517,8 @@ func _drop() -> void:
 	var deep := true
 	var clear := 0
 	for p: Vector2 in tried:
-		deep = deep and drop.meniscus.inside(p, Drop.START_INSET)
+		var depth := drop.meniscus.depth(p)
+		deep = deep and depth >= from - 1e-3 and depth <= from + Drop.MARGIN_START + 1e-3
 		if fmod(absf(p.x), 7.0) < 1.0:
 			continue
 		clear += 1
@@ -1427,8 +1533,9 @@ func _drop() -> void:
 		if fmod(absf(p.x), 7.0) >= 1.0 and absf(float(dread_at.call(p)) - least) <= 1e-6:
 			tied += 1
 	_check(("a run starts at the quietest of %d points: of the %d with no meal on top, the"
-		+ " %d that dread nothing tie and the one with most food (%d) wins; none within"
-		+ " %.0f of the rim") % [tried.size(), clear, tied, most, Drop.START_INSET],
+		+ " %d that dread nothing tie and the one with most food (%d) wins; all of them in"
+		+ " the margin, %.0f to %.0f from the rim") % [tried.size(), clear, tied, most, from,
+		from + Drop.MARGIN_START],
 		tried.size() == Drop.START_TRIES and start == want and deep and clear < tried.size()
 		and tied >= 2)
 	var pushed := drop.pushed_clear(OFF_CENTRE, OFF_CENTRE + Vector2(300.0, 400.0),
@@ -1436,48 +1543,52 @@ func _drop() -> void:
 	_check("a mouth that could swallow a newborn is moved out to %.0f from its start"
 		% _dist(pushed, OFF_CENTRE), absf(_dist(pushed, OFF_CENTRE)
 		- FoodField.DREAD_RANGE - Drop.START_PUSH) < 0.01)
-	# A start is drawn evenly over its disc: half of the draws within the radius
+	# A start is drawn evenly over its band: half of the draws within the radius
 	# that holds half its area. And one 1,100 µm in from the rim, with the mouth
-	# on the rim's side, pushes that mouth back inside, not out of the drop.
-	var disc := Drop.RADIUS - Drop.START_INSET
+	# on the rim's side, pushes that mouth back to its hold, not out of the drop.
+	var outer := Drop.RADIUS - from
+	var inner := Drop.RADIUS - from - Drop.MARGIN_START
+	var halves := sqrt((outer * outer + inner * inner) * 0.5)
 	var within := 0
 	var outside := 0
 	for i in 20000:
-		var d := _dist(drop.uniform_point(Drop.START_INSET), drop.meniscus.center)
-		if d <= disc / sqrt(2.0):
+		var d := _dist(drop.margin_point(), drop.meniscus.center)
+		if d <= halves:
 			within += 1
-		if d > disc + 1e-3:
+		if d > outer + 1e-3 or d < inner - 1e-3:
 			outside += 1
 	var edge_start := drop.meniscus.center + Vector2(Drop.RADIUS - 1100.0, 0.0)
 	var edge_push := drop.pushed_clear(edge_start, edge_start + Vector2(300.0, 0.0),
 		FoodField.DREAD_RANGE, 30.0)
-	_check(("a start is drawn evenly: %.3f of 20,000 within %.0f of the centre, which holds"
-		+ " half the disc, and %d past it; a mouth on the rim's side of a start 1,100 in"
-		+ " is pushed to %.1f inside the rim") % [float(within) / 20000.0,
-		disc / sqrt(2.0), outside, drop.meniscus.depth(edge_push)],
+	_check(("a start is drawn evenly over its band: %.3f of 20,000 within %.0f of the"
+		+ " centre, which holds half the band, and %d out of it; a mouth on the rim's side"
+		+ " of a start 1,100 in is pushed to %.1f inside the rim, where its hold is %.0f")
+		% [float(within) / 20000.0, halves, outside, drop.meniscus.depth(edge_push),
+			Drop.hold(30.0)],
 		absf(float(within) / 20000.0 - 0.5) <= 0.01 and outside == 0
-		and drop.meniscus.inside(edge_push, 30.0))
-	# **The review's S3**: the rim holds a pushed mouth back, and it must still
-	# end clear of dread's reach of the start. From a start as near the rim as
-	# one may be, mouths all round it at every distance inside dread's reach, of
-	# every size a body can be: each is slid along the rim until it clears.
+		and drop.keeps(edge_push, 30.0))
+	# **The review's S3**: the film holds a pushed mouth back at its hold, and it
+	# must still end clear of dread's reach of the start. From a start as near the
+	# rim as one may be -- a newborn's hold -- mouths all round it at every distance
+	# inside dread's reach, of every size a body can be: each is slid along its hold
+	# until it clears.
 	var nearest := INF
 	var held := 0
 	var escaped := 0
-	var worst_start := drop.meniscus.center + Vector2(0.0, -(Drop.RADIUS - Drop.START_INSET))
+	var worst_start := drop.meniscus.center + Vector2(0.0, -(Drop.RADIUS - from))
 	for k in 72:
 		for reach: float in [60.0, 700.0, 1350.0]:
 			for r: float in [13.0, 40.0]:
 				var mouth := worst_start + Vector2.from_angle(TAU * float(k) / 72.0) * reach
 				var put := drop.pushed_clear(worst_start, mouth, FoodField.DREAD_RANGE, r)
 				nearest = minf(nearest, _dist(put, worst_start))
-				if drop.meniscus.depth(put) < Drop.START_PUSH:
+				if drop.meniscus.depth(put) < Drop.hold(r) + Drop.START_PUSH:
 					held += 1
-				if not drop.meniscus.inside(put, r):
+				if not drop.keeps(put, r):
 					escaped += 1
 	_check(("S3: from a start %.0f inside the rim, 432 mouths moved out land at least %.0f"
-		+ " from it (dread reaches %.0f), %d of them slid along the rim, %d past it") % [
-		Drop.START_INSET, nearest, FoodField.DREAD_RANGE, held, escaped],
+		+ " from it (dread reaches %.0f), %d of them slid along their hold, %d past it") % [
+		from, nearest, FoodField.DREAD_RANGE, held, escaped],
 		nearest >= FoodField.DREAD_RANGE and held > 0 and escaped == 0)
 	# What a new thing is made with: a body made in play is fed, one of a first
 	# fill up to FIRST_HUNGER_MAX; a fallen floc fits a born cell's mouth and lasts
@@ -1604,7 +1715,7 @@ func _floor_by_class() -> void:
 ## widest body; `LOD_EVERY` even. A sense that one day reaches further fails
 ## here instead of being slowed where it is felt.
 func _lod() -> void:
-	var widest := CellBody.DIVIDE_RADIUS
+	var widest := CellBody.RADIUS_MAX
 	var ping := 0.0
 	for reach: float in Stats.table(&"ping_range"):
 		ping = maxf(ping, reach)
@@ -1645,8 +1756,27 @@ func _lod() -> void:
 ## store, burn, and light and absorption -- are the field's own reading of its
 ## genome, so they are held to the node's too.
 func _tank() -> void:
-	var water := _water(3000.0)
-	var field: WatchedDrop = water[0]
+	# **With the light off** (docs/design/daylight.md §10.3): the node is handed the
+	# field's light, which is today's 1.0, so this is the check it always was.
+	var water := _water(3000.0, true, true, false)
+	var ran := _one_tank(water[0], false)
+	_done(water)
+	_check(("one tank: 3 genomes, the node a frame at a time and the water body at its"
+		+ " rates, 60 s of the same efforts and meals, end %s apart (hunger ran %.2f"
+		+ " to %.2f, never pinned)") % [String.num_scientific(ran[0]), ran[1], ran[2]],
+		ran[0] < 1e-6 and ran[1] > 0.0 and ran[2] < 1.0)
+	_tank_edges()
+
+
+## **Check 10's three genomes, the node against the water body**, in [param field]:
+## the node a frame at a time as the run steps it, its `sun` times the field's own
+## light over the frame (`light_over`, as normal_mode.gd asks it), the water body in
+## food.gd's own tank at the rates its distance would give it. With [param day]
+## the field's clock runs with the frames from the start of the day's cycle, so its
+## dawn rises through the 60 s and every step is paid a moving light
+## (docs/design/daylight.md §10.3 check 3). Returns `[how far apart they end, the
+## lowest hunger, the highest]`.
+func _one_tank(field: WatchedDrop, day: bool) -> Array:
 	var genomes := [
 		{&"cytostome": 1, &"cirrus": 1, &"flagellum": 1},
 		{&"cytostome": 2, &"cirrus": 1, &"flagellum": 3, &"vacuole": 2, &"plastid": 3,
@@ -1661,16 +1791,20 @@ func _tank() -> void:
 	var frames := 3600
 	var dt := 1.0 / 60.0
 	var dash := Stats.at(&"dash_cost", 1)
+	var started := float(field.get("_t"))
+	if day:
+		field.set("_day_origin", -started)
+	var at := Vector2(1500.0, 0.0)
 	for tiers: Dictionary in genomes:
 		var met: Node = Metabolism.new()
 		met.upkeep = GenomeNode.upkeep_of(tiers)
 		met.reserve = Stats.of(tiers, &"store")
-		met.photosynthesis = Stats.of(tiers, &"sun") \
-			+ (Metabolism.ABSORB if GenomeNode.tier_of(tiers, &"cytostome") == 0 else 0.0)
 		met.burn = Stats.of(tiers, &"burn")
 		met.set_hunger(0.3)
-		var index := _pose(field, Vector2(1500.0, 0.0), 30.0, tiers, 0.0, 0.3)
+		field.set("_t", started)
+		var index := _pose(field, at, 30.0, tiers, 0.0, 0.3)
 		var tank: Object = (field.get("_cells") as Array)[index]
+		var where: Vector2 = tank.get("pos")
 		var last := -1
 		for f in frames:
 			# What the body did this frame, in seconds of rest: a stroke now and
@@ -1682,11 +1816,17 @@ func _tank() -> void:
 				effort += randf_range(0.0, 0.02)
 			if f == 1500:
 				effort += dash
-			# The run pays the effort, then the node is alive for the frame, then
-			# the water feeds it.
+			# The run pays the effort, then the node is alive for the frame -- in
+			# the light over the frame, which starts at the field's clock -- then the
+			# water feeds it.
+			var t0 := started + float(f) * dt
+			met.photosynthesis = Stats.of(tiers, &"sun") * field.light_over(where, t0, t0 + dt) \
+				+ (Metabolism.ABSORB if GenomeNode.tier_of(tiers, &"cytostome") == 0 else 0.0)
 			met.spend(effort)
 			met.call(&"_process", dt)
 			tank.set("effort", float(tank.get("effort")) + effort)
+			# The field's clock at the frame's end, as its own frame leaves it.
+			field.set("_t", started + float(f + 1) * dt)
 			# A meal every ten seconds, worth three fifths of what is missing, so
 			# neither tank is ever pinned at empty or at full: a pinned tank
 			# would agree with anything.
@@ -1704,11 +1844,13 @@ func _tank() -> void:
 		worst = maxf(worst, absf(float(met.hunger) - float(tank.get("hunger"))))
 		met.free()
 		field._drop_lose(index, 0)
-	_done(water)
-	_check(("one tank: 3 genomes, the node a frame at a time and the water body at its"
-		+ " rates, 60 s of the same efforts and meals, end %s apart (hunger ran %.2f"
-		+ " to %.2f, never pinned)") % [String.num_scientific(worst), low, high],
-		worst < 1e-6 and low > 0.0 and high < 1.0)
+	field.set("_t", started)
+	return [worst, low, high]
+
+
+## The tank's checks that need no field: the drifters, a mouthless born cell and
+## the arithmetic at its edges.
+func _tank_edges() -> void:
 	# A body with no mouth at rest: every drifter the water makes holds its tank,
 	# neither burning it nor -- with light or a mitochondrion to spare -- filling it.
 	var starving := PackedStringArray()
@@ -1761,15 +1903,33 @@ func _tank() -> void:
 ## nobody's senses (water-evolves.md). [param rules] false is pack 2's
 ## hand-written hunter (behaviour.md §12.3 check 1), and [param tails] false pack
 ## 3's water, where a tail beats only while a swim rule fires (automation.md
-## §5.4) -- set before the water is made, as a tool sets it.
-func _water(desert := 0.0, rules := true, tails := true) -> Array:
+## §5.4) -- set before the water is made, as a tool sets it. [param light] false
+## is the water before the day (docs/design/daylight.md §10.4), full light
+## everywhere at every hour: what every identity gate runs, since an older pack
+## had no day.
+## **How far in from the rim a desert to pose in starts** ([method _water]): past
+## the margin by more than any pose reaches toward the rim, and lit enough to see
+## by. The middle is the drop's darkest place, a quarter of the light, where an
+## eye sees nothing.
+const DESERT_DEPTH := 2400.0
+
+
+func _water(desert := 0.0, rules := true, tails := true, light := true) -> Array:
 	var cell := CellBody.new()
 	cell.radius = CellBody.BASE_RADIUS
 	var field := WatchedDrop.new()
 	field.process_mode = Node.PROCESS_MODE_DISABLED
 	field.desert = desert
+	# **A desert is cleared to pose in, so it is open water all round**: past the
+	# margin, DESERT_DEPTH in from the rim, where no body posed within 1,200 of the
+	# player is past its hold (margin.md §2.1) and the light is about 0.4 -- an eye
+	# sees by it. Without one, the game's own start, in the margin.
+	if desert > 0.0:
+		field.start_mode = &"edge"
+		field.edge_gap = DESERT_DEPTH
 	field.rules = rules
 	field.tails_beat = tails
+	field.daylight = light
 	add_child(field)
 	field.setup_drop(cell)
 	field.in_water = false
@@ -1902,8 +2062,10 @@ func _spawns() -> void:
 
 # --- 4. Containment ------------------------------------------------------------------------
 
-## **After 1,800 frames no body's centre past `RADIUS - r`, the player's
-## included; no mote past the rim** (§3.1). A run started 120 inside the rim,
+## **After 1,800 frames no body's centre past its hold, `RADIUS - hold(r)`
+## (margin.md §2.1), the player's included -- a floc's past `RADIUS - r`, which
+## lies on the glass; no mote past the rim** (§3.1). A run started 120 inside its
+## hold,
 ## facing it, the cell pressing straight into it at a stroke's speed the whole
 ## time -- knocked at the rim's bearing, and at most once in SHORE_GAP -- with its
 ## grit, the authored first mote included, round it. Bodies are looked at every
@@ -1914,7 +2076,7 @@ func _containment() -> void:
 	var field := WatchedDrop.new()
 	field.process_mode = Node.PROCESS_MODE_DISABLED
 	field.start_mode = &"edge"
-	field.edge_gap = 120.0
+	field.edge_gap = Drop.hold(CellBody.BASE_RADIUS) + 120.0
 	field.grace = 1e6
 	field.contact_swallow = false
 	add_child(field)
@@ -1937,7 +2099,7 @@ func _containment() -> void:
 	for k in 24:
 		var along := out0.rotated(deg_to_rad((5.0 + 2.5 * float(k / 2)) * (1.0 if k % 2 == 0
 			else -1.0)))
-		var hungry := _pose(field, centre + along * (edge - 33.0), 30.0,
+		var hungry := _pose(field, centre + along * (edge - Drop.hold(30.0) - 3.0), 30.0,
 			{&"cytostome": 1, &"cirrus": 1, &"flagellum": 2}, atan2(along.x, -along.y), 0.9)
 		var hb: Object = (field.get("_cells") as Array)[hungry]
 		hb.set("calm", 0.0)
@@ -1954,15 +2116,23 @@ func _containment() -> void:
 		cell.position += cell.velocity / 60.0
 		field._process(1.0 / 60.0)
 		motes._process(1.0 / 60.0)
-		worst_cell = minf(worst_cell, edge - cell.radius - _dist(cell.position, centre))
+		worst_cell = minf(worst_cell,
+			edge - Drop.hold(cell.radius) - _dist(cell.position, centre))
 		for p: Vector2 in motes.points():
 			worst_mote = minf(worst_mote, edge - MotesField.MOTE_RADIUS - _dist(p, centre))
 		if f % 30 == 29:
 			for b: Object in field.get("_cells"):
 				if b.get("seeded"):
 					bodies_seen += 1
-					worst_body = minf(worst_body,
-						edge - float(b.get("radius")) - _dist(b.get("pos"), centre))
+					var r := float(b.get("radius"))
+					var keep := r if b.get("inert") else Drop.hold(r)
+					# Grown since its last step: held at its new hold on its next.
+					var since := int(field.meals_at_step.get(b.get_instance_id(), 0)) \
+						if int(b.get("stepped")) >= 0 else 0
+					var grown := int(b.get("meals")) - since
+					if grown > 0 and not b.get("inert"):
+						keep = Drop.hold(r - CellBody.GROWTH_PER_MEAL * float(grown))
+					worst_body = minf(worst_body, edge - keep - _dist(b.get("pos"), centre))
 	var gap := INF
 	var off_bearing := 0.0
 	for k in knocks.size():
@@ -1995,7 +2165,8 @@ const SETTLED_WITHIN := 30
 ## **Five minutes of a drop** (§14.3), with a still ghost player in it, watched
 ## from inside:
 ##
-## - 5, growth: no body over DIVIDE_RADIUS, and none *made* with a mouth wider
+## - 5, growth: no body over its own division radius (margin.md §1.1) or
+##   `CellBody.RADIUS_MAX`, and none *made* with a mouth wider
 ##   than a newborn's, 21.3 (water-evolves.md §1) -- a grown one may have it (row 5);
 ## - 6, the floors (docs/design/gene-rarity.md §11.3): every common and uncommon
 ##   variety carried at every count -- a form as its variety -- and one found short
@@ -2028,6 +2199,7 @@ func _five_minutes() -> void:
 	var cell: CellBody = water[1]
 	var biggest := 0.0
 	var at_forty := 0
+	var over := 0
 	var floor_checks := 0
 	var floor_missed := 0
 	var seen := {}
@@ -2044,8 +2216,13 @@ func _five_minutes() -> void:
 		for b: Object in field.get("_cells"):
 			if b.get("seeded") and not b.get("inert"):
 				biggest = maxf(biggest, float(b.get("radius")))
-				if float(b.get("radius")) >= CellBody.DIVIDE_RADIUS - 1e-3:
+				if b.get("drifter"):
+					continue
+				var divides: float = b.call(&"divide_at")
+				if float(b.get("radius")) >= divides - 1e-3:
 					at_forty += 1
+				if float(b.get("radius")) > divides + 1e-3:
+					over += 1
 	var living := 0
 	var venomous := 0
 	for b: Object in field.get("_cells"):
@@ -2056,21 +2233,23 @@ func _five_minutes() -> void:
 	# What the water makes from nothing is a newborn (water-evolves.md §1): no
 	# mouth it makes is wider than a born cell's at BASE_RADIUS.
 	var newborn := CellBody.gape_of(Catalogue.born(), CellBody.BASE_RADIUS)
-	_check(("5. growth: five minutes of a drop, the biggest body r%.2f (DIVIDE_RADIUS %.0f;"
-		+ " %d looks at one there, %d ticks at forty), and of %d bodies made the widest"
-		+ " mouth %.2f, at most a newborn's (%.2f)") % [biggest, CellBody.DIVIDE_RADIUS,
-		at_forty, field.at_forty, field.made, field.made_gape, newborn],
-		biggest <= CellBody.DIVIDE_RADIUS + 1e-4 and at_forty + field.at_forty > 0
+	_check(("5. growth: five minutes of a drop, the biggest body r%.2f (RADIUS_MAX %.2f;"
+		+ " %d looks at one at its division radius, %d ticks there, %d over it), and of %d"
+		+ " bodies made the widest mouth %.2f, at most a newborn's (%.2f)") % [biggest,
+		CellBody.RADIUS_MAX, at_forty, field.at_forty, over, field.made, field.made_gape,
+		newborn],
+		biggest <= CellBody.RADIUS_MAX + 1e-4 and over == 0 and at_forty + field.at_forty > 0
 		and field.made_gape > 0.0 and field.made_gape <= newborn + 1e-4 and field.made > 1000)
 	var floor_made := int(field.stats.get(&"gene_floor", 0))
 	_check(("6. the floors: at %d gene counts a common or uncommon variety carried by nobody"
-		+ " %d times and one still short at the count after %d; the floor caught up with the"
+		+ " %d times and one still short at the count after, with the floor owing it, %d"
+		+ " (and %d more the floor gave and the water took back); the floor caught up with the"
 		+ " first fill at count %d (by %d), and a rare one was short three counts running %d"
 		+ " times after it (and %d more while the floor gave all its budget allowed); the"
 		+ " floor's drifters %d of %d made (at most one in %d); a living"
 		+ " drifter within the floor's reach of the still player at %d of %d checks; drifters"
 		+ " made with a gene no drifter may carry %d, living with venom %d") % [field.counts,
-		field.lost_genes, field.still_short, field.settled_at, SETTLED_WITHIN, field.rare_runs,
+		field.lost_genes, field.still_short, field.short_again, field.settled_at, SETTLED_WITHIN, field.rare_runs,
 		field.rare_waited, floor_made, field.drifters_made, Drop.GENE_FLOOR_GAP,
 		floor_checks - floor_missed,
 		floor_checks, field.venom_drifters, venomous],
@@ -2150,8 +2329,7 @@ func _lineage_look(field: WatchedDrop, t: float, seen: Dictionary) -> void:
 	var genes := {}
 	for b: Object in field.get("_cells"):
 		if b.get("seeded") and not b.get("inert"):
-			for gene: StringName in b.get("genome"):
-				genes[GenomeNode.variety(gene)] = true
+			genes.merge(WatchedDrop.carried_kinds(b))
 	# The least from no ceiling at all: a catalogue may carry more than any number.
 	seen["genes"] = minf(float(seen.get("genes", INF)), float(genes.size()))
 	seen["looks"] = int(seen.get("looks", 0)) + 1
@@ -2181,7 +2359,7 @@ func _lineage_summary(field: WatchedDrop, named: String, seen: Dictionary) -> Di
 	var out := seen.duplicate()
 	out["name"] = named
 	for key: String in ["divisions", "born", "faults", "body_faults", "said", "kinds",
-			"held_at_rim", "at_forty", "missed", "rolled", "worn", "meals_judged",
+			"held_at_rim", "at_forty", "missed", "past_forty", "rolled", "worn", "meals_judged",
 			"meal_faults", "graced_runs", "runs_at_born", "graced_eaten", "peers_over_floor",
 			"made_kinds", "runs_begun", "rule_divisions", "doors", "off_founders", "rules",
 			"drifter_steps", "drifter_moved", "rest_steps", "rest_swam", "rest_carried",
@@ -2257,9 +2435,12 @@ static func _keyed(line: String) -> String:
 ## byte -- its census and lineage lines at five minutes are [constant DEV_LINES],
 ## `dev`'s, and the senses the player and the water share are pinned by
 ## [method _membrane]. The drop of [method _five_minutes] is on rules, so the
-## division is checked on both.
+## division is checked on both. **Since the drop has a day** (docs/design/daylight.md
+## §10.3 check 5) the checks here read it with its day, whose lines are
+## [constant DAYLIGHT_LINES], and the same drop is run again with the light off for
+## [constant DEV_LINES]: pack 2 had no day.
 func _lineage() -> void:
-	var lines: Array[String] = []
+	var lit: Array[String] = []
 	seed(1)
 	var water := _water(0.0, false)
 	var field: WatchedDrop = water[0]
@@ -2270,9 +2451,20 @@ func _lineage() -> void:
 			_lineage_look(field, float(f + 1) / 60.0, seen)
 	seen["food"] = float(int(field.get("_drifters"))) / Drop.food_count(FoodField.DRIFTER_SHARE)
 	_lineage_runs.append(_lineage_summary(field, "pack 2's hunter's", seen))
-	lines.append(field.census_line())
-	lines.append(field.lineage_line())
+	lit.append(field.census_line())
+	lit.append(field.lineage_line())
 	_done(water)
+	# **And with the light off** (docs/design/daylight.md §10.3 check 5): the same
+	# drop with no day is `dev`'s to the byte -- DEV_LINES are the daylight-off gate.
+	var lines: Array[String] = []
+	seed(1)
+	var dark := _water(0.0, false, true, false)
+	var off: WatchedDrop = dark[0]
+	for f in LINEAGE_LOOKS * LOOK_FRAMES:
+		off._process(1.0 / 60.0)
+	lines.append(off.census_line())
+	lines.append(off.lineage_line())
+	_done(dark)
 	seed(20260930)
 	var differ := 0
 	for k in DEV_LINES.size():
@@ -2282,10 +2474,24 @@ func _lineage() -> void:
 			print("[drop-probe] check 1, line %d, this build: %s" % [k + 1, ours])
 			print("[drop-probe] check 1, line %d, dev:        %s" % [k + 1, _keyed(DEV_LINES[k])])
 	_check(("1. with the rules off it is pack 2, the drop: seed 1, five minutes on pack 2's"
-		+ " hunter -- its census and lineage lines against dev's: %s") % [
+		+ " hunter with the light off -- its census and lineage lines against dev's: %s") % [
 		"the same to the byte" if differ == 0
 		else "%d DIFFER" % differ],
 		differ == 0 and lines.size() == DEV_LINES.size())
+	var moved := 0
+	for k in maxi(lit.size(), DAYLIGHT_LINES.size()):
+		var ours: String = lit[k] if k < lit.size() else "(none)"
+		var pinned: String = _keyed(DAYLIGHT_LINES[k]) if k < DAYLIGHT_LINES.size() else "(none)"
+		if ours != pinned:
+			moved += 1
+			print("[drop-probe] daylight 5, line %d, this build: %s" % [k + 1, ours])
+			print("[drop-probe] daylight 5, line %d, pinned:     %s" % [k + 1, pinned])
+	var lit_differs := lit.size() == 2 and lines.size() == 2 and lit[0] != lines[0]
+	_check(("daylight 5. off is dev, to the byte: the same drop, the light on, prints its"
+		+ " census and lineage lines %s, and %s") % [
+		"as pinned" if moved == 0 else "%d MOVED" % moved,
+		"not dev's" if lit_differs else "DEV'S -- THE SWITCH DOES NOTHING"],
+		moved == 0 and lit.size() == DAYLIGHT_LINES.size() and lit_differs)
 	var posed := _food_over_floor()
 	var runs := _lineage_runs
 	var composed: Array[Dictionary] = []
@@ -2308,15 +2514,17 @@ func _lineage() -> void:
 	var enough := runs.size() == 2 and composed.size() == 1 \
 		and runs.all(func(run: Dictionary) -> bool: return int(run["divisions"]) >= 50)
 	_check(("lineage 1. a division is the player's: %d divisions in two drops' five minutes"
-		+ " (%s), every mother at r40 and every body at forty on its tick divided on it (%d"
-		+ " ticks, %d missed); %d daughters at r%.2f touching across her heading where she"
-		+ " was (%d held in by the rim), fed, in their grace, new ids, her children; one"
-		+ " faithful and one"
+		+ " (%s), every mother at her division radius -- %d past forty, for the genes"
+		+ " she carries (margin.md §1.1) -- and every body there on its tick divided on"
+		+ " it (%d ticks, %d missed); %d daughters at half her area touching across her"
+		+ " heading where she was (%d held in by the rim), fed, in their grace, new ids,"
+		+ " her children; one faithful and one"
 		+ " changed: %s, never a shift; %d faults%s") % [sum.call("divisions"), ", ".join(each),
-		sum.call("at_forty"), sum.call("missed"), sum.call("born"),
-		CellBody.daughter_radius(CellBody.DIVIDE_RADIUS), sum.call("held_at_rim"), str(kinds),
+		sum.call("past_forty"), sum.call("at_forty"), sum.call("missed"), sum.call("born"),
+		sum.call("held_at_rim"), str(kinds),
 		sum.call("faults"), "" if said.is_empty() else " -- " + "; ".join(said)],
 		enough and sum.call("faults") == 0 and sum.call("missed") == 0
+		and sum.call("past_forty") > 0
 		and sum.call("at_forty") >= sum.call("divisions")
 		and sum.call("born") == 2 * sum.call("divisions")
 		and kinds.keys().all(func(kind: StringName) -> bool:
@@ -2496,6 +2704,9 @@ func _division_rules() -> void:
 	_done(water)
 	var every := [&"nudge", &"replace", &"swap", &"copy", &"drop"].all(
 		func(kind: StringName) -> bool: return int(kinds.get(kind, 0)) > 0)
+	# **Fifty of each, to be a sample**: every kind must come, which is the check. A
+	# lineage that carries much divides later since margin.md §1.1, so five minutes on
+	# rules made 96 where it made over a hundred.
 	_check(("5. a division: %d on rules, each giving the daughter with her mother's DNA her"
 		+ " list itself and her sister one change of it (%s), and %d on pack 2's hunter giving"
 		+ " both hers; %d faults%s; of %d bodies the water's doors let in, %d off the founders'"
@@ -2503,7 +2714,7 @@ func _division_rules() -> void:
 		+ " a sister (%s)") % [on, str(kinds), off, faults,
 		"" if said.is_empty() else " -- " + "; ".join(said), doors, off_founders,
 		str(posed_on), str(sister_on)],
-		on >= 100 and off >= 100 and faults == 0 and every and doors > 1000
+		on >= 50 and off >= 50 and faults == 0 and every and doors > 1000
 		and off_founders == 0 and posed_on and sister_on)
 
 
@@ -2702,7 +2913,7 @@ func _determinism() -> void:
 		behaviours.append(field.behaviour_line())
 		_done(water)
 	seed(8088)
-	var pack3 := _water(0.0, true, false)
+	var pack3 := _water(0.0, true, false, false)
 	var field3: WatchedDrop = pack3[0]
 	field3.rule_change = false
 	for f in 40 * 60:
@@ -2810,10 +3021,15 @@ func _determinism() -> void:
 ## 45 degrees either side of the way its organ faces, where it heard the whole half
 ## circle, so a water hunter with a ping hears fewer bodies. With the half circle put
 ## back, this branch printed the old ones to the byte.
+## **Re-recorded when venom came to ride** (docs/design/venom-rides.md), from the
+## check's own output, because the water changed on purpose: a toxin goes inside or
+## into a gene's slot, never round the body, so the floor's venom and the founders'
+## ride their mouths, and drift brings the toxin as poison. Nothing else moved; the
+## rules two builds agree on moved with venom's side and stern lines (`Wire.RULES`).
 const THREE_ONE_LINES: Array[String] = [
-	"[census] t 40  living 549 (drifters 456, hunters 93)  flocs 34  | hunters at r40 0, mean r 29.5, hunger 0.67  | could swallow r26/r34/r40 17/0/0  dread 0.33/0.01/0.00  genes 17  | spawned 634  died: swallowed 82 chewed 0 starved 3 (r40 0) poisoned 0  | grazed by the water 3, by drifters 0, dissolved 0, snow kept 4, remains 3  | runs 0 at you 0 misses 0 stings 2 dashes 0  floors: gene 0+0 drifter 0  | sum 3035524957",
-	"[lineage] t 40  hunters 93, born 0  generation mean 1.00 max 1  families 93 (largest 1)  dna apart 33  | cruise 56.5 notice 638 mouth 1.00 upkeep 1.00 genes worn 4.02 carried 4.14  tails 93 sighted 93 at r40 0  | divisions 0 (trade 0 drift 0 faithfully 0), daughters 0: tailless 0, given a sense 0  | the spawner's peers 4 (for the floor 4, for venom 0), drifters 75, left to births 0  | worn cytostome 1.00 cirrus 1.00 flagellum 1.00 stigma 0.31 ocellus 0.25 chemocyte 0.19 ampulla 0.25 axoneme 0.00 palp 0.00 myoneme 0.00 trichocyst 0.00 pellicle 0.00 veneneux 0.00 plastid 0.00 vacuole 0.00 crista 0.00 toxicyst 0.02 haptonema 0.00  | commonest 28x cytostome:1,cirrus:1,flagellum:1,stigma:1 ; 23x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 22x cytostome:1,cirrus:1,flagellum:1,ampulla:1",
-	"[behaviour] t 40  hunters 93: on the founders' rules 93, other lists 0  | founders' rules fired 2729/8655/278/147/1458/17459/0  | meals of hunters with a nose 19, radar 21, laser 25  | stings 2, stuns 0, your wakes 0  | now holding a heading 39, resting 18, swimming 75, pushing 0, stunned 0, echoes in flight 44",
+	"[census] t 40  living 552 (drifters 457, hunters 95)  flocs 70  | hunters at r40 0, mean r 29.7, hunger 0.63  | could swallow r26/r34/r40 22/0/0  dread 0.35/0.00/0.00  genes 17  | spawned 648  died: swallowed 87 chewed 0 starved 9 (r40 0) poisoned 0  | grazed by the water 3, by drifters 0, dissolved 0, snow kept 34, remains 9  | runs 0 at you 0 misses 0 stings 6 dashes 0  floors: gene 0+0 drifter 0  | sum 907997993",
+	"[lineage] t 40  hunters 95, born 0  generation mean 1.00 max 1  families 95 (largest 1)  dna apart 37  | cruise 56.5 notice 623 mouth 1.00 upkeep 1.00 genes worn 4.00 carried 4.25  tails 95 sighted 95 at r40 0  | divisions 0 (trade 0 drift 0 faithfully 0), daughters 0: tailless 0, given a sense 0  | the spawner's peers 7 (for the floor 7, for venom 0), drifters 86, left to births 0  | worn cytostome 1.00 cirrus 1.00 flagellum 1.00 stigma 0.34 ocellus 0.22 chemocyte 0.27 ampulla 0.17 axoneme 0.00 palp 0.00 myoneme 0.00 trichocyst 0.00 pellicle 0.00 veneneux 0.00 plastid 0.00 vacuole 0.00 crista 0.00 toxicyst 0.00 haptonema 0.00 lysosome 0.00  | commonest 32x cytostome:1,cirrus:1,flagellum:1,stigma:1 ; 26x cytostome:1,cirrus:1,flagellum:1,chemocyte:1 ; 21x cytostome:1,cirrus:1,flagellum:1,ocellus:1",
+	"[behaviour] t 40  hunters 95: on the founders' rules 95, other lists 0  | founders' rules fired 3075/7271/262/116/2473/18491/0  | meals of hunters with a nose 34, radar 24, laser 21  | stings 6, stuns 0, your wakes 0  | now holding a heading 41, resting 22, swimming 73, pushing 0, stunned 0, echoes in flight 27",
 ]
 ## What phase 3-2's behaviour line adds after phase 3-1's, for a water whose
 ## rules never changed: one behaviour, every hunter on it, no change made.
@@ -3134,6 +3350,10 @@ func _rig(drop: bool, desert := 0.0) -> Array:
 	var field := WatchedDrop.new()
 	field.process_mode = Node.PROCESS_MODE_DISABLED
 	field.desert = desert
+	# A desert to pose in, in open water (see [method _water]).
+	if desert > 0.0:
+		field.start_mode = &"edge"
+		field.edge_gap = DESERT_DEPTH
 	rig.add_child(field)
 	var recorder := RecorderNode.new()
 	recorder.process_mode = Node.PROCESS_MODE_DISABLED
@@ -3748,6 +3968,14 @@ func _save_room() -> void:
 	room.open_dedicated(cell)
 	for f in 40 * 60:
 		room._process(1.0 / 60.0)
+	# **Kept once a family carries a list of its own**: forty seconds in, or the
+	# first second after when its first divisions come later -- a heavy lineage's
+	# do (margin.md §1.1) -- so the lists always have something to bring back.
+	var kept_at := 40.0
+	while (room.drop_state()["behaviours"]["lists"] as Array).is_empty() and kept_at < 120.0:
+		for f in 60:
+			room._process(1.0 / 60.0)
+		kept_at += 1.0
 	# On rules (pack 3) nothing is on a run: what its bodies were doing is the
 	# heading each held and the echoes each had in flight.
 	var holding := 0
@@ -3782,12 +4010,12 @@ func _save_room() -> void:
 	var age := room2.drop_age()
 	var changed := _changes_made(room) - changed_before
 	_check(("12. and lineage 8. and 7. a room kept and loaded (%s, %d bodies, on rules, %d of"
-		+ " them holding a heading, %d echoes in flight and %d lists of rules as it was kept)"
-		+ " goes on as one that never stopped: after 30 s more on the same stream,"
+		+ " them holding a heading, %d echoes in flight and %d lists of rules as it was kept"
+		+ " at %.0f s) goes on as one that never stopped: after 30 s more on the same stream,"
 		+ " %d divisions and %d changes of rules in them, the two census lines are %s, the"
 		+ " lineage lines %s and the behaviour lines %s -- %s")
 		% [error_string(wrote), int(done.get("bodies", 0)), holding, echoes, kept_lists,
-		room.divisions - divided_before, changed, "the same" if ours == theirs else "DIFFERENT",
+		kept_at, room.divisions - divided_before, changed, "the same" if ours == theirs else "DIFFERENT",
 		"the same" if our_line == their_line else "DIFFERENT",
 		"the same" if our_rules == their_rules else "DIFFERENT", ours if ours == theirs
 			else ours + " AGAINST " + theirs],
@@ -3795,7 +4023,7 @@ func _save_room() -> void:
 		and our_line == their_line and our_rules == their_rules and kept_lists > 0
 		and changed > 0 and room.divisions - divided_before > 0
 		and room2.divisions == room.divisions - divided_before
-		and is_equal_approx(age, 70.0) and int(done.get("bodies", 0)) > 500)
+		and is_equal_approx(age, kept_at + 30.0) and int(done.get("bodies", 0)) > 500)
 	if our_line != their_line:
 		print("[drop-probe] lineage 8, the room: %s AGAINST %s" % [our_line, their_line])
 	if our_rules != their_rules:
@@ -3824,6 +4052,7 @@ func _save_run() -> void:
 	var genome: Node = run.get("_genome")
 	var met: Node = run.get("_metabolism")
 	cell.radius = 34.0
+	_held_in_drop(run)
 	genome.call(&"express", {&"cytostome": 2, &"cirrus": 1, &"flagellum": 1, &"rhabdom": 1},
 		[&"cytostome", &"cirrus", &"flagellum", &"rhabdom"])
 	genome.call(&"integrate", &"stigma")
@@ -3930,7 +4159,7 @@ func _save_rules() -> void:
 		elif kinds[k] == 1 and far < 0:
 			far = k
 	var radius: PackedFloat64Array = rows["radius"]
-	radius[big] = CellBody.DIVIDE_RADIUS + 6.0
+	radius[big] = CellBody.RADIUS_MAX + 6.0
 	rows["radius"] = radius
 	var at: PackedVector2Array = rows["at"]
 	at[far] = field.basin().get(&"center") + Vector2(Drop.RADIUS + 400.0, 0.0)
@@ -3963,12 +4192,12 @@ func _save_rules() -> void:
 		+ " the rim put back inside (%s), a tank kept at %.3f; the log says %s -- and under"
 		+ " the same rules %s; the fingerprint's %d tables by name (%s)") % [
 		str(back.get("rules", "?")).left(8), DropSave.rules().left(8),
-		str(derived), CellBody.DIVIDE_RADIUS + 6.0, float(b.get("radius")), 400.0, str(inside),
+		str(derived), CellBody.RADIUS_MAX + 6.0, float(b.get("radius")), 400.0, str(inside),
 		float(b.get("hunger")), "CONVERTED" if line.contains("CONVERTED") else "NOTHING",
 		"it does not" if not calm.contains("CONVERTED") else "IT DOES TOO", names.size(),
 		"yes" if names == by_name else "NO: " + ",".join(names.slice(0, 4))],
 		names == by_name and names.size() >= 20
-		and not back.is_empty() and derived and float(b.get("radius")) == CellBody.DIVIDE_RADIUS
+		and not back.is_empty() and derived and float(b.get("radius")) == CellBody.RADIUS_MAX
 		and inside and float(b.get("hunger")) == 0.625 and int(done.get("trimmed", 0)) == 1
 		and int(done.get("contained", 0)) >= 1 and line.contains("CONVERTED")
 		and not calm.contains("CONVERTED"))
@@ -4952,10 +5181,22 @@ func _cells_views() -> void:
 ## first drifter still waiting. Then full vision plays on and the drop ages:
 ## **the cell resumes at its place, cleared round** -- nothing that could swallow
 ## it within dread's reach.
+## **A cell moved or grown by hand is held where its size is held** (margin.md
+## §2.1), as its own run holds it on its next frame -- so a place kept is a place
+## the water lets it be. A run starts in the margin, where a step toward the rim or
+## a few meals of growth is past it.
+func _held_in_drop(run: Node) -> void:
+	var cell: CellBody = run.get("_cell")
+	var rim: RefCounted = (run.get("_food") as Node).call(&"basin")
+	if rim != null:
+		cell.position = rim.call(&"contain", cell.position, Drop.hold(cell.radius))
+
+
 func _cells_place() -> void:
 	await _cells_world(1)
 	var blind := _cell_run(RunState.Mode.POV)
 	(blind.get("_cell") as CellBody).position += Vector2(520.0, -380.0)
+	_held_in_drop(blind)
 	var hunter := _cells_hunter(blind, Vector2(0.0, 110.0))
 	var place := _cells_place_of(blind)
 	var first := int(((blind.get("_food") as Node).call(&"player_state") as Dictionary)["first"])
@@ -5011,6 +5252,7 @@ func _cells_elsewhere() -> void:
 	for how: String in ["another world", "a gone world", "a friend's water"]:
 		var left := _cell_run(RunState.Mode.POV)
 		(left.get("_cell") as CellBody).position += Vector2(-640.0, 300.0)
+		_held_in_drop(left)
 		if how == "a friend's water":
 			left.call(&"_set_own_drop_aside")
 			(left.get("_food") as Node).call(&"become_mirror")
@@ -5135,6 +5377,7 @@ func _cells_order() -> void:
 	run.notification(NOTIFICATION_APPLICATION_PAUSED)
 	var food: Node = run.get("_food")
 	(run.get("_cell") as CellBody).position += Vector2(300.0, 200.0)
+	_held_in_drop(run)
 	food.set("_t", float(food.call(&"drop_age")) + 45.0)
 	var place := _cells_place_of(run)
 	var world := Drops.path_of(1, CELLS_ROOT)
@@ -5928,12 +6171,17 @@ const IDENTITY_DNA := {&"cytostome": 2, &"cirrus": 1, &"flagellum": 1, &"chemocy
 ## seconds of rest where it held thirty-six, at the same costs and the same meals, so a
 ## hunter starves later. With the tank, the meal and the dash put back as they were,
 ## this branch printed the old ones to the byte.
+## **Re-recorded when venom came to ride** (docs/design/venom-rides.md), from the
+## check's own output, because the water changed on purpose: a toxin goes inside or
+## into a gene's slot, never round the body, so the floor's venom and the founders'
+## ride their mouths, and drift brings the toxin as poison. Nothing else moved; the
+## rules two builds agree on moved with venom's side and stern lines (`Wire.RULES`).
 const IDENTITY_LINES: Array[String] = [
-	"[census] t 30  living 536 (drifters 440, hunters 96)  flocs 29  | hunters at r40 0, mean r 30.3, hunger 0.38  | could swallow r26/r34/r40 26/1/0  dread 0.35/0.01/0.00  genes 18  | spawned 638  died: swallowed 102 chewed 0 starved 0 (r40 0) poisoned 0  | grazed by the water 4, by drifters 0, dissolved 0, snow kept 3, remains 0  | runs 157 at you 0 misses 47 stings 4 dashes 0  floors: gene 0+0 drifter 0  | sum 2976889376",
-	"[census] t 60  living 537 (drifters 443, hunters 94)  flocs 27  | hunters at r40 21, mean r 35.1, hunger 0.50  | could swallow r26/r34/r40 67/6/3  dread 1.04/0.15/0.04  genes 18  | spawned 767  died: swallowed 227 chewed 1 starved 2 (r40 0) poisoned 0  | grazed by the water 9, by drifters 1, dissolved 0, snow kept 5, remains 2  | runs 387 at you 0 misses 169 stings 6 dashes 12  floors: gene 0+0 drifter 0  | sum 1749966948",
-	"[census] t 30  living 532 (drifters 420, hunters 112)  flocs 33  | hunters at r40 0, mean r 30.2, hunger 0.38  | could swallow r26/r34/r40 25/1/0  dread 0.37/0.00/0.00  genes 17  | spawned 650  died: swallowed 118 chewed 0 starved 0 (r40 0) poisoned 0  | grazed by the water 2, by drifters 0, dissolved 0, snow kept 5, remains 0  | runs 257 at you 0 misses 128 stings 1 dashes 0  floors: gene 0+0 drifter 0  | sum 1911577667",
-	"[census] t 60  living 523 (drifters 421, hunters 102)  flocs 32  | hunters at r40 20, mean r 35.9, hunger 0.49  | could swallow r26/r34/r40 83/3/2  dread 1.48/0.14/0.02  genes 17  | spawned 805  died: swallowed 274 chewed 3 starved 5 (r40 0) poisoned 0  | grazed by the water 8, by drifters 1, dissolved 0, snow kept 6, remains 5  | runs 511 at you 0 misses 235 stings 4 dashes 4  floors: gene 0+0 drifter 0  | sum 3231311563",
-	"[census] t 30  living 535 (drifters 419, hunters 116)  flocs 23  | hunters at r40 0, mean r 30.0, hunger 0.37  | could swallow r26/r34/r40 27/0/0  dread 0.46/0.00/0.00  genes 17  | spawned 651  died: swallowed 116 chewed 0 starved 0 (r40 0) poisoned 0  | grazed by the water 7, by drifters 1, dissolved 0, snow kept 1, remains 0  | runs 227 at you 0 misses 87 stings 2 dashes 0  floors: gene 0+0 drifter 0  | sum 760284622",
+	"[census] t 30  living 537 (drifters 442, hunters 95)  flocs 56  | hunters at r40 0, mean r 30.4, hunger 0.35  | could swallow r26/r34/r40 26/1/0  dread 0.36/0.01/0.00  genes 18  | spawned 643  died: swallowed 104 chewed 2 starved 0 (r40 0) poisoned 0  | grazed by the water 4, by drifters 1, dissolved 0, snow kept 31, remains 0  | runs 250 at you 0 misses 121 stings 2 dashes 0  floors: gene 0+0 drifter 0  | sum 3740566428",
+	"[census] t 60  living 529 (drifters 437, hunters 92)  flocs 67  | hunters at r40 23, mean r 35.7, hunger 0.41  | could swallow r26/r34/r40 78/5/2  dread 1.07/0.13/0.04  genes 18  | spawned 783  died: swallowed 248 chewed 4 starved 2 (r40 0) poisoned 0  | grazed by the water 8, by drifters 2, dissolved 0, snow kept 45, remains 2  | runs 514 at you 0 misses 253 stings 5 dashes 9  floors: gene 0+0 drifter 0  | sum 1101607375",
+	"[census] t 30  living 530 (drifters 418, hunters 112)  flocs 43  | hunters at r40 0, mean r 30.8, hunger 0.33  | could swallow r26/r34/r40 37/0/0  dread 0.62/0.00/0.00  genes 18  | spawned 665  died: swallowed 135 chewed 0 starved 0 (r40 0) poisoned 0  | grazed by the water 6, by drifters 0, dissolved 0, snow kept 19, remains 0  | runs 246 at you 0 misses 104 stings 3 dashes 1  floors: gene 0+0 drifter 0  | sum 1104260407",
+	"[census] t 60  living 526 (drifters 422, hunters 104)  flocs 51  | hunters at r40 23, mean r 36.5, hunger 0.47  | could swallow r26/r34/r40 92/4/3  dread 1.93/0.20/0.03  genes 18  | spawned 824  died: swallowed 295 chewed 2 starved 1 (r40 0) poisoned 0  | grazed by the water 11, by drifters 0, dissolved 0, snow kept 31, remains 1  | runs 538 at you 0 misses 230 stings 8 dashes 12  floors: gene 0+0 drifter 0  | sum 3988263794",
+	"[census] t 30  living 534 (drifters 438, hunters 96)  flocs 49  | hunters at r40 0, mean r 30.8, hunger 0.34  | could swallow r26/r34/r40 31/0/0  dread 0.47/0.00/0.00  genes 17  | spawned 649  died: swallowed 115 chewed 0 starved 0 (r40 0) poisoned 0  | grazed by the water 2, by drifters 1, dissolved 0, snow kept 22, remains 0  | runs 216 at you 0 misses 90 stings 4 dashes 0  floors: gene 0+0 drifter 0  | sum 1959292797",
 ]
 
 
@@ -5997,9 +6245,41 @@ const IDENTITY_LINES: Array[String] = [
 ## seconds of rest where it held thirty-six, at the same costs and the same meals, so a
 ## hunter starves later. With the tank, the meal and the dash put back as they were,
 ## this branch printed the old ones to the byte.
+## **Re-recorded when venom came to ride** (docs/design/venom-rides.md), from the
+## check's own output, because the water changed on purpose: a toxin goes inside or
+## into a gene's slot, never round the body, so the floor's venom and the founders'
+## ride their mouths, and drift brings the toxin as poison. Nothing else moved; the
+## rules two builds agree on moved with venom's side and stern lines (`Wire.RULES`).
+## **Re-recorded when lineages that carry much came to stay big** (docs/design/
+## margin.md §1), from the check's own output, because the water changed on purpose:
+## a body divides where each half has the room its genes need, so a heavy lineage
+## grows past forty and its daughters are born bigger; and a drift that drew a gene
+## with no room for what comes draws again. These, `PACK3_LINES`, `TAIL_LINES`,
+## `DAYLIGHT_LINES`, `TAIL_TRACE` and `DEV_MEMBRANE` moved with it; the rules two
+## builds agree on moved with `RADIUS_MAX` (`Wire.RULES`).
+## **Re-recorded when the drop's edge became a margin** (docs/design/margin.md §2),
+## from the check's own output, because the water changed on purpose: a body is held
+## 30 µm from the rim for every unit of its radius, the spawner keeps the margin three
+## times as full of food and makes its newborns there, a run starts there, and a
+## first fill draws each body only where it can be. These, `THREE_ONE_LINES`,
+## `IDENTITY_LINES`, `PACK3_LINES`, `TAIL_LINES`, `DAYLIGHT_LINES`, `PACK3_TRACE`,
+## `TAIL_TRACE` and `DEV_MEMBRANE` moved with it; the rules two builds agree on moved
+## with `drop.FILM` (`Wire.RULES`).
 const DEV_LINES: Array[String] = [
-	"[census] t 300  living 600 (drifters 430, hunters 170)  flocs 27  | hunters at r40 1, mean r 31.6, hunger 0.44  | could swallow r26/r34/r40 109/26/18  dread 1.56/0.51/0.24  genes 17  | spawned 1969  died: swallowed 1615 chewed 118 starved 82 (r40 0) poisoned 7  | grazed by the water 70, by drifters 3, dissolved 29, snow kept 10, remains 89  | runs 3083 at you 0 misses 1601 stings 99 dashes 402  floors: gene 0+2 drifter 0  | sum 3919946691",
-	"[lineage] t 300  hunters 170, born 170  generation mean 5.82 max 9  families 54 (largest 10)  dna apart 145  | cruise 86.7 notice 1198 mouth 1.38 upkeep 1.79 genes worn 5.69 carried 7.27  tails 116 sighted 170 at r40 1  | divisions 453 (trade 203 drift 250 faithfully 0), daughters 906: tailless 307, given a sense 171  | the spawner's peers 12 (for the floor 10, for venom 2), drifters 1402, left to births 0  | worn cytostome 1.38 cirrus 1.68 flagellum 1.64 stigma 0.26 ocellus 0.76 chemocyte 0.92 ampulla 0.71 axoneme 0.34 palp 0.28 myoneme 0.46 trichocyst 0.33 pellicle 0.38 veneneux 0.00 plastid 0.38 vacuole 0.24 crista 0.31 toxicyst 0.09 haptonema 0.65  | commonest 1x cytostome:1,ampulla:2,axoneme:3,pellicle:2,haptonema:2 ; 1x cytostome:1,ampulla:3,axoneme:3,trichocyst:1,haptonema:2 ; 1x cytostome:1,chemocyte:3,ampulla:3,plastid:2",
+	"[census] t 300  living 549 (drifters 456, hunters 93)  flocs 53  | hunters at r40 0, mean r 38.1, hunger 0.34  | could swallow r26/r34/r40 74/36/18  dread 1.48/0.70/0.42  genes 18  | spawned 1800  died: swallowed 1309 chewed 52 starved 67 (r40 0) poisoned 0  | grazed by the water 65, by drifters 2, dissolved 90, snow kept 113, remains 67  | runs 2355 at you 0 misses 1110 stings 64 dashes 258  floors: gene 0+0 drifter 0  | sum 1232672087",
+	"[lineage] t 300  hunters 93, born 59  generation mean 2.86 max 6  families 68 (largest 4)  dna apart 73  | cruise 76.6 notice 1015 mouth 1.28 upkeep 1.49 genes worn 5.17 carried 6.66  tails 83 sighted 93 at r40 0  | divisions 177 (trade 86 drift 91 faithfully 0), daughters 354: tailless 98, given a sense 59  | the spawner's peers 70 (for the floor 70, for venom 0), drifters 1175, left to births 0  | worn cytostome 1.28 cirrus 1.39 flagellum 1.57 stigma 0.41 ocellus 0.43 chemocyte 0.73 ampulla 0.53 axoneme 0.13 palp 0.03 myoneme 0.29 trichocyst 0.12 pellicle 0.27 veneneux 0.03 plastid 0.15 vacuole 0.34 crista 0.15 toxicyst 0.00 haptonema 0.29 lysosome 0.10  | commonest 10x cytostome:1,cirrus:1,flagellum:1,chemocyte:1 ; 10x cytostome:1,cirrus:1,flagellum:1,stigma:1 ; 9x cytostome:1,cirrus:1,flagellum:1,ampulla:1",
+]
+
+
+## **The same five minutes with the light on** (docs/design/daylight.md §10.3 check
+## 5, §10.4): [method _lineage]'s drop -- seed 1, pack 2's hunter -- with its day,
+## as this build first printed it, in this project's container. [constant DEV_LINES]
+## are the same drop with the light off. **A change to the water made on purpose
+## changes them**: re-record them then from the check's own output, and say so in
+## the commit.
+const DAYLIGHT_LINES: Array[String] = [
+	"[census] t 300  living 539 (drifters 445, hunters 94)  flocs 62  | hunters at r40 0, mean r 38.8, hunger 0.44  | could swallow r26/r34/r40 74/37/14  dread 1.60/0.70/0.31  genes 18  | spawned 1730  died: swallowed 1222 chewed 46 starved 86 (r40 0) poisoned 1  | grazed by the water 75, by drifters 2, dissolved 112, snow kept 134, remains 87  | runs 2436 at you 0 misses 1208 stings 77 dashes 243  floors: gene 0+3 drifter 0  | sum 2879113522",
+	"[lineage] t 300  hunters 94, born 64  generation mean 2.81 max 6  families 63 (largest 4)  dna apart 72  | cruise 78.2 notice 1002 mouth 1.22 upkeep 1.49 genes worn 5.24 carried 6.80  tails 75 sighted 94 at r40 0  | divisions 164 (trade 83 drift 81 faithfully 0), daughters 328: tailless 106, given a sense 61  | the spawner's peers 65 (for the floor 62, for venom 3), drifters 1110, left to births 0  | worn cytostome 1.22 cirrus 1.38 flagellum 1.40 stigma 0.28 ocellus 0.52 chemocyte 0.60 ampulla 0.45 axoneme 0.29 palp 0.17 myoneme 0.19 trichocyst 0.22 pellicle 0.40 veneneux 0.11 plastid 0.12 vacuole 0.29 crista 0.14 toxicyst 0.00 haptonema 0.44 lysosome 0.09  | commonest 10x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 8x cytostome:1,cirrus:1,flagellum:1,chemocyte:1 ; 7x cytostome:1,cirrus:1,flagellum:1,ampulla:1",
 ]
 
 
@@ -6065,6 +6345,7 @@ func _identity_lines(births: bool, first := 0) -> Array[String]:
 		field.process_mode = Node.PROCESS_MODE_DISABLED
 		field.births = births
 		field.rules = false
+		field.daylight = false
 		add_child(field)
 		field.setup_drop(cell)
 		field.in_water = false
@@ -6089,6 +6370,7 @@ func _identity_lines(births: bool, first := 0) -> Array[String]:
 	room.process_mode = Node.PROCESS_MODE_DISABLED
 	room.births = births
 	room.rules = false
+	room.daylight = false
 	add_child(room)
 	room.open_dedicated(nobody)
 	for f in 30 * 60:
@@ -6145,7 +6427,7 @@ const MEMBRANE: Array[String] = ["concentration", "taste_level", "shadow", "shad
 ## in a cone. `dev` itself, at 56bfe46, read through this shorter list printed the
 ## digest the half circle put back on this branch did, 44d381088b303418: what is left
 ## did not move until the cone did.
-const DEV_MEMBRANE := "9fbbf6258b8d00208a6fadd87aa0772134a23641a3d030eaee89a8dc05183d0a"
+const DEV_MEMBRANE := "2bf83deb879bedbd6eb09fbb8a23eb82ca4942f9823b5293d3f2003470e7224c"
 
 
 ## **1. With the rules off it is pack 2, the membrane** (behaviour.md §12.3):
@@ -6176,6 +6458,8 @@ func _membrane_digest(rules: bool) -> String:
 	field.process_mode = Node.PROCESS_MODE_DISABLED
 	field.grace = 1e6
 	field.rules = rules
+	# An older pack's water, before the day (docs/design/daylight.md §10.4).
+	field.daylight = false
 	add_child(field)
 	field.setup_drop(cell)
 	field.in_water = true
@@ -6257,6 +6541,11 @@ func _shared_senses() -> void:
 		round_you.append([cos(bearing) * (330.0 + 140.0 * ray),
 			sin(bearing) * (330.0 + 140.0 * ray), 17.0 + 3.0 * ray, {&"cirrus": 1}])
 		ray += 1
+	# And one in front of your eyespot, near enough to see in any light
+	# (docs/design/sight.md): what it sees is its field's, and the eight above are
+	# laid round you wherever it looks.
+	round_you.append([cos(field.sight_mid) * 140.0, sin(field.sight_mid) * 140.0, 24.0,
+		{&"cirrus": 1}])
 	var posed: Array[int] = []
 	for one: Array in round_you:
 		posed.append(_pose(field, p + fwd * float(one[0]) + stb * float(one[1]),
@@ -6344,6 +6633,20 @@ func _your_organs(field: WatchedDrop, cell: CellBody, tiers: Dictionary) -> Node
 		field.beam_fan_half = -1.0
 	field.beam_bearings = bearings
 	field.beam_arcs = arcs
+	# **Your eyespot as `_aim_sight` aims it** (docs/design/sight.md), at its tier as
+	# its level, as a water cell's is: on the arc it is worn on, by `sight_of`.
+	var eye := &"stigma" if int(tiers.get(&"stigma", 0)) > 0 else &""
+	var seeing: RefCounted = genome.progression(&"stigma")
+	if seeing != null:
+		seeing.set("xp", seeing.call("xp_at", int(tiers.get(&"stigma", 0)),
+			float(seeing.get("step"))))
+	var sight := FoodField.sight_of(eye, int(tiers.get(&"stigma", 0)))
+	field.sight_mid = Cilia.bearing_of(genome, &"stigma") if eye != &"" else 0.0
+	field.sight_half = float(sight[0])
+	field.sight_range = float(sight[1])
+	field.sight_core = float(sight[2])
+	field.sight_dark = float(sight[3])
+	field.sight_blur = float(sight[4])
 	return genome
 
 
@@ -6475,8 +6778,9 @@ func _no_magic() -> void:
 	# Everything the water cell's organs do not reach, changed.
 	var before := _readings(field, w)
 	var reach := maxf(maxf(Stats.at(&"smell_range", 2), Stats.at(&"ping_range", 2)),
-		maxf(Stats.at(&"beam_range", 2), FoodField.SHADOW_RANGE)) + 2.0 * Drop.GRID_SLACK \
-		+ CellBody.DIVIDE_RADIUS
+		maxf(Stats.at(&"beam_range", 2), float(FoodField.sight_of(&"stigma", 1)[1]))) \
+		+ 2.0 * Drop.GRID_SLACK \
+		+ CellBody.RADIUS_MAX
 	var taken := 0
 	for i in cells.size():
 		var b: Object = cells[i]
@@ -6497,7 +6801,8 @@ func _no_magic() -> void:
 			["beam_range", 5000.0], ["beam_bearings", PackedFloat32Array([1.5, 2.0, 2.5])],
 			["beam_fan_mid", 2.0], ["beam_fan_half", 1.0], ["ping_range", 5000.0],
 			["ping_bearing", 3.0], ["ping_through", 0.9], ["ping_tier", 3],
-			["touch_range", 2000.0], ["dart_wound", 0.5]]:
+			["touch_range", 2000.0], ["dart_wound", 0.5], ["sight_range", 5000.0],
+			["sight_mid", 2.0], ["sight_half", 3.0], ["sight_blur", 0.0]]:
 		field.set(value[0], value[1])
 	var after := _readings(field, w)
 	var same := var_to_bytes(before) == var_to_bytes(after)
@@ -6668,7 +6973,7 @@ func _gene_slots() -> void:
 		field.take_out(k)
 	# Yours, with venom in its slot, into a water cell touching its side.
 	var riders := {&"trichocyst": [[&"toxicyst", 3]]}
-	field.toxins = FoodField.toxins_of({&"trichocyst": 3}, [], true, riders)
+	field.toxins = FoodField.toxins_of({&"trichocyst": 3}, [], riders)
 	field.dart_wound = Stats.at(&"dart_wound", 3)
 	field.dart_bearing = PI * 0.5
 	field.dart_cooldown = Stats.at(&"dart_cooldown", 3)
@@ -6703,13 +7008,16 @@ func _gene_slots() -> void:
 	var daughters: PackedInt32Array = field._divide(grown, gb)
 	var carried := 0
 	var wearing := 0
+	var ids := {}
 	for d: int in daughters:
 		var db: Object = cells[d]
+		ids[int(db.get("id"))] = true
 		if Riders.rider_at(db.get("dna_riders"), &"cytostome", 0) == &"toxicyst":
 			carried += 1
 		if Riders.rider_at(db.get("riders"), &"cytostome", 0) == &"toxicyst":
 			wearing += 1
-	# And the drop's file keeps both, through the shape it is checked by.
+	# And the drop's file keeps both, through the shape it is checked by: the
+	# daughters', by their ids, since the floor's peers may carry venom too.
 	var data := DropSave.compose(field.drop_state(), {})
 	var shape := DropSave.unusable(data)
 	var cell2 := CellBody.new()
@@ -6720,9 +7028,9 @@ func _gene_slots() -> void:
 	var kept := 0
 	for i in (field2.get("_cells") as Array).size():
 		var b2: Object = (field2.get("_cells") as Array)[i]
-		if bool(b2.get("seeded")) and Riders.rider_at(b2.get("riders"), &"cytostome",
-				0) == &"toxicyst" and Riders.rider_at(b2.get("dna_riders"), &"cytostome",
-				0) == &"toxicyst":
+		if bool(b2.get("seeded")) and ids.has(int(b2.get("id"))) \
+				and Riders.rider_at(b2.get("riders"), &"cytostome", 0) == &"toxicyst" \
+				and Riders.rider_at(b2.get("dna_riders"), &"cytostome", 0) == &"toxicyst":
 			kept += 1
 	field2.queue_free()
 	cell2.free()
@@ -7307,10 +7615,15 @@ func _modular() -> void:
 ## 45 degrees either side of the way its organ faces, where it heard the whole half
 ## circle, so a water hunter with a ping hears fewer bodies. With the half circle put
 ## back, this branch printed the old ones to the byte.
+## **Re-recorded when venom came to ride** (docs/design/venom-rides.md), from the
+## check's own output, because the water changed on purpose: a toxin goes inside or
+## into a gene's slot, never round the body, so the floor's venom and the founders'
+## ride their mouths, and drift brings the toxin as poison. Nothing else moved; the
+## rules two builds agree on moved with venom's side and stern lines (`Wire.RULES`).
 const PACK3_LINES: Array[String] = [
-	"[census] t 300  living 549 (drifters 454, hunters 95)  flocs 69  | hunters at r40 0, mean r 30.6, hunger 0.46  | could swallow r26/r34/r40 45/9/6  dread 0.76/0.18/0.08  genes 18  | spawned 1382  died: swallowed 759 chewed 25 starved 193 (r40 0) poisoned 2  | grazed by the water 74, by drifters 2, dissolved 93, snow kept 13, remains 195  | runs 0 at you 0 misses 0 stings 44 dashes 0  floors: gene 0+2 drifter 0  | sum 2177970666",
-	"[lineage] t 300  hunters 95, born 68  generation mean 2.72 max 6  families 60 (largest 6)  dna apart 71  | cruise 78.0 notice 873 mouth 1.25 upkeep 1.30 genes worn 4.57 carried 6.02  tails 74 sighted 95 at r40 0  | divisions 146 (trade 71 drift 75 faithfully 0), daughters 292: tailless 105, given a sense 71  | the spawner's peers 146 (for the floor 144, for venom 2), drifters 681, left to births 0  | worn cytostome 1.25 cirrus 1.02 flagellum 1.40 stigma 0.19 ocellus 0.49 chemocyte 0.29 ampulla 0.45 axoneme 0.27 palp 0.14 myoneme 0.05 trichocyst 0.09 pellicle 0.08 veneneux 0.01 plastid 0.13 vacuole 0.14 crista 0.11 toxicyst 0.03 haptonema 0.28  | commonest 9x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 7x cytostome:1,cirrus:1,flagellum:1,chemocyte:1 ; 5x cytostome:1,cirrus:1,flagellum:1,ocellus:1",
-	"[behaviour] t 300  hunters 95: on the founders' rules 45, other lists 50  | founders' rules fired 18193/46964/1783/1096/7548/87650/2143  | meals of hunters with a nose 154, radar 283, laser 338  | stings 44, stuns 0, your wakes 0  | now holding a heading 34, resting 45, swimming 50, pushing 7, stunned 0, echoes in flight 76  | behaviours 42, unchanged 49.5 %  | rules changed 146: nudge 76, replace 30, swap 11, copy 16, drop 13",
+	"[census] t 300  living 552 (drifters 458, hunters 94)  flocs 92  | hunters at r40 0, mean r 34.3, hunger 0.45  | could swallow r26/r34/r40 54/19/10  dread 0.92/0.39/0.22  genes 18  | spawned 1533  died: swallowed 869 chewed 15 starved 173 (r40 0) poisoned 0  | grazed by the water 80, by drifters 3, dissolved 159, snow kept 131, remains 173  | runs 0 at you 0 misses 0 stings 36 dashes 0  floors: gene 0+7 drifter 0  | sum 3424225548",
+	"[lineage] t 300  hunters 94, born 35  generation mean 1.64 max 5  families 82 (largest 4)  dna apart 60  | cruise 64.5 notice 752 mouth 1.17 upkeep 1.20 genes worn 4.48 carried 5.57  tails 83 sighted 94 at r40 0  | divisions 76 (trade 37 drift 39 faithfully 0), daughters 152: tailless 48, given a sense 56  | the spawner's peers 218 (for the floor 211, for venom 7), drifters 760, left to births 0  | worn cytostome 1.17 cirrus 1.18 flagellum 1.16 stigma 0.29 ocellus 0.31 chemocyte 0.22 ampulla 0.35 axoneme 0.07 palp 0.12 myoneme 0.13 trichocyst 0.07 pellicle 0.13 veneneux 0.03 plastid 0.12 vacuole 0.13 crista 0.05 toxicyst 0.00 haptonema 0.17 lysosome 0.02  | commonest 19x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 14x cytostome:1,cirrus:1,flagellum:1,chemocyte:1 ; 14x cytostome:1,cirrus:1,flagellum:1,stigma:1",
+	"[behaviour] t 300  hunters 94: on the founders' rules 72, other lists 22  | founders' rules fired 26356/59718/1966/1661/7582/99854/463  | meals of hunters with a nose 179, radar 311, laser 350  | stings 36, stuns 0, your wakes 0  | now holding a heading 34, resting 47, swimming 47, pushing 3, stunned 0, echoes in flight 60  | behaviours 17, unchanged 76.6 %  | rules changed 76: nudge 45, replace 13, swap 6, copy 7, drop 5",
 ]
 ## **The same five minutes in the game's water** (row 37), pinned as
 ## [constant DEV_LINES] pins pack 2's: [method _five_minutes]' drop, seed 1, as
@@ -7383,10 +7696,21 @@ const PACK3_LINES: Array[String] = [
 ## 45 degrees either side of the way its organ faces, where it heard the whole half
 ## circle, so a water hunter with a ping hears fewer bodies. With the half circle put
 ## back, this branch printed the old ones to the byte.
+## **Re-recorded when venom came to ride** (docs/design/venom-rides.md), from the
+## check's own output, because the water changed on purpose: a toxin goes inside or
+## into a gene's slot, never round the body, so the floor's venom and the founders'
+## ride their mouths, and drift brings the toxin as poison. Nothing else moved; the
+## rules two builds agree on moved with venom's side and stern lines (`Wire.RULES`).
+## **Re-recorded when the drop got a day** (docs/design/daylight.md §10.4, 2026-10-16),
+## from the check's own output, because the water changed on purpose: a body with a
+## `plastid` is paid its sun at the light where it is, which falls at night and toward
+## the drop's deep middle, so a hunter carrying one runs hungrier there and the stream
+## follows. With the light off this branch printed the old ones to the byte, and the
+## player's trace did not move.
 const TAIL_LINES: Array[String] = [
-	"[census] t 300  living 549 (drifters 451, hunters 98)  flocs 78  | hunters at r40 0, mean r 30.0, hunger 0.48  | could swallow r26/r34/r40 35/8/2  dread 0.56/0.16/0.07  genes 17  | spawned 1541  died: swallowed 970 chewed 20 starved 216 (r40 0) poisoned 0  | grazed by the water 104, by drifters 6, dissolved 74, snow kept 16, remains 216  | runs 0 at you 0 misses 0 stings 43 dashes 0  floors: gene 0+2 drifter 0  | sum 3447574312",
-	"[lineage] t 300  hunters 98, born 47  generation mean 2.76 max 10  families 72 (largest 9)  dna apart 59  | cruise 68.5 notice 941 mouth 1.19 upkeep 1.31 genes worn 4.47 carried 5.34  tails 85 sighted 98 at r40 0  | divisions 214 (trade 103 drift 111 faithfully 0), daughters 428: tailless 138, given a sense 79  | the spawner's peers 143 (for the floor 141, for venom 2), drifters 843, left to births 0  | worn cytostome 1.19 cirrus 1.09 flagellum 1.24 stigma 0.29 ocellus 0.50 chemocyte 0.59 ampulla 0.30 axoneme 0.12 palp 0.27 myoneme 0.04 trichocyst 0.00 pellicle 0.19 veneneux 0.00 plastid 0.04 vacuole 0.17 crista 0.10 toxicyst 0.06 haptonema 0.31  | commonest 21x cytostome:1,cirrus:1,flagellum:1,chemocyte:1 ; 13x cytostome:1,cirrus:1,flagellum:1,stigma:1 ; 9x cytostome:1,cirrus:1,flagellum:1,ampulla:1",
-	"[behaviour] t 300  hunters 98: on the founders' rules 60, other lists 38  | founders' rules fired 18126/33920/1561/1600/7093/76721/3059  | meals of hunters with a nose 283, radar 328, laser 368  | stings 43, stuns 0, your wakes 0  | now holding a heading 38, resting 46, swimming 88, pushing 2, stunned 0, echoes in flight 47  | behaviours 34, unchanged 61.2 %  | rules changed 214: nudge 113, replace 45, swap 20, copy 20, drop 16",
+	"[census] t 300  living 548 (drifters 455, hunters 93)  flocs 102  | hunters at r40 0, mean r 34.9, hunger 0.46  | could swallow r26/r34/r40 55/30/20  dread 1.30/0.75/0.46  genes 18  | spawned 1770  died: swallowed 1135 chewed 11 starved 196 (r40 0) poisoned 0  | grazed by the water 118, by drifters 4, dissolved 135, snow kept 133, remains 196  | runs 0 at you 0 misses 0 stings 42 dashes 1  floors: gene 0+2 drifter 0  | sum 2047389632",
+	"[lineage] t 300  hunters 93, born 40  generation mean 1.74 max 5  families 81 (largest 3)  dna apart 56  | cruise 65.1 notice 780 mouth 1.31 upkeep 1.22 genes worn 4.33 carried 5.56  tails 79 sighted 93 at r40 0  | divisions 120 (trade 57 drift 63 faithfully 0), daughters 240: tailless 74, given a sense 54  | the spawner's peers 227 (for the floor 225, for venom 2), drifters 988, left to births 0  | worn cytostome 1.31 cirrus 1.05 flagellum 1.15 stigma 0.31 ocellus 0.38 chemocyte 0.40 ampulla 0.29 axoneme 0.11 palp 0.03 myoneme 0.11 trichocyst 0.06 pellicle 0.05 veneneux 0.02 plastid 0.13 vacuole 0.06 crista 0.04 toxicyst 0.00 haptonema 0.15 lysosome 0.05  | commonest 16x cytostome:1,cirrus:1,flagellum:1,stigma:1 ; 15x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 12x cytostome:1,cirrus:1,flagellum:1,chemocyte:1",
+	"[behaviour] t 300  hunters 93: on the founders' rules 68, other lists 25  | founders' rules fired 28588/42122/1465/1507/8240/92992/1184  | meals of hunters with a nose 308, radar 330, laser 484  | stings 42, stuns 0, your wakes 0  | now holding a heading 29, resting 46, swimming 83, pushing 3, stunned 0, echoes in flight 47  | behaviours 22, unchanged 73.1 %  | rules changed 120: nudge 71, replace 25, swap 8, copy 9, drop 7",
 ]
 ## **The player's seeded trace** ([method _tail_trace]): forty seconds of a cell
 ## stepped by its own drive, wearing a tail of two copies that nobody holds,
@@ -7430,8 +7754,11 @@ const TAIL_LINES: Array[String] = [
 ## `ping_echoes` or `_pulses`, and the water's calls hear in a cone. `dev` at 56bfe46,
 ## read through the shorter list, printed 59216500612c5669 and 03aae15dfd6d7d93, as
 ## this branch did with the half circle put back.
-const PACK3_TRACE := "1fd8aa1301286d529b432e90eaeda12b46896cd39b16b1c639ddcccc4e8604f8"
-const TAIL_TRACE := "2a6126e70d403c58c4e6feb06cd63bc96969d54ce891370dfa1ef8a319e5eb79"
+## **Re-recorded when venom came to ride** (venom-rides.md), from the check's own
+## output: the water round the player changed on purpose -- its founders' venom rides
+## their mouths, and the floor's too.
+const PACK3_TRACE := "c61199a22f307ca8f9ad51a1786d3ffcb280ec70d89a26113cf7787f6c241434"
+const TAIL_TRACE := "c8519be9814016faece638c8a6f1ce0a92a6c88d86fb296e1f7bae4d9920a8b3"
 ## A tail of two copies, the level a tail can be held still at, on a born body.
 const TWO_TAILS := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2}
 const ONE_TAIL := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
@@ -7472,14 +7799,14 @@ func _tail() -> void:
 ## [method _membrane]; the tail does not reach it.)
 func _tail_pack3() -> void:
 	seed(1)
-	var water := _water(0.0, true, false)
+	var water := _water(0.0, true, false, false)
 	var field: WatchedDrop = water[0]
 	for f in 5 * 60 * 60:
 		field._process(1.0 / 60.0)
 	var off: Array[String] = [field.census_line(), field.lineage_line(),
 		field.behaviour_line()]
 	_done(water)
-	var traces := [_tail_trace(false), _tail_trace(true)]
+	var traces := [_tail_trace(false, false), _tail_trace(true)]
 	seed(20260930)
 	var differ := 0
 	for k in maxi(off.size(), PACK3_LINES.size()):
@@ -7522,8 +7849,10 @@ func _tail_pack3() -> void:
 ## the water of a drop, its senses fed as a run feeds them; the
 ## SHA-256 of its place, heading, motion, stroke clock and effort, and every sense
 ## [constant MEMBRANE] names, each frame. [param tails] is the field's
-## `tails_beat`. Set by name, so the same lines digest on a build without it.
-func _tail_trace(tails: bool) -> String:
+## `tails_beat` and [param light] its `daylight` (docs/design/daylight.md §10.4),
+## off for pack 3's, which had no day. Set by name, so the same lines digest on a
+## build without them.
+func _tail_trace(tails: bool, light := true) -> String:
 	seed(1)
 	var cell := _tail_body({&"cytostome": 1, &"cirrus": 2, &"flagellum": 2, &"chemocyte": 1,
 		&"stigma": 1})
@@ -7531,6 +7860,7 @@ func _tail_trace(tails: bool) -> String:
 	var field := FoodField.new()
 	field.process_mode = Node.PROCESS_MODE_DISABLED
 	field.set("tails_beat", tails)
+	field.set("daylight", light)
 	add_child(field)
 	field.setup_drop(cell)
 	field.in_water = true
@@ -8104,8 +8434,8 @@ func _programs() -> void:
 ## **A player wearing [param tiers], its instincts wired**, in a drop of its own
 ## and stepped by hand: `[cell, genome, field, own, metabolism, water]`. Its
 ## organs as the run aims them ([method _your_organs]).
-func _own_player(tiers: Dictionary, desert := 3000.0) -> Array:
-	var water := _water(desert)
+func _own_player(tiers: Dictionary, desert := 3000.0, light := true) -> Array:
+	var water := _water(desert, true, true, light)
 	var field: WatchedDrop = water[0]
 	var cell: CellBody = water[1]
 	var genome := _your_organs(field, cell, tiers)
@@ -8144,7 +8474,11 @@ func _own_tick(own: RefCounted) -> void:
 ## game declares has a report of yours.
 func _instincts_read() -> void:
 	seed(91)
-	var player := _own_player(SENSES_ALL)
+	# **In full light**: the check is that you read what a water cell reads, not how
+	# far an eye sees by the light -- sight's own checks hold that. Its desert is
+	# past the margin (margin.md §2.1), where the light is under half and the eye
+	# would see none of the bodies posed for it.
+	var player := _own_player(SENSES_ALL, 3000.0, false)
 	var cell: CellBody = player[0]
 	var field: WatchedDrop = player[2]
 	var own: RefCounted = player[3]
@@ -8599,7 +8933,8 @@ func _instincts_autopilot() -> void:
 	_ap_key(KEY_R, false)
 	await _ap_frames(2)
 	var dividing := cell.autopilot
-	cell.radius = CellBody.DIVIDE_RADIUS
+	var grown_to: float = run.call(&"_divide_at")
+	cell.radius = grown_to
 	var split_born := false
 	var leaned := false
 	# By the clock, not by frames: the division's phases run on real time, and
@@ -8618,7 +8953,7 @@ func _instincts_autopilot() -> void:
 	_ap_key(KEY_D, false)
 	await _ap_frames(4)
 	var kept: bool = dividing and split_born and cell.autopilot \
-		and cell.radius < CellBody.DIVIDE_RADIUS
+		and cell.radius < grown_to
 	said.append("off with the last program off %s, off at a death %s, kept through a division"
 		% [str(last_off), str(death_off)] + " %s%s" % [str(kept), "" if kept
 		else " (on before %s, born %s, on after %s, radius %.1f)" % [str(dividing),
@@ -9413,7 +9748,11 @@ func _readout() -> void:
 ## share on the founders' rules, in percent. Different by what they say: the
 ## hunters are put a quarter each on the founders' rules, on a list of their
 ## own, on that list written another way, and on the founders' rules read again
-## into a list of their own -- two behaviours, half unchanged.
+## into a list of their own -- two behaviours, half unchanged. **And its light**
+## (docs/design/daylight.md §3.6): two rows more under those, set apart -- how far
+## into its day the drop is, as a share, and the light where the cell is; over a
+## friend's drop, a dash for the day -- the host's day is the host's -- and the full
+## light a mirror is in before its host's rim and first snapshot.
 func _readout_families() -> void:
 	var holder := Node.new()
 	add_child(holder)
@@ -9451,25 +9790,33 @@ func _readout_families() -> void:
 	FrameReadout.posing = "dev"
 	var readout := FrameReadout.attach(holder, field)
 	FrameReadout.posing = null
+	# Dusk, so neither the hour nor the light is a round number.
+	field.set("_day_origin", fposmod(Drop.DAY_DAWN + Drop.DAY_LIGHT + 21.0
+		- float(field.get("_t")), field.day_length()))
 	var rows: Array = readout.call(&"_figures") if readout != null else []
 	var counts: Array = field.lineage_counts()
 	var kinds: Array = field.behaviour_counts()
+	var light: Array = field.daylight_counts()
+	var hour := field.day_time() / field.day_length()
+	var here := field.light_at(cell.position)
 	field.become_mirror()
 	var away: Array = readout.call(&"_figures") if readout != null else []
 	var named := []
 	for row: Array in rows:
 		named.append(row[0])
 	var tail := func(of: Array) -> Array:
-		return [of[5][1], of[6][1]] if of.size() == 9 else []
+		return [of[5][1], of[6][1]] if of.size() == 11 else []
 	var last := func(of: Array) -> Array:
-		return [of[7][1], of[8][1], of[8][2]] if of.size() == 9 else []
+		return [of[7][1], of[8][1], of[8][2]] if of.size() == 11 else []
+	var lit := func(of: Array) -> Array:
+		return [of[9][1], of[10][1]] if of.size() == 11 else []
 	_check(("lineage, the readout: over a drop of its own, rows %s -- generation %s and"
 		+ " families %s over its %d hunters (the drop counts %s), the families' two set"
 		+ " apart; over a friend's drop, %s") % [str(named), str(tail.call(rows)[0])
-		if rows.size() == 9 else "-", str(tail.call(rows)[1]) if rows.size() == 9 else "-", k,
+		if rows.size() == 11 else "-", str(tail.call(rows)[1]) if rows.size() == 11 else "-", k,
 		str(counts), str(tail.call(away))],
 		named == ["frame", "p95", "dropped", "water", "stepped", "generation", "families",
-			"behaviours", "unchanged"]
+			"behaviours", "unchanged", "day", "light"]
 		and tail.call(rows) == ["3.0", "4"] and counts == [3.0, 4] and bool(rows[5][3])
 		and not bool(rows[6][3]) and tail.call(away) == ["–", "–"])
 	# At least two hunters in each quarter. How many hunters there are is the
@@ -9479,13 +9826,22 @@ func _readout_families() -> void:
 		+ " the founders' rules, a list of their own, that list written another way and the"
 		+ " founders' read again -- behaviours %s, unchanged %s %s (the drop counts %s), the"
 		+ " two set apart; over a friend's drop, %s") % [h, str(last.call(rows)[0])
-		if rows.size() == 9 else "-", str(last.call(rows)[1]) if rows.size() == 9 else "-",
-		str(last.call(rows)[2]) if rows.size() == 9 else "-", str(kinds),
+		if rows.size() == 11 else "-", str(last.call(rows)[1]) if rows.size() == 11 else "-",
+		str(last.call(rows)[2]) if rows.size() == 11 else "-", str(kinds),
 		str(last.call(away).slice(0, 2))],
 		h >= 8 and kinds.size() == 2 and int(kinds[0]) == 2
 		and absf(float(kinds[1]) - share) < 1e-9
 		and last.call(rows) == ["2", FrameReadout.figure(share, 1), "%"] and bool(rows[7][3])
 		and not bool(rows[8][3]) and last.call(away).slice(0, 2) == ["–", "–"])
+	_check(("the readout's light (docs/design/daylight.md §3.6): at dusk, day %s and light"
+		+ " %s (the drop says %s, %.4f of its day and %.4f at the cell), the two set apart;"
+		+ " over a friend's drop, %s") % [str(lit.call(rows)[0]) if rows.size() == 11 else "-",
+		str(lit.call(rows)[1]) if rows.size() == 11 else "-", str(light), hour, here,
+		str(lit.call(away))],
+		light.size() == 2 and lit.call(rows) == [FrameReadout.figure(hour, 2),
+			FrameReadout.figure(here, 2)] and hour > 0.6 and hour < 0.7 and here > 0.0
+		and here < 1.0 and bool(rows[9][3]) and not bool(rows[10][3])
+		and lit.call(away) == ["–", FrameReadout.figure(1.0, 2)])
 	holder.queue_free()
 	cell.free()
 	await get_tree().process_frame
@@ -9531,8 +9887,20 @@ const HARM := 0
 ## says, mutation for mutation.
 ## **Re-recorded with the haptonema** (haptonema.md §2), from the check's own output:
 ## drift may bring a fourth common, so every drift after the first that drew differs.
-const DEV_MUTATIONS := "be65245013f0f3e679d4bfdf7a8314b0b474890317cd7a66ff8613f772b92ba1"
-const DEV_MUTATIONS_CAME := 214
+## **Re-recorded when venom came to ride** (venom-rides.md, 2026-10-16): a toxin that
+## comes is poison now, inside, where it was venom in the slot of the gene it replaced,
+## so the 214 trials that bring it are left out of the digest altogether, and the
+## other 3,786 are what `dev` at 838c997 draws -- the same function run on its own
+## genome.gd, with those trials left out too, gives this digest to the byte.
+## **Re-recorded when the store moved inside and the mend came** (inside-genes.md
+## §6), from the check's own output: drift may bring `lysosome` now, and a store that
+## comes takes no arc, so the draws after the first that brought either differ.
+## **Re-recorded when drift came to draw again** (margin.md §3), from the check's own
+## output: a drift whose first draw of the gene that goes leaves no room draws again
+## among those that do, where it used to give up -- so those trials mutate where they
+## did not, and the draws after the first of them differ. One more brings the toxin.
+const DEV_MUTATIONS := "1d32e3d4b660ba5ca8a5fbd0baf87da10e76ba4564d9ec256f630970b69ca9c3"
+const DEV_MUTATIONS_CAME := 200
 ## **What `dev`'s water draws** (d08b0c3), for [method draw_digest]'s 3,000
 ## bodies: the digest of those that drew no toxin, and how many drew it. Worked
 ## out on `dev`'s own food.gd; a draw may differ from it only on a body that drew
@@ -9602,6 +9970,11 @@ func _in_place(g: GenomeNode) -> String:
 	var dna := g.dna()
 	var layout := g.layout()
 	var inside := g.inside_layout()
+	# **A form that only rides is never on the body** (the owner, 2026-10-16).
+	for tiers: Dictionary in [dna, g.tiers()]:
+		for gene: StringName in tiers:
+			if GenomeNode.is_riding_form(gene):
+				return "%s on the body, where it only rides" % gene
 	if GenomeNode.count_inside(dna) > GenomeNode.INSIDE_SLOTS:
 		return "%d forms inside, room for %d" % [GenomeNode.count_inside(dna),
 			GenomeNode.INSIDE_SLOTS]
@@ -9666,38 +10039,34 @@ func _dna_forms() -> void:
 	var inside := GenomeNode.INSIDE
 	var wrote := PackedStringArray()
 	var wrong := 0
+	# **Venom only rides** (the owner, 2026-10-16): every outside slot refuses a waiting
+	# toxin, and it waits on; the inside writes its poison.
 	for eaten: StringName in [&"veneneux", &"toxicyst"]:
 		for slot in inside + 1:
 			var g := _dna_genome()
 			g.integrate(eaten)
 			var said := g.placing(eaten, slot)
 			var result := g.place(slot)
-			var want := &"veneneux" if slot == inside else &"toxicyst"
-			var other := &"toxicyst" if slot == inside else &"veneneux"
-			if not (result == GenomeNode.Result.INTEGRATED and said == [GenomeNode.PLACE_WRITE, slot, &""]
-					and int(g.dna().get(want, 0)) == 1 and not g.dna().has(other)
-					and g.dna_slot(want) == slot and g.waiting().is_empty()
-					and _in_place(g) == ""):
+			var ok := false
+			if slot == inside:
+				ok = result == GenomeNode.Result.INTEGRATED \
+					and said == [GenomeNode.PLACE_WRITE, slot, &""] \
+					and int(g.dna().get(&"veneneux", 0)) == 1 and g.dna_slot(&"veneneux") == slot \
+					and g.waiting().is_empty()
+			else:
+				ok = result == GenomeNode.Result.NOTHING \
+					and said == [GenomeNode.PLACE_FACES_OUT, -1, &""] \
+					and not g.dna().has(&"veneneux") and g.waiting().size() == 1
+			if not (ok and not g.dna().has(&"toxicyst") and _in_place(g) == ""):
 				wrong += 1
 			if eaten == &"veneneux":
-				wrote.append("%d %s" % [slot, want])
+				wrote.append("%d %s" % [slot, "poison" if slot == inside else "refused"])
 			_dna_free(g)
 	_check(("dna 1. forms follow their places: a waiting toxin, eaten as either form, placed"
-		+ " in each slot writes %s (%d of 16 wrong)") % [", ".join(wrote), wrong], wrong == 0)
-	# A placement where its form is carried adds copies there: venom carried at slot 3,
-	# the toxin eaten as poison and tapped on empty slot 4.
+		+ " in each slot -- %s (%d of 16 wrong)") % [", ".join(wrote), wrong], wrong == 0)
 	var base := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
 	var three: Array = [&"cytostome", &"cirrus", &"flagellum"]
-	var with_venom := base.duplicate()
-	with_venom[&"toxicyst"] = 1
-	var g := _dna_posed(with_venom, three + [&"toxicyst"])
-	g.integrate(&"veneneux")
-	var elsewhere := g.placing(&"veneneux", 4)
-	var raised := g.place(4)
-	var raise_ok := elsewhere == [GenomeNode.PLACE_RAISE, 3, &""] \
-		and raised == GenomeNode.Result.RAISED and int(g.dna()[&"toxicyst"]) == 2 \
-		and g.layout()[4] == &"" and not g.dna().has(&"veneneux") and _in_place(g) == ""
-	_dna_free(g)
+	var g: GenomeNode = null
 	# The same inside, eaten as venom: poison carried at two, then at three.
 	var with_poison := base.duplicate()
 	with_poison[&"veneneux"] = 2
@@ -9722,32 +10091,28 @@ func _dna_forms() -> void:
 		and refused == GenomeNode.Result.NOTHING and g.waiting() == [&"ampulla"] \
 		and not g.dna().has(&"ampulla")
 	_dna_free(g)
-	_check(("dna 1. a placement where its form is carried adds copies there and leaves the"
-		+ " tapped slot as it was: venom at 3, tapped at 4, says %s and raises it (%s); poison"
+	_check(("dna 1. a placement where its form is carried adds copies there: poison"
 		+ " inside says %s, then at three %s, and spends the sample (%s); ampulla offered the"
-		+ " inside says %s, is refused and waits on (%s)") % [str(elsewhere), str(raise_ok),
-		str(in_place), str(full), str(inside_ok), str(faces), str(faces_ok)],
-		raise_ok and inside_ok and faces_ok)
+		+ " inside says %s, is refused and waits on (%s)") % [str(in_place), str(full),
+		str(inside_ok), str(faces), str(faces_ok)],
+		inside_ok and faces_ok)
 	# A lapse follows §5.3, case by case: [what is carried, the meal, what it ends as].
 	var full_order := _outside_full()
 	var outside_full := {}
 	for gene: StringName in full_order:
 		outside_full[gene] = 1
+	# **A lapse never writes venom**: it rides in a gene's slot, by the hand alone.
 	var cases := [
 		["poison carried", with_poison, three, &"veneneux", {&"veneneux": 3}],
-		["venom carried, eaten as poison", with_venom, three + [&"toxicyst"], &"veneneux",
-			{&"toxicyst": 2}],
-		["poison at three, venom at one", _merged(base, {&"veneneux": 3, &"toxicyst": 1}),
-			three + [&"toxicyst"], &"veneneux", {&"veneneux": 3, &"toxicyst": 2}],
 		["neither, eaten as poison", base, three, &"veneneux", {&"veneneux": 1}],
-		["neither, eaten as venom", base, three, &"toxicyst", {&"toxicyst": 1}],
+		["neither, eaten as venom", base, three, &"toxicyst", {&"veneneux": 1, &"toxicyst": 0}],
 		["neither, eaten as venom, the outside full", outside_full, full_order, &"toxicyst",
 			{&"veneneux": 1}],
 		["poison at three, the outside full", _merged(outside_full, {&"veneneux": 3}),
 			full_order,
 			&"veneneux", {&"veneneux": 3, &"toxicyst": 0}],
 		["poison at three, room outside", _merged(base, {&"veneneux": 3}), three, &"veneneux",
-			{&"veneneux": 3, &"toxicyst": 1}],
+			{&"veneneux": 3, &"toxicyst": 0}],
 	]
 	var lapses := PackedStringArray()
 	var lapse_wrong := 0
@@ -9764,10 +10129,7 @@ func _dna_forms() -> void:
 			ended[form] = int(g.dna().get(form, 0))
 			if ended[form] != int(one[4][form]):
 				ok = false
-		# The venom a lapse writes new takes the first free arc.
-		if int((one[4] as Dictionary).get(&"toxicyst", 0)) == 1 \
-				and not (one[1] as Dictionary).has(&"toxicyst"):
-			ok = ok and g.dna_slot(&"toxicyst") == (one[2] as Array).size()
+		ok = ok and Riders.count(g.riders()) == 0
 		lapse_wrong += 0 if ok else 1
 		lapses.append("%s: %s%s" % [one[0], str(ended), "" if ok else " WRONG"])
 		_dna_free(g)
@@ -9824,21 +10186,19 @@ func _dna_moves() -> void:
 	var inside := GenomeNode.INSIDE
 	var three: Array = [&"cytostome", &"cirrus", &"flagellum"]
 	var base := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
-	var both := _merged(base, {&"toxicyst": 3, &"veneneux": 1})
-	var venom := _merged(base, {&"toxicyst": 2})
 	var poison := _merged(base, {&"veneneux": 1})
+	var eye := _merged(base, {&"ampulla": 2})
+	var both := _merged(eye, {&"veneneux": 1})
 	# [what, dna, order, from, to, refusal, the DNA's toxin after, where venom sits after]
+	# **Venom only rides** (the owner, 2026-10-16), so poison never moves out: it would
+	# become a venom on the body.
 	var cases := [
-		["venom 3 at slot 3 and poison 1, venom moved in: they trade copies", both,
-			three + [&"toxicyst"], 3, inside, &"", {&"veneneux": 3, &"toxicyst": 1}, 3],
-		["venom 2 moved in: poison 2", venom, three + [&"toxicyst"], 3, inside, &"",
-			{&"veneneux": 2, &"toxicyst": 0}, -1],
-		["poison 1 moved out to 4: venom 1", poison, three, inside, 4, &"",
-			{&"veneneux": 0, &"toxicyst": 1}, 4],
-		["venom moved along the outside, 3 to 5", venom, three + [&"toxicyst"], 3, 5, &"",
-			{&"veneneux": 0, &"toxicyst": 2}, 5],
-		["poison out to 4 with venom at 3: a collision", both, three + [&"toxicyst"], inside, 4,
-			GenomeNode.MOVE_COLLISION, {&"veneneux": 1, &"toxicyst": 3}, 3],
+		["poison 1 moved out to 4: refused, it works only inside", poison, three, inside, 4,
+			GenomeNode.MOVE_FACES_OUT, {&"veneneux": 1, &"toxicyst": 0}, -1],
+		["poison out onto the ping at 3: refused both ways", both, three + [&"ampulla"],
+			inside, 3, GenomeNode.MOVE_FACES_OUT, {&"veneneux": 1, &"toxicyst": 0}, -1],
+		["the ping moved along the outside, 3 to 5", eye, three + [&"ampulla"], 3, 5, &"",
+			{&"veneneux": 0, &"toxicyst": 0}, -1],
 		["the tail moved in", base, three, 2, inside, GenomeNode.MOVE_FACES_OUT,
 			{&"veneneux": 0, &"toxicyst": 0}, -1],
 		["poison out onto the tail, which would go in", poison, three, inside, 2,
@@ -9866,7 +10226,7 @@ func _dna_moves() -> void:
 	# Every pair of slots of four genomes: can_move says what move does.
 	var pairs := 0
 	var disagree := 0
-	for one: Array in [[both, three + [&"toxicyst"]], [venom, three + [&"", &"", &"toxicyst"]],
+	for one: Array in [[both, three + [&"ampulla"]], [eye, three + [&"", &"", &"ampulla"]],
 			[poison, three], [base, three]]:
 		for from in inside + 1:
 			for to in inside + 1:
@@ -9877,8 +10237,8 @@ func _dna_moves() -> void:
 				if could != moved or _in_place(g) != "":
 					disagree += 1
 				_dna_free(g)
-	_check(("dna 1. a move converts across inside and outside, swaps copies, and is refused on"
-		+ " a collision or a gene that faces out: %s; can_move agrees with move on %d of %d"
+	_check(("dna 1. a move goes along the outside, and is refused across inside and outside,"
+		+ " where a gene would become nothing: %s; can_move agrees with move on %d of %d"
 		+ " pairs") % ["; ".join(said), pairs - disagree, pairs], wrong == 0 and disagree == 0)
 
 
@@ -9900,7 +10260,7 @@ func _dna_random() -> void:
 	var first_bad := ""
 	var disagreed := 0
 	var unfit := 0
-	var carried_both := 0
+	var riding_worn := 0
 	var inside_held := 0
 	for k in 10000:
 		match randi() % 9:
@@ -9950,18 +10310,21 @@ func _dna_random() -> void:
 				first_bad = "after op %d: %s" % [k, why]
 		if not Referee._order_fits(g.tiers(), g.body_layout()):
 			unfit += 1
-		if g.dna().has(&"toxicyst") and g.dna().has(&"veneneux"):
-			carried_both += 1
+		for tiers: Dictionary in [g.dna(), g.tiers()]:
+			for gene: StringName in tiers:
+				if GenomeNode.is_riding_form(gene):
+					riding_worn += 1
 		if g.dna().has(&"veneneux"):
 			inside_held += 1
 	_dna_free(g)
 	_check(("dna 1. ten thousand seeded random operations -- %s -- end with every form in its"
 		+ " place, no place over its room and no form twice: %d wrong%s; a refused move changed"
-		+ " nothing and can_move agreed every time (%d not); %d genomes carried poison and %d"
-		+ " both forms") % [str(done), bad, "" if first_bad.is_empty() else " (" + first_bad + ")",
-		disagreed, inside_held, carried_both],
+		+ " nothing and can_move agreed every time (%d not); %d genomes carried poison, and"
+		+ " venom was on a body %d times") % [str(done), bad,
+		"" if first_bad.is_empty() else " (" + first_bad + ")", disagreed, inside_held,
+		riding_worn],
 		bad == 0 and disagreed == 0 and done["mutation"] > 500 and done["move"] > 200
-		and done["lapse"] > 200 and done["old"] > 50 and carried_both > 100)
+		and done["lapse"] > 200 and done["old"] > 50 and inside_held > 100 and riding_worn == 0)
 	_check(("dna 2. the referee's slot rule holds: every one of the 10,000 genomes passes"
 		+ " Referee._order_fits with its worn layout (%d do not)") % unfit, unfit == 0)
 
@@ -9986,10 +10349,9 @@ const PLAIN_GENES: Array[StringName] = [&"cirrus", &"flagellum", &"stigma", &"oc
 
 ## **What [param genome]'s mutation draws** for [param trials] seeded genomes with
 ## no toxin, each as a daughter's, with her layout, and as a water cell's, with
-## none: `[digest, trials that brought the toxin in]`. The toxin that comes is
-## written by its gene's name, whatever form it took, and the number after a
-## trial that brought it is left out: a water cell's coin for its place is the
-## change (dna-slots.md §5.5). Run once on `dev`'s genome.gd to pin
+## none: `[digest of the trials that brought no toxin in, trials that did]`. A trial
+## that brought it is counted and left out: where the toxin lands is what changed
+## (dna-slots.md §5.5; venom-rides.md). Run once on `dev`'s genome.gd to pin
 ## [constant DEV_MUTATIONS].
 static func mutation_digest(genome: Object, trials: int) -> Array:
 	var lines := PackedStringArray()
@@ -10016,9 +10378,8 @@ static func mutation_digest(genome: Object, trials: int) -> Array:
 		line += " | " + _mutation_line(genome.call(&"mutated", dna, []))
 		if line.contains("veneneux"):
 			came += 1
-		else:
-			line += " | %d" % randi()
-		lines.append(line)
+			continue
+		lines.append(line + " | %d" % randi())
 	return ["\n".join(lines).sha256_text(), came]
 
 
@@ -10087,15 +10448,15 @@ static func _newborn_only(tiers: Dictionary, gifts: Array[StringName]) -> bool:
 
 # --- 3. The meal that waits -------------------------------------------------------------
 
-## **A meal of a carried toxin waits** (§5.1): `HELD`, not `RAISED`; its other
-## form's meal is the same sample, a copy more; a gene of one form is raised as
-## today; and frames never settle a toxin on their own.
+## **A meal of a carried toxin waits** (§5.1): `HELD`, not `RAISED`, since it may
+## go inside or into a gene's slot; its other form's meal is the same sample, a
+## copy more; a gene of one form is raised as today; and frames never settle a
+## toxin on their own.
 func _dna_meal_waits() -> void:
 	var base := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
-	var g := _dna_posed(_merged(base, {&"toxicyst": 1}),
-		[&"cytostome", &"cirrus", &"flagellum", &"toxicyst"])
-	var first := g.integrate(&"toxicyst")
-	var second := g.integrate(&"veneneux")
+	var g := _dna_posed(_merged(base, {&"veneneux": 1}), [&"cytostome", &"cirrus", &"flagellum"])
+	var first := g.integrate(&"veneneux")
+	var second := g.integrate(&"toxicyst")
 	var one := g.waiting()
 	var copies := g.waiting_copies(&"veneneux")
 	var plain := g.integrate(&"flagellum")
@@ -10103,16 +10464,17 @@ func _dna_meal_waits() -> void:
 	for f in 600:
 		g._process(1.0 / 60.0)
 	var still := g.waiting()
-	var kept := int(g.dna()[&"toxicyst"]) == 1 and not g.dna().has(&"veneneux")
+	var kept := int(g.dna()[&"veneneux"]) == 1 and not g.dna().has(&"toxicyst") \
+		and Riders.count(g.riders()) == 0
 	_dna_free(g)
 	var names := ["NOTHING", "INTEGRATED", "RAISED", "SATURATED", "HELD", "NO_ROOM"]
-	_check(("dna 3. the meal that waits: venom carried, a meal of it is %s; one of poison"
+	_check(("dna 3. the meal that waits: poison carried, a meal of it is %s; one of venom"
 		+ " joins it, one sample (%s) of %d copies; a tail is %s, to %d copies; ten seconds of"
 		+ " frames leave the toxin waiting (%s) and the DNA as it was (%s)") % [names[first],
 		str(one), copies, names[plain], tail, str(still), str(kept)],
 		first == GenomeNode.Result.HELD and second == GenomeNode.Result.HELD
-		and one == [&"toxicyst"] and copies == 2 and plain == GenomeNode.Result.RAISED
-		and tail == 2 and still == [&"toxicyst"] and kept)
+		and one == [&"veneneux"] and copies == 2 and plain == GenomeNode.Result.RAISED
+		and tail == 2 and still == [&"veneneux"] and kept)
 
 
 # --- 6 and 7. Every cell alike; venom and poison ---------------------------------------
@@ -10171,10 +10533,11 @@ func _dna_home(cell: CellBody, home: Vector2) -> void:
 
 
 ## **Checks 6 and 7** (§7): every delivery of the table, each posed with the cell
-## in the role and with a water cell in it -- a front venom biting, a venom on a
-## flank bitten on its side and off it, a poisonous body bitten and swallowed --
-## each by the function the water resolves that contact with, and the stacks
-## compared to the float.
+## in the role and with a water cell in it -- the venom in a mouth's slot biting, a
+## poisonous body bitten and swallowed -- each by the function the water resolves
+## that contact with, and the stacks compared to the float. **Venom rides** since
+## 2026-10-16: on the body's own slots it was the mouth's slot's venom by another
+## road, so a flank's venom is gone with them.
 func _dna_deliveries() -> void:
 	var water := _water(3000.0)
 	var field: WatchedDrop = water[0]
@@ -10185,25 +10548,24 @@ func _dna_deliveries() -> void:
 	var fired := [0, 0, 0]
 	field.toxin_fired.connect(func(how: int) -> void: fired[how] += 1)
 	var copies := 2
-	var venom_n := Stats.at(&"venom_stacks", copies)
+	var fanged := {&"cytostome": [[&"toxicyst", copies]]}
+	var venom_n := Riders.value(fanged, &"cytostome", &"bite_dose", 0.0)
 	var poison_n := Stats.at(&"poison_stacks", copies)
 	var swallow_n := Stats.at(&"swallow_stacks", copies)
 	var three: Array = [&"cytostome", &"cirrus", &"flagellum"]
-	var front: Array = three + [&"toxicyst"]
-	var flank: Array = three + [&"", &"", &"toxicyst"]
-	var venom := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2, &"toxicyst": copies}
+	# The venom in the mouth's slot: a plain body, and its riders.
+	var venom := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2}
 	var poison := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2, &"veneneux": copies}
 	var plain := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2}
 	# Armoured by the first live organ that provides it, asked for by its stat.
 	var armoured := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2,
 		Catalogue.first_provider(&"armor"): 3}
 	var mouth := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 2}
-	var side := Cilia.slot_bearing(5)
 	var astray := 0
 	var n := 0
-	# --- A front venom, biting: yours, on a bare body and an armoured one; a water
-	# cell's, worn by the default order, on the same two; and a water cell's on you.
-	field.toxins = FoodField.toxins_of(venom, front)
+	# --- The mouth's venom, biting: yours, on a bare body and an armoured one; a water
+	# cell's on the same two; and a water cell's on you.
+	field.toxins = FoodField.toxins_of(venom, three, fanged)
 	var you_front := []
 	for tiers: Dictionary in [plain, armoured]:
 		var t := _dna_body(field, n, 40.0, tiers)
@@ -10218,6 +10580,7 @@ func _dna_deliveries() -> void:
 	for tiers: Dictionary in [plain, armoured]:
 		var t := _dna_body(field, n, 40.0, tiers)
 		var v := _dna_body(field, n + 1, 30.0, venom)
+		(cells[v] as Object).set("riders", Riders.copy(fanged))
 		n += 2
 		_dna_mouth_on(field, v, (cells[t] as Object).get("pos"), 0.0, 0.0)
 		field._chew(v, cells[v], t, cells[t])
@@ -10225,6 +10588,7 @@ func _dna_deliveries() -> void:
 		field.take_out(t)
 		field.take_out(v)
 	var biter := _dna_body(field, n, 30.0, venom)
+	(cells[biter] as Object).set("riders", Riders.copy(fanged))
 	n += 1
 	_dna_mouth_on(field, biter, home, 0.0, 0.0)
 	field._bitten_by(biter, cells[biter])
@@ -10236,6 +10600,7 @@ func _dna_deliveries() -> void:
 	var swallowed_venom := []
 	var big := _dna_body(field, n, 40.0, mouth)
 	var small := _dna_body(field, n + 1, 14.0, venom)
+	(cells[small] as Object).set("riders", Riders.copy(fanged))
 	n += 2
 	var small_b: Object = cells[small]
 	field._mouth_on_drop(big, cells[big], small, cells[small], field._gape(cells[big]))
@@ -10243,13 +10608,14 @@ func _dna_deliveries() -> void:
 	var venom_eaten := not bool(small_b.get("seeded"))
 	field.take_out(big)
 	var morsel_at := home + Vector2(0.0, -(cell.radius + 12.0))
-	var morsel := _pose(field, morsel_at, 15.0, {&"cytostome": 1, &"toxicyst": 3}, PI, 0.5)
+	var morsel := _pose(field, morsel_at, 15.0, {&"cytostome": 1}, PI, 0.5)
+	(cells[morsel] as Object).set("riders", {&"cytostome": [[&"toxicyst", 3]]})
 	field.set("_near", field.bodies_near(home, 2500.0))
 	var you_alive: bool = not field._contacts_with(null)
 	swallowed_venom.append(cell.loads[HARM])
 	var morsel_eaten := not bool((cells[morsel] as Object).get("seeded"))
 	_dna_home(cell, home)
-	field.toxins = FoodField.toxins_of(venom, front)
+	field.toxins = FoodField.toxins_of(venom, three, fanged)
 	var eater_at := home + Vector2(0.0, -(40.0 + cell.radius) * 0.95)
 	var eater := _pose(field, eater_at, 40.0, mouth, _facing(eater_at, home), 0.5)
 	field.set("_near", field.bodies_near(home, 2500.0))
@@ -10257,50 +10623,6 @@ func _dna_deliveries() -> void:
 	swallowed_venom.append(field.loads_of(eater)[HARM])
 	field.take_out(eater)
 	field.toxins = PackedFloat64Array()
-	_dna_home(cell, home)
-	# --- A venom on a flank (slot 5): bitten on that side -- and 50° either side of it
-	# -- and off it -- 60° either side, and from behind. Yours, by water mouths; a
-	# water cell's, by water mouths; and a water cell's, by you.
-	var offsets: Array[float] = [0.0, deg_to_rad(50.0), deg_to_rad(-50.0), deg_to_rad(60.0),
-		deg_to_rad(-60.0), PI]
-	var stings := [venom_n, venom_n, venom_n, 0.0, 0.0, 0.0]
-	field.toxins = FoodField.toxins_of(venom, flank)
-	var you_flank := []
-	for off: float in offsets:
-		var m := _dna_body(field, n, 30.0, mouth)
-		n += 1
-		_dna_home(cell, home)
-		_dna_mouth_on(field, m, home, 0.0, side + off)
-		if absf(angle_difference(cell.bearing_to((cells[m] as Object).get("pos")),
-				side + off)) > 0.0001:
-			astray += 1
-		field._bitten_by(m, cells[m])
-		you_flank.append(field.loads_of(m)[HARM])
-		field.take_out(m)
-	_dna_home(cell, home)
-	field.toxins = PackedFloat64Array()
-	var its_flank := []
-	for off: float in offsets:
-		var s := _dna_body(field, n, 30.0, venom, flank)
-		var m := _dna_body(field, n + 1, 30.0, mouth)
-		n += 2
-		var landed := _dna_mouth_on(field, m, (cells[s] as Object).get("pos"), 0.0, side + off)
-		if absf(angle_difference(landed, side + off)) > 0.0001:
-			astray += 1
-		field._chew(m, cells[m], s, cells[s])
-		its_flank.append(field.loads_of(m)[HARM])
-		field.take_out(s)
-		field.take_out(m)
-	var from_you := []
-	for off: float in [0.0, PI]:
-		var s := _dna_body(field, n, 40.0, venom, flank)
-		n += 1
-		if absf(angle_difference(_dna_you_on(field, cell, cells[s], side + off),
-				side + off)) > 0.0001:
-			astray += 1
-		field._bite_from(s, cells[s])
-		from_you.append(cell.loads[HARM])
-		field.take_out(s)
 	_dna_home(cell, home)
 	# --- A poisonous body bitten, from the nose, the flank and the stern: you, by
 	# water mouths; a water cell, by water mouths and by you.
@@ -10374,36 +10696,6 @@ func _dna_deliveries() -> void:
 	field.dosed.disconnect(log_dosed)
 	field.eaten.disconnect(log_eaten)
 	_dna_home(cell, home)
-	# --- With VENOM_SIDES off a side venom leaves nothing, yours or a water cell's,
-	# and a front venom still bites.
-	field.venom_sides = false
-	field.toxins = FoodField.toxins_of(venom, flank, false)
-	var off_sides := []
-	var m_off := _dna_body(field, n, 30.0, mouth)
-	n += 1
-	_dna_mouth_on(field, m_off, home, 0.0, side)
-	field._bitten_by(m_off, cells[m_off])
-	off_sides.append(field.loads_of(m_off)[HARM])
-	field.take_out(m_off)
-	_dna_home(cell, home)
-	field.toxins = PackedFloat64Array()
-	var s_off := _dna_body(field, n, 30.0, venom, flank)
-	m_off = _dna_body(field, n + 1, 30.0, mouth)
-	n += 2
-	_dna_mouth_on(field, m_off, (cells[s_off] as Object).get("pos"), 0.0, side)
-	field._chew(m_off, cells[m_off], s_off, cells[s_off])
-	off_sides.append(field.loads_of(m_off)[HARM])
-	field.take_out(s_off)
-	field.take_out(m_off)
-	field.toxins = FoodField.toxins_of(venom, front, false)
-	var t_off := _dna_body(field, n, 40.0, plain)
-	n += 1
-	_dna_you_on(field, cell, cells[t_off], 0.0)
-	field._bite_from(t_off, cells[t_off])
-	var front_still := field.loads_of(t_off)[HARM]
-	field.take_out(t_off)
-	field.venom_sides = true
-	field.toxins = PackedFloat64Array()
 	var never_stung := not field.has_signal(&"stung")
 	_done(water)
 	var all_of := func(values: Array, want: float) -> bool:
@@ -10411,37 +10703,32 @@ func _dna_deliveries() -> void:
 			if float(value) != want:
 				return false
 		return true
-	_check(("dna 6. every cell alike: a front venom of %d copies biting leaves %s from you,"
-		+ " %s from a water cell (the last on you); a venom on a flank bitten 0°, ±50°,"
-		+ " ±60° and opposite gives %s from you and %s from a water cell; a poisonous"
+	_check(("dna 6. every cell alike: the venom in a mouth's slot at %d copies, biting,"
+		+ " leaves %s from you, %s from a water cell (the last on you); a poisonous"
 		+ " body bitten from the nose, flank and stern gives %s from you and %s from a water"
 		+ " cell, by water mouths and by you; swallowed, %s -- you, a water cell, then by you;"
 		+ " %d poses off their bearing") % [copies, str(you_front), str(its_front),
-		str(you_flank), str(its_flank), str(you_poison), str(its_poison), str(swallowed),
-		astray],
+		str(you_poison), str(its_poison), str(swallowed), astray],
 		you_front == [venom_n, venom_n] and its_front == [venom_n, venom_n, venom_n]
-		and you_flank == stings and its_flank == stings and all_of.call(you_poison, poison_n)
+		and all_of.call(you_poison, poison_n)
 		and all_of.call(its_poison, poison_n) and its_poison.size() == 6
 		and all_of.call(swallowed, swallow_n) and swallowed.size() == 3 and astray == 0)
-	_check(("dna 7. venom and poison: a front venom's bite leaves %.0f whatever the armour"
-		+ " (%s), and nothing on a swallow (%s; the venom eaten %s, %s, you swallowed %s); a"
-		+ " flank venom stings within 55° of its bearing and nowhere else (%s), and you take"
-		+ " it biting there (%s); a poisonous body bitten leaves %.0f on the biter; swallowed,"
+	_check(("dna 7. venom and poison: the mouth's venom's bite leaves %.0f whatever the"
+		+ " armour (%s), and nothing on a swallow (%s; the venom eaten %s, %s, you swallowed"
+		+ " %s); a poisonous body bitten leaves %.0f on the biter; swallowed,"
 		+ " %.0f on the swallower, there when your death is told (%s), the body eaten (%s, %s,"
-		+ " %s) and the eater alive (%s), told %s; `stung` gone (%s); with VENOM_SIDES off a"
-		+ " flank venom leaves %s and a front one still %.0f; fired: venom %d, sting %d,"
-		+ " poison %d") % [venom_n, str(you_front), str(swallowed_venom), str(venom_eaten),
-		str(morsel_eaten), str(you_swallowed), str(its_flank), str(from_you), poison_n,
+		+ " %s) and the eater alive (%s), told %s; `stung` gone (%s); fired: venom %d,"
+		+ " sting %d, poison %d") % [venom_n, str(you_front), str(swallowed_venom),
+		str(venom_eaten), str(morsel_eaten), str(you_swallowed), poison_n,
 		swallow_n, str(told), str(poisoned_eaten), str(poison_eaten), str(you_ate),
-		str(eater_lives), " then ".join(order), str(never_stung), str(off_sides), front_still,
+		str(eater_lives), " then ".join(order), str(never_stung),
 		fired[FoodField.FIRED_VENOM], fired[FoodField.FIRED_STING],
 		fired[FoodField.FIRED_POISON]],
 		you_front == [venom_n, venom_n] and swallowed_venom == [0.0, 0.0, 0.0] and venom_eaten
-		and morsel_eaten and you_alive and you_swallowed and its_flank == stings
-		and from_you == [venom_n, 0.0] and told == [swallow_n] and poisoned_eaten
-		and poison_eaten and you_ate and eater_lives and order == ["dosed", "eaten"]
-		and never_stung and off_sides == [0.0, 0.0] and front_still == venom_n
-		and fired[FoodField.FIRED_VENOM] == 3 and fired[FoodField.FIRED_STING] == 3
+		and morsel_eaten and you_alive and you_swallowed and told == [swallow_n]
+		and poisoned_eaten and poison_eaten and you_ate and eater_lives
+		and order == ["dosed", "eaten"] and never_stung
+		and fired[FoodField.FIRED_VENOM] == 2 and fired[FoodField.FIRED_STING] == 0
 		and fired[FoodField.FIRED_POISON] == 4)
 
 
@@ -10543,7 +10830,8 @@ func _dna_water() -> void:
 		for form: StringName in GenomeNode.forms_of(TOXIN):
 			toxic_drop += 1 if one.genome.has(form) else 0
 	# The floor: the drop down to its last carriers gives the toxin to the next peer,
-	# its place by a coin -- and to none that carries a form of it.
+	# its place by a coin -- venom into its mouth's slot, poison inside -- and to none
+	# that carries a form of it.
 	var places := {"venom": 0, "poison": 0}
 	var still_short := 0
 	var over := 0
@@ -10554,7 +10842,8 @@ func _dna_water() -> void:
 		var i := _pose(field, home + Vector2(1500.0, 300.0 * (k % 8)), 34.0, peer)
 		field._give_back_by_peer(cells[i])
 		var genome: Dictionary = (cells[i] as Object).get("genome")
-		places["venom"] += 1 if genome.has(&"toxicyst") else 0
+		var fangs := Riders.rider_at((cells[i] as Object).get("riders"), &"cytostome", 0)
+		places["venom"] += 1 if fangs == &"toxicyst" and not genome.has(&"toxicyst") else 0
 		places["poison"] += 1 if genome.has(&"veneneux") else 0
 		if _due(field).has(TOXIN):
 			still_short += 1
@@ -10565,21 +10854,30 @@ func _dna_water() -> void:
 	var carriers := 0
 	for form: StringName in [&"toxicyst", &"veneneux"]:
 		_owe(field, [TOXIN])
-		var i := _pose(field, home + Vector2(-1500.0, 0.0), 34.0, _merged(peer, {form: 1}))
+		var i := _pose(field, home + Vector2(-1500.0, 0.0), 34.0,
+			peer if form == &"toxicyst" else _merged(peer, {form: 1}))
+		if form == &"toxicyst":
+			(cells[i] as Object).set("riders", {&"cytostome": [[form, 1]]})
 		field._give_back_by_peer(cells[i])
-		carriers += (cells[i] as Object).get("genome").size()
+		carriers += (cells[i] as Object).get("genome").size() \
+			+ Riders.count((cells[i] as Object).get("riders"))
 		field.take_out(i)
-	# Where a water cell wears its toxin.
+	# Where a water cell wears its toxin: poison takes no seat outside.
 	var worn := Cilia.default_order({&"cytostome": 2, &"cirrus": 1, &"flagellum": 1,
-		&"veneneux": 2, &"toxicyst": 1, &"ampulla": 1, &"pellicle": 1})
-	var seats_ok: bool = worn.size() > 3 and worn[3] == &"toxicyst" and not worn.has(&"veneneux") \
+		&"veneneux": 2, &"ampulla": 1, &"pellicle": 1})
+	var seats_ok: bool = worn.size() == 5 and not worn.has(&"veneneux") \
 		and worn.has(&"ampulla") and worn.has(&"pellicle")
 	# A water cell's poison takes no outside room.
 	var full := {}
 	for gene: StringName in _outside_full():
 		full[gene] = 1
 	var in_room := GenomeNode.integrate_into(full.duplicate(), &"veneneux", CellBody.SLOT_MAX)
-	var out_room := GenomeNode.integrate_into(full.duplicate(), &"toxicyst", CellBody.SLOT_MAX)
+	var outer: StringName = &""
+	for gene: StringName in Catalogue.live():
+		if outer == &"" and not full.has(gene) and not GenomeNode.has_forms(gene) \
+				and not GenomeNode.is_inside_form(gene):
+			outer = gene
+	var out_room := GenomeNode.integrate_into(full.duplicate(), outer, CellBody.SLOT_MAX)
 	# **What the water makes with a mouth is a newborn** (water-evolves.md §1): the
 	# born body and one gift sense, and never the toxin, which only the floor gives,
 	# through a peer, as above. It drew 3,000 peers of every radius until the water
@@ -10603,8 +10901,8 @@ func _dna_water() -> void:
 		+ " carry a form of the toxin; the floor gives it back through a peer as venom %d"
 		+ " times and as poison %d of 40, the drop short of it after %d, %d over their room;"
 		+ " a peer carrying either form is given nothing (%d genes in two peers of 6); the"
-		+ " default order wears %s; a water cell's poison takes no room (%s), its venom does"
-		+ " (%s); and of 3,000 newborns the water made %d were the born body and one gift"
+		+ " default order wears %s; a water cell's poison takes no room (%s), a gene"
+		+ " outside does (%s); and of 3,000 newborns the water made %d were the born body and one gift"
 		+ " sense, %d carrying the toxin") % [
 		toxic_today, toxic_drop, places["venom"], places["poison"], still_short, over,
 		carriers, str(worn), "INTEGRATED" if in_room == GenomeNode.Result.INTEGRATED
@@ -10789,7 +11087,7 @@ func _dna_saves() -> void:
 	var worn: Array = genome2.call(&"body_layout")
 	var converted: bool = bool(dev.get("_resumed")) \
 		and int((genome2.call(&"dna") as Dictionary).get(&"veneneux", 0)) == 2 \
-		and layout.size() > 3 and layout[3] == &"" and inside == [&"veneneux"] \
+		and layout.size() > 3 and layout[3] == &"" and inside == [&"veneneux", &"", &""] \
 		and int(genome2.call(&"tier", &"veneneux")) == 2 and worn[3] == &"" \
 		and int(genome2.call(&"slot_of", &"veneneux")) == -1
 	var nothing_carried := not Doses.any((dev.get("_cell") as CellBody).loads)
@@ -11106,14 +11404,14 @@ func _rarity_draw() -> void:
 
 ## **2. Drift** (§11.3 item 2), static, on the same catalogue: 50,000 drifts of one water
 ## cell's DNA -- §5.2's line, the mouth, the cirrus, the tail, the nose, the eye and the
-## plates, with the toxin as venom -- by `genome.gd`'s own `_mutate_drift`. None brings a
-## variety the DNA carries in any form, the toxin's poison included, the mouth or a
+## plates, with the toxin as poison -- by `genome.gd`'s own `_mutate_drift`. None brings a
+## variety the DNA carries in any form, the toxin's venom included, the mouth or a
 ## retired gene; each class's share of what came lands within 5 % of its share of
 ## `drift_weight` over the varieties the DNA lacks; and the variant the water never makes
 ## comes, at its share of its organ in drift.
 func _rarity_drift() -> void:
 	var dna := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"chemocyte": 1, &"ocellus": 1,
-		&"pellicle": 1, &"toxicyst": 1}
+		&"pellicle": 1, &"veneneux": 1}
 	var carried := {}
 	for gene: StringName in dna:
 		carried[Catalogue.variety(gene)] = true
@@ -11220,14 +11518,15 @@ func _rarity_crowded() -> void:
 	_check(("rarity 3. the crowded drop: the mixed hundred, %d varieties in the drifters' pool,"
 		+ " five minutes of a drop, seed 1, on the rules -- at %d gene"
 		+ " counts a common or uncommon variety carried by nobody %d times and one still short"
-		+ " at the count after %d; the floor caught up with the first fill at count %d (by %d),"
+		+ " at the count after, with the floor owing it, %d (and %d more the floor gave and"
+		+ " the water took back); the floor caught up with the first fill at count %d (by %d),"
 		+ " and a rare one was short three counts running %d times after it (and %d more"
 		+ " while the floor gave all its budget allowed); drifters"
 		+ " made with a gene no drifter may carry %d; the floor's drifters %d of %d made, %.1f"
 		+ " %% (at most one in %d; table 5.1 worked out %.1f %% for this catalogue, the gene"
 		+ " probe's arithmetic %.1f %%); the commons %.1f %% of every drifter made, %.0f %% of"
 		+ " their %.1f %% of the draw (at least 90 %%)") % [pool.size(), field.counts,
-		field.lost_genes, field.still_short, field.settled_at, SETTLED_WITHIN, field.rare_runs,
+		field.lost_genes, field.still_short, field.short_again, field.settled_at, SETTLED_WITHIN, field.rare_runs,
 		field.rare_waited, field.venom_drifters, floor_made,
 		made, 100.0 * float(floor_made) / float(maxi(made, 1)), Drop.GENE_FLOOR_GAP,
 		100.0 * MIXED_FLOOR_SHARE, 100.0 * float(loads[0]), 100.0 * got,
@@ -11280,3 +11579,263 @@ func _drifters_by_class(field: WatchedDrop) -> String:
 			float(drifters) * float(weights[name]) / total / float(n)])
 	return "drifters made %d, the draw's %d and the floor's %d, %d standing -- %s" % [
 		drawn + given, drawn, given, drifters, "; ".join(said)]
+
+
+# --- The light (docs/design/daylight.md §10.3) ----------------------------------------------
+
+## **The day, the depth, and the tank under them** (docs/design/daylight.md §10.3): 1, the
+## curve; 2, the column; 3, one tank under a moving day; 4, the drifters in the dark; 6,
+## the save; 7, the replay. Check 5 -- off is `dev`, to the byte -- is [method _lineage]'s,
+## which runs the drop it pins. Last of all, and seeded, so nothing here moves the stream
+## any check before it reads.
+func _daylight() -> void:
+	seed(4242)
+	_daylight_curve()
+	_daylight_column()
+	_daylight_tank()
+	_daylight_drifters()
+	_daylight_save()
+	_daylight_replay()
+	seed(20260930)
+
+
+## **1. The curve**: 0 through the night and 1 through the day; continuous at the four
+## joins; a whole cycle's mean 0.6 to 1e-12 wherever it starts; the mean over a stretch
+## against a 10,000-step sum to 1e-6, across a join and across midnight; and at a room's
+## age, about a million seconds, a frame's mean the same as at the cycle's start to 1e-9.
+func _daylight_curve() -> void:
+	var sky := Drop.daylight()
+	var p: float = sky.period()
+	var day_from := Drop.DAY_DAWN
+	var day_to := Drop.DAY_DAWN + Drop.DAY_LIGHT
+	var night_from := day_to + Drop.DAY_DUSK
+	var off_day := 0
+	var off_night := 0
+	var t := day_from
+	while t < day_to:
+		off_day += 0 if sky.surface(t) == 1.0 else 1
+		t += 0.1
+	t = night_from
+	while t < p:
+		off_night += 0 if sky.surface(t) == Drop.NIGHT_LIGHT else 1
+		t += 0.1
+	var jump := 0.0
+	for join: float in [0.0, day_from, day_to, night_from]:
+		jump = maxf(jump, absf(sky.surface(join - 1e-6) - sky.surface(join + 1e-6)))
+	var whole := 0.0
+	for start: float in [0.0, 123.456, p - 0.001, 1e6 + 3.25]:
+		whole = maxf(whole, absf(sky.mean(start, start + p) - 0.6))
+	whole = maxf(whole, absf(sky.whole_mean() - 0.6))
+	var summed := 0.0
+	for stretch: Array in [[30.0, 90.0], [350.0, 430.0], [400.0, 670.0], [590.0, 1250.5]]:
+		var a: float = stretch[0]
+		var b: float = stretch[1]
+		var n := 10000
+		var h := (b - a) / float(n)
+		var sum := 0.0
+		for k in n:
+			sum += sky.surface(a + (float(k) + 0.5) * h)
+		summed = maxf(summed, absf(sky.mean(a, b) - sum / float(n)))
+	var frame := 1.0 / 60.0
+	var room := 0.0
+	for k in 60:
+		var at := 1e6 + float(k)
+		var near := fposmod(at, p)
+		room = maxf(room, absf(sky.mean(at, at + frame) - sky.mean(near, near + frame)))
+	_check(("daylight 1. the curve: %d of 3,000 day samples not 1 and %d of 1,800 night"
+		+ " samples not %.1f; the four joins %s apart a millionth of a second either side; a"
+		+ " whole cycle's mean %s off 0.6; a stretch's mean %s off a 10,000-step sum, across"
+		+ " dawn, dusk and midnight; a frame's mean at a room's million seconds %s off the"
+		+ " same frame of the cycle") % [off_day, off_night, Drop.NIGHT_LIGHT,
+		String.num_scientific(jump), String.num_scientific(whole),
+		String.num_scientific(summed), String.num_scientific(room)],
+		off_day == 0 and off_night == 0 and jump < 1e-7 and whole < 1e-12 and summed < 1e-6
+		and room < 1e-9)
+
+
+## **2. The column**: 0 on the rim and past it, 1 at the centre, rising inward; and in a
+## drop at noon the light on the rim exactly 1 and at the centre exactly
+## LIGHT_AT_MIDDLE.
+func _daylight_column() -> void:
+	var rim := Basin.new(OFF_CENTRE, Drop.RADIUS)
+	var edge: float = rim.column(OFF_CENTRE + Vector2(Drop.RADIUS, 0.0))
+	var past: float = rim.column(OFF_CENTRE + Vector2(0.0, Drop.RADIUS + 300.0))
+	var middle: float = rim.column(OFF_CENTRE)
+	var falls := 0
+	var last := -1.0
+	for k in 101:
+		var at := OFF_CENTRE + Vector2.from_angle(0.7) * Drop.RADIUS * (1.0 - float(k) / 100.0)
+		var here: float = rim.column(at)
+		if here < last:
+			falls += 1
+		last = here
+	var water := _water()
+	var field: WatchedDrop = water[0]
+	var centre: Vector2 = field.basin().get(&"center")
+	field.set("_day_origin", Drop.DAY_DAWN + Drop.DAY_LIGHT * 0.5 - float(field.get("_t")))
+	var noon: float = field.daylight_now()
+	# On the rim or a hair past it, as near as a float holds a point there.
+	var on_rim: Vector2 = field.basin().nearest_rim(centre + Vector2(1.0, 0.25))
+	while float(field.basin().depth(on_rim)) > 0.0:
+		on_rim += (on_rim - centre).normalized() * 1e-3
+	var at_rim: float = field.light_at(on_rim)
+	var at_middle: float = field.light_at(centre)
+	var halfway: float = field.light_at(centre + Vector2(0.0, Drop.RADIUS * 0.5))
+	_done(water)
+	_check(("daylight 2. the column: %s on the rim, %s past it, %s at the centre, falling"
+		+ " %d times of 100 steps inward; at noon (%s) the light on the rim %s, at the"
+		+ " centre %s (LIGHT_AT_MIDDLE %.2f), halfway %.3f") % [str(edge), str(past),
+		str(middle), falls, str(noon), str(at_rim), str(at_middle), Drop.LIGHT_AT_MIDDLE,
+		halfway],
+		edge == 0.0 and past == 0.0 and middle == 1.0 and falls == 0 and noon == 1.0
+		and at_rim == 1.0 and at_middle == Drop.LIGHT_AT_MIDDLE
+		and halfway > Drop.LIGHT_AT_MIDDLE and halfway < 1.0)
+
+
+## **3. One tank under a moving day**: check 10's three genomes again, the field's day
+## set so its dawn rises through the 60 s -- the node takes the field's light over each
+## frame, the water body is paid at its rates -- and they end within 1e-6.
+func _daylight_tank() -> void:
+	var water := _water(3000.0)
+	var field: WatchedDrop = water[0]
+	var ran := _one_tank(field, true)
+	var where := Vector2(1500.0, 0.0)
+	var started := float(field.get("_t"))
+	var rose := [field.light_over(where, started, started + 1.0 / 60.0),
+		field.light_over(where, started + 59.0, started + 60.0)]
+	_done(water)
+	_check(("daylight 3. one tank under a moving day: check 10's 3 genomes, the light where"
+		+ " the body is rising from %.4f to %.4f through the 60 s, the node a frame at a time"
+		+ " and the water body at its rates end %s apart (hunger ran %.2f to %.2f)") % [
+		rose[0], rose[1], String.num_scientific(ran[0]), ran[1], ran[2]],
+		ran[0] < 1e-6 and ran[1] > 0.0 and ran[2] < 1.0 and rose[0] < 0.01 and rose[1] > 0.2)
+
+
+## **4. The drifters in the dark**: every drifter gene, at the one copy the water makes
+## them with, holds its tank at the drop's least light -- what absorbing pays covers it.
+func _daylight_drifters() -> void:
+	var starving := PackedStringArray()
+	var genes := Drop.drifter_genes(Catalogue.drifters())
+	for gene: StringName in genes:
+		var tiers := {gene: 1}
+		var dark := Stats.of(tiers, &"sun") * Drop.NIGHT_LIGHT * Drop.LIGHT_AT_MIDDLE
+		if Metabolism.rest_rate(GenomeNode.upkeep_of(tiers), Metabolism.ABSORB + dark,
+				Stats.of(tiers, &"store")) != 0.0:
+			starving.append(str(gene))
+	_check(("daylight 4. the drifters in the dark: %d of %d drifter genes burn anything at"
+		+ " the drop's least light (%s)") % [starving.size(), genes.size(),
+		", ".join(starving)],
+		starving.is_empty() and genes.size() > 0)
+
+
+## **6. The save**: a drop kept at dusk opens at dusk -- its hour and its light -- through
+## the file; one whose file has no `day` opens at DAY_BEGINS whatever its age; and the
+## light's lines are in the drop's rules, so a file written before them reads as
+## converted.
+func _daylight_save() -> void:
+	var path := "user://drop_probe/daylight.save"
+	var water := _water()
+	var field: WatchedDrop = water[0]
+	for f in 5 * 60:
+		field._process(1.0 / 60.0)
+	var dusk := Drop.DAY_DAWN + Drop.DAY_LIGHT + Drop.DAY_DUSK * 0.37
+	field.set("_day_origin", fposmod(dusk - float(field.get("_t")), field.day_length()))
+	for f in 7:
+		field._process(1.0 / 60.0)
+	var hour: float = field.day_time()
+	var light: float = field.daylight_now()
+	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
+	var wrote := DropSave.write(path, DropSave.compose(field.drop_state(), {}))
+	var back := DropSave.read(path)
+	var kept: Dictionary = back.get("drop", {})
+	var loaded := _load_into(kept)
+	var opened: float = (loaded[0] as Node).call(&"day_time")
+	var opened_light: float = (loaded[0] as Node).call(&"daylight_now")
+	_unload(loaded)
+	var before := kept.duplicate()
+	before.erase("day")
+	var old := _load_into(before)
+	var morning: float = (old[0] as Node).call(&"day_time")
+	_unload(old)
+	_done(water)
+	for leftover: String in [path, path + ".old", path.get_basename() + ".tmp"]:
+		if FileAccess.file_exists(leftover):
+			DirAccess.remove_absolute(ProjectSettings.globalize_path(leftover))
+	var without := PackedStringArray()
+	var light_lines := 0
+	for line: String in DropSave.rules_text().split("\n"):
+		var name := line.get_slice("=", 0)
+		if name in ["drop.DAY_DAWN", "drop.DAY_LIGHT", "drop.DAY_DUSK", "drop.DAY_NIGHT",
+				"drop.NIGHT_LIGHT", "drop.LIGHT_AT_MIDDLE"]:
+			light_lines += 1
+		else:
+			without.append(line)
+	var older := {"rules": "\n".join(without).sha256_text()}
+	var ours := {"rules": DropSave.rules()}
+	_check(("daylight 6. the save: a drop kept at dusk, %.6f s into its day at light %.6f,"
+		+ " written (%s) and opened at %.6f s and %.6f -- %s s and %s apart; a file with no"
+		+ " day opens at %.6f s (DAY_BEGINS %.0f); the light's %d lines in the drop's rules,"
+		+ " a file without them %s, one with them %s") % [hour, light, error_string(wrote),
+		opened, opened_light, String.num_scientific(absf(opened - hour)),
+		String.num_scientific(absf(opened_light - light)), morning, Drop.DAY_BEGINS,
+		light_lines, "converted" if DropSave.converted(older) else "NOT CONVERTED",
+		"converted" if DropSave.converted(ours) else "as it was"],
+		wrote == OK and hour > Drop.DAY_DAWN + Drop.DAY_LIGHT
+		and hour < Drop.DAY_DAWN + Drop.DAY_LIGHT + Drop.DAY_DUSK and light > 0.0
+		and light < 1.0 and absf(opened - hour) < 1e-9 and absf(opened_light - light) < 1e-12
+		and absf(morning - Drop.DAY_BEGINS) < 1e-9 and light_lines == 6
+		and DropSave.converted(older) and not DropSave.converted(ours))
+
+
+## **7. The replay**: through five seconds of dusk the recorded light is the field's,
+## frame by frame; the replay's own field answers what the recording says, and works out
+## what got through to a place under the recorded rim; and the run's field is untouched.
+func _daylight_replay() -> void:
+	var rig := _rig(true)
+	var field: WatchedDrop = rig[1]
+	var cell: CellBody = rig[2]
+	var rec: Node = rig[3]
+	var dusk := Drop.DAY_DAWN + Drop.DAY_LIGHT + 5.0
+	field.set("_day_origin", fposmod(dusk - float(field.get("_t")), field.day_length()))
+	var wrong := 0
+	var first := -1.0
+	var last := -1.0
+	for f in 300:
+		_rig_step(rig, 1)
+		var ring: PackedFloat32Array = rec.get("_ring")
+		var said := ring[_newest(rec) + RecorderNode.AT_DAYLIGHT]
+		if said != _f32(field.daylight_now()):
+			wrong += 1
+		if first < 0.0:
+			first = said
+		last = said
+	rec.call(&"seal")
+	var kept := [field.get("_t"), field.get("_day_origin"), field.daylight_now(),
+		field.light_at(cell.position)]
+	var screen := _raise_replay(rig[0], rec)
+	var water: Node = screen.get("_food")
+	var answered := 0
+	var asked := 0
+	var span := float(rec.call(&"span"))
+	for at: float in [0.0, span * 0.5, span - 0.01]:
+		_seek(screen, at)
+		var frame: PackedFloat32Array = screen.get("_frame")
+		var recorded := float(frame[RecorderNode.AT_DAYLIGHT])
+		var p: Vector2 = cell.position
+		var through := Daylight.through(float(water.call(&"basin").call(&"column", p)),
+			Drop.LIGHT_AT_MIDDLE)
+		asked += 1
+		if float(water.call(&"daylight_now")) == recorded \
+				and float(water.call(&"light_at", p)) == recorded * through \
+				and recorded <= first + 1e-6 and recorded >= last - 1e-6:
+			answered += 1
+	var after := [field.get("_t"), field.get("_day_origin"), field.daylight_now(),
+		field.light_at(cell.position)]
+	screen.queue_free()
+	(rig[0] as Node).queue_free()
+	_check(("daylight 7. the replay: through 300 frames of dusk, the light falling from %.4f"
+		+ " to %.4f, the recorded light is not the field's on %d; the replay's own field"
+		+ " answers the recording, and what gets through under the recorded rim, at %d of"
+		+ " %d seeks; the run's field %s") % [first, last, wrong, answered, asked,
+		"untouched" if after == kept else "CHANGED"],
+		wrong == 0 and first > last and answered == asked and after == kept)

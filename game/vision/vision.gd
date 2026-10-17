@@ -47,6 +47,7 @@ const GenomeNode := preload("res://game/normal/genome.gd")
 const SignalBus := preload("res://game/perception/signal_bus.gd")
 const Cilia := preload("res://game/vision/cilia.gd")
 const Afterglow := preload("res://game/mechanics/afterglow.gd")
+const Sight := preload("res://game/mechanics/sight.gd")
 ## How far a sweeping ray turns between two of the marks it holds: 2 degrees,
 ## the field's own sub-step, in radians.
 const GLOW_SPACING := 0.034906585
@@ -951,7 +952,7 @@ func _step_friend(delta: float) -> void:
 		"doubt": 0.0,
 		"alpha": alpha,
 		"pinch": pinch,
-		"double": smoothstep(CellBody.DIVIDE_WARN_RADIUS, CellBody.DIVIDE_RADIUS, drawn),
+		"double": smoothstep(CellBody.warn_radius_of(pb.divide_at()), pb.divide_at(), drawn),
 		"tiers": pb.genome,
 		"order": pb.order,
 		"riders": pb.riders,
@@ -1101,7 +1102,16 @@ func _push_shader() -> void:
 	if rim != null:
 		_shader.set_shader_parameter("drop_center", rim.get(&"center"))
 		_shader.set_shader_parameter("drop_radius", float(rim.get(&"radius")))
-		_shader.set_shader_parameter("drop_band", FoodField.Drop.SHALLOWS)
+		# **The film** (docs/design/margin.md §2.4): lit across the margin, thinning
+		# to the rim, and a faint line where it gets too thin for you.
+		_shader.set_shader_parameter("drop_band", FoodField.Drop.MARGIN)
+		_shader.set_shader_parameter("drop_shore",
+			FoodField.Drop.hold(_cell.radius) - _cell.radius if _cell != null else 0.0)
+		# **The light** (docs/design/daylight.md §3.1): the surface light now and
+		# what reaches the drop's middle, the field's -- so the water dims and cools
+		# with the same two numbers the plastid is paid by. Both 1 with no day.
+		_shader.set_shader_parameter("day_light", _food_node.daylight_now())
+		_shader.set_shader_parameter("light_at_middle", _food_node.light_at_deepest())
 
 
 func _apply_visibility() -> void:
@@ -1170,7 +1180,7 @@ func _on_eaten(nutrition: float, gene: StringName, at: Vector2) -> void:
 	# smallest drifter swallowed by the largest cell. Adding a fourth argument
 	# to a signal three files forward it would cost more than a pixel is worth.
 	var r := clampf(nutrition * _cell.radius,
-		FoodField.DRIFTER_MIN, CellBody.DIVIDE_RADIUS)
+		FoodField.DRIFTER_MIN, CellBody.RADIUS_MAX)
 	_meals.append([at, r, 0.0, Cilia.hue(gene) if gene != &"" else FOOD_TINT])
 
 
@@ -1209,6 +1219,14 @@ func _age_echo_marks(delta: float) -> void:
 			_echo_marks.remove_at(i)
 
 
+## **What the eyespot sees, in the water** (docs/design/sight.md): the same lit
+## field point of view draws (returns.gd's `_draw_sight`), much fainter here,
+## where every body is drawn anyway -- what it adds is where the eye is looking,
+## how far it sees in this light and what is hiding what. Laid down across the
+## eye's blur, as there.
+const SIGHT_ALPHA := 0.07
+
+
 ## A body-relative bearing turned back into a world direction. The one place
 ## this view undoes what the membrane did, which is exactly what makes the
 ## membrane checkable.
@@ -1244,6 +1262,7 @@ func _on_world_draw() -> void:
 	_draw_meals(a)
 	_draw_hits(a)
 	_draw_wakes(a)
+	_draw_sight(a)
 	_draw_beams(a)
 	_draw_ping(a)
 	_draw_cell(a)
@@ -1465,7 +1484,7 @@ func _dose_felt(felt: Vector3) -> Dictionary:
 func _draw_drop_cells(a: float, middle: Vector2, half: float) -> void:
 	var bodies := _food_node.bodies()
 	var margin := CULL_MARGIN / ZOOM
-	var widest := CellBody.DIVIDE_RADIUS * CULL_REACH
+	var widest := CellBody.RADIUS_MAX * CULL_REACH
 	for i: int in _food_node.bodies_near(middle, half + widest + margin):
 		var b: Object = bodies[i]
 		var p: Vector2 = b.pos
@@ -1477,9 +1496,11 @@ func _draw_drop_cells(a: float, middle: Vector2, half: float) -> void:
 			_draw_floc(p, r, float(b.settle), int(b.id), a)
 			continue
 		# **A division coming** (lineage.md §6.4): every cell's nucleus doubles
-		# from DIVIDE_WARN_RADIUS as yours does, read off the radius -- which the
-		# wire and the replay already carry -- since every body at forty divides.
-		var double := smoothstep(CellBody.DIVIDE_WARN_RADIUS, CellBody.DIVIDE_RADIUS, r) \
+		# two meals before it divides, as yours does, read off the radius -- which
+		# the wire and the replay already carry -- and where its genes say it
+		# divides (margin.md §1.1).
+		var divide_at: float = b.divide_at()
+		var double := smoothstep(CellBody.warn_radius_of(divide_at), divide_at, r) \
 			if _food_node.births else 0.0
 		Cilia.draw_cell(_world, p, float(b.heading), r, b.genome, _food_node.gape_at(i),
 			_cell.radius, false, _clock, a, 0.0, 0.0, float(i) * 1.9, 1.0 / ZOOM, [],
@@ -1611,6 +1632,53 @@ func _draw_beams(a: float) -> void:
 			true, -1.0, true)
 		_world.draw_circle(_beam_glow.point(i), 3.4, Color(tone, 0.92 * fade),
 			true, -1.0, true)
+
+
+## **The eyespot's field** ([constant SIGHT_ALPHA]): each ray of the field's
+## picture from the skin to where something stopped it, as bright as the haze
+## leaves it at each distance -- whole to its core, nothing at its reach -- so a
+## ray stopped by a body is no brighter than the open water beside it. Exact, not
+## blurred: every body is drawn here anyway, and point of view is where the blur
+## is seen (returns.gd). Two triangle strips, handed to the server.
+func _draw_sight(a: float) -> void:
+	if _food_node == null:
+		return
+	var fan: PackedFloat32Array = _food_node.sight_fan
+	var n := fan.size()
+	var reach: float = _food_node.sight_reach
+	if n < 2 or reach <= 0.0:
+		return
+	var half: float = _food_node.sight_half
+	var step := 2.0 * half / float(n - 1)
+	var tone := Cilia.hue_on(Catalogue.LIGHT)
+	var seeing: float = _food_node.sight_seeing
+	var core: float = _food_node.sight_core * seeing
+	var lit := SIGHT_ALPHA * seeing * a
+	var low: float = _food_node.sight_mid - half
+	var origin := _cell.position
+	var skin := _cell.radius * 1.12
+	var points := PackedVector2Array()
+	var colors := PackedColorArray()
+	points.resize(3 * n)
+	colors.resize(3 * n)
+	for k in n:
+		var dir := _ray(low + step * float(k))
+		var run := maxf(fan[k], skin * 1.02)
+		var whole := clampf(core, skin * 1.01, run)
+		points[k] = origin + dir * skin
+		colors[k] = Color(tone, lit)
+		points[n + k] = origin + dir * whole
+		colors[n + k] = Color(tone, lit * Sight.haze(whole, core, reach))
+		points[2 * n + k] = origin + dir * run
+		colors[2 * n + k] = Color(tone, lit * Sight.haze(run, core, reach))
+	var indices := PackedInt32Array()
+	for row in 2:
+		var first := row * n
+		for k in n - 1:
+			indices.append_array([first + k, first + k + 1, first + n + k,
+				first + k + 1, first + n + k + 1, first + n + k])
+	RenderingServer.canvas_item_add_triangle_array(_world.get_canvas_item(),
+		indices, points, colors)
 
 
 ## **A sweep's hits, caught as they happen**, for [method _draw_beams] to hold.

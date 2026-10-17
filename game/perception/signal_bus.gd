@@ -222,9 +222,11 @@ const INGEST_DECAY_BY_TIER: Array[float] = [1.0, 1.2, 1.5, 1.9]
 ## it is the *sharpest* thing on the membrane, not the loudest, and sharpness is
 ## what it was bought for.
 const LIGHT_PEAK := 0.28
-## By tier. Taste is 78 degrees wide at range and only 26 on top of the food;
-## the stigma is its tier's width at **every** range. It does not jitter and it
-## does not lag, and those two properties are most of what a slot is paying for.
+## By tier, for a run that has not said how blurred its eye is ([method
+## sight_width]). Taste is 78 degrees wide at range and only 26 on top of the
+## food; the stigma is its width at **every** range. It does not jitter and it
+## does not lag. **Since the eyespot sees** (docs/design/sight.md) the run sets the
+## width from its blur at its level, which is where these three came from.
 const LIGHT_HALFWIDTH_DEG: Array[float] = [0.0, 26.0, 19.0, 13.0]
 ## Below this the lobe is idled rather than drawn at nothing.
 const LIGHT_FLOOR := 0.02
@@ -773,6 +775,8 @@ var _faint_target := 0.0
 ## continuous state like taste, posted every frame by whoever owns the run.
 var _light := 0.0
 var _light_bearing := 0.0
+## The run's word on the lobe's half-width ([method sight_width]), 0 for none.
+var _light_halfwidth := 0.0
 
 ## Where the beam is hitting something and how near. Continuous, posted every
 ## frame, with no envelope.
@@ -1147,6 +1151,14 @@ func taste(concentration: float) -> void:
 func smell_glow() -> float:
 	return smoothstep(GLOW_FROM, TASTE_FULL, _taste_c) \
 		* (1.0 - TASTE_DREAD_SUPPRESS * _dread)
+
+
+## **How wide the eyespot's lobe is**, in degrees either side: its blur at its
+## level (docs/design/sight.md), so a blurred eye says roughly where and a sharp one
+## exactly. 0 or less hands the width back to [constant LIGHT_HALFWIDTH_DEG] by
+## tier.
+func sight_width(degrees: float) -> void:
+	_light_halfwidth = degrees
 
 
 ## **How brightly the eyespot glows**, 0..1 (three-senses.md §2.7): the shadow it
@@ -1718,7 +1730,9 @@ func _compose_lobes() -> void:
 	if _light > LIGHT_FLOOR:
 		_glow_lobes[LOBE_LIGHT] = _lobe(
 			_light_bearing,
-			LIGHT_HALFWIDTH_DEG[_organs[ORGAN_STIGMA]], LIGHT_PEAK * _light)
+			_light_halfwidth if _light_halfwidth > 0.0
+				else LIGHT_HALFWIDTH_DEG[_organs[ORGAN_STIGMA]],
+			LIGHT_PEAK * _light)
 	else:
 		_glow_lobes[LOBE_LIGHT] = IDLE_LOBE
 

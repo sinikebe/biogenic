@@ -160,15 +160,17 @@ static func _read_plan() -> void:
 # --- The end of a body, and the beginning of two -----------------------------
 # docs/design/lifecycle.md §2. **Forty is where a body runs out of places to put
 # an organ**: slots_for(40) is SLOT_MAX, every arc the body plan gives a body.
-# Growth past it is the one thing a cell can do that buys nothing it can pass on,
-# so the player's radius clamps here and the body divides instead.
+# Growth past it buys nothing it can pass on, so a body divides there instead --
+# unless its genes need each daughter bigger than half of forty, when it grows on
+# until each half has that room (docs/design/margin.md §1.1).
 #
 # The old justifications for 40 -- "nothing left in the water can eat you" and
 # "the genome fills on the same meal" -- are both withdrawn by
 # docs/design/edibility.md §4 and by measurement respectively. The capacity
 # argument stands on its own and is the only one left.
 
-## Where a body divides, and where its radius stops.
+## Where a body divides, and where its radius stops, for a lineage whose genes fit
+## a newborn: the least any body divides at ([method divide_radius_of]).
 ## The host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const DIVIDE_RADIUS := 40.0
 ## Two meals out, and where the nucleus starts to double.
@@ -187,9 +189,55 @@ const DIVIDE_WARN_RADIUS := 32.0
 const DIVIDE_SPLIT := 0.5
 
 
-## What each daughter of a body of [param mother_radius] is born at.
+## **The most any body grows** (docs/design/margin.md §1.1): the division radius of
+## a lineage whose daughters need forty, so each half is born at forty -- 56.57.
+## The host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
+const RADIUS_MAX := 56.568542494923804
+
+
+## What each daughter of a body of [param mother_radius] is born at: half her
+## area, always.
 static func daughter_radius(mother_radius: float = DIVIDE_RADIUS) -> float:
 	return mother_radius * sqrt(DIVIDE_SPLIT)
+
+
+## **The room the gift brings with it**: one slot outside, which every newborn has
+## for the sense it is given (genome.gd's `bonus_slots`; drop.gd's `give_sense`). So
+## a newborn carries four genes outside on three arcs, and a lineage needs no more
+## room than that for four.
+const GIFT_ROOM := 1
+
+
+## **The least a body carrying [param dna] may be** (docs/design/margin.md §1.1):
+## the radius whose slots -- and the gift's -- hold every gene it carries, round the
+## body and in it: `body_plan.gd`'s ladder read backwards, and never under
+## [constant BASE_RADIUS]. A gene that only rides takes no slot of the body's and
+## needs no room.
+static func floor_radius(dna: Dictionary) -> float:
+	var outside := 0
+	var inside := 0
+	for gene: Variant in dna:
+		var place := Catalogue.place_of(StringName(gene))
+		if place == Catalogue.Gene.INSIDE:
+			inside += 1
+		elif place != Catalogue.Gene.RIDING:
+			outside += 1
+	return maxf(BASE_RADIUS, BodyPlan.radius_for(outside - GIFT_ROOM, inside))
+
+
+## **Where a body carrying [param dna] divides**: at [constant DIVIDE_RADIUS], or
+## later, where each half of it is still at its floor -- so a lineage that carries
+## much is born big, every generation (margin.md §1.1). Never past
+## [constant RADIUS_MAX].
+static func divide_radius_of(dna: Dictionary) -> float:
+	return clampf(floor_radius(dna) / sqrt(DIVIDE_SPLIT), DIVIDE_RADIUS, RADIUS_MAX)
+
+
+## **Where the nucleus starts to double** for a body that divides at
+## [param divide_at]: two meals before it, as [constant DIVIDE_WARN_RADIUS] is
+## before forty.
+static func warn_radius_of(divide_at: float) -> float:
+	return divide_at - (DIVIDE_RADIUS - DIVIDE_WARN_RADIUS)
 
 # --- Drive -----------------------------------------------------------------
 # What the drive does with what the genome buys. **Every number a gene buys is
@@ -277,14 +325,6 @@ const DOSE_TAU_BY_KIND: Array[float] = [6.0, 4.0, 8.0]
 ## **Below this a load is gone**, cleared whole: one stack lasts
 ## `6 x ln 5 = 9.7 s`, so a light dose stops a body mending for about ten.
 const DOSE_GONE := 0.2
-## **How far round its slot's bearing a venom on a side or the stern stings** a
-## mouth that bites there: the sting's own arc, so the two weapons that guard a side
-## reach as far round it.
-const VENOM_ARC_DEG := 110.0
-## **Whether a venom on a side or the stern stings at all.** False makes it inert
-## there, and venom works through the bite alone: the switch, should the owner read
-## *"the direction slots express outside"* as the mouth only (dna-slots.md §22.2).
-const VENOM_SIDES := true
 
 # --- Steering --------------------------------------------------------------
 ## The water pushes back: a slow random walk on the heading the player never
@@ -597,15 +637,16 @@ func restore_loads(kept: PackedFloat64Array) -> void:
 ## wore off this step go into the wound -- [constant HARM_PER_STACK] a stack,
 ## diluted by the body's [param body_radius] -- and **the wound mends only for
 ## the part of the step after the harm ran out**: a body carrying harm does not
-## mend. [param loads] are worn in place.
+## mend. [param loads] are worn in place. [param mend] is how much faster than
+## [constant MEND_SECONDS] it mends (the `mend` stat, docs/design/inside-genes.md §3).
 static func dosed(loads: PackedFloat64Array, hurt: float, body_radius: float,
-		delta: float) -> float:
+		delta: float, mend: float = 1.0) -> float:
 	if not Doses.any(loads):
-		return mended(hurt, delta)
+		return mended(hurt, delta, mend)
 	var worn := Doses.wear(loads, delta, DOSE_TAU_BY_KIND, DOSE_GONE)
 	var harmed := clampf(hurt + worn[0] * HARM_PER_STACK
 		* Doses.felt(1.0, body_radius, DOSE_SIZE), 0.0, 1.0)
-	return mended(harmed, worn[1])
+	return mended(harmed, worn[1], mend)
 
 
 func _process(delta: float) -> void:
@@ -630,7 +671,7 @@ func _process(delta: float) -> void:
 	# this way is found by the field, at the top of its contacts with this cell,
 	# which is where every death of this cell is told -- on a guest never, since
 	# the host owns that death and the next snapshot's wound is the truth.
-	wound = dosed(loads, wound, radius, delta)
+	wound = dosed(loads, wound, radius, delta, stat(&"mend"))
 
 	_omega = lerpf(_omega, steer * turn_rate(), 1.0 - exp(-delta / turn_response()))
 	# Ornstein-Uhlenbeck-ish drift: a heading nudge that wanders instead of
@@ -1062,14 +1103,20 @@ static func flank(theta: float) -> float:
 ## A wound knitting up over [param delta] seconds. Every body in the water uses
 ## this one -- the player's through [method _process], the field's through
 ## food.gd -- so there is one definition of how fast a cell recovers.
-static func mended(hurt: float, delta: float) -> float:
-	return clampf(hurt - delta / MEND_SECONDS, 0.0, 1.0)
+static func mended(hurt: float, delta: float, mend: float = 1.0) -> float:
+	return clampf(hurt - delta * mend / MEND_SECONDS, 0.0, 1.0)
 
 
 ## **How many outside slots a body of [param body_radius] has earned**: the body
 ## plan's count -- every slot earned at that radius or below.
 static func slots_for(body_radius: float) -> int:
 	return BodyPlan.slots_for(body_radius)
+
+
+## **How many slots inside a body of [param body_radius] has earned**: one from
+## birth and more as it grows (`body_plan.gd`'s `inside_for`; inside-genes.md §1).
+static func inside_for(body_radius: float) -> int:
+	return BodyPlan.inside_for(body_radius)
 
 
 ## **The realised speed of a body's tail**, from what it wears, [param tiers]:

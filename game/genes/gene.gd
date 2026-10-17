@@ -43,6 +43,11 @@ const TIER_MAX := 3
 ## these.
 const OUTSIDE := &"outside"
 const INSIDE := &"inside"
+## **And riding** (docs/design/gene-sockets.md): in another gene's own slot, and
+## nowhere on the body. A form of this place is what its gene rides as -- the
+## toxin's venom -- and the body never wears it: neither the outside slots nor the
+## inside take it. A gene of one form rides as itself, outside.
+const RIDING := &"riding"
 
 ## **The tags** (§3): facts about a gene other systems ask, through the
 ## catalogue's `tagged()` and `has_tag()`. A tag on an organ is on every variant
@@ -155,8 +160,9 @@ var numbers := {}
 
 ## **How it earns levels** (docs/design/beam-levels.md), for an organ that does:
 ## `step` (what going from level L to L + 1 costs, over L), `fork` (the level its
-## fork opens at, 0 for none) and `paths` (what the fork offers, an
-## `Array[StringName]`). Empty for an organ whose strength is its copies. Read by
+## fork opens at, 0 for none), `paths` (what the fork offers, an
+## `Array[StringName]`) and `earns` (what the pause screen says it earns by:
+## `strike`, the default, or `sight`). Empty for an organ whose strength is its copies. Read by
 ## `genome.gd`, which keeps a progression for every gene that levels.
 var levels := {}
 
@@ -302,8 +308,8 @@ var sockets: Array = []
 #
 #   WORDS           its chip word, one short word         figure.gd's word_of
 #   EXPLAINS        what it does, one line                 figure.gd's explains
-#   EXPLAINS_SIDE   that line for a venom on a side, and
-#   EXPLAINS_STERN  at the stern
+#   EXPLAINS_SIDE   that line for a gene worn on a side, and
+#   EXPLAINS_STERN  at the stern (none uses them since venom rides)
 #   EXPLAINS_PATH   way to the line once a fork is taken
 #   CARRIED_WORDS   its word while it waits to be placed, for a gene of forms
 #   CARRIED_EXPLAINS  and its line then
@@ -356,7 +362,8 @@ var key: StringName = &""
 ## The variant this form is of: `&""` for the organ's own key, its implicit first
 ## variant, so every variant [member variants] lists needs a name of its own.
 var variant: StringName = &""
-## The place this form sits in: [constant OUTSIDE] or [constant INSIDE].
+## The place this form sits in: [constant OUTSIDE], [constant INSIDE] or
+## [constant RIDING].
 var place: StringName = OUTSIDE
 ## The kind of dose this form delivers, by doses.gd's name, `&""` for none.
 var dose: StringName = &""

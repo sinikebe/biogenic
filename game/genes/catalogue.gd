@@ -46,6 +46,7 @@ const ORGANS: Array[GDScript] = [
 	preload("res://game/genes/organs/vacuole.gd"),
 	preload("res://game/genes/organs/crista.gd"),
 	preload("res://game/genes/organs/haptonema.gd"),
+	preload("res://game/genes/organs/lysosome.gd"),
 	# Retired, and kept known for good (§4.4).
 	preload("res://game/genes/organs/rhabdom.gd"),
 	preload("res://game/genes/organs/statocyst.gd"),
@@ -836,10 +837,14 @@ static func sockets(key: StringName) -> Array:
 	return record.sockets if record != null else _no_sockets
 
 
-## **The key [param gene] rides as**: its outside form, which is itself for a gene of
-## one form. `&""` for a gene that cannot sit outside, which can ride in nothing.
+## **The key [param gene] rides as**: its riding form where it has one -- the
+## toxin's venom -- and otherwise its outside form, which is itself for a gene of one
+## form. `&""` for a gene that can do neither, which can ride in nothing.
 static func rides_as(gene: StringName) -> StringName:
-	return form_in(gene, Gene.OUTSIDE) if known(gene) else &""
+	if not known(gene):
+		return &""
+	var riding := form_in(gene, Gene.RIDING)
+	return riding if riding != &"" else form_in(gene, Gene.OUTSIDE)
 
 
 ## **Whether [param gene] fits slot [param socket] of [param host]**: its organ is one

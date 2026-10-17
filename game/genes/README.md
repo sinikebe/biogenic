@@ -133,14 +133,17 @@ organ's own key is its first variant, implicitly, and never leaves the catalogue
      whatever its water and drift say -- picked from its organ by its class's share.
    - **Two places** take `forms`: place to `{"key": ..., "order": ..., ...}`, each
      form keyed and ordered, the first its variety. A variant of one place needs none.
+     A form in `RIDING` is never worn on the body: it is what a gene's own slot holds
+     (the toxin's venom; docs/design/venom-rides.md), and it provides the body
+     nothing, since its host's slot says what it gives.
    - **A strain of a toxin** sets its `dose`. The probe asks for a stack line where its
-     kind of dose has none, and for a venom's side and stern words.
+     kind of dose has none.
    - **Its parts are its organ's**: it declares none of its own, and every reader of
      the organ's parts reads it.
 3. **Its words**: its key in the organ's word tables -- `WORDS`, `EXPLAINS`,
    `VARIANT_WORDS` (its own word after its organ's name on the explaining line,
    `toxicyst · paralysing`), and whatever else the organ's keys have
-   (`EXPLAINS_SIDE`, `CARRIED_WORDS`...), each with the TRANSLATORS note, ROOM and
+   (`CARRIED_WORDS`...), each with the TRANSLATORS note, ROOM and
    CONTEXT the table has.
 4. **Its look**: an accent, `"look": {"accent": &"ring"}`, and nothing else of a look
    (**Looks**, below).

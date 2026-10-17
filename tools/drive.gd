@@ -72,10 +72,11 @@ extends Node
 ##                           (dna-body.md §8)
 ##   --touch=<seconds>:<x>,<y>
 ##                           press and release one finger at that canvas point;
-##                           repeatable. This is how the genome strip's two-tap
-##                           arming gets exercised on the input path a phone
-##                           actually uses. Coordinates are in canvas units, not
-##                           window pixels -- but note the canvas is only 1280
+##                           repeatable. This is how the pause screen's choosing
+##                           and its button (docs/design/placing.md) get
+##                           exercised on the input path a phone actually uses.
+##                           Coordinates are in canvas units, not window
+##                           pixels -- but note the canvas is only 1280
 ##                           wide at 16:9: `expand` keeps the height at 720 and
 ##                           widens it, so at 2400x1080 the canvas is 1600 across
 ##                           and a centred widget is 160 further right.
@@ -367,7 +368,7 @@ extends Node
 ##                           comes to meet the cell, for a contact swallow
 ##   --grow-posed-at=<seconds>
 ##                           grow the bodies --cell= posed in the drop to
-##                           DIVIDE_RADIUS then, so each divides on its next tick
+##                           their division radius then, so each divides on its next tick
 ##                           (lineage.md §6.4's frames): one posed at forty would
 ##                           divide while it is held, and its daughter be posed
 ##                           again. Pass it after --release-at=
@@ -380,7 +381,7 @@ extends Node
 ##                           runs out at that time and dies of hunger on its next
 ##                           step, leaving its remains where it was (ocean.md
 ##                           §7.4) -- a death in view, for the replay's flocs
-##   --divide-at=<seconds>   grow the cell to DIVIDE_RADIUS then, so it divides
+##   --divide-at=<seconds>   grow the cell to its division radius then, so it divides
 ##                           at a known time -- in a pond, after the guest has
 ##                           arrived
 ##   --shift=<from>:<to>     the division's mutation is a shift of the gene in
@@ -579,7 +580,7 @@ extends Node
 ##                           what the far seat's cell wears, expressed whole
 ##   --friend-state=<state>[:<seconds>]
 ##                           put the far seat in a state at that time (default
-##                           0.5): `out`, its body at DIVIDE_RADIUS so it divides
+##                           0.5): `out`, its body at its division radius so it divides
 ##                           and waits choosing -- a ghost from its pinch; `dead`,
 ##                           starved; `quiet`, its run and session stopped the way
 ##                           `onActivityStopped` stops a phone, with its transport
@@ -610,7 +611,9 @@ extends Node
 ##                           where the run starts: somewhere quiet (§8.1, the
 ##                           game's), the middle, or --edge-gap= inside the rim
 ##                           facing it, for the renders
-##   --edge-gap=<units>      default 380
+##   --edge-gap=<units>      default 380; a cell started nearer the rim than its
+##                           hold is held there (margin.md §2.1): a newborn's
+##                           is 780
 ##   --flocs-near=<n>        n flocs 220-520 units round the start, the last one
 ##                           caught settling (§7.6's render)
 ##   --desert=<units>        everything alive within it of the start taken away
@@ -668,7 +671,11 @@ extends Node
 ## division. **And pack 4's** (docs/design/automation.md §5.4):
 ## --water-tail=pack3|row37, `pack3` being pack 3's water, where a body swims
 ## only while a swim rule fires, and `row37` the game's, where every tail that
-## swims beats unless it is held.
+## swims beats unless it is held. **And the light's** (docs/design/daylight.md
+## §10.1): --daylight=0|1, 0 being full light everywhere at every hour -- the build
+## before the day, to the byte -- and --day-at=<seconds into the day>, where a drop
+## being made starts its day, for the renders: 0 is dawn, 60 the game's start at
+## the end of it, 390 dusk and 480 night.
 ##
 ## **Your programs and the autopilot** (docs/design/automation.md §18.1, phase
 ## 4-2). **A run of this harness keeps no library** unless told where, as it
@@ -984,7 +991,7 @@ var _replay_seen := false
 ## When the poses stop being held, and when the nearest mouth starves.
 var _release_at := -1.0
 var _starve_near := -1.0
-## `--grow-posed-at=`: when the posed bodies are grown to DIVIDE_RADIUS, or -1.
+## `--grow-posed-at=`: when the posed bodies are grown to their division radius, or -1.
 var _grow_posed_at := -1.0
 ## When to raise the two-pane screen over the live run, and the node once it is.
 var _panes_at := -1.0
@@ -1048,7 +1055,7 @@ var _friend_state_at := 0.5
 var _friend_state_done := false
 var _pond_trace := -1.0
 var _pond_trace_clock := 0.0
-## --divide-at=: when to grow this cell to DIVIDE_RADIUS, or -1 for never.
+## --divide-at=: when to grow this cell to its division radius, or -1 for never.
 var _divide_at := -1.0
 ## --shift=: the two outside slots the division's mutation swaps, empty for the
 ## run's own roll; and whether the pair has been rewritten yet.
@@ -1999,13 +2006,14 @@ func _step_friend_state() -> void:
 		return
 	match _friend_state:
 		"out":
-			# DIVIDE_RADIUS is where every division begins: 2.4 s of quickening
-			# in the water, then the pinch, where it leaves it.
+			# Its division radius is where its division begins (margin.md §1.1):
+			# 2.4 s of quickening in the water, then the pinch, where it leaves it.
 			var cell := _far_cell()
+			var divide_at: float = far_run.call(&"_divide_at")
 			if cell != null:
-				cell.radius = CellBody.DIVIDE_RADIUS
-			print("[seat]  %5.2f  the %s reaches r%.0f and divides -- out of the water from its pinch"
-				% [_clock, far_seat, CellBody.DIVIDE_RADIUS])
+				cell.radius = divide_at
+			print("[seat]  %5.2f  the %s reaches r%.1f and divides -- out of the water from its pinch"
+				% [_clock, far_seat, divide_at])
 		"dead":
 			var metabolism := _find_script(far_run, "res://game/normal/metabolism.gd")
 			if metabolism != null:
@@ -2587,7 +2595,7 @@ func _step_field_cost() -> void:
 
 
 ## Straight to the end of the grace, which is a death this frame.
-## --divide-at=: this cell reaches DIVIDE_RADIUS, and the run divides it --
+## --divide-at=: this cell reaches its division radius, and the run divides it --
 ## at a known time, so a division can be photographed where it happens: in a
 ## pond, after the guest has arrived rather than in the water it swam in alone.
 func _step_divide() -> void:
@@ -2596,8 +2604,8 @@ func _step_divide() -> void:
 	_divide_at = -1.0
 	var cell := _find_node_with(_run, &"bearing_to")
 	if cell != null:
-		cell.radius = CellBody.DIVIDE_RADIUS
-		print("[drive] %5.2f  grown to r%.0f -- dividing" % [_clock, cell.radius])
+		cell.radius = _run.call(&"_divide_at")
+		print("[drive] %5.2f  grown to r%.1f -- dividing" % [_clock, cell.radius])
 
 
 ## --shift=: once the pair is rolled at the pinch, and before the choosing
@@ -2714,8 +2722,10 @@ func _step_toxins() -> void:
 		match String(event[1]):
 			"hit":
 				var bearing := float(event[2])
+				# A bite whose mouth's slot holds venom at three copies.
 				_food.call(&"_dose", FoodField.TARGET_PLAYER, 0,
-					Stats.at(&"venom_stacks", 3), -1, bearing, false)
+					Riders.value({&"cytostome": [[&"toxicyst", 3]]}, &"cytostome",
+					&"bite_dose", 0.0), -1, bearing, false)
 				_food.bitten.emit(bearing, 1.0)
 			"meal":
 				_food.call(&"_dose", FoodField.TARGET_PLAYER, 0,
@@ -3179,6 +3189,9 @@ func _step_rects() -> void:
 		"Gauge": base + "/Genome/Lines/Stack/Hint/Gauge",
 		"Text": base + "/Genome/Lines/Stack/Hint/Text",
 		"Act": base + "/Genome/Lines/Stack/Act",
+		# **The button that writes** (placing.md §1), in the verb line's place
+		# while the chip chosen has something to place.
+		"Place": base + "/Genome/Lines/Stack/Place",
 		# The switch: its hit rect, which is 96 x 48 however it is drawn.
 		"NumbersToggle": base + "/Genome/Lines/NumbersToggle",
 		# **The fork view and its two cards** (§8.3, §8.7): the one surface
@@ -3482,7 +3495,7 @@ func _hold_world() -> void:
 
 
 ## `--grow-posed-at=`: the bodies `--cell=` posed in the drop grown to
-## DIVIDE_RADIUS, once, so each divides on its next tick -- the frames of a
+## their division radius, once, so each divides on its next tick -- the frames of a
 ## division (lineage.md §6.4). One the water took meanwhile is left alone.
 func _grow_posed() -> void:
 	# Not while frozen: a photograph's water stands still, the posed bodies too.
@@ -3498,10 +3511,11 @@ func _grow_posed() -> void:
 		if slot < 0 or slot >= bodies.size() or not bool(bodies[slot].get("seeded")) \
 				or bool(bodies[slot].get("inert")) or bool(bodies[slot].get("drifter")):
 			continue
-		bodies[slot].set("radius", CellBody.DIVIDE_RADIUS)
+		var divide_at: float = bodies[slot].call(&"divide_at")
+		bodies[slot].set("radius", divide_at)
 		water.call(&"refresh", slot)
-		print("[drive] %5.2f  posed cell %d grown to r%.0f in slot %d, id %d" % [_clock,
-			int(index), CellBody.DIVIDE_RADIUS, slot, int(bodies[slot].get("id"))])
+		print("[drive] %5.2f  posed cell %d grown to r%.1f in slot %d, id %d" % [_clock,
+			int(index), divide_at, slot, int(bodies[slot].get("id"))])
 
 
 ## **The drop's numeric and on/off switches** (the header's last block), by the
@@ -3511,7 +3525,8 @@ func _drop_switch(text: String) -> bool:
 	const FLOATS := {"--edge-gap=": &"edge_gap", "--desert=": &"desert",
 		"--age=": &"age_first", "--absorb=": &"absorb",
 		"--first-delay=": &"grace", "--mutate=": &"mutate", "--floor=": &"floor_share",
-		"--floor-tau=": &"floor_tau", "--newborn-grace=": &"newborn_grace"}
+		"--floor-tau=": &"floor_tau", "--newborn-grace=": &"newborn_grace",
+		"--day-at=": &"day_at"}
 	# `--drifter-venom=` is read as `--drifter-toxin=` as well: the switch kept its
 	# meaning -- the drifters' share of the toxin -- when the toxin took forms.
 	const SWITCHES := {"--drifter-toxin=": &"drifter_toxin",
@@ -3519,7 +3534,7 @@ func _drop_switch(text: String) -> bool:
 		"--contact-swallow=": &"contact_swallow", "--armour-swallow=": &"armour_swallow",
 		"--lod=": &"lod", "--half-rate=": &"half_rate", "--near-first=": &"near_first",
 		"--skip-still=": &"skip_still", "--births=": &"births", "--rules=": &"rules",
-		"--rule-change=": &"rule_change"}
+		"--rule-change=": &"rule_change", "--daylight=": &"daylight"}
 	if text.begins_with("--flocs-near="):
 		_field_sets[&"flocs_near"] = int(text.trim_prefix("--flocs-near="))
 		return true

@@ -40,7 +40,10 @@ extends RefCounted
 #   the selection     the lens fills, the word goes loud, and the arc lights on
 #                     the skin -- the owner's sentence answered on the body
 #   waiting genes     a tray above the figure, soonest to lapse first, one of
-#                     them in hand; the two taps place it, as they always have
+#                     them in hand; a tap chooses where it goes and the button
+#                     under the figure places it (docs/design/placing.md)
+#   a gene's slots    a small chip each, off the right end of its gene's chip,
+#                     on the same figure (gene-sockets.md §5)
 #
 # **A launcher-themed surface, not the membrane aesthetic.** The membrane is
 # what the cell feels; this is what the player consults. It lives on pause
@@ -67,10 +70,17 @@ const Rarity := preload("res://game/genes/rarity.gd")
 
 ## The figure's own box, and where the body sits in it. **Set in code, as the
 ## choosing screen's column is**: every seat below is measured from
-## [constant FIGURE_AT], and a `.tscn` cannot add. The scene carries the same
+## [member FIGURE_AT], and a `.tscn` cannot add. The scene carries the same
 ## size so the tree reads right in an editor; this is what binds.
-const FIGURE_SIZE := Vector2(420.0, 372.0)
-const FIGURE_AT := Vector2(210.0, 170.0)
+##
+## **Laid out with the ring** ([method _lay_out]), because how wide it is depends on
+## how many slots of its own the widest gene has (docs/design/placing.md §2): the
+## ring's columns move apart to make room for them beside each chip, and the box
+## ends where the right column's slots do. So the body is not at the box's middle
+## once any gene has a slot: the chips are, and they are what is centred under the
+## tray. 492 x 372 while no gene has more than one.
+static var FIGURE_SIZE := Vector2(420.0, 372.0)
+static var FIGURE_AT := Vector2(210.0, 170.0)
 ## **A fixed radius, not the cell's.** Drawn at the cell's own size the ring of
 ## slots would move between two pauses as the body grew, and growth is already
 ## said by the slots that light up. Sixty is what the worst body the game can
@@ -82,15 +92,35 @@ const FIGURE_R := 60.0
 ## it, and far louder than the water behind the scrim.
 const FIGURE_FADE := 0.85
 ## One slot, and the whole of its touch target: 144 x 84 device px at
-## 2400x1080. Neighbours are 54 px apart across and 82 and 112 down.
+## 2400x1080. Neighbours are 82 and 112 px apart down, and across, at least
+## [constant RING_GAP] clear of the last of a chip's own slots.
 const SLOT_SIZE := Vector2(96.0, 56.0)
 ## **The ring the chips sit on: a 3 x 3 grid, not a circle at true bearings**:
 ## words are horizontal, rows and columns give the arrow keys a meaning, and every
-## chip still sits within 5.3 degrees of its arc's true bearing -- the forward
-## diagonals at 47.4 against 42.1, the rear ones at 138.2 against 133.3, the flank
-## at 90 against 92.5. Its columns and rows, from the body's centre.
-const RING_X: Array[float] = [-150.0, 0.0, 150.0]
+## chip still sits near its arc's true bearing. Its columns and rows, from the
+## body's centre. **The columns are laid out** ([method _lay_out]): 150 apart with
+## no gene's slots to make room for, as they were, and with one, 168 -- the forward
+## diagonals then sit at 50.6 degrees against 42.1, the rear ones at 135.0 against
+## 133.3.
+static var RING_X: Array[float] = [-150.0, 0.0, 150.0]
 const RING_Y: Array[float] = [-138.0, 0.0, 168.0]
+## The narrowest the columns ever are: the ring as it was before any gene had a slot.
+const RING_PITCH_MIN := 150.0
+## **The least room across between the last of a chip's own slots and the next chip
+## along the row**, so the two never read as one gene's.
+const RING_GAP := 12.0
+
+## **A gene's own slot, on the figure** (docs/design/placing.md §2): its touch target,
+## a chip-high square off the right end of its gene's chip -- a lobe of helix, its
+## rungs, and its word under them -- [constant SOCKET_GAP] from the chip and from the
+## slot before it.
+const SOCKET_SIZE := Vector2(56.0, 56.0)
+const SOCKET_GAP := 4.0
+## Where the slot's one lobe starts across its square: centred.
+const SOCKET_LOBE_X := (56.0 - 28.0) * 0.5
+## **How many slots of its own the figure makes room for beside every chip**: the
+## most any gene in the catalogue has. Laid out with the ring.
+static var SOCKETS_DRAWN := 0
 ## **The ring's eight cells, clockwise from the nose's**, as `(column, row)`: the
 ## cell an outside slot takes is the one its arc's bearing is nearest, an eighth
 ## of a turn each.
@@ -103,6 +133,16 @@ const RING_CELLS: Array[Vector2i] = [Vector2i(1, 0), Vector2i(2, 0), Vector2i(2,
 ## there would read as a place on the skin.
 const INSIDE_SEAT := Vector2(0.0, 6.0)
 const RING_MIDDLE := Vector2i(1, 1)
+## **The inside's slots, one above the other** (docs/design/inside-genes.md §5): the
+## first on [constant INSIDE_SEAT], where the one inside slot always was, the second
+## below it and the third above, a chip's height apart -- so no two chips share a
+## pixel a finger could press, and each keeps its 48 px and more. A slot not earned
+## yet is not drawn: a newborn's body carries one chip, as it always did.
+const INSIDE_PITCH := 56.0
+## **How many inside chips the body has room for**: three rows, from just under the
+## mouth's bow to just over the tail. A plan with more inside slots crowds the
+## figure ([member CROWDED]), and the gene probe says so.
+const INSIDE_ROWS := 3
 
 ## **Chip centres from the body's centre, by slot index** -- laid out from the body
 ## plan (`body_plan.gd`, gene-catalogue.md §10.2): each outside slot in the ring's
@@ -137,9 +177,11 @@ const NEIGHBOUR_SIDES: Array = [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]
 ## the `numbers` switch -- and on the pause screen, `light`.
 static var SLOT_RING: Array[int] = []
 ## **The slots the ring has no cell of their own for**: an outside slot whose
-## nearest cell another already took, or an inside one past the middle's one. Each
-## is seated somewhere so nothing breaks, but a plan that makes one fails the gene
-## probe's layout check rather than overlapping in silence (§10.4). Empty today.
+## nearest cell another already took. Each is seated somewhere so nothing breaks,
+## but a plan that makes one fails the gene probe's layout check rather than
+## overlapping in silence (§10.4). Empty today. **The inside is one only past its
+## [constant INSIDE_ROWS]**: every inside slot is the middle's, one above the other
+## ([constant INSIDE_PITCH]).
 static var CROWDED: Array[int] = []
 
 
@@ -152,36 +194,72 @@ static func _static_init() -> void:
 ## [member SLOT_RING] and [member CROWDED], each refilled in place -- when this
 ## script loads, and whenever the plan changes.
 static func _lay_out() -> void:
+	# **Room for a gene's own slots first** (docs/design/placing.md §2): the widest
+	# host's slots beside every chip, and the columns as far apart as that needs.
+	SOCKETS_DRAWN = 0
+	for key: StringName in Catalogue.live():
+		SOCKETS_DRAWN = maxi(SOCKETS_DRAWN, Catalogue.sockets(key).size())
+	var beside := sockets_width(SOCKETS_DRAWN)
+	var pitch := maxf(RING_PITCH_MIN, SLOT_SIZE.x + beside + RING_GAP)
+	RING_X.assign([-pitch, 0.0, pitch])
+	# The old box's 12 px margins, left of the left column's chips and right of the
+	# right column's last slot.
+	var margin := (420.0 - 2.0 * RING_PITCH_MIN - SLOT_SIZE.x) * 0.5
+	FIGURE_SIZE = Vector2(2.0 * pitch + SLOT_SIZE.x + beside + 2.0 * margin, 372.0)
+	FIGURE_AT = Vector2(margin + pitch + SLOT_SIZE.x * 0.5, 170.0)
 	var cells: Array[Vector2i] = []
 	var taken := {}
 	CROWDED.clear()
+	# The middle is the inside's, all of it: an outside slot never lands there.
+	if BodyPlan.INSIDE_SLOTS > 0:
+		taken[RING_MIDDLE] = BodyPlan.INSIDE
 	for slot in BodyPlan.SLOTS:
 		var cell := RING_MIDDLE
 		if slot < BodyPlan.INSIDE:
 			var turn := wrapf(BodyPlan.bearing(slot), 0.0, TAU)
 			cell = RING_CELLS[posmod(roundi(turn / (TAU / RING_CELLS.size())),
 				RING_CELLS.size())]
-		if taken.has(cell):
-			CROWDED.append(slot)
-			cell = _free_cell(taken, cell)
-		taken[cell] = slot
+			if taken.has(cell):
+				CROWDED.append(slot)
+				cell = _free_cell(taken, cell)
+			taken[cell] = slot
 		cells.append(cell)
 	SLOT_SEAT.clear()
+	# The inside's column, top to bottom: its slots by their row.
+	var column: Array[int] = []
+	for slot in range(BodyPlan.INSIDE, BodyPlan.SLOTS):
+		column.append(slot)
+	column.sort_custom(func(a: int, b: int) -> bool: return inside_row(a) < inside_row(b))
+	for slot in range(BodyPlan.INSIDE + INSIDE_ROWS, BodyPlan.SLOTS):
+		CROWDED.append(slot)
 	for slot in cells.size():
 		var cell := cells[slot]
-		SLOT_SEAT.append(INSIDE_SEAT if cell == RING_MIDDLE
-			else Vector2(RING_X[cell.x], RING_Y[cell.y]))
+		SLOT_SEAT.append(INSIDE_SEAT + Vector2(0.0, INSIDE_PITCH * float(inside_row(slot)))
+			if slot >= BodyPlan.INSIDE else Vector2(RING_X[cell.x], RING_Y[cell.y]))
 	SLOT_NEIGHBOUR.clear()
 	var ways: Array[Vector2i] = [Vector2i(-1, 0), Vector2i(0, -1), Vector2i(1, 0),
 		Vector2i(0, 1)]
 	for slot in cells.size():
 		var sides: Array = []
 		for way: Vector2i in ways:
+			# **Up and down the inside's column first**: only its top and bottom slots
+			# lead out of it. A screen steps past a slot not earned yet the same way
+			# (normal_mode.gd's `_wire_focus`), so a newborn's arrows go as they did.
+			if slot >= BodyPlan.INSIDE and way.x == 0:
+				var row := column.find(slot) + way.y
+				if row >= 0 and row < column.size():
+					sides.append(column[row])
+					continue
 			var at := cells[slot] + way
 			var to := -1
 			while at.x >= 0 and at.x < RING_X.size() and at.y >= 0 and at.y < RING_Y.size():
 				if taken.has(at):
 					to = int(taken[at])
+					# Into the inside from above is its top slot, from below its
+					# bottom one, and from a side its first, in the middle.
+					if at == RING_MIDDLE:
+						to = column[0] if way.y > 0 else column[column.size() - 1] \
+							if way.y < 0 else BodyPlan.INSIDE
 					break
 				at += way
 			sides.append(to)
@@ -193,6 +271,30 @@ static func _lay_out() -> void:
 		return wrapf(BodyPlan.bearing(a), 0.0, TAU) < wrapf(BodyPlan.bearing(b), 0.0, TAU))
 	for slot in range(BodyPlan.INSIDE, BodyPlan.SLOTS):
 		SLOT_RING.append(slot)
+
+
+## **Where an arrow goes from [param slot]**, [param way] one of [constant
+## NEIGHBOUR_SIDES]' indices: [member SLOT_NEIGHBOUR]'s, stepping on past an inside
+## slot [param live] says is not earned yet, so a body with one inside slot moves
+## between the nose, its inside and the tail as it always did. -1 for nothing.
+static func neighbour(slot: int, way: int, live: Callable) -> int:
+	var to := int(SLOT_NEIGHBOUR[slot][way])
+	for step in SLOT_NEIGHBOUR.size():
+		if to < BodyPlan.INSIDE or bool(live.call(to)):
+			break
+		to = int(SLOT_NEIGHBOUR[to][way])
+	return to
+
+
+## **Which row of the inside's column [param slot] sits on**, about the first: 0
+## for the first, then 1 below it, -1 above, 2, -2 and so on.
+static func inside_row(slot: int) -> int:
+	var k := slot - BodyPlan.INSIDE
+	if k <= 0:
+		return 0
+	@warning_ignore("integer_division")
+	var away := (k + 1) / 2
+	return away if k % 2 == 1 else -away
 
 
 ## The free cell of the ring nearest [param cell] round it, the middle last.
@@ -285,24 +387,14 @@ const CHIP_AMP := 11.0
 ## The word's baseline, and its size -- one up from the strand's 13, because a
 ## chip is read on its own rather than along a row of neighbours.
 const CHIP_BASE := 50.0
-## **A gene's own slots, as ports off its chip** (docs/design/gene-sockets.md §5.1):
-## a 4 px port 5 px past the chip's right edge, one every 9.5 px down the helix's
-## end, on a stem from it. Up to four fit the helix's 22 px and a little over; a
-## neighbour chip is 54 px away. Lit, a port gains a ring and a glow in the hue of
-## the gene in hand.
-const PORT_X := 101.0
-const PORT_R := 4.0
-const PORT_PITCH := 9.5
-const PORT_RING := 1.4
-const PORT_GLOW := 4.0
-const PORT_GLOW_ALPHA := 0.32
+## **The stem a gene's own slot hangs on** (docs/design/placing.md §2), from the end
+## of its gene's helix: quiet, and lit in the hue of the gene in hand where the slot
+## takes it -- with a tint in its lens, well under a chosen lens's
+## [constant CHIP_LENS], so being chosen stays the louder of the two.
+const PORT_GLOW_ALPHA := 0.12
 const PORT_LIT_ALPHA := 0.95
-const PORT_FULL_ALPHA := 0.95
-const PORT_EMPTY_ALPHA := 0.62
 const PORT_STEM_ALPHA := 0.40
 const PORT_STEM_WIDTH := 1.2
-## The hole an empty port is, so a stem never shows through it.
-const PORT_HOLE := Color(0.031, 0.075, 0.067, 0.95)
 const CHIP_WORD := 14
 ## **The copies are three pips**, after the word, at its x-height. Built three
 ## ways on one frame (dna-body.md §3.1): seats for three rungs inside the helix
@@ -531,15 +623,15 @@ const GAUGE_RADIUS := 2
 const GAUGE_TRACK := Color(0.855, 0.953, 0.933, 0.14)
 const GAUGE_FILL_ALPHA := 0.85
 
-## TRANSLATORS: The line for the empty slot inside the body (the one slot in the
-## middle of the body, not round it): nothing is there yet, and a toxin placed
-## there becomes poison.
+## TRANSLATORS: The line for an empty slot inside the body (the slots in the
+## middle of the body, not round it): nothing is there yet, and the genes that can
+## go there. `store` and `mend` are those genes' short words, as on their chips.
 ## ROOM: 520 px at 15 px
-const EXPLAIN_INSIDE := "nothing inside yet · a toxin here becomes poison"
-## TRANSLATORS: Under that line, for the empty inside slot: the slot is inside the
-## cell's body, and a toxin is the only gene that can go there.
+const EXPLAIN_INSIDE := "nothing inside yet · store, mend or a toxin can go here"
+## TRANSLATORS: Under that line, for an empty inside slot: the slot is inside the
+## cell's body, and a toxin placed there becomes poison.
 ## ROOM: 560 px at 14 px
-const HINT_INSIDE := "inside your body · only a toxin goes here"
+const HINT_INSIDE := "inside your body · a toxin here becomes poison"
 
 ## The second, weaker channel behind the rungs: a gene the body does not wear
 ## draws its word and its organ fainter. Honest about which one does the work.
@@ -709,8 +801,7 @@ static func explains(gene: StringName, slot: int = -1,
 	var taken: Dictionary = words.get(&"paths", {})
 	if taken.has(path):
 		return String(TranslationServer.translate(taken[path]))
-	if slot >= 0 and not GenomeNode.is_inside(slot) and not GenomeNode.is_front(slot) \
-			and CellBody.VENOM_SIDES:
+	if slot >= 0 and not GenomeNode.is_inside(slot) and not GenomeNode.is_front(slot):
 		if slot == GenomeNode.STERN and words.has(&"stern"):
 			return String(TranslationServer.translate(words[&"stern"]))
 		if words.has(&"side"):
@@ -747,7 +838,7 @@ static func explain_empty(slot: int) -> String:
 
 
 ## The hint under an empty [param slot]: nothing to pass on from there -- or,
-## inside, that only a toxin goes there.
+## inside, what a toxin becomes there.
 static func hint_empty(slot: int) -> String:
 	if GenomeNode.is_inside(slot):
 		return String(TranslationServer.translate(HINT_INSIDE))
@@ -857,7 +948,8 @@ static func _row_width(font: Font, text: String) -> float:
 ## [param numbers] on, the body's size at [param radius], what its full tank
 ## holds and how long that lasts drifting -- in the caption's own size and tint,
 ## so it is still a caption. [param upkeep] is what the [param body] costs to
-## keep, as the genome prices it.
+## keep, as the genome prices it, and [param light] the light where it is, which
+## its `sun` is made at (docs/design/daylight.md §3.5): full where nobody says.
 ##
 ## **It carries the generation**, because the hint below the figure carries what
 ## a slot is worth to a daughter, and it says `genome` because the group is two
@@ -867,7 +959,7 @@ static func _row_width(font: Font, text: String) -> float:
 ## the odds -- zero pixels either way. The phrases are drops.gd's, which a drop's
 ## line in the drop menu says too.
 static func caption(generation: int, numbers: bool, radius: float, body: Dictionary,
-		upkeep: float) -> String:
+		upkeep: float, light := 1.0) -> String:
 	# TRANSLATORS: The caption above the figure on the pause screen, in 15 px
 	# type: the word for the cell's whole set of genes, then a middle dot and %s,
 	# which is the generation ("first generation"). Keep %s. With the numbers
@@ -876,7 +968,7 @@ static func caption(generation: int, numbers: bool, radius: float, body: Diction
 	var said := String(TranslationServer.translate("genome · %s")) \
 		% Drops.generation_text(generation)
 	if numbers:
-		said += Readout.SEP + Readout.plain(GeneStats.cell_items(radius, body, upkeep))
+		said += Readout.SEP + Readout.plain(GeneStats.cell_items(radius, body, upkeep, light))
 	return said
 
 
@@ -1013,6 +1105,20 @@ static func chip_at(slot: int) -> Vector2:
 	return FIGURE_AT + SLOT_SEAT[slot] - SLOT_SIZE * 0.5
 
 
+## **How wide [param count] of a gene's own slots are**, beside its chip: each
+## [constant SOCKET_SIZE] and the [constant SOCKET_GAP] before it.
+static func sockets_width(count: int) -> float:
+	return float(count) * (SOCKET_GAP + SOCKET_SIZE.x)
+
+
+## **Where slot [param socket] of the gene in ring slot [param slot] sits**: the
+## top-left corner of its [constant SOCKET_SIZE], in a row off the right end of
+## the chip, level with it.
+static func socket_at(slot: int, socket: int) -> Vector2:
+	return chip_at(slot) + Vector2(SLOT_SIZE.x + SOCKET_GAP
+		+ float(socket) * (SOCKET_SIZE.x + SOCKET_GAP), 0.0)
+
+
 # ---------------------------------------------------------------------------
 # A chip.
 # ---------------------------------------------------------------------------
@@ -1033,14 +1139,14 @@ static func chip_at(slot: int) -> Vector2:
 ## [param trace] leaves only a trace of it, where a tap adds a copy elsewhere;
 ## [param refused] drops the weave to [constant REFUSED_INK]; and [param ghost]
 ## is a form not written yet, at [param ghost_copies] and [param ghost_ink].
-## [param ports] are **its gene's own slots** (docs/design/gene-sockets.md §5.1),
-## one `[rider, lit]` each -- [method draw_ports]. The keyboard's underline is drawn
-## whenever the node has the focus.
+## **Its gene's own slots are chips of their own** beside it ([method
+## draw_socket_chip]), which draw the stem from this one's helix. The keyboard's
+## underline is drawn whenever the node has the focus.
 static func draw_chip(node: Control, slot: int, gene: StringName, copies: int,
 		worn: int, tone: Color, level: int = 0, forking: bool = false,
 		selected: bool = false, trace: bool = false, refused: bool = false,
 		ghost: StringName = &"", ghost_copies: int = 0,
-		ghost_ink: float = GHOST_INK, ports: Array = []) -> void:
+		ghost_ink: float = GHOST_INK) -> void:
 	# **The inside chip sits on the body, over a window of the base colour**, so
 	# its weave and word read over the nucleus and a stain (dna-slots-ux.md §3.1).
 	if GenomeNode.is_inside(slot):
@@ -1070,8 +1176,6 @@ static func draw_chip(node: Control, slot: int, gene: StringName, copies: int,
 			CHIP_AMP, 0, CHIP_LOBE * 1.5, Cilia.hue(gene), copies, worn)
 		draw_accent(node, gene, Vector2(CHIP_LOBE * 0.5, CHIP_MID))
 	node.draw_set_transform(Vector2.ZERO)
-	if gene != &"" and not ports.is_empty():
-		draw_ports(node, ports, REFUSED_INK if refused else 1.0)
 
 	draw_chip_label(node, gene, copies, worn, selected, level)
 	if ghost != &"":
@@ -1085,33 +1189,66 @@ static func draw_chip(node: Control, slot: int, gene: StringName, copies: int,
 			FOCUS_TINT, FOCUS_WIDTH, true)
 
 
-## **A gene's own slots, as ports off its chip's helix** (docs/design/gene-sockets.md
-## §5.1): one a slot, stacked at the helix's right end on a short stem -- hollow for
-## an empty slot, a disc in its rider's hue for a full one. [param ports] holds
-## `[rider, lit]` a slot, `lit` the hue of the gene in hand where that slot takes
-## it, and transparent where it does not: a lit port rings and glows in it, so
-## everywhere the gene could go is lit at once. [param ink] is the chip's own.
-static func draw_ports(node: CanvasItem, ports: Array, ink: float = 1.0) -> void:
-	var count := ports.size()
-	var root := Vector2(CHIP_X + CHIP_LOBE * float(CHIP_LOBES), CHIP_MID)
-	for k in count:
-		var at := Vector2(PORT_X, CHIP_MID + (float(k) - float(count - 1) * 0.5) * PORT_PITCH)
-		var rider := StringName(ports[k][0])
-		var lit: Color = ports[k][1]
-		node.draw_line(root, at, Color(PALE, PORT_STEM_ALPHA * ink), PORT_STEM_WIDTH, true)
-		if lit.a > 0.0:
-			node.draw_circle(at, PORT_R + PORT_GLOW, Color(lit, PORT_GLOW_ALPHA * ink),
-				true, -1.0, true)
-		if rider != &"":
-			node.draw_circle(at, PORT_R, Color(Cilia.hue(rider), PORT_FULL_ALPHA * ink),
-				true, -1.0, true)
-		else:
-			node.draw_circle(at, PORT_R, PORT_HOLE, true, -1.0, true)
-			node.draw_arc(at, PORT_R - PORT_RING * 0.5, 0.0, TAU, 16,
-				Color(PALE, PORT_EMPTY_ALPHA * ink), PORT_RING, true)
-		if lit.a > 0.0:
-			node.draw_arc(at, PORT_R + PORT_RING, 0.0, TAU, 20,
-				Color(lit, PORT_LIT_ALPHA * ink), PORT_RING, true)
+## **One of a gene's own slots, as a chip of its own** (docs/design/placing.md §2;
+## the node is [constant SOCKET_SIZE]): one lobe of helix on a stem from the end of
+## the gene before it -- its gene's chip for the first slot, the slot before for the
+## next -- its rider's copies as rungs, and its word under it. A slot is not a gene
+## of the body, so it is one lobe and not three, and its copies are its rungs alone:
+## the three pips would not fit beside the word.
+##
+## [param rider] is what the slot shows, &"" for nothing, at [param copies], of
+## which the body wears [param worn]; [param tone] is its lens's hue. [param
+## selected] fills the lens; [param refused] drops the weave and the stem to
+## [constant REFUSED_INK], for a slot that cannot take the gene in hand. [param
+## ghost] is the word an empty slot says faint, at [param ghost_ink]: what it takes,
+## or the gene in hand as it would land. [param lit] is the hue of the gene in hand
+## where this slot takes it, and transparent where it does not: the stem lights in
+## it and the lens glows, so everywhere the gene could go is lit at once.
+static func draw_socket_chip(node: Control, socket: int, rider: StringName,
+		copies: int, worn: int, tone: Color, selected: bool, refused: bool,
+		ghost: StringName, ghost_ink: float, lit: Color) -> void:
+	var ink := REFUSED_INK if refused else 1.0
+	# The stem: back across the gap to where the helix before this one ends.
+	var before := SLOT_SIZE.x - CHIP_X - CHIP_LOBE * float(CHIP_LOBES) if socket == 0 \
+		else SOCKET_SIZE.x - SOCKET_LOBE_X - CHIP_LOBE
+	var stem_from := Vector2(-SOCKET_GAP - before, CHIP_MID)
+	var stem_to := Vector2(SOCKET_LOBE_X, CHIP_MID)
+	if lit.a > 0.0:
+		node.draw_line(stem_from, stem_to, Color(lit, PORT_LIT_ALPHA), PORT_STEM_WIDTH
+			* 1.6, true)
+	else:
+		node.draw_line(stem_from, stem_to, Color(PALE, PORT_STEM_ALPHA * ink),
+			PORT_STEM_WIDTH, true)
+	node.draw_set_transform(Vector2(SOCKET_LOBE_X, 0.0))
+	if selected:
+		Cilia.draw_lens(node, Cilia.STRAND_ALONG_X, CHIP_LOBE, CHIP_MID, CHIP_AMP, 0,
+			0.0, Color(tone, CHIP_LENS))
+	elif lit.a > 0.0:
+		Cilia.draw_lens(node, Cilia.STRAND_ALONG_X, CHIP_LOBE, CHIP_MID, CHIP_AMP, 0,
+			0.0, Color(lit, PORT_GLOW_ALPHA))
+	Cilia.draw_weave(node, Cilia.STRAND_ALONG_X, CHIP_LOBE, CHIP_MID, CHIP_AMP, 1, 0,
+		BACKBONE_LIT if selected else ink, 0)
+	if rider != &"":
+		Cilia.draw_rungs(node, Cilia.STRAND_ALONG_X, CHIP_LOBE, CHIP_MID, CHIP_AMP, 0,
+			CHIP_LOBE * 0.5, Cilia.hue(rider), copies, worn)
+	node.draw_set_transform(Vector2.ZERO)
+	var font := node.get_theme_default_font()
+	if font == null:
+		return
+	var says := word_of(rider) if rider != &"" else word_of(ghost) if ghost != &"" else ""
+	if says.is_empty():
+		return
+	var tint := word_tint(selected, worn) if rider != &"" \
+		else Color(PALE, LABEL_TINT_LOUD.a * ghost_ink)
+	if refused and not selected:
+		tint = Color(tint, tint.a * REFUSED_INK)
+	var width := font.get_string_size(says, HORIZONTAL_ALIGNMENT_LEFT, -1.0, CHIP_WORD).x
+	node.draw_string(font, Vector2((SOCKET_SIZE.x - width) * 0.5, CHIP_BASE), says,
+		HORIZONTAL_ALIGNMENT_LEFT, -1.0, CHIP_WORD, tint)
+	if node.has_focus():
+		node.draw_line(Vector2(FOCUS_INSET * 0.5, SOCKET_SIZE.y - 1.0),
+			Vector2(SOCKET_SIZE.x - FOCUS_INSET * 0.5, SOCKET_SIZE.y - 1.0),
+			FOCUS_TINT, FOCUS_WIDTH, true)
 
 
 ## **[param gene]'s accent at [param at]** (gene-looks.md §4): a variant's mark,
@@ -1275,80 +1412,8 @@ static func draw_pips(node: CanvasItem, first: Vector2, tone: Color, copies: int
 
 
 # ---------------------------------------------------------------------------
-# A gene's own slots: its view (docs/design/gene-sockets.md §5.2).
+# A gene's own slots (docs/design/gene-sockets.md, placing.md §2).
 # ---------------------------------------------------------------------------
-
-## **The view's places, in the figure's own 420 x 372**, which it takes over as the
-## fork's cards do: the gene drawn large at the top, its chip under it, its slots
-## in a row below on threads from it, and `‹ genome` in the top-left corner, the
-## view's way back. Chips are the ring's own [constant SLOT_SIZE].
-const HOST_ORGAN_AT := Vector2(210.0, 100.0)
-const HOST_ORGAN_SCALE := 2.6
-const HOST_CHIP_AT := Vector2(162.0, 140.0)
-const SOCKET_ROW_Y := 272.0
-const SOCKET_GAP := 24.0
-const BACK_AT := Vector2(0.0, 4.0)
-const BACK_SIZE := Vector2(104.0, 48.0)
-const BACK_WORD := 15
-## The threads from the gene's chip to each slot: quiet, and lit in the hue of the
-## gene in hand where the slot takes it.
-const THREAD_ALPHA := 0.28
-const THREAD_LIT_ALPHA := 0.85
-const THREAD_WIDTH := 1.6
-const THREAD_LIT_WIDTH := 2.2
-## TRANSLATORS: The chip in the corner of a gene's own slots, on the pause screen:
-## it goes back to the whole genome, the ring of slots round the cell. Keep the
-## arrow on its left, as on "‹ programs". Lowercase.
-## ROOM: 88 px at 15 px
-const SOCKETS_BACK := "‹ genome"
-
-
-## **Slot [param k] of [param count]'s chip**, its top-left: the row centred under
-## the gene's chip.
-static func socket_chip_at(k: int, count: int) -> Vector2:
-	var row := float(count) * SLOT_SIZE.x + float(maxi(count - 1, 0)) * SOCKET_GAP
-	return Vector2(FIGURE_AT.x - row * 0.5 + float(k) * (SLOT_SIZE.x + SOCKET_GAP),
-		SOCKET_ROW_Y)
-
-
-## **The view behind its chips**: [param host] drawn large -- its tile organ at
-## [param tier], dimmer for a gene the body does not wear -- and a thread from its
-## chip to each of its slots, `lit[k]` the hue of the gene in hand where slot `k`
-## takes it and transparent where it does not.
-static func draw_host_view(canvas: Control, host: StringName, tier: int, worn: bool,
-		lit: Array) -> void:
-	Cilia.draw_tile_organ(canvas, host, tier, HOST_ORGAN_AT,
-		Cilia.TILE_STROKE_ALPHA if worn else ORGAN_UNEXPRESSED, HOST_ORGAN_SCALE)
-	var from := HOST_CHIP_AT + Vector2(SLOT_SIZE.x * 0.5, SLOT_SIZE.y)
-	for k in lit.size():
-		var to := socket_chip_at(k, lit.size()) + Vector2(SLOT_SIZE.x * 0.5, 0.0)
-		var tone: Color = lit[k]
-		var bend := from + Vector2(0.0, (to.y - from.y) * 0.5)
-		var turn := Vector2(to.x, bend.y)
-		var points := PackedVector2Array([from, bend, turn, to])
-		if tone.a > 0.0:
-			canvas.draw_polyline(points, Color(tone, THREAD_LIT_ALPHA), THREAD_LIT_WIDTH,
-				true)
-		else:
-			canvas.draw_polyline(points, Color(PALE, THREAD_ALPHA), THREAD_WIDTH, true)
-
-
-## **The view's way back**, `‹ genome`, in the chips' word tint, underlined while
-## it has the keyboard.
-static func draw_back(node: Control) -> void:
-	var font := node.get_theme_default_font()
-	if font == null:
-		return
-	var says := String(TranslationServer.translate(SOCKETS_BACK))
-	var height := font.get_height(BACK_WORD)
-	node.draw_string(font, Vector2(FOCUS_INSET * 0.5,
-		(BACK_SIZE.y + height) * 0.5 - font.get_descent(BACK_WORD)), says,
-		HORIZONTAL_ALIGNMENT_LEFT, -1.0, BACK_WORD, LABEL_TINT)
-	if node.has_focus():
-		node.draw_line(Vector2(FOCUS_INSET * 0.5, BACK_SIZE.y - 1.0),
-			Vector2(BACK_SIZE.x - FOCUS_INSET * 0.5, BACK_SIZE.y - 1.0),
-			FOCUS_TINT, FOCUS_WIDTH, true)
-
 
 ## **What a slot takes, said as the gene it would hold**: the form its first organ
 ## rides as -- `venom` for the toxin's slot, `burn` for the crista's. What an empty
@@ -1568,7 +1633,8 @@ static func numbers_lines(gene: StringName, copies: int, level: int,
 		GeneStats.context(body, radius), slot)
 	if next != null:
 		(lines[1] as Array).append(
-			GeneStats.progress_item(next.level(), next.to_next()))
+			GeneStats.progress_item(next.level(), next.to_next(),
+				StringName(Catalogue.levels(gene).get("earns", &"strike"))))
 	return lines
 
 

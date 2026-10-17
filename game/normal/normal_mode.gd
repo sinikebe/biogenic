@@ -238,8 +238,9 @@ const SLACK_REDRAW := 0.05
 # aperture. No number, no icon, no text in the playfield beyond one onboarding
 # line, and no new shader uniform.
 #
-# The warning is not a phase: it is continuous in radius, from
-# DIVIDE_WARN_RADIUS, and it is the nucleus doubling. Everything below is what
+# The warning is not a phase: it is continuous in radius, from two meals
+# before the body's division radius (`CellBody.warn_radius_of`), and it is the
+# nucleus doubling. Everything below is what
 # happens once the body has run out of arcs.
 
 ## QUICKEN still steers; PINCH stops the simulation, exactly as a death does.
@@ -470,13 +471,15 @@ var library_at := Library.PATH
 @onready var _hint_gauge: Control = $Hud/Pause/Center/Columns/Genome/Lines/Stack/Hint/Gauge
 @onready var _genome_hint: Label = $Hud/Pause/Center/Columns/Genome/Lines/Stack/Hint/Text
 @onready var _genome_act: Label = $Hud/Pause/Center/Columns/Genome/Lines/Stack/Act
+## **The button that writes** (docs/design/placing.md §1): in the verb line's place
+## while the chip chosen has something to place, write, add or choose, and saying
+## what. A tap on a chip only ever chooses it; this is the one way a pointer
+## writes the DNA. Hidden, the verb line is what it always was.
+@onready var _place_button: Button = $Hud/Pause/Center/Columns/Genome/Lines/Stack/Place
 ## **The fork view** (beam-levels.md §8.3): two cards, one per way, in the
 ## figure's own place. Exactly one of `Figure` and `Fork` is visible, and both
-## are 420 x 372, so the column never moves when one takes over.
+## are the figure's size, so the column never moves when one takes over.
 @onready var _fork_view: Control = $Hud/Pause/Center/Columns/Genome/Fork
-## **A gene's own slots** (docs/design/gene-sockets.md §5.2), in the figure's place
-## as the fork's cards are.
-@onready var _socket_view: Control = $Hud/Pause/Center/Columns/Genome/Sockets
 @onready var _ways: Array[Control] = [
 	$Hud/Pause/Center/Columns/Genome/Fork/Way0,
 	$Hud/Pause/Center/Columns/Genome/Fork/Way1]
@@ -518,7 +521,9 @@ var library_at := Library.PATH
 @onready var _gauges_row: Container = $Hud/Gauges
 ## **The senses' tiles** (docs/design/sense-tiles.md), channel to tile: one for every
 ## channel a gene with a `readout` drives, made once in the catalogue's order and
-## shown only while the lineage carries a gene on it.
+## shown only while the lineage carries a gene on it. **And one for every stat a
+## `readout` organ that drives no channel provides** (docs/design/daylight.md §3.3),
+## keyed by the stat: the plastid's `sun`, lit by the light where the cell is.
 var _sense_tiles := {}
 ## **How lit the ping's organ is** (ping-as-outline.md §14): lit by the last echo
 ## to land, by its strength, and falling over [constant ECHO_GLOW_FALL].
@@ -589,32 +594,6 @@ var _strip_waiting: Array[StringName] = []
 ## [constant SLOT_NONE]. Set by `_get_drag_data` and cleared by the drop or by
 ## `NOTIFICATION_DRAG_END`, whichever arrives -- and one of them always does.
 var _dragging := SLOT_NONE
-## Which slot a finger is holding down with a placement waiting on the lift,
-## or [constant SLOT_NONE].
-##
-## **The confirming gesture and the drag-starting gesture cannot be the same
-## event, and this variable is what keeps them apart.** A pointer going *down*
-## on an armed slot is ambiguous by construction: it is the second tap of
-## §9.7's placement and it is also how a move begins, and both readings are
-## live at the same instant on the same pixel. Committing on the down-stroke
-## resolved that by the clock -- the same finger, the same two points on
-## screen, placed a gene or moved one depending on whether the press landed
-## more or less than [constant ARM_GUARD_MS] after the arming tap -- and one of
-## those two outcomes evicts a gene from the lineage for good.
-##
-## So the down-stroke only **primes**: it says *a placement is waiting on this
-## slot*, changes nothing, and is cancelled by the one thing that proves the
-## finger meant a move, which is the drag actually starting ([method
-## _slot_drag]). The irreversible half happens on the up-stroke, and only if
-## the finger is still inside the chip it pressed. A drag can no longer
-## perform a placement, because by the time a placement could happen the drag
-## has already claimed the gesture and cleared this.
-##
-## The 300 ms guard is unmoved and still measured press-to-press, so §9.7's
-## contract -- *two taps, and the second cannot follow the first inside
-## 300 ms* -- is what it always was. What changed is which half of the second
-## tap the DNA is written on.
-var _primed := SLOT_NONE
 
 var _last_toggle_frame := -1
 ## The frame Back was last answered on, whichever door it came through. See
@@ -715,6 +694,9 @@ var _vision_cut := false
 var _beam_fan := RayFan.new()
 ## Different bodies the beam touched this second, which is its experience.
 var _beam_tally := Tally.new(int(Catalogue.number_for({}, &"beam_range", &"xp_cap", 0)))
+## Different bodies the eyespot saw this second, which is its experience
+## (docs/design/sight.md): its cap is the organ's, set as it earns.
+var _sight_tally := Tally.new(0)
 ## **What the membrane's beam lobe is still holding**, for a sweep: a hit that
 ## is only lit once a pass stays on the skin and fades over the revisit time,
 ## or a sweep reads as flicker (§4.3). Strength and bearing, as the bus takes
@@ -1018,7 +1000,7 @@ func _ready() -> void:
 	# styleboxes, drawn only once the screen opens on a gene that levels.
 	_build_level_row()
 	_build_fork_view()
-	_build_socket_view()
+	_build_place_button()
 	# The numbers' switch and their two lines (gene-stats.md): a few
 	# connections and four styleboxes, after the level's row, whose height
 	# `Lines` is measured with.
@@ -1133,6 +1115,8 @@ func _ready() -> void:
 	_energy_gauge.low_from = 1.0 - MetabolismNode.HUNGRY_FROM
 	# **One tile a sense, after the gauge**, in the catalogue's order, each hidden
 	# until a gene on its channel is carried: the beam has none (gene.gd's `readout`).
+	# A tile keyed by a stat comes first, beside the gauge whose rate it explains
+	# (docs/design/daylight.md §3.3).
 	for channel: StringName in _readout_channels():
 		var tile: SenseTile = Scope.new() if _scoped(channel) else SenseTile.new()
 		tile.name = "Sense_" + String(channel)
@@ -1262,7 +1246,8 @@ func _open_drop() -> Dictionary:
 			var at: Vector2 = (cell["body"]["at"] as Vector2) + moved
 			# A content pack may have shrunk the rim since.
 			var rim: RefCounted = _food.basin()
-			_cell.position = rim.call(&"contain", at, _cell.radius) if rim != null else at
+			_cell.position = rim.call(&"contain", at, FoodField.Drop.hold(_cell.radius)) \
+				if rim != null else at
 			var moved_on := float(kept["drop"]["age"]) != float(where["age"])
 			_food.resume_player(cell["water"], moved_on)
 			print("[cells] %s, slot %d: resumed where it was left, the drop %.0f away under it%s"
@@ -1594,10 +1579,8 @@ func _process(delta: float) -> void:
 		_step_death(delta)
 		return
 	if _menu_open and not _session_up():
-		# The genome screen is the one thing on screen that still has a clock
-		# running: a slot armed for the gene in hand lapses after four seconds
-		# whether or not the simulation is moving. §5.2. A selection with
-		# nothing to commit has no clock -- see [method _step_arming].
+		# The genome screen's own step: a refused move's words run out on the
+		# wall clock -- see [method _step_arming].
 		#
 		# **Single player only.** With a session up the tree is never paused
 		# (shared-pond.md §1.7, owner's B): the menu is open over a live water,
@@ -1642,7 +1625,15 @@ func _process(delta: float) -> void:
 	# (`vacuole`'s and `plastid`'s). Both land on the beat, which is where every
 	# cost in this game lands.
 	_metabolism.reserve = _cell.stat(&"store")
-	_metabolism.photosynthesis = _cell.stat(&"sun")
+	# **The sun is made in the light where the cell is** (docs/design/daylight.md
+	# §2.3), averaged exactly over this frame: this node processes before its
+	# field, so the field's clock is at the frame's start, and the frame runs to
+	# `delta` past it -- the light a water body is paid for the same stretch. The
+	# literal 1.0 outside a drop and with the light off; a guest's is the host's
+	# sky over where it is (daylight.md §5).
+	var age := _food.drop_age()
+	_metabolism.photosynthesis = _cell.stat(&"sun") \
+		* _food.light_over(_cell.position, age, age + delta)
 	# **In the drop a cell with no mouth absorbs its food from the water**, as
 	# every body there does (ocean.md §5.3, row 11): an income beside the light,
 	# so a player who put a gene over its own mouth lives on as a slow, cheap
@@ -1674,6 +1665,11 @@ func _process(delta: float) -> void:
 	# cilia.gd's arcs -- and handed to the field, which delivers them.
 	_food.toxins = _toxins()
 	_aim_beam(delta)
+	_aim_sight()
+	# **The grit, for the water** (food.gd's `_separate_grit`): what you bump off,
+	# every water cell is solid against too.
+	_food.grit = _motes.points()
+	_food.grit_radius = MotesField.MOTE_RADIUS
 	# `chemocyte` and `ampulla`: how far this nose reaches and how often this
 	# electroreceptor fires. Scalars about the cell's own anatomy, handed to the
 	# field so it can answer in bearings -- the same contract as beam_range.
@@ -1720,6 +1716,9 @@ func _process(delta: float) -> void:
 	# sensations a minute for an organ it does not have.
 	var eye := _eyespot_tier() > 0
 	_bus.light(_food.shadow_bearing if eye else 0.0, _food.shadow if eye else 0.0)
+	# **Its lobe is as wide as its eye is blurred** (docs/design/sight.md): a
+	# level-1 eye says roughly where, a sharp one exactly.
+	_bus.sight_width(rad_to_deg(_food.sight_blur))
 	# The earned senses, beside organs() and for the same reason: a tier is a
 	# property of the organ, not of what it senses.
 	# The beam's by its level, held to the three rungs the membrane's lobe
@@ -1728,6 +1727,7 @@ func _process(delta: float) -> void:
 		_cell.tier_for(&"smell_range"), _cell.tier_for(&"ping_range"))
 	_post_beam(delta)
 	_earn_beam(delta)
+	_earn_sight(delta)
 	_post_pings(delta)
 	# The nose, the eyespot and the ping's organ glow with what each senses, on the
 	# body in both views: after the echoes that landed this frame are in.
@@ -1769,8 +1769,14 @@ func _process(delta: float) -> void:
 	# **Every arc full, and no room for one more organ.** Checked after the meal
 	# that grew the body, so the division is the consequence of the mouthful
 	# rather than of the frame after it.
-	if _split == Split.NONE and _cell.radius >= CellBody.DIVIDE_RADIUS:
+	if _split == Split.NONE and _cell.radius >= _divide_at():
 		_begin_split()
+
+
+## **Where this cell divides** (docs/design/margin.md §1.1): forty, or later when
+## the genes its DNA carries need each half bigger.
+func _divide_at() -> float:
+	return CellBody.divide_radius_of(_genome.dna())
 
 
 ## **The body goes slack with hunger** (docs/design/hunger.md §2.4): eased
@@ -1877,6 +1883,40 @@ func _aim_beam(delta: float) -> void:
 	_food.beam_fan_half = half
 
 
+## **Where this cell's eyespot looks, how far and how sharply**
+## (docs/design/sight.md): the arc it is worn on, its organ's field and reach, and
+## its blur at its level -- `food.gd`'s `sight_of`, which every water cell's eye
+## is read by too. Resolved here for the beam's reason: this file has the genome
+## and cilia.gd's arc table. An eyespot only the DNA carries is no eye.
+func _aim_sight() -> void:
+	var eye := _cell.on_channel(Catalogue.LIGHT)
+	var level := maxi(_genome.level_of(eye), 1) if eye != &"" else 0
+	var sight := FoodField.sight_of(eye, level)
+	_food.sight_mid = _slot_bearing_of(eye) if eye != &"" else 0.0
+	_food.sight_half = float(sight[0])
+	_food.sight_range = float(sight[1])
+	_food.sight_core = float(sight[2])
+	_food.sight_dark = float(sight[3])
+	_food.sight_blur = float(sight[4])
+
+
+## **The eyespot's experience** (docs/design/sight.md), as the beam's: one for
+## every different body it saw clearly enough in a second (food.gd's
+## SIGHT_COUNTS), capped by its own number, and only while this body wears it.
+func _earn_sight(delta: float) -> void:
+	var eye := _cell.on_channel(Catalogue.LIGHT)
+	if eye == &"":
+		_sight_tally.reset()
+		return
+	var cap: Variant = Catalogue.number(eye, &"xp_cap")
+	_sight_tally.cap = maxi(int(cap), 0) if cap != null else 0
+	for index: int in _food.sight_seen:
+		_sight_tally.touch(index)
+	var earned := _sight_tally.step(delta)
+	if earned > 0:
+		_earn(eye, float(earned))
+
+
 ## **The beam's experience** (beam-levels.md §2): one for every different body
 ## its rays touched in a second, capped, and only while this body wears it.
 ## Every body counts -- food, a hunter, a sister, the other player -- because
@@ -1903,7 +1943,7 @@ func _earn_beam(delta: float) -> void:
 ## asked: a daughter who inherits an open fork never levels into it, so she is
 ## not told again.
 ##
-## The one door experience comes in by -- the beam's tally, and
+## The one door experience comes in by -- the beam's tally, the eyespot's, and
 ## `tools/drive.gd --earn=`, which poses a level-up through it.
 func _earn(gene: StringName, amount: float) -> void:
 	var grown := _genome.progression(gene)
@@ -2128,7 +2168,7 @@ func _hear_others() -> void:
 		# mark is held for as long as the caller's size says, and a host's
 		# referee is the only thing between a guest's call and here -- a guest
 		# has none over its host. Honest calls are never over either.
-		var radius := minf(float(said[1]), CellBody.DIVIDE_RADIUS)
+		var radius := minf(float(said[1]), CellBody.RADIUS_MAX)
 		var reach := minf(float(said[2]), Stats.top(&"ping_range"))
 		# A bodiless or organless shouter is not a thing a cell can hear, and
 		# it is also the one input that would divide by zero below. Both
@@ -2483,8 +2523,8 @@ func _read_lean() -> int:
 ## `bodies` is present only once there are two of them, and its presence is what
 ## tells a view to stop drawing the cell and draw the pair.
 func _push_division() -> void:
-	var double := smoothstep(CellBody.DIVIDE_WARN_RADIUS, CellBody.DIVIDE_RADIUS,
-		_cell.radius)
+	var divide_at := _divide_at()
+	var double := smoothstep(CellBody.warn_radius_of(divide_at), divide_at, _cell.radius)
 	if _split == Split.NONE and double <= 0.0:
 		if not _division.is_empty():
 			_division = {}
@@ -2503,7 +2543,7 @@ func _push_division() -> void:
 		if _split == Split.PART:
 			spread = clampf(_split_clock / DIVIDE_PART, 0.0, 1.0)
 		_division["spread"] = spread
-		_division["radius"] = CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)
+		_division["radius"] = CellBody.daughter_radius(_cell.radius)
 		var pair: Array = []
 		for side in 2:
 			pair.append({
@@ -2568,10 +2608,12 @@ func _be_born() -> void:
 	# sister, numbered as she comes into the water, is the same mother's child.
 	var mother := _record()
 	_set_record(Descent.child(_take_id(), mother))
+	# Half her mother's area, whatever size her lineage divides at.
+	var born_at := CellBody.daughter_radius(_cell.radius)
 	# A new body, not a starving one: the mother spent herself. Her place and
 	# her heading are kept, so nothing about the frame jumps.
 	_cell.reset(true)
-	_cell.radius = CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)
+	_cell.radius = born_at
 	_metabolism.reset()
 	_settle_gauges(1.0 - _metabolism.hunger)
 	# Born fed, so born full: none of her mother's creases.
@@ -2758,7 +2800,7 @@ func _toxins() -> PackedFloat64Array:
 	var key := hash(tiers) ^ (hash(worn) * 31) ^ (Riders.sign_of(riders) * 17)
 	if key != _toxins_key:
 		_toxins_key = key
-		_toxins_now = FoodField.toxins_of(tiers, worn, CellBody.VENOM_SIDES, riders)
+		_toxins_now = FoodField.toxins_of(tiers, worn, riders)
 	return _toxins_now
 
 
@@ -2896,12 +2938,13 @@ func _on_eaten(nutrition: float, gene: StringName, _at: Vector2) -> void:
 	# first for the same reason, and genome.gd's docstring promises there is
 	# only one definition of this rule.
 	#
-	# **And it stops at DIVIDE_RADIUS**, because that is where the body runs out
-	# of arcs. A field cell is not clamped -- edibility.md §7 keeps the runaway
-	# and makes it killable from astern instead -- but the player's growth has
-	# somewhere else to go now, and it goes there.
-	_cell.radius = minf(_cell.radius + CellBody.GROWTH_PER_MEAL,
-		CellBody.DIVIDE_RADIUS)
+	# **And it stops where it divides**: forty, or later for a lineage whose genes
+	# need its daughters bigger (margin.md §1.1). A field cell is not clamped --
+	# edibility.md §7 keeps the runaway and makes it killable from astern instead
+	# -- but the player's growth has somewhere else to go now, and it goes there.
+	# Never smaller for a meal: a DNA that lost a gene since divides on this one.
+	_cell.radius = maxf(_cell.radius,
+		minf(_cell.radius + CellBody.GROWTH_PER_MEAL, _divide_at()))
 	_genome.integrate(gene)
 	# `fed` counts from here (automation.md §4.1): a cell, or one chewed apart.
 	_instincts.ate()
@@ -3467,15 +3510,31 @@ func _update_gauges() -> void:
 
 
 ## **The channels whose genes have a tile** (gene.gd's `readout`), once each, in the
-## catalogue's order: smell, the eyespot's light, the ping, touch -- today.
+## catalogue's order: smell, the eyespot's light, the ping, touch -- today. **And,
+## ahead of them, the stats of `readout` organs that drive no channel**, each keyed by
+## the first stat it provides (docs/design/daylight.md §3.3): the plastid's `sun`.
 func _readout_channels() -> Array[StringName]:
+	var stats: Array[StringName] = []
 	var out: Array[StringName] = []
 	for key: StringName in Catalogue.keys():
 		var organ := Catalogue.gene(key)
-		if organ != null and organ.readout and organ.channel != &"" \
-				and not out.has(organ.channel) and not organ.tags.has(Catalogue.RETIRED):
-			out.append(organ.channel)
-	return out
+		if organ == null or not organ.readout or organ.tags.has(Catalogue.RETIRED):
+			continue
+		if organ.channel != &"":
+			if not out.has(organ.channel):
+				out.append(organ.channel)
+		elif not organ.provides.is_empty():
+			var stat: StringName = organ.provides.keys()[0]
+			if not stats.has(stat):
+				stats.append(stat)
+	stats.append_array(out)
+	return stats
+
+
+## **Whether a tile is keyed by a stat** rather than a membrane channel
+## ([method _readout_channels]).
+static func _tile_by_stat(key: StringName) -> bool:
+	return not Catalogue.Gene.CHANNELS.has(key)
 
 
 ## **Whether a channel's tile is a scope** (gene.gd's `scope`): any gene on it says
@@ -3510,8 +3569,12 @@ func _update_sense_tiles(shown: bool) -> void:
 		or _entering_held)
 	for channel: StringName in _sense_tiles:
 		var tile: SenseTile = _sense_tiles[channel]
-		var worn := _cell.on_channel(channel)
-		var key := worn if worn != &"" else Catalogue.worn_on(_genome.dna(), channel)
+		# Worn is the body's organ on that channel -- or, for a tile keyed by a stat,
+		# its provider of the stat -- and carried the DNA's.
+		var by_stat := _tile_by_stat(channel)
+		var worn := _cell.provider(channel) if by_stat else _cell.on_channel(channel)
+		var key := worn if worn != &"" else (Catalogue.worn_provider(_genome.dna(), channel)
+			if by_stat else Catalogue.worn_on(_genome.dna(), channel))
 		if not shown or key == &"":
 			tile.visible = false
 			continue
@@ -3536,9 +3599,15 @@ func _update_sense_tiles(shown: bool) -> void:
 ## - light: the eyespot's glow, facing the shadow, and the shadow's strength;
 ## - ping: no glow of its own -- its echoes flash it ([method _post_pings]) -- and how
 ##   much of the call's round trip it is still listening for;
-## - touch: what the palps feel, both.
+## - touch: what the palps feel, both;
+## - sun, a stat's tile: the light where the cell is, both (docs/design/daylight.md
+##   §3.3) -- the same for one copy or three: the tile says the light, and the
+##   gauge says what it earns.
 func _sense_reading(channel: StringName, organ: StringName) -> Array:
 	match channel:
+		&"sun":
+			var light := _food.light_at(_cell.position)
+			return [light, light]
 		Catalogue.SMELL:
 			return [_bus.smell_glow(), _food.taste_level]
 		Catalogue.LIGHT:
@@ -4135,11 +4204,9 @@ func _notification(what: int) -> void:
 			elif _life != Life.ALIVE:
 				_leave()
 			# The fork's two cards are a screen over the figure, and Back shuts
-			# the top one: the view, and only the view. So do a gene's own slots.
+			# the top one: the view, and only the view.
 			elif _fork_open():
 				_close_fork(true)
-			elif _sockets_open():
-				_close_sockets(true)
 			# **Inside a program, Back goes up to the library** (automation-ux.md
 			# §1.2); from the library it resumes.
 			elif _menu_open and _on_programs and _programs.back():
@@ -4156,9 +4223,9 @@ func _notification(what: int) -> void:
 			if _dragging != SLOT_NONE:
 				# **And a gene let go on nothing, or back where it came from,
 				# leaves its slot unarmed when a gene is in hand.** The press
-				# that lifted it began a drag, not a first tap, so the slot
-				# must not be one tap from the gene in hand writing over it --
-				# the rule [method _move_slot] keeps for a move that landed.
+				# that lifted it began a drag, not a tap, so the slot must not
+				# be chosen for the gene in hand to be written over it -- the
+				# rule [method _move_slot] keeps for a move that landed.
 				if _dragging >= 0 and _hand() != &"":
 					_armed = SLOT_SAMPLE
 					_armed_at = Time.get_ticks_msec()
@@ -4172,12 +4239,6 @@ func _notification(what: int) -> void:
 			# pause: a pause screen nobody asked for is its own bug.
 			_cell.release()
 			_controls.let_go()
-			# The same argument for the genome screen: a finger that left with
-			# the app never lifts, so the placement it was holding is abandoned
-			# rather than left waiting for a release that cannot come. So is a
-			# card's confirm: it would otherwise never lapse.
-			_primed = SLOT_NONE
-			_way_primed = -1
 			# And for the body held open (dna-body.md §8), nothing placed. The
 			# emulated mouse's finger goes with it: its release may never come.
 			_offer_close(false)
@@ -4375,8 +4436,6 @@ func _unhandled_input(event: InputEvent) -> void:
 			# reason: one key, one step back.
 			elif _fork_open():
 				_close_fork(true)
-			elif _sockets_open():
-				_close_sockets(true)
 			# Esc inside a program goes up to the library, as Back does.
 			elif _menu_open and _on_programs and _programs.back():
 				pass
@@ -4755,7 +4814,6 @@ func _set_menu(open: bool) -> void:
 		# Nothing can be in the air on a screen that was not open, and a stale
 		# source slot would draw a hole in the figure.
 		_dragging = SLOT_NONE
-		_primed = SLOT_NONE
 		# The tray's held height is let go here and only here: it never shrinks
 		# while the screen is open. See [method _latch_tray].
 		_tray.custom_minimum_size.y = Figure.WAIT_SIZE.y
@@ -4778,7 +4836,7 @@ func _set_menu(open: bool) -> void:
 		_keep_drop()
 	else:
 		_reset_fork_view()
-		_reset_socket_view()
+		_clear_sock()
 		RunState.save_gain(_bus.gain)
 		# A half-built instinct and a drag go with the page (automation-ux.md §1.2).
 		_programs.closed()
@@ -4993,7 +5051,7 @@ func _track(fill: Color, edge: Color) -> StyleBoxFlat:
 # its tethers, the chips, the tray and the words under them, as static functions
 # of plain values, so a screen that shows a cell nobody is playing draws it the
 # same way. What stays here is the pause screen's own: what is selected, hovered,
-# armed, in hand or in the air, the keyboard, the two taps and the drag --
+# armed, in hand or in the air, the keyboard, the tap, the button and the drag --
 # resolved into plain values as each piece is drawn, and handed over.
 # ---------------------------------------------------------------------------
 
@@ -5010,11 +5068,6 @@ const DRAG_LIFT := 34.0
 ## The strand's dart, sized for the choosing screen, which still draws one under
 ## each locus (dna-body.md §9).
 const DART_R := 6.5
-## The second tap cannot land sooner than this after the first, so a double-tap
-## -- or the mouse event Godot emulates from a touch -- cannot commit.
-const ARM_GUARD_MS := 300
-## Arming lapses on its own, so a slot left armed is not a trap.
-const ARM_TIMEOUT_MS := 4000
 
 ## **Armed over a gene, the hint says what the next tap costs** instead of what
 ## the gene is worth. Reading *a daughter always wears it* about the gene the
@@ -5099,31 +5152,66 @@ const HINT_WORD_HEIGHT := 19.0
 ## The row is 560 px wide. This one: a gene is waiting, none is chosen.
 ## ROOM: 560 px at 14 px
 const ACT_ARM := "tap a slot · your daughters may wear it"
-## TRANSLATORS: A slot is chosen for the waiting gene; a second tap confirms.
-## ROOM: 560 px at 14 px
-const ACT_COMMIT := "tap again to place"
-## Armed over a gene, the verb names both genes: what the tap writes and what it
-## writes over. `tap again to place` alone read as harmless over `eat`.
+## **The button's size**: 48 tall for the touch rule, and never narrower than
+## `resume`, so a short verb does not make a small target.
+const PLACE_HEIGHT := 48.0
+const PLACE_MIN_WIDTH := 232.0
+const PLACE_WORD := 16
+## The column's teal for *this responds* -- the focus underline's hue, at the
+## verb line's ink and louder, because this is the line a finger presses.
+const PLACE_TINT := Color(0.588, 1.0, 0.859, 0.92)
+## **The button's words** (docs/design/placing.md §1): what it writes, said as a
+## verb with its genes, because the button is the only control on the screen that
+## changes the DNA and it must never be pressed for something it did not say.
+## Armed over a gene, it names both genes: what it writes and what it writes over.
+## `place` alone read as harmless over `eat`.
 ##
-## TRANSLATORS: The two %s are the short words of two genes, such as `eat` and
-## `ping`: the first is the waiting gene, the second the gene it would replace in
-## the DNA. Keep both %s, in this order.
-## ROOM: 560 px at 14 px with word, word
-const ACT_COMMIT_OVER := "tap again to write %s over %s"
+## TRANSLATORS: The `PLACE_` lines are the words on one button under the figure,
+## in 16 px type: pressing it does what they say. Short: at most 480 px. This one:
+## a slot is chosen for the waiting gene. %s is the gene's short word as it would
+## be in that slot, such as `swim`, or `venom` for a toxin outside.
+## ROOM: 480 px at 16 px with word
+const PLACE := "place %s here"
+## TRANSLATORS: The button, when the chosen slot already holds a gene. The two %s
+## are the short words of two genes, such as `eat` and `ping`: the first is the
+## waiting gene, the second the gene it would replace in the DNA. Keep both %s, in
+## this order.
+## ROOM: 480 px at 16 px with word, word
+const PLACE_OVER := "write %s over %s"
+## TRANSLATORS: The button, when the waiting gene would add one copy to a gene the
+## cell already carries. %s is that gene's short word, such as `venom`.
+## ROOM: 480 px at 16 px with word
+const PLACE_RAISE := "add a copy to %s"
+## TRANSLATORS: The button, when an empty slot of a gene's own is chosen: some
+## genes have small slots where another gene can be placed to change them. The
+## first %s is the waiting gene's word as it would be there (`venom`), the second
+## the word of the gene the slot belongs to (`sting`). Keep both, in this order.
+## ROOM: 480 px at 16 px with word, word
+const PLACE_SOCKET := "put %s in %s's slot"
+## TRANSLATORS: The button, for a gene that can now grow in one of two ways: it
+## shows the two ways. %s is the gene's short word, such as `beam`.
+## ROOM: 480 px at 16 px with word
+const PLACE_FORK := "choose how %s grows"
+## TRANSLATORS: The button, once one of the two ways is chosen: pressing it takes
+## that way, and the choice cannot be undone. %s is the way's name (see the cards'
+## titles). Keep %s.
+## ROOM: 480 px at 16 px with word
+const PLACE_WAY := "choose %s · for good"
 ## **A waiting gene carried out of the tray** lands on an empty slot when it is
 ## let go -- nothing is evicted and a move can still take it anywhere, so one
-## gesture is enough (owner's call 6). Over a gene it only arms: the drop is the
-## first tap, and the eviction still needs the second.
+## gesture is enough (owner's call 6). Over a gene it only chooses the slot, and
+## the eviction still needs the button.
 ##
 ## TRANSLATORS: While the player drags a waiting gene over an empty slot; letting
 ## go places it there. %s is the gene's short word, such as `eat`.
 ## ROOM: 560 px at 14 px with word
 const ACT_DROP := "let go to place %s here"
 ## TRANSLATORS: While dragging a waiting gene over a slot that already holds a
-## gene: letting go only selects it, and a second tap writes over it. The two %s
-## are short gene words: the one being dragged, then the one it would replace.
+## gene: letting go only chooses it, and the button under it then writes over it.
+## The two %s are short gene words: the one being dragged, then the one it would
+## replace.
 ## ROOM: 560 px at 14 px with word, word
-const ACT_DROP_OVER := "let go, then tap again to place %s over %s"
+const ACT_DROP_OVER := "let go, then press below to write %s over %s"
 ## TRANSLATORS: Under a gene that is already in a slot: it can be dragged to
 ## another slot.
 ## ROOM: 560 px at 14 px
@@ -5153,50 +5241,19 @@ const ACT_SWAP := "let go to swap %s and %s"
 ## cancels the move. %s is the gene's short word.
 ## ROOM: 560 px at 14 px with word
 const ACT_KEEP := "let go to leave %s where it is"
-## **A slot whose fork is open, selected with nothing in hand**: its second tap
-## brings up the two ways (beam-levels.md §8.3), and this is the one line that
-## says so. It is what pause opens on when a fork waits and no gene does.
+## **The lines of a gene's own slots** (gene-sockets.md §5, placing.md §2), as the
+## ring's are.
 ##
-## TRANSLATORS: For a gene that can grow in two different ways (the player picks
-## one, for good). %s is the gene's short word, such as `beam`.
-## ROOM: 560 px at 14 px with word
-const ACT_FORK := "tap again to choose how %s grows"
-## **A gene with slots of its own, selected** (docs/design/gene-sockets.md §5.1):
-## its second tap opens them, with nothing in hand or with a gene in hand that one
-## of them takes -- and then the line says it fits.
-##
-## TRANSLATORS: Some genes have small slots of their own, where another gene can be
-## placed to change them. %s is the short word of the gene that has them, such as
-## `sting`.
-## ROOM: 560 px at 14 px with word
-const ACT_OPEN_SOCKETS := "tap again to open %s's slots"
-## TRANSLATORS: The same, while the player holds a waiting gene that fits one of
-## those slots. The first %s is the word of the gene with the slots (`sting`), the
-## second the waiting gene's (`toxin`). Keep both, in this order.
-## ROOM: 560 px at 14 px with word, word
-const ACT_OPEN_SOCKETS_FITS := "tap again to open %s's slots · %s fits"
-## **The lines of a gene's own slots** (gene-sockets.md §5.2), as the ring's are.
-##
-## TRANSLATORS: In the view of a gene's own slots, with a waiting gene in hand and
-## no slot chosen yet: the slots that would take it are lit. %s is the waiting
-## gene's word, such as `toxin`.
-## ROOM: 560 px at 14 px with word
-const ACT_SOCKET_ARM := "tap a lit slot to put %s in it"
-## TRANSLATORS: In the view of a gene's own slots, when none of them takes the
-## waiting gene. The first %s is the word of the gene whose slots these are
-## (`sting`), the second the waiting gene's (`ping`). Keep both, in this order.
-## ROOM: 560 px at 14 px with word, word
-const ACT_SOCKET_NONE := "no slot of %s takes %s"
 ## TRANSLATORS: A slot of a gene's own is chosen that does not take the waiting
 ## gene. %s is the word of the gene the slot does take, such as `venom`.
 ## ROOM: 560 px at 14 px with word
 const ACT_SOCKET_TAKES := "this slot takes %s"
-## TRANSLATORS: An empty slot of a gene's own is chosen with a waiting gene in hand,
-## and a second tap places it. The first %s is the waiting gene's word as it would
-## be in the slot (`venom`), the second the word of the gene whose slot it is
-## (`sting`). Keep both, in this order.
+## TRANSLATORS: While dragging a waiting gene over an empty slot of a gene's own:
+## letting go puts it there. The first %s is the waiting gene's word as it would be
+## there (`venom`), the second the word of the gene the slot belongs to (`sting`).
+## Keep both, in this order.
 ## ROOM: 560 px at 14 px with word, word
-const ACT_SOCKET_PUT := "tap again to put %s in %s's slot"
+const ACT_DROP_SOCKET := "let go to put %s in %s's slot"
 ## TRANSLATORS: The hint under a gene placed in one of another gene's own slots: a
 ## daughter cell wears it whenever she wears that gene. %s is the word of the gene
 ## whose slot it is (`sting`). The rarity word of the placed gene starts the row.
@@ -5213,38 +5270,43 @@ const HINT_SOCKET_EMPTY := "nothing in this slot yet"
 # genome -- `placing()` for a gene in hand, `move_refusal()` for one in the air --
 # so the line, the chip and the guard never disagree.
 
-## TRANSLATORS: While a toxin is waiting and no slot is chosen: tapping a slot
-## round the body (outside) makes it venom, the slot in the body (inside) makes it
-## poison.
+## TRANSLATORS: While a toxin is waiting and no slot is chosen: the slot inside the
+## body makes it poison, and a lit slot of another gene, such as the mouth's, makes
+## it venom. Only those slots are lit.
 ## ROOM: 560 px at 14 px
-const ACT_ARM_FORMS := "tap a slot · venom outside, poison inside"
+const ACT_ARM_FORMS := "tap a lit slot · poison inside, venom in a gene's slot"
 ## **A gene that faces out says what it does, not what the slot refuses**:
 ## `swim works only outside` is true, short, and teaches the rule from the other
 ## side.
 ##
-## TRANSLATORS: When the player tries to put a gene other than a toxin into the
-## slot inside the body: only a toxin works there. %s is the gene's short word,
+## TRANSLATORS: When the player tries to put a gene that works outside the body
+## into a slot inside it: only a few genes work there. %s is the gene's short word,
 ## such as `swim`.
 ## ROOM: 560 px at 14 px with word
 const ACT_FACES_OUT := "%s works only outside"
-## TRANSLATORS: A slot is chosen for a waiting toxin; a second tap places it, as
-## the form it takes in that slot. %s is `venom` or `poison`.
+## **And a gene that never sits outside says where it goes** (the owner, 2026-10-16:
+## a toxin goes in the mouth's slot or inside, never outside).
+##
+## TRANSLATORS: When the player tries to put a waiting toxin into one of the slots
+## round the body: it only goes inside the body, or into a lit slot of another gene
+## such as the mouth's. %s is its word while it waits, `toxin`.
 ## ROOM: 560 px at 14 px with word
-const ACT_COMMIT_FORM := "tap again to place %s here"
-## TRANSLATORS: A slot is chosen for a waiting toxin, but the toxin would become
-## a form the cell already carries, so a second tap adds one copy of it where it
-## already is. %s is `venom` or `poison`.
+const ACT_NOT_OUTSIDE := "%s goes inside, or in a lit gene's slot"
+## TRANSLATORS: When the player tries to put a gene that works only inside the body,
+## such as poison or store, into one of the slots round it. %s is its word, such as
+## `poison` or `store`.
 ## ROOM: 560 px at 14 px with word
-const ACT_RAISE := "tap again to add a copy to %s"
-## TRANSLATORS: As above, but that form already has the most copies a gene can
-## have, three, so placing it there would do nothing. %s is `venom` or `poison`.
+const ACT_ONLY_INSIDE := "%s works only inside"
+## TRANSLATORS: A slot is chosen for a waiting gene, but that gene already has the
+## most copies a gene can have, three, so placing it there would do nothing. %s is
+## its word, such as `venom` or `poison`.
 ## ROOM: 560 px at 14 px with word
 const ACT_RAISE_FULL := "%s has three copies already"
 ## TRANSLATORS: While dragging a waiting toxin over a slot where it would add a
-## copy to a form the cell already carries: letting go chooses the slot, and a
-## second tap adds the copy. %s is `venom` or `poison`.
+## copy to a form the cell already carries: letting go chooses the slot, and the
+## button under it then adds the copy. %s is `venom` or `poison`.
 ## ROOM: 560 px at 14 px with word
-const ACT_DROP_RAISE := "let go, then tap again to add a copy to %s"
+const ACT_DROP_RAISE := "let go, then press below to add a copy to %s"
 ## TRANSLATORS: While dragging a gene to a slot where it would turn into a form
 ## the cell already carries (venom outside, poison inside), which is not allowed.
 ## %s is `venom` or `poison`.
@@ -5299,6 +5361,8 @@ var _slot_chips: Array[Control] = []
 ## How many of the slots outside are live: the ones the body has earned, or the
 ## whole layout a newborn inherits. The rest are drawn and dead.
 var _slot_count := 0
+## How many of the slots inside are live, the same way (genome.gd's `inside_room`).
+var _inside_count := 1
 
 
 ## Rebuilds the figure's chips and the tray from the genome as it is right now.
@@ -5329,16 +5393,15 @@ func _build_genome_strip() -> void:
 	# The tray's own, by gene, because the chip it was on is about to be freed
 	# and the gene may since have moved in the queue or left it.
 	var keeping_gene := _focused_waiting()
-	# And a fork chip's, by the gene whose fork it is.
+	# And a fork chip's, by the gene whose fork it is; and a gene's own slot's.
 	var keeping_fork := _focused_fork()
+	var keeping_sock := _focused_socket()
 	# Every chip about to be freed takes its hover with it, and Godot will not
 	# re-enter a control the cursor never left. The selection carries the lines
 	# until the mouse moves again, which is the same slot either way.
 	_hovered = SLOT_NONE
-	# And with it goes any placement waiting on a finger: the control that took
-	# that press is about to be freed, so the lift it was waiting for will never
-	# arrive here.
-	_primed = SLOT_NONE
+	_sock_hovered = SOCK_NONE
+	_sock_hover_at = SLOT_NONE
 	for layer: Control in [_figure_slots, _tray]:
 		for child in layer.get_children():
 			layer.remove_child(child)
@@ -5366,6 +5429,9 @@ func _build_genome_strip() -> void:
 	# always live.
 	_slot_count = mini(maxi(_genome.slots(), _genome.layout().size()),
 		GenomeNode.INSIDE)
+	# **The inside's count**, which grows as the outside's does (inside-genes.md
+	# §1): earned by the body's radius, or carried by its DNA already.
+	_inside_count = _genome.inside_room()
 	_slot_chips.clear()
 	_slot_chips.resize(Figure.SLOT_SEAT.size())
 	for slot in Figure.SLOT_SEAT.size():
@@ -5379,10 +5445,11 @@ func _build_genome_strip() -> void:
 		# `moving-a-gene.md` §2.4 -- and the body drawn in the middle now says
 		# where every organ is, with a word wherever that disagrees.
 		var chip := _make_slot(gene, int(dna.get(gene, 0)),
-			int(body.get(gene, 0)), slot, slot < _slot_count
-			or GenomeNode.is_inside(slot))
+			int(body.get(gene, 0)), slot, _live_index(slot))
 		_figure_slots.add_child(chip)
 		_slot_chips[slot] = chip
+	# **And every gene's own slots beside it** (placing.md §2).
+	_build_sockets()
 	_wire_focus()
 
 	# **The tray, head first.** Its caption only while something waits: an
@@ -5400,10 +5467,6 @@ func _build_genome_strip() -> void:
 	# is no longer there to choose.
 	if _fork_gene != &"" and not _strip_forks.has(_fork_gene):
 		_reset_fork_view()
-	# **And a gene's own slots, held by gene as well** (gene-sockets.md §5.2): shut
-	# when that gene has left the slot they were opened from.
-	if _sockets_open() and _gene_at(_host_at) != _host_gene:
-		_reset_socket_view()
 	_show_fork_view()
 	_levels_seen = _levels_sign()
 
@@ -5417,6 +5480,7 @@ func _build_genome_strip() -> void:
 	_restore_focus(keeping)
 	_restore_tray_focus(keeping_gene)
 	_restore_fork_focus(keeping_fork)
+	_restore_sock_focus(keeping_sock)
 
 
 ## **The ring's keyboard**: a plain arrow goes where it points, Tab goes round
@@ -5434,37 +5498,74 @@ func _wire_focus() -> void:
 	for slot: int in Figure.SLOT_RING:
 		if _slot_live(slot):
 			live.append(_slot_chips[slot])
-	for i in live.size():
-		var chip := live[i]
+	# **The ring's arrows, and a gene's own slots threaded into them** (placing.md
+	# §2): `→` from a chip goes on to its first slot and along them, and on from the
+	# last to where the chip's own `→` went; `←` comes back the same way, into the
+	# last slot of the chip to the left; `↑` and `↓` from a slot go where its chip's
+	# do.
+	for chip in live:
 		var slot := int(chip.get_meta(&"slot"))
 		for way in Figure.NEIGHBOUR_SIDES.size():
-			var to := int(Figure.SLOT_NEIGHBOUR[slot][way])
+			var to := Figure.neighbour(slot, way, _slot_live)
 			var neighbour: Control = _slot_chips[to] if _slot_live(to) else chip
+			if way == 0 and _slot_live(to) and _sock_chips.has(to):
+				var theirs: Array = _sock_chips[to]
+				neighbour = theirs[theirs.size() - 1]
 			chip.set_focus_neighbor(Figure.NEIGHBOUR_SIDES[way],
 				chip.get_path_to(neighbour))
+	for slot: int in _sock_chips:
+		var chip := _slot_chips[slot]
+		var chips: Array = _sock_chips[slot]
+		var right := chip.get_node_or_null(chip.focus_neighbor_right) as Control
+		chip.focus_neighbor_right = chip.get_path_to(chips[0])
+		for k in chips.size():
+			var sock := chips[k] as Control
+			sock.focus_neighbor_left = sock.get_path_to(chip if k == 0 else chips[k - 1])
+			var on: Control = chips[k + 1] if k + 1 < chips.size() \
+				else (right if right != null and right != chip else sock)
+			sock.focus_neighbor_right = sock.get_path_to(on)
+			for side: int in [SIDE_TOP, SIDE_BOTTOM]:
+				var there := chip.get_node_or_null(chip.get_focus_neighbor(side)) as Control
+				sock.set_focus_neighbor(side, sock.get_path_to(
+					there if there != null and there != chip else sock))
+	# **Tab goes round clockwise from the nose, each chip's slots after it**, and
+	# then on to the `numbers` switch and `light`.
+	var order: Array[Control] = []
+	for chip in live:
+		order.append(chip)
+		order.append_array(_sock_chips.get(int(chip.get_meta(&"slot")), []))
+	for i in order.size():
+		var chip := order[i]
 		chip.focus_next = chip.get_path_to(
-			live[i + 1] if i + 1 < live.size() else _numbers_toggle)
+			order[i + 1] if i + 1 < order.size() else _numbers_toggle)
 		# The nose's previous is left to the tree: the last waiting gene if
 		# there is one, and `leave` if not -- which is where Tab came from.
 		if i > 0:
-			chip.focus_previous = chip.get_path_to(live[i - 1])
+			chip.focus_previous = chip.get_path_to(order[i - 1])
 	# **Then the switch, then `light`** (gene-stats.md §2.2), and back the same
 	# way: `light` backs onto the switch, and the switch into the ring where Tab
 	# left it, not at whichever chip happens to be last in the tree.
 	_numbers_toggle.focus_next = _numbers_toggle.get_path_to(_gain_slider)
 	_gain_slider.focus_previous = _gain_slider.get_path_to(_numbers_toggle)
-	if not live.is_empty():
+	if not order.is_empty():
 		_numbers_toggle.focus_previous = _numbers_toggle.get_path_to(
-			live[live.size() - 1])
+			order[order.size() - 1])
 
 
 ## True when [param slot] is one of this figure's live slots: earned, or
-## inherited -- and the inside, which every cell has from birth. The keys' one
-## test, and a drop's.
+## inherited -- outside, and inside alike. The keys' one test, and a drop's.
 func _slot_live(slot: int) -> bool:
 	if slot < 0 or slot >= _slot_chips.size() or _slot_chips[slot] == null:
 		return false
-	return slot < _slot_count or GenomeNode.is_inside(slot)
+	return _live_index(slot)
+
+
+## Whether [param slot] is live by the counts alone: one of the outside's
+## [member _slot_count], or of the inside's [member _inside_count].
+func _live_index(slot: int) -> bool:
+	if GenomeNode.is_inside(slot):
+		return slot < GenomeNode.INSIDE + _inside_count
+	return slot < _slot_count
 
 
 ## **What the figure's chips stand for** (dna-slots-ux.md §3.1): the DNA's
@@ -5556,7 +5657,7 @@ func _update_hint() -> void:
 	if _fork_open():
 		_set_hint(_fork_hint(), _fork_gene)
 		return
-	if _sockets_open():
+	if _sock_read().x >= 0:
 		_hint_sockets()
 		return
 	var slot := _hovered if _hovered != SLOT_NONE else _armed
@@ -5581,7 +5682,7 @@ func _update_hint() -> void:
 			GenomeNode.TIER_MAX)), form)
 		return
 	if slot >= 0 and slot == _armed and _dragging == SLOT_NONE \
-			and _hand() != &"" and _gene_at(slot) != &"" and not _opens_sockets(slot):
+			and _hand() != &"" and _gene_at(slot) != &"":
 		var under := _gene_at(slot)
 		var worn := _genome.tier(under) > 0
 		# **A level at stake is named**, and the gauge stays out of it: the
@@ -5643,25 +5744,107 @@ func _lay_hint() -> void:
 		Figure.level_text(grown.level()) if grown != null else "", _genome_hint, _hint_said)
 
 
-## **The verb line**, kept in step with the hint because the two are read
-## together and the state they read is the same. It is a separate row for the
-## reason gene-lines-and-the-pause-target.md §3 made the explanation one: both
-## are wanted at once, and the moment one would have to be chosen over the other
-## is the moment the player is about to change their daughters.
+## **The verb line, or the button in its place** (docs/design/placing.md §1), kept
+## in step with the hint because the two are read together and the state they read
+## is the same. It is a separate row for the reason
+## gene-lines-and-the-pause-target.md §3 made the explanation one: both are wanted at
+## once, and the moment one would have to be chosen over the other is the moment the
+## player is about to change their daughters.
+##
+## **When the chip chosen has something to place, write, add or choose, the row is a
+## button that says so**, and pressing it is what does it. Otherwise it is the line
+## it always was: what a tap or a release would do, or why nothing would.
 func _update_act() -> void:
-	# A refused `Shift`+arrow says why, for two seconds, over whatever else.
-	if _refusal_text != "" and Time.get_ticks_msec() < _refusal_until:
-		_genome_act.text = _refusal_text
-		return
-	_refusal_text = ""
-	# The fork's cards: pick a way, then take it (beam-levels.md §8.3).
+	var refusing := _refusal_text != "" and Time.get_ticks_msec() < _refusal_until
+	if not refusing:
+		_refusal_text = ""
+	var offer := "" if refusing else _offer()
+	_place_button.text = offer
+	_place_button.visible = offer != ""
+	_genome_act.visible = offer == ""
+	_genome_act.text = _refusal_text if refusing else _act_line()
+
+
+## **What the button would do, in its words**, or "" for nothing: the gene in hand
+## into the slot chosen -- the form that place makes of a toxin, a copy added where
+## its form already is, or written over a gene -- into one of a gene's own slots, a
+## fork's two ways shown, or the way chosen on them taken. **Nothing while anything
+## is in the air**, and nothing on a screen the genome has moved on from, which
+## [method _catch_up] rebuilds first.
+func _offer() -> String:
+	if _dragging != SLOT_NONE or not _strip_current():
+		return ""
 	if _fork_open():
-		_genome_act.text = tr(ACT_CHOOSE_WAY) % _path_title(_way_path(_way_armed)) \
-			if _way_armed >= 0 else tr(ACT_PICK_WAY)
+		return tr(PLACE_WAY) % _path_title(_way_path(_way_armed)) if _way_armed >= 0 \
+			else ""
+	if _sock_chosen():
+		return _offer_socket()
+	var hand := _hand()
+	if hand != &"":
+		if not _committable(_armed):
+			return ""
+		var form := GenomeNode.form_at(hand, _armed)
+		var lands := form if form != &"" else hand
+		if _genome.placing(hand, _armed)[0] == GenomeNode.PLACE_RAISE:
+			return tr(PLACE_RAISE) % _word(form)
+		var under := _gene_at(_armed)
+		return tr(PLACE) % _word(lands) if under == &"" \
+			else tr(PLACE_OVER) % [_word(lands), _word(under)]
+	# **With nothing in hand, a slot whose fork is open offers its two ways**
+	# (beam-levels.md §8.3).
+	if _armed >= 0 and _forks_at(_armed):
+		return tr(PLACE_FORK) % _word(_gene_at(_armed))
+	return ""
+
+
+## **The button, pressed** -- or a key on the chosen chip, which is the keyboard's
+## press of it. It does exactly what [method _offer] says, asked again now: a
+## button that said one thing and did another would be the worst control on the
+## screen. [param by_key] says the keyboard pressed it, which sends the keyboard
+## onto the first of a fork's cards.
+func _on_place_pressed(by_key := false) -> void:
+	if _offer() == "":
 		return
-	if _sockets_open():
-		_genome_act.text = _act_sockets()
+	if _fork_open():
+		_choose_way(_way_armed)
 		return
+	if _sock_chosen():
+		_commit_socket(_host_at, _sock_armed)
+		return
+	if _hand() != &"":
+		_commit_slot(_armed)
+		return
+	if _armed >= 0 and _forks_at(_armed):
+		_open_fork(_gene_at(_armed), by_key)
+
+
+## **The button's look**: the camera toggle's slab -- a control inside a surface, not
+## a thing that ends the run -- in the teal this column keeps for *this responds*,
+## 48 tall for the touch rule. It never takes the keyboard: it comes and goes with
+## the choice, and a control the keyboard stood on that then vanished would leave
+## it nowhere. The keyboard's press is a key on the chosen chip.
+func _build_place_button() -> void:
+	_place_button.hide()
+	_place_button.focus_mode = Control.FOCUS_NONE
+	_place_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_place_button.custom_minimum_size = Vector2(PLACE_MIN_WIDTH, PLACE_HEIGHT)
+	_place_button.add_theme_font_size_override("font_size", PLACE_WORD)
+	for state: String in ["font_color", "font_hover_color", "font_focus_color"]:
+		_place_button.add_theme_color_override(state, PLACE_TINT)
+	_place_button.add_theme_color_override("font_pressed_color", Color(1.0, 1.0, 1.0, 1.0))
+	_place_button.add_theme_stylebox_override("normal", _slab(0.2))
+	_place_button.add_theme_stylebox_override("hover", _slab(0.45))
+	_place_button.add_theme_stylebox_override("pressed", _slab(0.6))
+	_place_button.add_theme_stylebox_override("focus", StyleBoxEmpty.new())
+	_place_button.pressed.connect(_on_place_pressed.bind(false))
+
+
+## **The verb line's words, when the button has nothing to offer**: what a tap or a
+## release would do, or why nothing would.
+func _act_line() -> String:
+	# The fork's cards: tap a way to read it, and the button takes it.
+	if _fork_open():
+		return tr(ACT_PICK_WAY) if _way_armed < 0 else ""
 	# A gene in the air outranks the gene in hand: the line reports the gesture
 	# that is actually happening.
 	if _dragging != SLOT_NONE:
@@ -5672,82 +5855,50 @@ func _update_act() -> void:
 		var under := _gene_at(_hovered) if _hovered >= 0 else &""
 		if _dragging == SLOT_SAMPLE:
 			# Out of the tray: a drop on an empty slot places it, a drop on a
-			# gene arms that slot for the second tap. **A toxin says the form
-			# it lands as**, or that the drop arms a copy to a form you carry.
+			# gene only chooses that slot. **A toxin says the form it lands as**,
+			# or that the drop chooses a copy to a form you carry.
+			if _sock_hovered != SOCK_NONE:
+				return _drop_sock_line(flying)
 			if _hovered < 0:
-				_genome_act.text = tr(ACT_CARRY) % _carried_word(flying)
-				return
+				return tr(ACT_CARRY) % _carried_word(flying)
 			var what := _genome.placing(flying, _hovered)
 			var lands := GenomeNode.form_at(flying, _hovered)
 			match what[0]:
 				GenomeNode.PLACE_FACES_OUT:
-					_genome_act.text = tr(ACT_FACES_OUT) % _word(flying)
+					return _faces_line(flying, true)
 				GenomeNode.PLACE_FULL:
-					_genome_act.text = tr(ACT_RAISE_FULL) % _word(lands)
+					return tr(ACT_RAISE_FULL) % _word(lands)
 				GenomeNode.PLACE_RAISE:
-					_genome_act.text = tr(ACT_DROP_RAISE) % _word(lands)
-				_:
-					_genome_act.text = tr(ACT_DROP) % _word(lands) if under == &"" \
-						else tr(ACT_DROP_OVER) % [_word(lands), _word(under)]
-			return
+					return tr(ACT_DROP_RAISE) % _word(lands)
+			return tr(ACT_DROP) % _word(lands) if under == &"" \
+				else tr(ACT_DROP_OVER) % [_word(lands), _word(under)]
 		if _hovered == _dragging:
 			# Back over the slot it came out of: a drop here is refused by
 			# [method _slot_can_drop] and the gene simply stays, which is the
 			# gesture's own cancel and now says so.
-			_genome_act.text = tr(ACT_KEEP) % _word(flying)
-		elif _hovered >= 0:
-			_genome_act.text = _move_line(_dragging, _hovered)
-		else:
-			_genome_act.text = tr(ACT_CARRY) % _word(flying)
-		return
+			return tr(ACT_KEEP) % _word(flying)
+		if _hovered >= 0:
+			return _move_line(_dragging, _hovered)
+		return tr(ACT_CARRY) % _word(flying)
+	if _sock_chosen():
+		return _act_sockets()
 	var hand := _hand()
 	if hand != &"":
-		# `_armed >= 0` and not `!= SLOT_NONE`: the hand with no slot chosen is
-		# selected and not placeable, so it must not promise a second tap that
-		# does nothing.
+		# `_armed < 0` and not `== SLOT_NONE`: the hand with no slot chosen is
+		# selected and not placeable, so the line says where it can go.
 		if _armed < 0:
-			_genome_act.text = tr(ACT_ARM_FORMS) if GenomeNode.has_forms(hand) \
-				else tr(ACT_ARM)
-			return
-		var under := _gene_at(_armed)
-		# **A gene with slots one of which takes the hand opens them** instead
-		# (gene-sockets.md §5.1), and says that the hand fits.
-		if _opens_sockets(_armed):
-			_genome_act.text = tr(ACT_OPEN_SOCKETS_FITS) % [_word(under), _carried_word(hand)]
-			return
-		# **What the second tap would do, asked of the genome** (dna-slots.md
-		# §5.2): write the form of this place here, add a copy to that form
-		# where it already is, or nothing -- a form at three copies, or a gene
-		# that faces out, inside.
-		var what := _genome.placing(hand, _armed)
+			return tr(ACT_ARM_FORMS) if GenomeNode.has_forms(hand) else tr(ACT_ARM)
+		# **Why the button is not there** (dna-slots.md §5.2): a gene that faces
+		# out, inside, or a form at three copies already.
 		var form := GenomeNode.form_at(hand, _armed)
-		match what[0]:
+		match _genome.placing(hand, _armed)[0]:
 			GenomeNode.PLACE_FACES_OUT:
-				_genome_act.text = tr(ACT_FACES_OUT) % _word(hand)
+				return _faces_line(hand, true)
 			GenomeNode.PLACE_FULL:
-				_genome_act.text = tr(ACT_RAISE_FULL) % _word(form)
-			GenomeNode.PLACE_RAISE:
-				_genome_act.text = tr(ACT_RAISE) % _word(form)
-			_:
-				if GenomeNode.has_forms(hand):
-					_genome_act.text = tr(ACT_COMMIT_FORM) % _word(form) if under == &"" \
-						else tr(ACT_COMMIT_OVER) % [_word(form), _word(under)]
-				else:
-					_genome_act.text = tr(ACT_COMMIT) if under == &"" \
-						else tr(ACT_COMMIT_OVER) % [_word(hand), _word(under)]
-		return
+				return tr(ACT_RAISE_FULL) % _word(form)
+		return ""
 	var slot := _hovered if _hovered != SLOT_NONE else _armed
-	# **The selected slot's gene has slots of its own**, which its second tap opens
-	# (gene-sockets.md §5.1). Only the selected one, as for a fork below.
-	if slot >= 0 and slot == _armed and _opens_sockets(slot):
-		_genome_act.text = tr(ACT_OPEN_SOCKETS) % _word(_gene_at(slot))
-		return
-	# **The selected slot's fork is open, so its second tap opens the cards.**
-	# Only the selected one: a slot being hovered has not had its first tap.
-	if slot >= 0 and slot == _armed and _forks_at(slot):
-		_genome_act.text = tr(ACT_FORK) % _word(_gene_at(slot))
-		return
-	_genome_act.text = tr(ACT_MOVE) if _movable(slot) else ""
+	return tr(ACT_MOVE) if _movable(slot) else ""
 
 
 ## The plain word a gene is read by on this surface: [method Figure.word_of],
@@ -5773,7 +5924,7 @@ func _move_line(from: int, to: int) -> String:
 	var back := GenomeNode.form_at(under, from) if under != &"" else &""
 	match _genome.move_refusal(from, to):
 		GenomeNode.MOVE_FACES_OUT:
-			return tr(ACT_FACES_OUT) % _word(flying if lands == &"" else under)
+			return _faces_line(flying if lands == &"" else under, false)
 		GenomeNode.MOVE_COLLISION:
 			var carried := lands if lands != flying and lands != under \
 				and _genome.dna().has(lands) else back
@@ -5790,6 +5941,18 @@ func _move_line(from: int, to: int) -> String:
 		return tr(ACT_SWAP_FORM) % [_word(flying), _word(under), _word(under),
 			_word(back)]
 	return tr(ACT_SWAP) % [_word(flying), _word(under)]
+
+
+## **Why [param gene] cannot go where it is pointed** (dna-slots-ux.md §3.4): a gene
+## that faces out works only outside; one with no outside form works only inside --
+## and the toxin, which rides as well, goes inside or in a gene's slot when it is
+## [param waiting].
+func _faces_line(gene: StringName, waiting: bool) -> String:
+	if GenomeNode.form_in(gene, GenomeNode.OUTSIDE_PLACE) != &"":
+		return tr(ACT_FACES_OUT) % _word(gene)
+	if waiting and GenomeNode.form_in(gene, Catalogue.Gene.RIDING) != &"":
+		return tr(ACT_NOT_OUTSIDE) % _carried_word(gene)
+	return tr(ACT_ONLY_INSIDE) % _word(gene)
 
 
 ## **A refused `Shift`+arrow says why** (dna-slots-ux.md §3.4), for
@@ -5822,8 +5985,8 @@ func _hand_copies() -> int:
 ## True when [param slot] is a DNA slot with a gene in it, which is the only
 ## thing a move can pick up.
 ##
-## **No guard, no timeout and no second tap**, deliberately: that machinery
-## belongs to placement, which evicts a gene from the lineage for good. A move
+## **No choice and no button**, deliberately: that machinery belongs to
+## placement, which evicts a gene from the lineage for good. A move
 ## creates nothing and destroys nothing, it cannot undo a placement -- the
 ## evicted gene is not in the DNA for any rearrangement to find -- and it only
 ## reaches the player's daughters, so it is free, repeatable and
@@ -5870,10 +6033,10 @@ func _hand_lost() -> bool:
 ## **An empty slot with a gene in hand explains the gene in hand.** There is
 ## nothing in that slot to describe and the gene about to land in it is the
 ## decision; an *occupied* slot still describes its own gene, because that is
-## what a second tap would overwrite and the player should read it first.
+## what the button would overwrite and the player should read it first.
 func _update_explain() -> void:
-	# A gene's own slots have lines of their own (gene-sockets.md §5.2).
-	if _sockets_open():
+	# A gene's own slots have lines of their own (gene-sockets.md §5).
+	if _sock_read().x >= 0 and not _fork_open():
 		_explain_sockets()
 		return
 	var slot := _hovered if _hovered != SLOT_NONE else _armed
@@ -5963,7 +6126,7 @@ func _read_form() -> Array:
 	return [gene, _worn_at(gene, slot), false]
 
 
-## **Where a second tap on [param slot] would really put the gene in hand**: the
+## **Where placing on [param slot] would really put the gene in hand**: the
 ## slot of the form it would add copies to -- elsewhere, or this one -- or -1 when
 ## it would be written here, or nowhere (dna-slots.md §5.2). Never while a gene
 ## is in the air.
@@ -5977,7 +6140,7 @@ func _raise_target(slot: int) -> int:
 	return -1
 
 
-## Whether the copy a second tap on [param slot] would add lands on a form at
+## Whether the copy placing on [param slot] would add lands on a form at
 ## three copies already: the tap would spend the sample for nothing, so the
 ## screen refuses it and says so (dna-slots-ux.md §3.4).
 func _raise_full(slot: int) -> bool:
@@ -6175,10 +6338,11 @@ func _update_numbers() -> void:
 
 ## **The caption, whole** ([method Figure.caption], §5.4): the generation, and
 ## with the numbers on, this body's size, what its full tank holds and how long
-## that lasts drifting.
+## that lasts drifting -- **in the light where the cell is** (docs/design/
+## daylight.md §3.5), so a plastid's drifting time is true where you are.
 func _update_caption() -> void:
 	_genome_caption.text = Figure.caption(_generation, _show_numbers, _cell.radius,
-		_genome.tiers(), _genome.upkeep())
+		_genome.tiers(), _genome.upkeep(), _food.light_at(_cell.position))
 
 
 ## **What the three lines under the figure are about**, resolved once.
@@ -6186,7 +6350,7 @@ func _update_caption() -> void:
 ## The slot being read -- hovered first, because a mouse can ask about a slot
 ## without committing to it -- and then two fallbacks for the two ways a slot
 ## can be empty while something is still in hand. An **occupied** slot always
-## describes its own gene: with a gene in hand that is what a second tap would
+## describes its own gene: with a gene in hand that is what the button would
 ## overwrite, and under a gene in the air that is what a drop would displace,
 ## and either way it should be read before it goes.
 func _reading() -> StringName:
@@ -6209,9 +6373,9 @@ func _gene_at(slot: int) -> StringName:
 	return &""
 
 
-## True when a second tap on [param slot] would place the gene in hand into it --
+## True when the button would place the gene in hand into [param slot] --
 ## which is the only case that is irreversible, and therefore the only case that
-## needs the guard, the timeout and the confirming second tap.
+## needs a choice of where and a button that says what it does (placing.md §1).
 ##
 ## **The gene in hand has to still be waiting**, which [method _hand] asks by
 ## gene and never by place in the queue -- see [member _in_hand]. **And the
@@ -6245,10 +6409,10 @@ func _strip_current() -> bool:
 ## **The screen catches up with a genome that changed under it** -- only in a
 ## pond, where the menu stops nothing. A hand that stopped waiting goes back to
 ## the head, as the screen opening would put it. A slot armed for the hand whose
-## own gene changed is disarmed: the arm was a first tap on a different decision
+## own gene changed is disarmed: the arm was a choice of a different decision
 ## -- `place into an empty slot` is not `write over ping` -- and the one
-## irreversible action must never be a tap away without a first tap on what it
-## would actually do. Returns true when the figure needs rebuilding, which the
+## irreversible action must never be offered without a choice of what it would
+## actually do. Returns true when the figure needs rebuilding, which the
 ## caller does, because only the caller knows whether a finger is on a chip.
 func _catch_up() -> bool:
 	if not _hand_lost() and _strip_current():
@@ -6279,6 +6443,7 @@ func _catch_up() -> bool:
 ## carry, which on a born cell is the mouth.
 func _select_default() -> void:
 	_hovered = SLOT_NONE
+	_clear_sock()
 	_armed_at = Time.get_ticks_msec()
 	_in_hand = _genome.held_sample
 	if _in_hand != &"":
@@ -6320,7 +6485,11 @@ func _make_slot(gene: StringName, tier: int, body_tier: int, slot: int,
 	if not live:
 		node.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		node.focus_mode = Control.FOCUS_NONE
-		node.draw.connect(Figure.draw_unearned.bind(node))
+		# **An inside slot not earned yet is not drawn at all** (inside-genes.md §5):
+		# it would sit on the body, which is the mirror. One outside is drawn faint,
+		# on the ring, where growing will bring it.
+		if not GenomeNode.is_inside(slot):
+			node.draw.connect(Figure.draw_unearned.bind(node))
 		return node
 
 	# **Every live slot takes input, gene in hand or not.** Selecting is what the
@@ -6419,6 +6588,11 @@ func _draw_figure_body() -> void:
 ## under the figure; the travelling gene's hue over a drop target, the hand's
 ## over the slot armed for it, and otherwise the slot's own.
 func _draw_arc_mark() -> void:
+	# **A gene's own slot read lights its gene's arc**: what is in it works there.
+	var read := _sock_read()
+	if read.x >= 0 and _dragging == SLOT_NONE:
+		Figure.draw_mark(_figure_body, read.x, _gene_at(read.x))
+		return
 	var slot := _hovered if _hovered >= 0 else _armed
 	if not _slot_live(slot):
 		return
@@ -6470,11 +6644,10 @@ func _draw_slot(node: Control, gene: StringName, tier: int, body_tier: int,
 	# build previewed the incoming gene over an occupant too: rendered, `eat`
 	# vanished from the screen while the line under it still read *the mouth · a
 	# daughter always wears it*.
-	var armed := selected and hand != &"" and _dragging == SLOT_NONE \
-		and not _opens_sockets(slot)
+	var armed := selected and hand != &"" and _dragging == SLOT_NONE
 	if armed:
 		tone = Cilia.hue(hand)
-	# **Where a second tap would really go** (dna-slots.md §5.2): written here,
+	# **Where the button would really put it** (dna-slots.md §5.2): written here,
 	# a copy added where its form already is, or nothing at all.
 	var raise_to := _raise_target(_armed) if _dragging == SLOT_NONE \
 		and _armed >= 0 and hand != &"" else -1
@@ -6520,7 +6693,7 @@ func _draw_slot(node: Control, gene: StringName, tier: int, body_tier: int,
 		# lie a drag can tell.
 		shown = &""
 	elif armed and gene == &"" and raise_to < 0:
-		# What a second tap would write, drawn before it is written: a placed
+		# What the button would write, drawn before it is written: a placed
 		# gene reaches the DNA and **not** this body, so the preview is carried
 		# rungs and ring pips. It is the one frame where the player can see that
 		# placing changes their daughters and not themselves. **A toxin is
@@ -6566,7 +6739,7 @@ func _draw_slot(node: Control, gene: StringName, tier: int, body_tier: int,
 	Figure.draw_chip(node, slot, shown, copies, worn, tone,
 		grown.level() if grown != null else 0,
 		shown != &"" and _genome.can_choose(shown), selected, trace, refused,
-		ghost, ghost_copies, ghost_ink, _ports_of(shown))
+		ghost, ghost_copies, ghost_ink)
 
 
 ## **What an empty [param slot] would make of the gene in hand**, or &"": on every
@@ -6631,22 +6804,24 @@ func _draw_explain_organ() -> void:
 		_genome.tier(_explain_gene) > 0 or _genome.waiting_index(_explain_gene) >= 0)
 
 
-# --- Two taps on the same target -------------------------------------------
-# The only pattern that is safe on touch and navigable by keyboard. A mis-tap
-# costs nothing because arming is reversible, and that is the argument that
-# makes neighbouring chips acceptable on a phone. The destructive control here
-# is not adjacent to `resume`: they are in different columns.
+# --- A tap chooses; the button writes (docs/design/placing.md §1) ------------
+# The owner, 2026-10-16: "Double tapping a slot to put a gene can lead to
+# mistakes. remove that." A tap on a chip only ever chooses it, so a mis-tap, or
+# two, costs nothing, and that is the argument that makes neighbouring chips
+# acceptable on a phone. What writes is a button of its own, under the figure,
+# saying what it writes: nowhere near the chips, and gone the moment it has
+# written. The destructive control is not adjacent to `resume` either: they are
+# in different columns.
 
 ## **Picking a waiting gene.** A tap takes it in hand, and any armed slot
-## disarms: a slot armed for one gene must never be a tap away from writing a
-## different one. Tapping the gene already in hand disarms too, which is how a
-## thumb with no Escape takes an arm back.
+## disarms: a slot armed for one gene must never be offered for a different one.
+## Tapping the gene already in hand disarms too, which is how a thumb with no
+## Escape takes an arm back.
 func _on_waiting_input(event: InputEvent, node: Control,
 		gene: StringName) -> void:
 	if not _is_widget_tap(event):
 		return
 	node.accept_event()
-	_primed = SLOT_NONE
 	# **A waiting gene is one way out of the fork's cards** (beam-levels.md
 	# §8.3): the view shuts on the press, so the gene goes in hand on the figure
 	# and a drag that grows out of this press lands on the slots.
@@ -6657,12 +6832,14 @@ func _on_waiting_input(event: InputEvent, node: Control,
 	# away, and picking a gene that is not waiting would put nothing in hand.
 	if _genome.waiting_index(gene) < 0:
 		return
-	if _in_hand == gene and _armed == SLOT_SAMPLE and not was_open:
+	if _in_hand == gene and _armed == SLOT_SAMPLE and not _sock_chosen() \
+			and not was_open:
 		return
 	_in_hand = gene
 	_armed = SLOT_SAMPLE
 	_armed_at = Time.get_ticks_msec()
 	_hovered = SLOT_NONE
+	_clear_sock()
 	_redraw_figure()
 	_update_explain()
 	_update_hint()
@@ -6675,11 +6852,10 @@ func _on_waiting_input(event: InputEvent, node: Control,
 ## keyboard path, but it means nothing may touch `tile` after the rebuild. Read
 ## the new node out of the layer instead, the way the focus line does.
 ##
-## Two of the branches below rebuild -- a move and a commit -- and **selecting
-## does not**, because a press that selects may still become a drag and Godot
-## hangs the drag off the control that took the press. Everything `tile` is
-## used for happens before either rebuild: `accept_event()`, and the rect the
-## up-stroke is tested against.
+## Two of the branches below rebuild -- a move and the keyboard's confirm -- and
+## **choosing does not**, because a press that chooses may still become a drag and
+## Godot hangs the drag off the control that took the press. Everything `tile` is
+## used for happens before either rebuild: `accept_event()`.
 func _on_slot_input(event: InputEvent, tile: Control, index: int) -> void:
 	var way := _move_key(event)
 	if way >= 0:
@@ -6696,85 +6872,27 @@ func _on_slot_input(event: InputEvent, tile: Control, index: int) -> void:
 		if _slot_live(to):
 			_move_slot(index, to)
 		return
-	# **The up-stroke, which is where a placement lands.** See [member _primed]
-	# for why it cannot land on the down-stroke.
-	if _is_pointer_lift(event):
-		tile.accept_event()
-		var was_primed := _primed == index
-		_primed = SLOT_NONE
-		# `has_point` and not simply "this slot got the release": Godot keeps
-		# delivering to the control the press landed on, so a finger that
-		# pressed an armed slot, slid off it and lifted elsewhere gets its
-		# release *here*, outside the chip's rect. That is a gesture the player
-		# aborted, and aborting by sliding off is the oldest cancel there is.
-		if was_primed and _dragging == SLOT_NONE and not event.is_canceled() \
-				and Rect2(Vector2.ZERO, tile.size).has_point(
-					_pointer_at(event)):
-			_second_tap(index, false)
-		return
 	if not _is_widget_tap(event):
 		return
 	tile.accept_event()
-	# Any fresh down-stroke replaces whatever the last one was waiting to do.
-	_primed = SLOT_NONE
-	if _armed == index:
-		# **A gene with slots of its own opens them on its second tap**
-		# (gene-sockets.md §5.1), with the ring's guard and its lift: the press may
-		# still become a move.
-		if _opens_sockets(index):
-			if Time.get_ticks_msec() - _armed_at < ARM_GUARD_MS:
-				return
-			if _is_pointer_press(event):
-				_primed = index
-				return
-			_second_tap(index, true)
+	if _armed == index and not _sock_chosen():
+		# **A key is not a double tap.** `ui_accept` is Enter, KP-Enter and Space,
+		# and one press of them is one press: the keyboard's confirm stays on the
+		# chip, and does what the button says ([method _on_place_pressed]).
+		if not _is_pointer_press(event):
+			_on_place_pressed(true)
 			return
-		if _committable(index):
-			# **The guard is not politeness, it is the touch path working.**
-			# Godot emulates a mouse click from every screen touch, so one thumb
-			# press arrives here twice; without this the second copy would
-			# arm and prime in the same frame, and the one irreversible action
-			# in the game would need no confirmation at all.
-			if Time.get_ticks_msec() - _armed_at < ARM_GUARD_MS:
-				return
-			if _is_pointer_press(event):
-				# Primed, not placed: a finger that goes down here may still be
-				# starting a move, and nothing may be written until it has said
-				# which.
-				_primed = index
-				return
-			# **A key is not ambiguous.** `ui_accept` is Enter, KP-Enter and
-			# Space; no drag can grow out of any of them, so the keyboard's
-			# confirm stays on the press where it always was. [method
-			# _commit_slot] carries the guard for the one way a key can still
-			# arrive mid-gesture: a mouse drag in flight while the other hand
-			# presses Enter.
-			_commit_slot(index)
-			return
-		# **With nothing in hand, a slot whose fork is open opens its two ways**
-		# (beam-levels.md §8.3). The same guard, so a touch and the click Godot
-		# emulates from it cannot select and open in one press; primed on the
-		# press and landing on the lift, because the press may still become a
-		# move -- the slot's gene is as movable as any other.
-		if _hand() == &"" and _forks_at(index):
-			if Time.get_ticks_msec() - _armed_at < ARM_GUARD_MS:
-				return
-			if _is_pointer_press(event):
-				_primed = index
-				return
-			_second_tap(index, true)
-			return
-		# Nothing to commit -- nothing in hand, or, in a pond, a screen the
-		# genome has moved on from -- so the second tap is simply the first one
-		# again and the slot stays selected.
+		# **A second tap is the first one again** (placing.md §1): the slot stays
+		# chosen, and nothing is written. Two taps used to place, and a thumb that
+		# landed twice placed by accident.
 		#
 		# **It used to deselect, and the render is what killed that.** Godot
 		# focuses a control on click, so the chip a thumb has just tapped keeps
 		# a focus ring whether or not it is selected: deselecting left a chip
 		# underlined in pale teal with an empty sentence under it, which is the
-		# surface pointing at something and then refusing to say what. Blanking
-		# the one line the player came for is a worse answer than doing nothing.
+		# surface pointing at something and then refusing to say what.
 		return
+	_clear_sock()
 	_armed = index
 	_armed_at = Time.get_ticks_msec()
 	# **A selection redraws; it does not rebuild.** Freeing and remaking the
@@ -6794,7 +6912,6 @@ func _on_slot_input(event: InputEvent, tile: Control, index: int) -> void:
 ## the hand and the drag out of [member _armed], [member _in_hand] and
 ## [member _dragging] at draw time, so this is all a change of any of them needs.
 func _redraw_figure() -> void:
-	_redraw_sockets()
 	_figure_body.queue_redraw()
 	for layer: Control in [_figure_slots, _tray]:
 		for child in layer.get_children():
@@ -6804,17 +6921,16 @@ func _redraw_figure() -> void:
 
 
 # --- The move: a drag, because nothing is destroyed by one ------------------
-# A placement evicts a gene from the lineage and cannot be undone, so it is two
-# taps with a 300 ms guard. A move rearranges what is already there, destroys
-# nothing and only ever reaches the player's daughters, so it is a drag:
-# self-cancelling, repeatable, and over the moment the finger lifts. The two
-# consequences get two gestures, which is the cheapest possible way to say that
-# one of them is heavier than the other.
+# A placement evicts a gene from the lineage and cannot be undone, so it is a
+# tap that chooses and a button that writes (placing.md §1). A move rearranges
+# what is already there, destroys nothing and only ever reaches the player's
+# daughters, so it is a drag: self-cancelling, repeatable, and over the moment
+# the finger lifts. The two consequences get two gestures, which is the cheapest
+# possible way to say that one of them is heavier than the other.
 #
-# Tap-then-tap was not available: a tap already selects a slot and reads it,
-# and a second tap already places the gene in hand. Redefining the pair as a
-# move would cost the ability to read a second gene, which is most of what the
-# figure is for.
+# Tap-then-tap was not available: a tap already selects a slot and reads it.
+# Redefining a pair of taps as a move would cost the ability to read a second
+# gene, which is most of what the figure is for.
 
 ## The gene leaves its slot. Returning `null` refuses the drag, which is what
 ## an empty slot does.
@@ -6822,11 +6938,7 @@ func _slot_drag(_at: Vector2, node: Control, slot: int) -> Variant:
 	if not _movable(slot):
 		return null
 	var gene := _gene_at(slot)
-	# **The drag is what proves the press was not a tap**, so whatever that
-	# press primed is cancelled here. This is the line that makes a placement
-	# unreachable from a gesture the player made as a move; see [member
-	# _primed].
-	_primed = SLOT_NONE
+	_clear_sock()
 	_dragging = slot
 	_armed = slot
 	_armed_at = Time.get_ticks_msec()
@@ -6839,13 +6951,13 @@ func _slot_drag(_at: Vector2, node: Control, slot: int) -> Variant:
 
 ## **A waiting gene, carried out of the tray** (dna-body.md §5). It is in hand
 ## from the moment it leaves: onto an empty slot it lands on the drop, and onto
-## an occupied one the drop is only the first tap. The data carries the gene,
-## never its place in the queue -- see [member _in_hand].
+## an occupied one the drop only chooses it. The data carries the gene, never its
+## place in the queue -- see [member _in_hand].
 func _waiting_drag(_at: Vector2, node: Control, gene: StringName) -> Variant:
 	if _genome.waiting_index(gene) < 0:
 		return null
 	_in_hand = gene
-	_primed = SLOT_NONE
+	_clear_sock()
 	_dragging = SLOT_SAMPLE
 	_armed = SLOT_SAMPLE
 	_armed_at = Time.get_ticks_msec()
@@ -6890,12 +7002,6 @@ func _slot_can_drop(_at: Vector2, data: Variant, slot: int) -> bool:
 		# gene that faces out, inside, or a copy to a form at three copies.
 		var gene := StringName(carried[&"place"])
 		var what: StringName = _genome.placing(gene, slot)[0]
-		# **Onto a gene whose own slots take it**, the drop opens them
-		# (gene-sockets.md §5.1), full or not.
-		var host := _gene_at(slot)
-		if _genome.waiting_index(gene) >= 0 and host != &"" \
-				and Riders.takes_any(host, gene):
-			return true
 		return _genome.waiting_index(gene) >= 0 \
 			and what != GenomeNode.PLACE_FACES_OUT and what != GenomeNode.PLACE_FULL
 	if not carried.has(&"move_from"):
@@ -6921,21 +7027,14 @@ func _slot_drop(_at: Vector2, data: Variant, slot: int) -> void:
 
 ## **A waiting gene let go over a slot.** Onto an empty one it is placed there
 ## and then: nothing is evicted, and a move can still take it anywhere, so the
-## second tap would confirm nothing (owner's call 6). Onto a gene the drop is
-## the first tap and the slot arms, with the guard and the timeout running from
-## now -- the eviction still needs its own second tap.
+## button would confirm nothing (owner's call 6). Onto a gene the drop only
+## chooses the slot -- the eviction still needs the button (placing.md §1).
 ##
 ## **A toxin that would add a copy to a form you carry only arms** (dna-slots.md
 ## §20.2): it would land elsewhere than the slot it was let go over, so it is a
-## first tap, and the second tap is the player's.
+## choice, and the button is the player's.
 func _drop_waiting(gene: StringName, slot: int) -> void:
 	_in_hand = gene
-	# **Onto a gene whose own slots take it, they open** (gene-sockets.md §5.1), the
-	# slot that takes it armed: the drop was a tap toward it.
-	if _opens_sockets(slot):
-		_armed = slot
-		_open_sockets(slot, false)
-		return
 	if _gene_at(slot) == &"" and _raise_target(slot) < 0:
 		_commit_slot(slot)
 		return
@@ -6978,10 +7077,10 @@ func _move_slot(from: int, to: int) -> void:
 	# selection goes back to the hand, and the keyboard alone follows the move
 	# (below). Left on the destination, the selection would be an *arm* for the
 	# gene in hand that no tap ever made: a drop, or a `Shift`+arrow, is not a
-	# first tap on that slot, and the next tap there would write the gene in
-	# hand over the one that just moved in -- a player tapping to read what they
-	# moved would lose it. The one irreversible action takes two taps on the
-	# slot it writes, both of them the player's.
+	# choice of that slot, and the button under the figure would then offer to
+	# write the gene in hand over the one that just moved in. The one
+	# irreversible action is offered only for a slot the player chose.
+	_clear_sock()
 	if _hand() != &"":
 		_armed = SLOT_SAMPLE
 	else:
@@ -7024,8 +7123,8 @@ func _is_pointer_press(event: InputEvent) -> bool:
 ## Godot delivers the release to the control the press landed on -- as both an
 ## emulated mouse button and a screen touch, in that order, one millisecond
 ## apart -- and when a drag *is* in flight it delivers no release here at all,
-## because the release is the drop. That is exactly the discrimination
-## [member _primed] needs, and it is free.
+## because the release is the drop. That is the discrimination a lift that lands
+## something needs, and it is free.
 ##
 ## **A cancelled one is still a lift, and must commit nothing.** Android ends a
 ## gesture the system takes away -- a call, the shade, the screen locking, a
@@ -7052,23 +7151,6 @@ func _pointer_at(event: InputEvent) -> Vector2:
 	return Vector2(-1.0, -1.0)
 
 
-## **A second tap that landed on the selected slot**, by the lift inside the
-## chip or by a key. With a gene in hand it places it, as it always has; with
-## none, on a slot whose fork is open, it opens that fork's two ways
-## (beam-levels.md §8.3). [param by_key] says the keyboard asked, which is what
-## sends focus onto the first card.
-func _second_tap(index: int, by_key: bool) -> void:
-	# **A gene with slots of its own opens them** (gene-sockets.md §5.1), before its
-	# fork: a fork's chip in the tray opens the cards as well.
-	if _opens_sockets(index):
-		_open_sockets(index, by_key)
-		return
-	if _hand() == &"" and _forks_at(index):
-		_open_fork(_gene_at(index), by_key)
-		return
-	_commit_slot(index)
-
-
 ## The one irreversible action in the game (§9.7). A genome you cannot ruin is
 ## not a choice, and §1.3's drifter floor is what makes even the worst swap --
 ## dropping a fourth gene over your own mouth -- survivable rather than a soft
@@ -7093,8 +7175,8 @@ func _commit_slot(index: int) -> void:
 		return
 	if index < 0 or index >= _slot_genes.size():
 		return
-	# **Asked again here, on every path that writes the DNA.** A lift commits on
-	# the strength of a press made earlier, and in a pond the genome can change
+	# **Asked again here, on every path that writes the DNA.** The button writes
+	# on the strength of a choice made earlier, and in a pond the genome can change
 	# between the two -- the gene in hand can lapse, or another can lapse into
 	# this slot. Then nothing is written, and the screen catches up now rather
 	# than a frame later.
@@ -7112,9 +7194,9 @@ func _commit_slot(index: int) -> void:
 	#
 	# **Unless another gene is waiting behind it** (#118), and then the head
 	# goes in hand, unplaced. Left on the slot it would be armed for the *next*
-	# gene -- drawn over the gene that just landed, one more tap from writing
-	# over it. The one irreversible action in the game must never be a tap away
-	# without a fresh first tap to arm it.
+	# gene -- drawn over the gene that just landed, the button offering to write
+	# over it, under a thumb that has just pressed it. The one irreversible action
+	# in the game must never be offered without a fresh choice of where.
 	_in_hand = &""
 	_armed = index
 	_armed_at = Time.get_ticks_msec()
@@ -7124,40 +7206,21 @@ func _commit_slot(index: int) -> void:
 	_build_genome_strip()
 
 
-## The armed slot lapses on its own, so a screen left armed is not a trap -- and,
-## in a pond, the queue can change under it, which this is where the screen
-## catches up with.
+## **The genome screen's own step**: a refused move's words run out, and -- in a
+## pond, where the queue can change under the open menu -- this is where the
+## screen catches up with it.
 ##
-## **This does not lapse the gene.** Four seconds is a hesitation; the gene has
-## forty-five, and in single player its clock is not even running -- `Genome` is
-## `process_mode = 1`, so it stops with the rest of the simulation while the
-## pause screen is open. **An arm that lapses goes back to the gene in hand, not
-## to the head**: the player picked that gene, and four seconds of reading is
-## not a reason to take it off them. It is a redraw and not a rebuild -- nothing
-## in the genome changed -- so the chip under a resting mouse keeps its hover
-## and the keyboard stays where it was.
-##
-## **Only a committable selection lapses.** The timeout exists to make sure a
-## slot left armed is not a trap; a selection with nothing in hand behind it is
-## not a trap, it is a player reading a sentence, and four seconds is not long
-## enough to read one twice.
+## **A chosen slot no longer lapses** (placing.md §1). Arming lapsed after four
+## seconds so that a slot left armed was not a trap, one stray tap from writing
+## over its gene; now nothing but the button writes, so a choice left standing is
+## a player reading, and the button that would act on it says what it would do.
 func _step_arming() -> void:
 	# A refused chord's two seconds are up: the line goes back to the gesture.
 	if _refusal_text != "" and Time.get_ticks_msec() >= _refusal_until:
 		_update_act()
-	# **Nothing lapses while a gesture is in flight.** A rebuild frees the chip
-	# a drag came out of and the one under the pointer -- and four seconds is an
-	# easy hold for a thumb that is choosing between every slot the body has.
+	# **Nothing is rebuilt while a gesture is in flight.** A rebuild frees the
+	# chip a drag came out of and the one under the pointer.
 	if _dragging != SLOT_NONE:
-		return
-	# **A finger already down counts as a gesture in flight**, and this one was
-	# found by posing the move at 2400x1080, where the renderer is slow enough
-	# that the wall clock outran the harness's own clock. A press lands on an
-	# armed slot, the four seconds run out before the finger has moved the ten
-	# pixels Godot needs to call `_get_drag_data`, a rebuild frees the control
-	# the press landed on -- and the drag can never start. The cure is one line:
-	# a slot with a finger on it is not a slot left armed.
-	if _primed != SLOT_NONE:
 		return
 	# **A genome that changed under the screen is a new picture, and sometimes
 	# a new decision** (#118): the gene in hand lapsed and the head goes in hand;
@@ -7167,16 +7230,6 @@ func _step_arming() -> void:
 	# menu stops nothing. See [method _catch_up].
 	if _catch_up():
 		_build_genome_strip()
-		return
-	if not _committable(_armed):
-		return
-	if Time.get_ticks_msec() - _armed_at < ARM_TIMEOUT_MS:
-		return
-	_armed = SLOT_SAMPLE
-	_armed_at = Time.get_ticks_msec()
-	_redraw_figure()
-	_update_explain()
-	_update_hint()
 
 
 ## **The wilt, kept moving** (dna-body.md §5): the tray is redrawn while any
@@ -7213,9 +7266,8 @@ func _latch_tray() -> void:
 # and one place takes it: two cards, one per way, in the figure's own place.
 #
 # **Choosing is the pause screen's one confirm, unchanged in kind.** Tap a way
-# to arm it; tap it again to take it, for good. The guard and the timeout are
-# the slot's, and the second tap lands on the lift inside the card, so sliding
-# off cancels. The words for the ways live here, at the edge, and nothing in
+# to read it; the button under the figure takes it, for good, as it places a
+# gene (placing.md §1). The words for the ways live here, at the edge, and nothing in
 # progression.gd knows them.
 # ---------------------------------------------------------------------------
 
@@ -7250,16 +7302,14 @@ const HINT_WORKS_AS := "works as level %d until you choose"
 ## only starts at the next level.
 ## ROOM: 350 px at 14 px
 const HINT_BOTH_NEXT := "both ways start at the next level"
-## The verbs: arming is harmless, and taking is for good.
+## The verbs: reading a way is harmless, and taking it is for good -- which is
+## the button's ([constant PLACE_WAY], placing.md §1).
 ##
 ## TRANSLATORS: The line of instructions under the figure while the two cards
-## are up and none is chosen: a "way" is one of the two cards.
+## are up and none is chosen: a "way" is one of the two cards. Tapping one shows
+## what it does; a button then takes it.
 ## ROOM: 560 px at 14 px
-const ACT_PICK_WAY := "tap a way to choose it"
-## TRANSLATORS: A card is chosen; a second tap takes it, and the choice cannot be
-## undone. %s is the way's name (see the cards' titles). Keep %s.
-## ROOM: 560 px at 14 px with way
-const ACT_CHOOSE_WAY := "tap again to choose %s · for good"
+const ACT_PICK_WAY := "tap a way to read it"
 
 ## **Owner's call 3** (§8.9), answered on 2026-09-29 with the recommended
 ## option: what pause opens on with a fork open and no gene
@@ -7271,8 +7321,11 @@ const PAUSE_OPENS_ON_CARDS := false
 ## The cards, in the view's own 420 x 372: 200 x 290, 20 apart, 41 down, which
 ## is 49 px clear of the tray above and of `Explain` below, and 300 x 435 device
 ## px on a phone. `Way0` is the progression's first path, `Way1` its second.
+## **Centred in the figure's box**, which is wider than [constant WAY_FIGURE_W]
+## once a gene has slots of its own (figure.gd's `_lay_out`).
 const WAY_SIZE := Vector2(200.0, 290.0)
 const WAY_SEAT: Array[Vector2] = [Vector2(0.0, 41.0), Vector2(220.0, 41.0)]
+const WAY_FIGURE_W := 420.0
 ## **Opaque on purpose.** Full vision pins the ghost of the player's cell to
 ## canvas x 640, inside the left card. At the slab's usual 0.45 the design's
 ## mock saw its rim through the card, 36.5 of glance on a card that read 23.5;
@@ -7320,12 +7373,10 @@ const WAY_FOCUS_Y := 284.0
 ## gene, as the gene in hand is (dna-body.md §5.1), so a tray rebuilt under it
 ## in a pond keeps it open.
 var _fork_gene: StringName = &""
-## The armed way, since when, and the way a finger is holding its confirm on:
-## [member _armed], [member _armed_at] and [member _primed], for the cards. -1
-## is none.
+## The way chosen, and since when: [member _armed] and [member _armed_at], for
+## the cards. -1 is none.
 var _way_armed := -1
 var _way_armed_at := 0
-var _way_primed := -1
 ## The way the mouse is over, -1 for none. Desktop's read, as on the slots.
 var _way_hovered := -1
 ## Each card's fans, stepped while the view is up: one for a still way; for a
@@ -7408,9 +7459,11 @@ func _build_fork_view() -> void:
 	_fork_view.hide()
 	_way_box = Figure.flat(WAY_FILL, WAY_CORNER, WAY_EDGE, 1)
 	_way_box_armed = Figure.flat(WAY_FILL, WAY_CORNER, WAY_EDGE, WAY_EDGE_ARMED)
+	# The cards' seats are the figure's at its narrowest, centred in it as it is.
+	var inset := Vector2((Figure.FIGURE_SIZE.x - WAY_FIGURE_W) * 0.5, 0.0)
 	for way in _ways.size():
 		var card := _ways[way]
-		card.position = WAY_SEAT[way]
+		card.position = WAY_SEAT[way] + inset
 		card.size = WAY_SIZE
 		card.custom_minimum_size = WAY_SIZE
 		card.mouse_filter = Control.MOUSE_FILTER_STOP
@@ -7538,12 +7591,11 @@ func _draw_fork_chip(node: Control, gene: StringName) -> void:
 
 
 ## **A tap on the fork's chip opens its cards, and a second shuts them.** On the
-## **lift**, inside the chip, as a slot's second tap lands -- never on the
-## press. A thumb's press arrives twice, as the click Godot emulates from it
+## **lift**, inside the chip -- never on the press. A thumb's press arrives twice, as the click Godot emulates from it
 ## and then as the touch, and the cards were hidden until now and have never
 ## been laid out: opened on the first copy, the second was hit-tested against
 ## a card still sitting at the column's origin, right over this chip, and
-## armed it. One tap read `tap again to choose sweep`. Enter opens on the press,
+## armed it: one tap read as a way already chosen. Enter opens on the press,
 ## with the keyboard on the first card.
 func _on_fork_chip_input(event: InputEvent, node: Control,
 		gene: StringName) -> void:
@@ -7564,7 +7616,6 @@ func _on_fork_chip_input(event: InputEvent, node: Control,
 	if frame == _fork_chip_frame:
 		return
 	_fork_chip_frame = frame
-	_primed = SLOT_NONE
 	if _fork_gene == gene:
 		_close_fork(false)
 		return
@@ -7607,17 +7658,14 @@ func _focus_fork_chip(gene: StringName) -> void:
 func _open_fork(gene: StringName, by_key: bool) -> void:
 	if not _genome.can_choose(gene):
 		return
-	if _sockets_open():
-		_reset_socket_view()
+	_clear_sock()
 	if _armed >= 0 and _hand() != &"":
 		_armed = SLOT_SAMPLE
 		_armed_at = Time.get_ticks_msec()
-	_primed = SLOT_NONE
 	_hovered = SLOT_NONE
 	_fork_gene = gene
 	_fork_opened_frame = Engine.get_process_frames()
 	_way_armed = -1
-	_way_primed = -1
 	_way_hovered = -1
 	_start_way_fans()
 	_show_fork_view()
@@ -7655,7 +7703,6 @@ func _close_fork(to_chip: bool) -> void:
 func _reset_fork_view() -> void:
 	_fork_gene = &""
 	_way_armed = -1
-	_way_primed = -1
 	_way_hovered = -1
 	_way_fans.clear()
 	_show_fork_view()
@@ -7668,19 +7715,11 @@ func _reset_fork_view() -> void:
 ## nobody can see.
 func _show_fork_view() -> void:
 	var open := _fork_open()
-	# **A gene's own slots take the same place** (gene-sockets.md §5.2): one view at
-	# a time, and the cards win, since opening either shuts the other.
-	var sockets := _sockets_open() and not open
-	_figure.visible = not open and not sockets
+	_figure.visible = not open
 	_fork_view.visible = open
-	_socket_view.visible = sockets
 	if open:
 		_numbers_toggle.focus_previous = _numbers_toggle.get_path_to(
 			_ways[_ways.size() - 1])
-		_gain_slider.focus_previous = _gain_slider.get_path_to(_numbers_toggle)
-	elif sockets and not _sock_chips.is_empty():
-		_numbers_toggle.focus_previous = _numbers_toggle.get_path_to(
-			_sock_chips[_sock_chips.size() - 1])
 		_gain_slider.focus_previous = _gain_slider.get_path_to(_numbers_toggle)
 	else:
 		_wire_focus()
@@ -7691,435 +7730,249 @@ func _redraw_ways() -> void:
 		card.queue_redraw()
 
 
-# --- A gene's own slots: its view (docs/design/gene-sockets.md §5.2) ---------------
-# The owner, 2026-10-15: "An equipped gene opens a new slot view. Each gene will have
-# specific number of slots. It must be easy to see which slots are valid for a gene
-# we're about to equip." The view takes the figure's place, as the fork's cards do:
-# the gene drawn large, its chip, and its slots in a row on threads from it.
+# --- A gene's own slots, on the figure (docs/design/placing.md §2) ---------------
+# The owner, 2026-10-16: "I think you can use a bit more of the screen to display
+# all gene slots instead of having to enter a sub screen as well." So a gene's own
+# slots are chips of the figure, off the right end of their gene's chip, and every
+# slot the body and its genes have is on one screen: lit together while a gene
+# waits, chosen with one tap and written by the button, as the ring's are. The
+# ring's columns moved apart to make room (figure.gd's `_lay_out`).
 
-## No chip of the view; and the view's chip for the gene itself. A slot of its own
-## is its index, from 0.
+## No slot of a gene's own.
 const SOCK_NONE := -9
-const SOCK_HOST := -1
 
-## **The gene whose slots are up**, &"" while the figure is, and the ring slot it is
-## in. Held by gene, as the fork's view is: a rebuild under it keeps it open while
-## that gene is still in that slot, and shuts it when it is not.
-var _host_gene: StringName = &""
+## **The gene's own slot that is chosen**: the ring slot of the gene it belongs to,
+## that gene, and which of its slots -- or [constant SLOT_NONE], &"" and [constant
+## SOCK_NONE]. Chosen as a ring slot is, by a tap or by a drop over its rider, and
+## **only ever one of the two**: choosing a ring slot clears it, and choosing it
+## sends [member _armed] back to the hand, so nothing on the ring is offered while
+## a slot of a gene's is.
 var _host_at := SLOT_NONE
-## The view's [member _armed], [member _armed_at], [member _primed] and
-## [member _hovered]: [constant SOCK_HOST], a slot's index, or [constant SOCK_NONE].
+var _host_gene: StringName = &""
 var _sock_armed := SOCK_NONE
 var _sock_armed_at := 0
-var _sock_primed := SOCK_NONE
+## The one the mouse is over, and its gene's ring slot.
 var _sock_hovered := SOCK_NONE
-## **The frame the view came up on**, in which no chip of it takes a pointer event,
-## for the reason [member _fork_opened_frame] gives.
-var _sock_opened_frame := -1
-## The view's chips: the gene's own, one for each of its slots, and the way back --
-## and the canvas the gene and the threads are drawn on, behind them.
-var _sock_host_chip: Control = null
-var _sock_chips: Array[Control] = []
-var _sock_back: Control = null
-var _sock_body: Control = null
+var _sock_hover_at := SLOT_NONE
+## The chips as last built, by ring slot: an array of its gene's slots' chips.
+var _sock_chips := {}
 
 
-## The view's fixed parts, laid out as the fork's are: the canvas, the way back and
-## the gene's own chip. Its slots' chips are made when it opens, as many as the gene
-## has ([method _build_socket_chips]).
-func _build_socket_view() -> void:
-	_socket_view.custom_minimum_size = Figure.FIGURE_SIZE
-	_socket_view.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_socket_view.hide()
-	_sock_body = Control.new()
-	_sock_body.name = "Body"
-	_sock_body.size = Figure.FIGURE_SIZE
-	_sock_body.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_sock_body.draw.connect(_draw_sock_body)
-	_socket_view.add_child(_sock_body)
-	_sock_back = Control.new()
-	_sock_back.name = "Back"
-	_sock_back.position = Figure.BACK_AT
-	_sock_back.size = Figure.BACK_SIZE
-	_sock_back.custom_minimum_size = Figure.BACK_SIZE
-	_sock_back.mouse_filter = Control.MOUSE_FILTER_STOP
-	_sock_back.focus_mode = Control.FOCUS_ALL
-	_sock_back.draw.connect(Figure.draw_back.bind(_sock_back))
-	_sock_back.gui_input.connect(_on_sock_back_input)
-	_sock_back.focus_entered.connect(_sock_back.queue_redraw)
-	_sock_back.focus_exited.connect(_sock_back.queue_redraw)
-	_socket_view.add_child(_sock_back)
-	_sock_host_chip = _make_sock_chip(SOCK_HOST)
-	_sock_host_chip.position = Figure.HOST_CHIP_AT
-	_socket_view.add_child(_sock_host_chip)
+## True while one of a gene's own slots is chosen.
+func _sock_chosen() -> bool:
+	return _sock_armed != SOCK_NONE and _host_at >= 0
 
 
-## One chip of the view: the gene's own for [constant SOCK_HOST], otherwise slot
-## [param index]. The ring's size and the ring's taps: one reads or arms, two place.
-func _make_sock_chip(index: int) -> Control:
-	var node := Control.new()
-	node.name = "Host" if index == SOCK_HOST else "Socket%d" % index
-	node.custom_minimum_size = Figure.SLOT_SIZE
-	node.size = Figure.SLOT_SIZE
-	node.mouse_filter = Control.MOUSE_FILTER_STOP
-	node.focus_mode = Control.FOCUS_ALL
-	node.draw.connect(_draw_sock.bind(node, index))
-	node.gui_input.connect(_on_sock_input.bind(node, index))
-	node.focus_entered.connect(_on_sock_focus.bind(node, index))
-	node.focus_exited.connect(node.queue_redraw)
-	node.mouse_entered.connect(_on_sock_hover.bind(index))
-	node.mouse_exited.connect(_on_sock_unhover.bind(index))
-	return node
-
-
-## **The slots' chips, one for each of [member _host_gene]'s**, in a row under its
-## own, and the keyboard's ways between them: `←` and `→` along the row, `↑` to the
-## gene and `↓` back down, the way back above the gene. Tab goes round them in that
-## order and on to the `numbers` switch.
-func _build_socket_chips() -> void:
-	for chip in _sock_chips:
-		_socket_view.remove_child(chip)
-		chip.queue_free()
-	_sock_chips.clear()
-	var count := Catalogue.sockets(_host_gene).size()
-	for k in count:
-		var chip := _make_sock_chip(k)
-		chip.position = Figure.socket_chip_at(k, count)
-		_socket_view.add_child(chip)
-		_sock_chips.append(chip)
-	var order: Array[Control] = [_sock_back, _sock_host_chip]
-	order.append_array(_sock_chips)
-	for k in order.size():
-		var here := order[k]
-		var next := order[k + 1] if k + 1 < order.size() else null
-		if next != null:
-			here.focus_next = here.get_path_to(next)
-			next.focus_previous = next.get_path_to(here)
-	if not _sock_chips.is_empty():
-		_sock_host_chip.focus_neighbor_bottom = _sock_host_chip.get_path_to(_sock_chips[0])
-		_sock_host_chip.focus_neighbor_top = _sock_host_chip.get_path_to(_sock_back)
-		_sock_back.focus_neighbor_bottom = _sock_back.get_path_to(_sock_host_chip)
-		for k in _sock_chips.size():
-			var chip := _sock_chips[k]
-			chip.focus_neighbor_top = chip.get_path_to(_sock_host_chip)
-			chip.focus_neighbor_left = chip.get_path_to(_sock_chips[maxi(k - 1, 0)])
-			chip.focus_neighbor_right = chip.get_path_to(
-				_sock_chips[mini(k + 1, _sock_chips.size() - 1)])
-		_sock_chips[_sock_chips.size() - 1].focus_next = \
-			_sock_chips[_sock_chips.size() - 1].get_path_to(_numbers_toggle)
-
-
-func _sockets_open() -> bool:
-	return _host_gene != &""
-
-
-## **Whether a second tap on the ring's [param slot] opens its gene's slots**
-## (gene-sockets.md §5.1): a gene with slots of its own, with nothing in hand or
-## with a gene in hand that one of them takes -- full or not, so a gene that fits a
-## full slot opens the view that says so, and is never written over the gene by a
-## tap meant for its slot. With a gene in hand that none of them takes, the second
-## tap writes over it, as it always did.
-func _opens_sockets(slot: int) -> bool:
-	if slot < 0 or GenomeNode.is_inside(slot) or _dragging != SLOT_NONE:
-		return false
-	var gene := _gene_at(slot)
-	if gene == &"" or Catalogue.sockets(gene).is_empty():
-		return false
-	var hand := _hand()
-	return hand == &"" or Riders.takes_any(gene, hand)
-
-
-## **Whether slot [param socket] of [param host] would take [param gene] now**: an
-## empty slot that takes it, or one that holds it below three copies -- what lights
-## a port, a thread and a slot's chip.
-func _socket_takes(host: StringName, socket: int, gene: StringName) -> bool:
-	if gene == &"":
-		return false
-	var what: StringName = _genome.placing_rider(gene, host, socket)[0]
-	return what == GenomeNode.PLACE_WRITE or what == GenomeNode.PLACE_RAISE
-
-
-## **[param host]'s slots as its chip's ports** ([method Figure.draw_ports]): what
-## the DNA holds in each, lit in the hue of the gene in hand -- or of the gene in the
-## air out of the tray -- where that slot would take it.
-func _ports_of(host: StringName) -> Array:
-	var out: Array = []
-	var count := Catalogue.sockets(host).size()
-	if count == 0:
-		return out
-	var riders := _genome.riders()
-	var hand := _hand() if _dragging == SLOT_NONE or _dragging == SLOT_SAMPLE else &""
-	for k in count:
-		var lit := Color(0.0, 0.0, 0.0, 0.0)
-		if _socket_takes(host, k, hand):
-			lit = Cilia.hue(Catalogue.rides_as(hand))
-		out.append([Riders.rider_at(riders, host, k), lit])
-	return out
-
-
-## **The view comes up for the gene in the ring's [param slot]**, in the figure's
-## place. The fork's cards go if they were up. Nothing on the ring stays armed: a
-## slot armed for the gene in hand is disarmed and the hand is kept.
-##
-## **The slot that takes the gene in hand comes up armed**, empty or holding it
-## already -- the taps that opened the view were taps toward it -- so one more tap
-## places it. Never one holding another gene: writing over a rider takes two taps
-## on its chip, both of them the player's, as everywhere.
-func _open_sockets(slot: int, by_key: bool) -> void:
-	var gene := _gene_at(slot)
-	if gene == &"" or Catalogue.sockets(gene).is_empty():
-		return
-	if _fork_open():
-		_reset_fork_view()
-	if _armed >= 0 and _hand() != &"":
-		_armed = SLOT_SAMPLE
-		_armed_at = Time.get_ticks_msec()
-	_primed = SLOT_NONE
-	_hovered = SLOT_NONE
-	_host_gene = gene
-	_host_at = slot
-	_sock_opened_frame = Engine.get_process_frames()
+## Nothing of a gene's own chosen or hovered.
+func _clear_sock() -> void:
+	_host_at = SLOT_NONE
+	_host_gene = &""
 	_sock_armed = SOCK_NONE
-	_sock_primed = SOCK_NONE
 	_sock_hovered = SOCK_NONE
-	var hand := _hand()
-	var riders := _genome.riders()
-	for k in Catalogue.sockets(gene).size():
-		var there := Riders.rider_at(riders, gene, k)
-		if _socket_takes(gene, k, hand) \
-				and (there == &"" or there == Catalogue.rides_as(hand)):
-			_sock_armed = k
-			_sock_armed_at = Time.get_ticks_msec()
-			break
-	_build_socket_chips()
-	_show_fork_view()
-	var focused := get_viewport().gui_get_focus_owner()
-	if by_key:
-		var first := _sock_chips[_sock_armed] if _sock_armed >= 0 else _sock_chips[0]
-		first.grab_focus()
-	elif focused == null or not focused.is_visible_in_tree():
-		_sock_host_chip.grab_focus()
-	_redraw_sockets()
-	_update_explain()
-	_update_hint()
+	_sock_hover_at = SLOT_NONE
 
 
-## **The view goes and the figure comes back**, the gene's ring slot selected.
-## [param to_chip] sends the keyboard to that slot -- `Esc`'s way back -- and so does
-## a chip of the view that had it, which has just been hidden.
-func _close_sockets(to_chip: bool) -> void:
-	if not _sockets_open():
-		return
-	var at := _host_at
-	var had_focus := _sock_back.has_focus() or _sock_host_chip.has_focus()
-	for chip in _sock_chips:
-		had_focus = had_focus or chip.has_focus()
-	_reset_socket_view()
-	if _hand() == &"":
-		_armed = at
-		_armed_at = Time.get_ticks_msec()
-	if (to_chip or had_focus) and at >= 0 and at < _slot_chips.size() \
-			and _slot_chips[at] != null:
-		_slot_chips[at].grab_focus()
+## **Slot [param socket] of the gene in ring slot [param slot], chosen**: the ring
+## gives up its own choice -- the hand stays in hand -- and the lines read it.
+func _choose_sock(slot: int, socket: int) -> void:
+	_host_at = slot
+	_host_gene = _gene_at(slot)
+	_sock_armed = socket
+	_sock_armed_at = Time.get_ticks_msec()
+	_armed = SLOT_SAMPLE if _hand() != &"" else SLOT_NONE
+	_armed_at = _sock_armed_at
+	_hovered = SLOT_NONE
 	_redraw_figure()
 	_update_explain()
 	_update_hint()
 
 
-## Back to the figure with nothing of the view armed: the menu opening and shutting
-## come through here, as does a gene that left its slot under the view.
-func _reset_socket_view() -> void:
-	_host_gene = &""
-	_host_at = SLOT_NONE
-	_sock_armed = SOCK_NONE
-	_sock_primed = SOCK_NONE
-	_sock_hovered = SOCK_NONE
-	for chip in _sock_chips:
-		_socket_view.remove_child(chip)
-		chip.queue_free()
+## **The gene's own slot the lines read**, as `(ring slot, slot)`, or `(-1, -1)`:
+## the one hovered, unless a ring chip is; then the one chosen. Hover wins over
+## a choice, as it does on the ring.
+func _sock_read() -> Vector2i:
+	if _sock_hovered != SOCK_NONE and _sock_hover_at >= 0:
+		return Vector2i(_sock_hover_at, _sock_hovered)
+	if _hovered != SLOT_NONE:
+		return Vector2i(-1, -1)
+	if _sock_chosen():
+		return Vector2i(_host_at, _sock_armed)
+	return Vector2i(-1, -1)
+
+
+## **Every gene's own slots, as chips**, beside the live ring chips whose genes
+## have them -- outside, where a gene with slots can be worn. Built with the ring,
+## into the same layer; [method _wire_focus] threads them into the keyboard's.
+func _build_sockets() -> void:
 	_sock_chips.clear()
-	_show_fork_view()
+	for slot in mini(_slot_count, GenomeNode.INSIDE):
+		var gene := _gene_at(slot)
+		if gene == &"":
+			continue
+		var count := mini(Catalogue.sockets(gene).size(), Figure.SOCKETS_DRAWN)
+		if count == 0:
+			continue
+		var chips: Array[Control] = []
+		for k in count:
+			var chip := _make_socket(slot, k)
+			_figure_slots.add_child(chip)
+			chips.append(chip)
+		_sock_chips[slot] = chips
+	# **Shut when its gene has left the slot it was chosen at**, as the view was.
+	if _sock_chosen() and _gene_at(_host_at) != _host_gene:
+		_clear_sock()
 
 
-func _redraw_sockets() -> void:
-	if _sock_body == null:
-		return
-	_sock_body.queue_redraw()
-	_sock_back.queue_redraw()
-	_sock_host_chip.queue_redraw()
-	for chip in _sock_chips:
-		chip.queue_redraw()
+## One of a gene's own slots, its chip: a tap chooses it, and a gene carried out
+## of the tray can be let go over it. It never starts a drag: a gene in a gene's
+## slot goes where its gene goes (gene-sockets.md §4).
+func _make_socket(slot: int, socket: int) -> Control:
+	var node := Control.new()
+	node.name = "Slot%d_%d" % [slot, socket]
+	node.custom_minimum_size = Figure.SOCKET_SIZE
+	node.size = Figure.SOCKET_SIZE
+	node.position = Figure.socket_at(slot, socket)
+	node.set_meta(&"socket", Vector2i(slot, socket))
+	node.mouse_filter = Control.MOUSE_FILTER_STOP
+	node.focus_mode = Control.FOCUS_ALL
+	node.draw.connect(_draw_sock.bind(node, slot, socket))
+	node.gui_input.connect(_on_sock_input.bind(node, slot, socket))
+	node.focus_entered.connect(node.queue_redraw)
+	node.focus_exited.connect(node.queue_redraw)
+	node.mouse_entered.connect(_on_sock_hover.bind(slot, socket))
+	node.mouse_exited.connect(_on_sock_unhover.bind(slot, socket))
+	node.set_drag_forwarding(Callable(), _sock_can_drop.bind(slot, socket),
+		_sock_drop.bind(slot, socket))
+	return node
 
 
-## The view's chip [param index] took a press or a lift: the ring's grammar. One
-## tap reads it, or arms it with a gene in hand; a second places, on the lift for a
-## finger -- the ring's reason -- and on the press for a key.
-func _on_sock_input(event: InputEvent, node: Control, index: int) -> void:
-	if (_is_pointer_press(event) or _is_pointer_lift(event)) \
-			and Engine.get_process_frames() == _sock_opened_frame:
-		node.accept_event()
-		return
-	if _is_pointer_lift(event):
-		node.accept_event()
-		var was_primed := _sock_primed == index
-		_sock_primed = SOCK_NONE
-		if was_primed and not event.is_canceled() \
-				and Rect2(Vector2.ZERO, node.size).has_point(_pointer_at(event)):
-			_sock_second_tap(index)
-		return
+## **Whether slot [param socket] of [param host] would take [param gene] now**: an
+## empty slot that takes it, or one that holds it below three copies -- what lights
+## a slot's chip and its stem.
+func _socket_takes(host: StringName, socket: int, gene: StringName) -> bool:
+	if gene == &"" or host == &"":
+		return false
+	var what: StringName = _genome.placing_rider(gene, host, socket)[0]
+	return what == GenomeNode.PLACE_WRITE or what == GenomeNode.PLACE_RAISE
+
+
+## A tap on a gene's own slot chooses it; a key on the chosen one does what the
+## button says, as on the ring ([method _on_slot_input]).
+func _on_sock_input(event: InputEvent, node: Control, slot: int, socket: int) -> void:
 	if not _is_widget_tap(event):
 		return
 	node.accept_event()
-	_sock_primed = SOCK_NONE
-	if _sock_armed == index and _sock_committable(index):
-		# The ring's guard, for the ring's reason: one thumb press arrives twice.
-		if Time.get_ticks_msec() - _sock_armed_at < ARM_GUARD_MS:
-			return
-		if _is_pointer_press(event):
-			_sock_primed = index
-			return
-		_sock_second_tap(index)
+	if _sock_chosen() and _host_at == slot and _sock_armed == socket:
+		if not _is_pointer_press(event):
+			_on_place_pressed(true)
 		return
-	if _sock_armed == index:
-		return
-	_sock_armed = index
-	_sock_armed_at = Time.get_ticks_msec()
-	_redraw_sockets()
+	_choose_sock(slot, socket)
+
+
+func _on_sock_hover(slot: int, socket: int) -> void:
+	_sock_hovered = socket
+	_sock_hover_at = slot
 	_update_explain()
 	_update_hint()
+	if _dragging != SLOT_NONE:
+		_redraw_figure()
 
 
-## **Whether a second tap on the view's chip [param index] would write**: a gene
-## in hand, the screen still the genome, and the gene's own chip committable as its
-## ring slot is -- or the slot taking it ([method _socket_takes]).
-func _sock_committable(index: int) -> bool:
-	if _hand() == &"" or not _strip_current():
+func _on_sock_unhover(slot: int, socket: int) -> void:
+	if _sock_hovered != socket or _sock_hover_at != slot:
+		return
+	_sock_hovered = SOCK_NONE
+	_sock_hover_at = SLOT_NONE
+	_update_explain()
+	_update_hint()
+	if _dragging != SLOT_NONE:
+		_redraw_figure()
+
+
+## **A waiting gene, and only a waiting gene, lands on a gene's own slot**, where
+## that slot would take it. A gene moved off the ring never does: a gene's slots
+## take what the meal brings, never the body's own.
+func _sock_can_drop(_at: Vector2, data: Variant, slot: int, socket: int) -> bool:
+	if not (data is Dictionary) or not (data as Dictionary).has(&"place"):
 		return false
-	if index == SOCK_HOST:
-		return _committable(_host_at)
-	return index >= 0 and _socket_takes(_host_gene, index, _hand())
+	var gene := StringName((data as Dictionary)[&"place"])
+	return _genome.waiting_index(gene) >= 0 and _socket_takes(_gene_at(slot), socket, gene)
 
 
-## The second tap: over the gene itself, the ring's own write, which takes the
-## view with the gene; into one of its slots, [method _commit_socket].
-func _sock_second_tap(index: int) -> void:
-	if not _sock_committable(index):
+## **Let go over a gene's own slot**: into an empty one it is put there and then,
+## as onto an empty ring slot; over a rider it only chooses the slot, and the
+## button writes or adds the copy.
+func _sock_drop(_at: Vector2, data: Variant, slot: int, socket: int) -> void:
+	_dragging = SLOT_NONE
+	var gene := StringName((data as Dictionary)[&"place"])
+	_in_hand = gene
+	var host := _gene_at(slot)
+	var what: Array = _genome.placing_rider(gene, host, socket)
+	if what[0] == GenomeNode.PLACE_WRITE and StringName(what[1]) == &"":
+		_commit_socket(slot, socket)
+		return
+	_choose_sock(slot, socket)
+
+
+## **The gene in hand into slot [param socket] of the gene in ring slot [param
+## slot]** (genome.gd's `place_rider`). The slot stays chosen as a receipt -- unless
+## another gene is waiting, which goes in hand, and then nothing stays chosen: a
+## slot chosen for the next gene would be offered for writing over this one.
+func _commit_socket(slot: int, socket: int) -> void:
+	if _dragging != SLOT_NONE:
+		return
+	var host := _gene_at(slot)
+	# **Asked again on the press**, as the ring's write is: in a pond the genome
+	# can change between the choice and the button.
+	if not _strip_current() or not _socket_takes(host, socket, _hand()):
 		if _catch_up():
 			_build_genome_strip()
 		return
-	if index == SOCK_HOST:
-		var at := _host_at
-		_reset_socket_view()
-		_commit_slot(at)
-		return
-	_commit_socket(index)
-
-
-## **The gene in hand into slot [param index]** (genome.gd's `place_rider`), and the
-## view stays up so the player sees it land. The slot stays selected as a receipt --
-## unless another gene is waiting, which goes in hand, and then nothing stays armed:
-## a slot armed for the next gene would be one tap from writing over this one.
-func _commit_socket(index: int) -> void:
-	if _genome.place_rider(_host_gene, index, _genome.waiting_index(_in_hand)) \
+	if _genome.place_rider(host, socket, _genome.waiting_index(_in_hand)) \
 			== GenomeNode.Result.NOTHING:
 		return
 	_in_hand = &""
-	_sock_armed = index
+	_host_at = slot
+	_host_gene = host
+	_sock_armed = socket
 	_sock_armed_at = Time.get_ticks_msec()
-	_sock_hovered = SOCK_NONE
+	_armed = SLOT_NONE
+	_hovered = SLOT_NONE
 	if _genome.held_sample != &"":
 		_select_default()
-		_sock_armed = SOCK_NONE
 	_build_genome_strip()
 
 
-func _on_sock_back_input(event: InputEvent) -> void:
-	if (_is_pointer_press(event) or _is_pointer_lift(event)) \
-			and Engine.get_process_frames() == _sock_opened_frame:
-		_sock_back.accept_event()
+## **One of a gene's own slots, as the screen stands** ([method
+## Figure.draw_socket_chip]): its rider -- rungs, and worn where the body wears it --
+## or, empty, what it takes, faint, as an empty ring slot draws a toxin's form.
+## **With a gene in hand every slot says whether it takes it**: lit where it does,
+## its weave dropped where it does not, and chosen, or under the gene carried out
+## of the tray, it previews the gene as it would land. Nothing while its gene is
+## in the air: what is in its slots goes where it goes.
+func _draw_sock(node: Control, slot: int, socket: int) -> void:
+	var host := _gene_at(slot)
+	if host == &"" or _dragging == slot:
 		return
-	if not _is_widget_tap(event):
-		return
-	_sock_back.accept_event()
-	_close_sockets(true)
-
-
-func _on_sock_hover(index: int) -> void:
-	_sock_hovered = index
-	_update_explain()
-	_update_hint()
-
-
-func _on_sock_unhover(index: int) -> void:
-	if _sock_hovered != index:
-		return
-	_sock_hovered = SOCK_NONE
-	_update_explain()
-	_update_hint()
-
-
-## The keyboard moved onto a chip of the view: its underline. `Enter` is its tap.
-func _on_sock_focus(node: Control, _index: int) -> void:
-	node.queue_redraw()
-
-
-## **What the view's lines read**: the chip hovered, or the one armed.
-func _sock_reading() -> int:
-	return _sock_hovered if _sock_hovered != SOCK_NONE else _sock_armed
-
-
-## The gene drawn large and the threads to its slots, each lit where it takes the
-## gene in hand.
-func _draw_sock_body() -> void:
-	if not _sockets_open():
-		return
-	var lit: Array = []
-	var hand := _hand()
-	for k in Catalogue.sockets(_host_gene).size():
-		lit.append(Cilia.hue(Catalogue.rides_as(hand)) if _socket_takes(_host_gene, k, hand)
-			else Color(0.0, 0.0, 0.0, 0.0))
-	Figure.draw_host_view(_sock_body, _host_gene, _genome.dna_tier(_host_gene),
-		_genome.tier(_host_gene) > 0, lit)
-
-
-## **One chip of the view, as the screen stands.** The gene's own is its ring chip
-## again, ports and all, armed in the incoming hue when the gene in hand would be
-## written over it. A slot draws its rider -- rungs and copies, worn where the body
-## wears it -- or, empty, what it takes, faint, as an empty ring slot draws a toxin's
-## form. **With a gene in hand every slot says whether it takes it**: lit where it
-## does, its weave dropped where it does not, and armed it previews the gene as it
-## would land.
-func _draw_sock(node: Control, index: int) -> void:
-	if not _sockets_open():
-		return
-	var host := _host_gene
-	var hand := _hand()
-	if index == SOCK_HOST:
-		var tier := _genome.dna_tier(host)
-		var armed := _sock_armed == SOCK_HOST and hand != &""
-		var grown := _genome.progression(host)
-		Figure.draw_chip(node, SLOT_NONE, host, tier, mini(_genome.tier(host), tier),
-			Cilia.hue(hand) if armed else Cilia.hue(host),
-			grown.level() if grown != null else 0, false, _sock_armed == SOCK_HOST,
-			false, false, &"", 0, Figure.GHOST_INK, _ports_of(host))
-		return
+	var hand := _hand() if _dragging == SLOT_NONE or _dragging == SLOT_SAMPLE else &""
 	var riders := _genome.riders()
-	var rider := Riders.rider_at(riders, host, index)
-	var copies := Riders.copies_at(riders, host, index)
+	var rider := Riders.rider_at(riders, host, socket)
+	var copies := Riders.copies_at(riders, host, socket)
 	var body := _genome.body_riders()
-	var worn := Riders.copies_at(body, host, index) \
-		if Riders.rider_at(body, host, index) == rider else 0
-	var takes := _socket_takes(host, index, hand)
+	var worn := Riders.copies_at(body, host, socket) \
+		if Riders.rider_at(body, host, socket) == rider else 0
+	var takes := _socket_takes(host, socket, hand)
 	var lands := Catalogue.rides_as(hand) if takes else &""
-	var selected := _sock_armed == index
+	var selected := _sock_chosen() and _host_at == slot and _sock_armed == socket \
+		and _dragging == SLOT_NONE
+	var under := _dragging == SLOT_SAMPLE and _sock_hovered == socket \
+		and _sock_hover_at == slot
 	var refused := hand != &"" and not takes
 	var shown := rider
 	var shown_copies := copies
 	var tone := Cilia.hue(rider) if rider != &"" else Figure.PALE
-	var ghost: StringName = &""
-	var ghost_copies := 0
-	var ghost_ink := Figure.GHOST_INK
-	if selected and takes:
+	if (selected or under) and takes:
+		selected = true
 		tone = Cilia.hue(lands)
 		if rider == &"":
 			shown = lands
@@ -8129,36 +7982,46 @@ func _draw_sock(node: Control, index: int) -> void:
 			shown_copies = mini(copies + _hand_copies(), Riders.COPIES_MAX)
 	elif selected and refused:
 		selected = false
+	var ghost: StringName = &""
+	var ghost_ink := Figure.GHOST_INK
 	if shown == &"":
-		ghost = lands if takes else Figure.socket_takes(host, index)
-		ghost_copies = _hand_copies() if takes else 0
+		ghost = lands if takes else Figure.socket_takes(host, socket)
 		ghost_ink = Figure.LAND_INK if takes else Figure.GHOST_INK
-	Figure.draw_chip(node, SLOT_NONE, shown, shown_copies, mini(worn, shown_copies), tone,
-		0, false, selected, false, refused, ghost, ghost_copies, ghost_ink)
+	Figure.draw_socket_chip(node, socket, shown, shown_copies, mini(worn, shown_copies),
+		tone, selected, refused, ghost, ghost_ink,
+		Cilia.hue(lands) if takes else Color(0.0, 0.0, 0.0, 0.0))
 
 
-## **The line under the view, for the chip it reads**: the gene's own line on its
-## own chip; on a slot, the word of what is in it -- or, empty, of what it takes, or
-## of the gene in hand that it would take -- then what that does to the gene.
-func _explain_sockets() -> void:
-	var at := _sock_reading()
-	var host := _host_gene
-	_explain_at = -1
-	if at < 0:
-		_explain_gene = host
-		_explain_at = _host_at
-		_explain_tier = _copies_of(host)
-		_named_gene = host
-		_lay_hint()
-		_update_numbers()
-		if _explain_organ != null:
-			_explain_organ.queue_redraw()
-		_explain_name.text = Figure.explain_name(host)
-		_explain_name.add_theme_color_override("font_color",
-			Color(Cilia.hue(host), Figure.EXPLAIN_NAME_ALPHA))
-		var says := _explains(host, _host_at)
-		_explain_says.text = "" if says.is_empty() else "· " + says
+## Which of a gene's own slots the keyboard is on, as `(ring slot, slot)`, or
+## `(-1, -1)`.
+func _focused_socket() -> Vector2i:
+	for child in _figure_slots.get_children():
+		var chip := child as Control
+		if chip != null and chip.has_focus() and chip.has_meta(&"socket"):
+			return chip.get_meta(&"socket")
+	return Vector2i(-1, -1)
+
+
+## Puts the keyboard back on that slot of a gene's own after a rebuild, or on its
+## gene's chip when the gene has no such slot any more.
+func _restore_sock_focus(at: Vector2i) -> void:
+	if at.x < 0:
 		return
+	var chips: Array = _sock_chips.get(at.x, [])
+	if at.y < chips.size():
+		(chips[at.y] as Control).grab_focus()
+		return
+	_restore_focus(at.x)
+
+
+## **The line under the figure, for the gene's own slot it reads**: the word of what
+## is in it -- or, empty, of what it takes, or of the gene in hand that it would
+## take -- then what that does to its gene.
+func _explain_sockets() -> void:
+	var read := _sock_read()
+	var host := _gene_at(read.x)
+	var at := read.y
+	_explain_at = -1
 	var rider := Riders.rider_at(_genome.riders(), host, at)
 	var hand := _hand()
 	var named := rider
@@ -8174,6 +8037,7 @@ func _explain_sockets() -> void:
 	_update_numbers()
 	if _explain_organ != null:
 		_explain_organ.queue_redraw()
+	_figure_body.queue_redraw()
 	_explain_name.text = _word(named)
 	# In its hue for a rider, and for the gene in hand over a slot that takes it;
 	# faint for what an empty slot takes.
@@ -8185,25 +8049,19 @@ func _explain_sockets() -> void:
 	_explain_says.text = "" if line.is_empty() else "· " + line
 
 
-## **The row under it**: the gene's own odds on its own chip; on a slot, what a gene
-## written over loses, as on the ring, or that a rider is worn whenever its gene is,
-## or that the slot is empty.
+## **The row under it**: what a rider written over loses, as on the ring, or that a
+## rider is worn whenever its gene is, or that the slot is empty.
 func _hint_sockets() -> void:
-	var at := _sock_reading()
-	var host := _host_gene
-	if at < 0:
-		if at == SOCK_HOST and at == _sock_armed and _hand() != &"":
-			_set_hint((tr(HINT_LOSES) if _genome.tier(host) > 0 else tr(HINT_LOSES_CARRIED))
-				% _word(host))
-			return
-		_set_hint(_odds(_copies_of(host)), host)
-		return
+	var read := _sock_read()
+	var host := _gene_at(read.x)
+	var at := read.y
 	var rider := Riders.rider_at(_genome.riders(), host, at)
 	if rider == &"":
 		_set_hint(tr(HINT_SOCKET_EMPTY))
 		return
 	var hand := _hand()
-	if at == _sock_armed and hand != &"" and Catalogue.rides_as(hand) != rider \
+	var chosen := _sock_chosen() and read.x == _host_at and at == _sock_armed
+	if chosen and hand != &"" and Catalogue.rides_as(hand) != rider \
 			and _socket_takes(host, at, hand):
 		var worn := Riders.rider_at(_genome.body_riders(), host, at) == rider
 		_set_hint((tr(HINT_LOSES) if worn else tr(HINT_LOSES_CARRIED)) % _word(rider))
@@ -8211,43 +8069,57 @@ func _hint_sockets() -> void:
 	_set_hint(tr(HINT_RIDES) % _word(host), rider)
 
 
-## **The verb line in the view**: what the second tap on the armed chip would do,
-## or, with nothing armed, where the gene in hand can go -- or that nothing here
-## takes it.
+## **The verb line for the chosen gene's own slot**, when the button has nothing to
+## offer: what it takes, for a gene in hand it does not, or that its rider is full.
 func _act_sockets() -> String:
 	var hand := _hand()
 	if hand == &"":
 		return ""
-	var host := _host_gene
-	var at := _sock_armed
-	if at == SOCK_HOST:
-		var what := _genome.placing(hand, _host_at)
-		var form := GenomeNode.form_at(hand, _host_at)
-		match what[0]:
-			GenomeNode.PLACE_FACES_OUT:
-				return tr(ACT_FACES_OUT) % _word(hand)
-			GenomeNode.PLACE_FULL:
-				return tr(ACT_RAISE_FULL) % _word(form)
-			GenomeNode.PLACE_RAISE:
-				return tr(ACT_RAISE) % _word(form)
-		return tr(ACT_COMMIT_OVER) % [_word(form if form != &"" else hand), _word(host)]
-	if at < 0:
-		for k in Catalogue.sockets(host).size():
-			if _socket_takes(host, k, hand):
-				return tr(ACT_SOCKET_ARM) % _carried_word(hand)
-		return tr(ACT_SOCKET_NONE) % [_word(host), _carried_word(hand)]
-	var rider := Riders.rider_at(_genome.riders(), host, at)
+	var host := _gene_at(_host_at)
+	var rider := Riders.rider_at(_genome.riders(), host, _sock_armed)
+	match _genome.placing_rider(hand, host, _sock_armed)[0]:
+		GenomeNode.PLACE_FACES_OUT:
+			return tr(ACT_SOCKET_TAKES) % _word(Figure.socket_takes(host, _sock_armed))
+		GenomeNode.PLACE_FULL:
+			return tr(ACT_RAISE_FULL) % _word(rider)
+	return ""
+
+
+## **The button, for the chosen gene's own slot**: put the gene in hand in, write it
+## over the rider, or add a copy to it -- or nothing, for a slot that does not take
+## it.
+func _offer_socket() -> String:
+	var hand := _hand()
+	if hand == &"" or not _strip_current():
+		return ""
+	var host := _gene_at(_host_at)
+	var rider := Riders.rider_at(_genome.riders(), host, _sock_armed)
 	var lands := Catalogue.rides_as(hand)
-	match _genome.placing_rider(hand, host, at)[0]:
+	match _genome.placing_rider(hand, host, _sock_armed)[0]:
+		GenomeNode.PLACE_RAISE:
+			return tr(PLACE_RAISE) % _word(rider)
+		GenomeNode.PLACE_WRITE:
+			return tr(PLACE_SOCKET) % [_word(lands), _word(host)] if rider == &"" \
+				else tr(PLACE_OVER) % [_word(lands), _word(rider)]
+	return ""
+
+
+## **What the gene carried out of the tray would do let go over the gene's own slot
+## it is over**, in words, as [method _update_act] says it for a ring slot.
+func _drop_sock_line(flying: StringName) -> String:
+	var host := _gene_at(_sock_hover_at)
+	var at := _sock_hovered
+	var rider := Riders.rider_at(_genome.riders(), host, at)
+	var lands := Catalogue.rides_as(flying)
+	match _genome.placing_rider(flying, host, at)[0]:
 		GenomeNode.PLACE_FACES_OUT:
 			return tr(ACT_SOCKET_TAKES) % _word(Figure.socket_takes(host, at))
 		GenomeNode.PLACE_FULL:
 			return tr(ACT_RAISE_FULL) % _word(rider)
 		GenomeNode.PLACE_RAISE:
-			return tr(ACT_RAISE) % _word(rider)
-	if rider == &"":
-		return tr(ACT_SOCKET_PUT) % [_word(lands), _word(host)]
-	return tr(ACT_COMMIT_OVER) % [_word(lands), _word(rider)]
+			return tr(ACT_DROP_RAISE) % _word(rider)
+	return tr(ACT_DROP_SOCKET) % [_word(lands), _word(host)] if rider == &"" \
+		else tr(ACT_DROP_OVER) % [_word(lands), _word(rider)]
 
 
 ## The path way [param way] stands for, &"" for none.
@@ -8355,55 +8227,32 @@ func _reshape_way_fans() -> void:
 
 
 ## **The cards, alive**: their fans step on this node's own frame delta, which
-## a paused tree still hands it, and an armed way lapses on its own after
-## [constant ARM_TIMEOUT_MS] -- the slot's rule, so a card left armed is not a
-## trap. Not while a finger is holding its confirm.
+## a paused tree still hands it. A way chosen stays chosen, as a slot does
+## (placing.md §1): only the button takes it.
 func _step_fork_view(delta: float) -> void:
 	if not _fork_open():
 		return
 	for fans: Array in _way_fans:
 		for fan: RayFan in fans:
 			fan.step(delta)
-	if _way_armed >= 0 and _way_primed < 0 \
-			and Time.get_ticks_msec() - _way_armed_at >= ARM_TIMEOUT_MS:
-		_way_armed = -1
-		_update_explain()
-		_update_hint()
 	_redraw_ways()
 
 
-## **The two taps, on a card.** The first arms it, which is harmless and is how
-## a thumb reads a way; a tap on the other card arms that one instead. The
-## second, [constant ARM_GUARD_MS] or more later, takes it for good -- primed on
-## the press and landing on the lift inside the card, so sliding off cancels.
-## A key is not ambiguous and lands on the press.
+## **A tap on a card chooses it**, which is harmless and is how a thumb reads a
+## way; a tap on the other card chooses that one instead. Only the button under
+## the figure takes it, for good (placing.md §1) -- or a key on the chosen card,
+## which is the keyboard's press of it.
 func _on_way_input(event: InputEvent, card: Control, way: int) -> void:
 	if (_is_pointer_press(event) or _is_pointer_lift(event)) \
 			and Engine.get_process_frames() == _fork_opened_frame:
 		card.accept_event()
 		return
-	if _is_pointer_lift(event):
-		card.accept_event()
-		var was_primed := _way_primed == way
-		_way_primed = -1
-		# **A cancelled lift is not a lift** (see [method _is_pointer_lift]).
-		if was_primed and not event.is_canceled() \
-				and Rect2(Vector2.ZERO, card.size).has_point(_pointer_at(event)):
-			_choose_way(way)
-		return
 	if not _is_widget_tap(event):
 		return
 	card.accept_event()
-	_way_primed = -1
 	if _way_armed == way:
-		# The guard, for the reason the slot gives: one thumb press arrives
-		# twice, and the second copy must not take what the first just armed.
-		if Time.get_ticks_msec() - _way_armed_at < ARM_GUARD_MS:
-			return
-		if _is_pointer_press(event):
-			_way_primed = way
-			return
-		_choose_way(way)
+		if not _is_pointer_press(event):
+			_on_place_pressed(true)
 		return
 	_way_armed = way
 	_way_armed_at = Time.get_ticks_msec()
@@ -8645,7 +8494,7 @@ func _draw_centred(card: Control, font: Font, text: String, base: float,
 #
 # **Free slots only, never an eviction.** Placing into an empty slot destroys
 # nothing and a move can still change it, so one gesture is enough; the one
-# irreversible action in the game keeps its two taps on the pause screen. With
+# irreversible action in the game keeps its button on the pause screen. With
 # no free slot the body does not open, and a press on it is nothing.
 #
 # **The inside is a free slot too, for a toxin** (dna-slots-ux.md §3.7): out to
@@ -8681,7 +8530,7 @@ var _offer_open := false
 var _offer_key := false
 ## Where the finger is, in canvas px.
 var _offer_at := Vector2.ZERO
-## The free slot that is lit -- [member GenomeNode.INSIDE] for the inside --
+## The free slot that is lit -- the first empty inside one for the inside --
 ## or -1 for none: a finger that never left the body, or one back inside it
 ## when the inside is not offered.
 var _offer_aim := -1
@@ -8742,7 +8591,10 @@ func _offer_free() -> Array[int]:
 	for slot in mini(mini(layout.size(), Figure.SLOT_SEAT.size()), GenomeNode.INSIDE):
 		if layout[slot] != &"":
 			continue
-		if GenomeNode.has_forms(gene) and layout.has(GenomeNode.form_at(gene, slot)):
+		# A gene of forms buds where its outside form is not carried yet -- and
+		# nowhere round the body for a toxin, whose venom only rides.
+		var form := GenomeNode.form_at(gene, slot)
+		if form == &"" or (GenomeNode.has_forms(gene) and layout.has(form)):
 			continue
 		out.append(slot)
 	return out
@@ -8750,14 +8602,16 @@ func _offer_free() -> Array[int]:
 
 ## **Whether the inside is offered too** (dna-slots-ux.md §3.7): while the gene
 ## the body opened for -- or, before it opens, the head of the queue -- would
-## be written into a free inside slot as a form not carried yet. So only a
-## toxin, and only into an empty inside: nothing there is written over, as
-## nothing is under any bud, and the pause screen can still move it out.
+## be written into a free inside slot as a form not carried yet. So only a gene
+## that works inside -- the toxin, the store, the mend -- and only into an empty
+## inside slot: nothing there is written over, as nothing is under any bud, and
+## the pause screen can still move it out.
 func _offer_inside() -> bool:
 	var gene := _offer_gene if _offer_gene != &"" else _genome.held_sample
-	if gene == &"" or not _genome.inside_layout().has(&""):
+	var free := _genome.free_inside()
+	if gene == &"" or free < 0:
 		return false
-	return _genome.placing(gene, GenomeNode.INSIDE)[0] == GenomeNode.PLACE_WRITE
+	return _genome.placing(gene, free)[0] == GenomeNode.PLACE_WRITE
 
 
 ## `[centre, heading, radius]` of the player's body on the screen, in canvas px,
@@ -8792,7 +8646,7 @@ func _offer_aim_at(at: Vector2) -> int:
 		return -1
 	var reach: Vector2 = at - body[0]
 	if reach.length() <= _offer_hit(body):
-		return GenomeNode.INSIDE if _offer_left and _offer_inside() else -1
+		return _genome.free_inside() if _offer_left and _offer_inside() else -1
 	_offer_left = true
 	var bearing := atan2(reach.x, -reach.y) - float(body[1])
 	var best := -1
@@ -8813,7 +8667,7 @@ func _offer_aim_at(at: Vector2) -> int:
 func _offer_default() -> int:
 	var best := _offer_nearest_nose()
 	if best < 0 and _offer_inside():
-		return GenomeNode.INSIDE
+		return _genome.free_inside()
 	return best
 
 
@@ -8901,10 +8755,10 @@ func _offer_place() -> void:
 	if slot < 0 or which < 0:
 		return
 	# **The inside, asked again now as every bud is**: still offered -- still a
-	# toxin, still an empty inside -- or nothing.
+	# gene that works inside, still an empty inside slot -- or nothing.
 	if GenomeNode.is_inside(slot):
 		if _offer_inside():
-			_genome.place(slot, which)
+			_genome.place(_genome.free_inside(), which)
 		return
 	if not _offer_free().has(slot):
 		return
@@ -8984,7 +8838,7 @@ func _offer_keys(key: InputEventKey) -> bool:
 	# `ui_up` and `ui_down` as well.
 	if key.keycode == KEY_S or key.keycode == KEY_DOWN:
 		if key.pressed and not key.echo and _offer_inside():
-			_offer_aim = GenomeNode.INSIDE
+			_offer_aim = _genome.free_inside()
 		return true
 	if key.keycode == KEY_W or key.keycode == KEY_UP:
 		if key.pressed and not key.echo and GenomeNode.is_inside(_offer_aim):
@@ -9123,7 +8977,7 @@ func _step_offer(delta: float) -> void:
 # Three things about the geometry are worth stating rather than deriving:
 #
 # - **Every slot outside and the inside, always.** A division fires only at
-#   `DIVIDE_RADIUS` 40, where `slots_for(40)` is every slot the plan has outside
+#   `DIVIDE_RADIUS` 40 or past it, where `slots_for` is every slot the plan has outside
 #   -- today seven -- and `Genome.mutated()` never changes the order's length;
 #   the inside is every cell's from birth, so it is the last locus on each strand
 #   (dna-slots-ux.md §3.8). So the column is fixed -- 480 px today -- at every
@@ -9161,8 +9015,11 @@ static func _choose_loci() -> int:
 	return GenomeNode.INSIDE + GenomeNode.INSIDE_SLOTS
 
 
-## One locus, along the strand, and therefore one lobe of the weave.
-const CHOOSE_PITCH := 48.0
+## One locus, along the strand, and therefore one lobe of the weave. **44, and
+## not the 48 it was**: the inside's two more slots (docs/design/inside-genes.md
+## §5) make ten loci, and at 48 their words ran 34 px past the foot of a 720 px
+## canvas -- the shortest one there is.
+const CHOOSE_PITCH := 44.0
 ## The lead-in and the tail, in lobes: the chromosome arrives and leaves rather
 ## than starting mid-lens. One each, against the old pause strand's two,
 ## because there is no held sample to park off the head of this one.
@@ -9519,7 +9376,7 @@ func _choose_say() -> void:
 			took = inherited.path if inherited != null else &""
 		_choose_lines = GeneStats.lines(gene, maxi(int(found[1]), 1), works_at, took,
 			GeneStats.context(_daughters[side]["body"],
-				CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)), slot)
+				CellBody.daughter_radius(_cell.radius)), slot)
 	_choose_numbers.queue_redraw()
 	if gene == &"":
 		_choose_name.text = ""
@@ -9676,7 +9533,7 @@ func _draw_choose_locus(node: Control, side: int, slot: int) -> void:
 ## What this must **not** do: start a lean, alter one in progress, arm or commit
 ## anything, take keyboard focus, or change the DNA. Nothing on this screen is
 ## committable -- there is no held sample and no placement here -- so none of
-## the pause screen's guard and timeout machinery is wanted. A second tap on the
+## the pause screen's button is wanted. A second tap on the
 ## same locus is a no-op rather than a deselect, which is the pause screen's
 ## rule for the pause screen's reason.
 func _on_choose_locus_input(event: InputEvent, node: Control, side: int,
@@ -10000,7 +9857,7 @@ func _leave_sister(bearing: float, body: Dictionary, dna: Dictionary,
 	var at := _cell.position + dir * SISTER_DISTANCE
 	var rim: RefCounted = _food.basin()
 	if rim != null:
-		at = rim.call(&"contain", at, _cell.radius)
+		at = rim.call(&"contain", at, FoodField.Drop.hold(_cell.radius))
 	var brain: Variant = _sister_brain()
 	_pond.sister(at, atan2(dir.x, -dir.y), _cell.radius, body, dna,
 		Rulebook.lines_of(brain) if brain != null else PackedStringArray(), riders)

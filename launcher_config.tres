@@ -25,6 +25,6 @@ show_quit = true
 quit_text = "quit"
 extra_buttons = PackedStringArray("settings")
 play_scene = "res://game/mode_select.tscn"
-update_repo = "sinikebe/biogenic"
+update_repo = "sinikebe/biogenic-releases"
 check_on_launch = true
 show_update_bar = true

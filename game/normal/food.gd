@@ -53,6 +53,9 @@ const Cilia := preload("res://game/vision/cilia.gd")
 const Drop := preload("res://game/normal/drop.gd")
 const Replenish := preload("res://game/mechanics/replenish.gd")
 const FloorQueue := preload("res://game/mechanics/floor_queue.gd")
+## **A light on a cycle, and how much of it gets through** (docs/design/daylight.md
+## §2.5): the drop's day, which drop.gd builds and this file keeps the clock of.
+const Daylight := preload("res://game/mechanics/daylight.gd")
 ## **Lineage** (docs/design/lineage.md §4): a body's record of descent, which
 ## the drop keeps on every body and draws nowhere.
 const Descent := preload("res://game/mechanics/descent.gd")
@@ -65,6 +68,8 @@ const Metabolism := preload("res://game/normal/metabolism.gd")
 const Rulebook := preload("res://game/mechanics/rulebook.gd")
 ## A fan of rays: how a water cell's beam is spread, as the run spreads yours.
 const RayFan := preload("res://game/mechanics/ray_fan.gd")
+## What an eye sees of the bodies round it (docs/design/sight.md).
+const Sight := preload("res://game/mechanics/sight.gd")
 ## The file a drop is kept in, for the layout of pack 3's entries in it
 ## ([method drop_state]). It preloads nothing of this file's, so no cycle.
 const DropSave := preload("res://game/normal/drop_save.gd")
@@ -117,10 +122,10 @@ signal bitten(bearing: float, strength: float)
 ## dose. `Contact.STUNG` keeps its number and is never sent.)
 signal dosed(bearing: float, kind: int, stacks: float, meal: bool)
 ## **This cell's toxin went into something** (§10.1, item 12): [param how] is
-## [constant FIRED_VENOM] -- its venom rode in on its bite -- [constant
-## FIRED_STING], a venom on a side stung a mouth biting there, or [constant
-## FIRED_POISON], its poison was taken by a biter or a swallower. For the view's
-## flare and nothing else.
+## [constant FIRED_VENOM] -- the venom in its mouth's slot rode in on its bite --
+## [constant FIRED_STING], the venom in its sting's slot went in with a sting, or
+## [constant FIRED_POISON], its poison was taken by a biter or a swallower. For the
+## view's flare and nothing else.
 signal toxin_fired(how: int)
 ## `trichocyst`: your sting went off into what touched you, at that bearing.
 signal darted(bearing: float)
@@ -293,16 +298,13 @@ const MIRROR_SHOWN := 1.0
 ## body-relative bearing it guards. Read once whenever a body changes, never at
 ## a bite.
 ##
-## [constant HOW_BITE]: venom at the front, into whatever its bite lands on.
-## [constant HOW_STING]: venom on a side or the stern, into a mouth biting
-## within `VENOM_ARC_DEG / 2` of its bearing. [constant HOW_POISON]: poison,
-## into whatever bites it, anywhere. [constant HOW_SWALLOW]: poison, into
-## whatever swallows it. [constant HOW_DART]: a toxin in the sting's own slot
-## (docs/design/gene-sockets.md §3 row 1), into whatever the sting stings. A
-## toxin in the mouth's own slot (row 3) is a [constant HOW_BITE], as venom at
-## the front is.
+## [constant HOW_BITE]: a toxin in the mouth's own slot (docs/design/gene-sockets.md
+## §3 row 3), into whatever its bite lands on. [constant HOW_POISON]: poison, into
+## whatever bites it, anywhere. [constant HOW_SWALLOW]: poison, into whatever
+## swallows it. [constant HOW_DART]: a toxin in the sting's own slot (row 1), into
+## whatever the sting stings. 1 was venom on a side or the stern, which went with
+## venom on the body (2026-10-16), and is never written.
 const HOW_BITE := 0
-const HOW_STING := 1
 const HOW_POISON := 2
 const HOW_SWALLOW := 3
 const HOW_DART := 4
@@ -667,20 +669,20 @@ const AIM_STERN_SHARE := 0.6
 # perception.md's "never an identity", and it is the gap §2.3's reserved
 # chemoreceptor gene is there to sell later.
 
-## Inside WAKE_RANGE 760 on purpose: the gene sharpens what the cell knows, it
-## never extends how far it knows it.
-const SHADOW_RANGE := 620.0
-const SHADOW_CORE := 180.0
-## Bodies below this fraction of your own radius cast nothing.
-const SHADOW_MIN_RATIO := 0.8
-## **A divergence from §6, and the same one §7.0 forced on dread.** The design
-## writes the ratio as a threshold -- "any cell with radius >= SHADOW_MIN_RATIO
-## * cell.radius" -- and a threshold is a boolean, so a body drifting across it
-## would pop the amber lobe on and off. Every gate in this file has been taken
-## off exactly that argument. So 0.8 is where a shadow starts and a body your
-## own size casts a whole one, with a curve in between; nothing below 0.8 casts
-## anything, which is what the number in §6 actually means.
-const SHADOW_FULL_RATIO := 1.05
+## **The eyespot sees** (docs/design/sight.md, 2026-10-16): what the shadow above
+## summed is now what an eye sees, through game/mechanics/sight.gd -- a field about
+## the slot it is worn on, a reach the light sets, a blur its level sets, and
+## nothing behind a nearer body. Its numbers are the organ's, asked through the
+## catalogue by its channel. These two are the field's own.
+##
+## **How many rays the picture of what it sees is drawn with** (the player's only:
+## point of view and full vision draw it, docs/design/sight.md §4): one every 1.3
+## degrees across a 120-degree field, finer than the finest blur but one.
+const SIGHT_FAN_RAYS := 92
+## **What a body in view has to come through at to count as seen**: what earns the
+## eye its levels, a body at a tenth of its strength -- a body your size near the
+## edge of what a level-1 eye sees.
+const SIGHT_COUNTS := 0.1
 
 # --- The beam (`ocellus`, beam-levels.md) -----------------------------------
 
@@ -956,8 +958,8 @@ class Body:
 	var serial := 0
 	var meals := 0
 	## How far through this body something has chewed, 0..1. Mends on its own at
-	## [constant CellBody.MEND_SECONDS], exactly as the player's does -- except
-	## while it carries harm (docs/design/dna-slots.md §6.2).
+	## [constant CellBody.MEND_SECONDS], faster by its `mend`, exactly as the
+	## player's does -- except while it carries harm (docs/design/dna-slots.md §6.2).
 	var wound := 0.0
 	## **Its loads**, stacks of each of doses.gd's kinds -- the venom and poison
 	## it took, wearing off -- and the body whose stacks it took last, a slot or
@@ -1062,12 +1064,14 @@ class Body:
 	var armour := 1.0
 	## Where its `trichocyst` is worn, as a body-relative bearing.
 	var dart_bearing := 0.0
-	## The tank's terms: `vacuole`'s store, `plastid`'s light, all it takes in
-	## without eating (light, and what a body with no `cytostome` absorbs),
-	## `crista`'s burn and the upkeep of what it wears.
+	## The tank's terms: `vacuole`'s store, `plastid`'s food in full light, what a
+	## body with no `cytostome` absorbs, `crista`'s burn and the upkeep of what it
+	## wears. **The light is not in them** (docs/design/daylight.md §2.3): what it
+	## takes in without eating is `absorbs + sun × the light`, read at each step of
+	## its tank ([method _tank]), since the light moves where the body and the day do.
 	var reserve := 1.0
 	var sun := 0.0
-	var income := 0.0
+	var absorbs := 0.0
 	var burn := 1.0
 	var upkeep := 1.0
 	## Its own tail's speed: what it cruises at, and searches at (row 14).
@@ -1182,6 +1186,7 @@ class Body:
 	var stat_gape := 0.0
 	var stat_bite := 0.0
 	var stat_armor := 1.0
+	var stat_mend := 1.0
 	var stat_turn := 0.0
 	var stat_speed := 0.0
 	var stat_hold := 0
@@ -1210,6 +1215,7 @@ class Body:
 		stat_gape = Stats.of(g, &"gape")
 		stat_bite = Stats.of(g, &"bite")
 		stat_armor = Stats.of(g, &"armor")
+		stat_mend = Stats.of(g, &"mend")
 		stat_turn = Stats.of(g, &"turn_rate")
 		stat_speed = CellBody.speed_of(g)
 		stat_hold = CellBody.hold_level(g)
@@ -1228,6 +1234,12 @@ class Body:
 		stat_effort_tail = Riders.through(riders, g, &"impulse_speed", &"effort", 1.0)
 		stat_effort_push = Riders.through(riders, g, &"push_accel", &"effort", 1.0)
 		stat_effort_dash = Riders.through(riders, g, &"dash_speed", &"effort", 1.0)
+
+	## **Where it divides** (docs/design/margin.md §1.1): forty, or later when the
+	## genes its DNA carries need each daughter bigger -- read off the DNA each time,
+	## since a meal or a seed may change it; the body it wears where it carries none.
+	func divide_at() -> float:
+		return CellBody.divide_radius_of(dna if not dna.is_empty() else genome)
 
 	## **The slots it wears its organs in**: a person's worn order, as they sent it,
 	## or the default order a water cell is drawn in (cilia.gd) -- where a mechanic
@@ -1310,10 +1322,17 @@ class Observer:
 	var smell_bearing := 0.0
 	## `palp`.
 	var touch_range := 0.0
-	## `stigma`: whether it wears one. The player's shadow is summed whatever it
-	## wears, and its membrane is gated downstream; a water cell's eyespot reads
-	## only when it is worn.
+	## `stigma`: whether it wears one, and its eye -- the bearing of the slot it is
+	## worn on, its field either side of it, how far it sees in full light and how
+	## near a body comes through whole, what it keeps in the dark and its blur, in
+	## radians and µm. An eye that is not worn sees nothing (docs/design/sight.md).
 	var eyespot := false
+	var sight_mid := 0.0
+	var sight_half := 0.0
+	var sight_range := 0.0
+	var sight_core := 0.0
+	var sight_dark := 0.0
+	var sight_blur := 0.0
 	## `ocellus`: each ray's bearing, the arc a sweeping one crossed, how far the
 	## rays reach, and where the fan points and how far it spreads.
 	var beam_range := 0.0
@@ -1339,9 +1358,13 @@ class Observer:
 	## alone, when the nose was asked alone.
 	var smell := 0.0
 	var scent := 0.0
-	## Light blocked, summed, and the direction it is blocked from.
+	## What the eye sees, summed -- each body in view at how clearly it comes
+	## through -- and the direction of that sum.
 	var shade := 0.0
 	var shade_pull := Vector2.ZERO
+	## The bodies it saw at [constant SIGHT_COUNTS] or better: what a hunter's eye
+	## finds ([method _senses_find]) and what earns the player's eye its levels.
+	var seen := PackedInt32Array()
 	## The player's dread, and the worst threat in it (§3.4: no water cell
 	## feels either).
 	var dread := 0.0
@@ -1378,14 +1401,43 @@ var dread_level := 0.0
 ## window dread is, ignoring distance. Public for the dev harness, which needs
 ## to be able to show that this varies continuously rather than stepping.
 var threat := 0.0
-## How much light is being blocked, 0..1, and from where. Read by whoever owns
-## the run and posted to the bus as the `stigma`'s lobe -- but only if the cell
-## has grown one. The field computes it either way: what the water is doing is
-## not a function of which organs are watching it. §6.
+## **What the eyespot sees**, 0..1, and from where: each body in its field it is
+## not hidden from, at how clearly it comes through, summed (docs/design/sight.md).
+## Posted by the run as the `stigma`'s lobe. 0 for a cell that wears no eyespot:
+## an eye that is not there sees nothing, so this is no longer the water's
+## (it was a shadow, which is).
 var shadow := 0.0
-## Body-relative bearing of the summed occlusion. Meaningless when [member
-## shadow] is 0.
+## Body-relative bearing of what it sees. Meaningless when [member shadow] is 0.
 var shadow_bearing := 0.0
+
+## **The player's eyespot, as the run wrote it this frame** (normal_mode.gd's
+## `_aim_sight`): the bearing of its slot, its field either side, how far it sees
+## in full light, how near a body is whole, what it keeps in the dark and its
+## blur at its level -- radians and µm. [member sight_range] 0 for no eyespot.
+var sight_mid := 0.0
+var sight_half := 0.0
+var sight_range := 0.0
+var sight_core := 0.0
+var sight_dark := 0.0
+var sight_blur := 0.0
+## **What the player's eye saw this frame**, for the views and the eye's levels:
+## how far each of [constant SIGHT_FAN_RAYS] rays across the field ran before
+## something stopped it, out to [member sight_reach] -- the picture point of view
+## and full vision draw -- and how far it saw, and how much of it the light left,
+## 0..1. And the bodies that counted as seen ([constant SIGHT_COUNTS]), which earn
+## the eye its levels.
+var sight_fan := PackedFloat32Array()
+var sight_reach := 0.0
+var sight_seeing := 0.0
+var sight_seen := PackedInt32Array()
+
+## **The grit round the player** (motes.gd), written by the run every frame: where
+## each speck is and how wide. The player bumps off it in motes.gd; **every water
+## cell this device moves is solid against it too** ([method _separate_grit]), so
+## grit that stops you never lets a hunter through. Empty where nothing writes it
+## -- the probes' water, a server's.
+var grit := PackedVector2Array()
+var grit_radius := 0.0
 
 # --- The earned senses, computed here and posted by the run -----------------
 # Same contract as everything above: this node computes and does not post, and
@@ -1528,17 +1580,11 @@ var dart_cooldown := 0.0
 ## of it, so a sting in a rear slot is the answer to being flanked and placement
 ## becomes a defensive decision. Meaningless while [member dart_wound] is 0.
 var dart_bearing := 0.0
-## **What this cell's toxins deliver** -- its venom, where it is worn, and its
-## poison -- as [method toxins_of] reads them off its worn body, written once a
+## **What this cell's toxins deliver** -- its poison, and the venom in its genes'
+## own slots -- as [method toxins_of] reads them off its worn body, written once a
 ## frame by the run where the dart's arc is (docs/design/dna-slots.md §7.2).
 ## Empty is a cell with no toxin.
 var toxins := PackedFloat64Array()
-## **Whether a venom on a side or the stern stings** (cell.gd's `VENOM_SIDES`),
-## as this water reads its bodies' toxins: the design's switch, held here so a
-## probe can turn it off on one field and see a side venom leave nothing
-## (dna-slots.md §20.3 check 7). This cell's own follow it through
-## [method toxins_of], which the run hands the same constant.
-var venom_sides := CellBody.VENOM_SIDES
 ## **The body whose stacks this cell took last**: a slot, or -1. Who a death by
 ## a dose is the death of ([member died_to], [member died_by]); with
 ## [member _dosed_serial], the serial that slot held then, since a swallowed
@@ -1639,6 +1685,10 @@ var _mirror_flocs := {}
 var _mirror_free := PackedInt32Array()
 ## The mirror's own clock: how far a floc has settled since it was told.
 var _mirror_t := 0.0
+## **The host's sky** (docs/design/daylight.md §5): the light at the surface of the
+## host's drop, as its newest snapshot said it ([method apply_pond]), held between
+## snapshots. Full light until the first one, which is one 20 Hz tick.
+var _host_light := 1.0
 ## The bodies a snapshot's send set, or the flocs in a guest's reach, are
 ## chosen from: one grid answer, never shared with another pass.
 var _send_ids := PackedInt32Array()
@@ -1737,6 +1787,7 @@ func _process(delta: float) -> void:
 	if not _step_contacts():
 		return
 	_step_separate()
+	_separate_grit()
 	if _pond:
 		_step_pond()
 	if in_water:
@@ -2926,61 +2977,48 @@ func _felt(damage: float) -> float:
 # stacks from the same contact. A body is named by its slot, and the cell on
 # this device -- which is in no slot -- by [constant TARGET_PLAYER].
 #
-# | form   | where         | when                                   | who takes it |
-# | venom  | the front     | a bite its mouth lands                 | the bitten   |
-# | venom  | a side, stern | a bite landing within VENOM_ARC_DEG / 2 | the biter    |
-# | poison | inside        | a bite landing anywhere                | the biter    |
-# | poison | inside        | it is swallowed                        | the swallower|
+# | form   | where              | when                       | who takes it  |
+# | venom  | the mouth's slot   | a bite its mouth lands     | the bitten    |
+# | venom  | the sting's slot   | a sting that lands         | the stung     |
+# | poison | inside             | a bite landing anywhere    | the biter     |
+# | poison | inside             | it is swallowed            | the swallower |
+#
+# **Venom rides, and nowhere else** (the owner, 2026-10-16): on the body's outside
+# slots it was the mouth's slot's venom by another road, so the road went.
 #
 # Armour does not stop venom: `pellicle` divides a bite's damage and the stacks
 # ride in whole. A dose is stacks in a body's loads; what they do is the dose
 # step's, over the seconds that follow -- nobody leaves the water at the bite.
 # ---------------------------------------------------------------------------
 
-## **What a body wearing [param tiers] delivers** -- its toxins' forms, by where
-## each sits -- as records of [constant TOX_STRIDE] floats `[how, kind, stacks,
-## bearing]` ([constant HOW_BITE] and the rest). [param order] is where its
-## outside forms are worn, slot by slot; empty, the default order every water
-## cell is drawn and senses in ([method Cilia.default_order]). A venom with no
-## seat rides on the bite. Empty for a body with no toxin, which is most of the
-## water. Read once, whenever what a body wears changes. [param sides] false is
-## a venom on a side or the stern that stings nothing ([member venom_sides]).
+## **What a body wearing [param tiers] delivers** -- its poison, and the venom in
+## its genes' own slots -- as records of [constant TOX_STRIDE] floats `[how, kind,
+## stacks, bearing]` ([constant HOW_BITE] and the rest). Empty for a body with no
+## toxin, which is most of the water. Read once, whenever what a body wears changes.
 ##
-## [param riders] are **the body's riders** (docs/design/gene-sockets.md): a toxin
-## in its mouth's own slot rides on every bite ([constant HOW_BITE]), and one in
-## its sting's on every sting ([constant HOW_DART]) -- the sting that fires, the
-## first in slot order. Each is its slot's gift at the rider's copies, of the dose
-## the rider's strain delivers.
+## [param order] is where its outside genes are worn, slot by slot; empty, the
+## default order every water cell is drawn and senses in ([method
+## Cilia.default_order]): the sting that fires is the first in it. [param riders]
+## are **the body's riders** (docs/design/gene-sockets.md): a toxin in its mouth's
+## own slot rides on every bite ([constant HOW_BITE]), and one in its sting's on
+## every sting ([constant HOW_DART]). Each is its slot's gift at the rider's copies,
+## of the dose the rider's strain delivers.
 static func toxins_of(tiers: Dictionary, order: Array = [],
-		sides := CellBody.VENOM_SIDES, riders: Dictionary = {}) -> PackedFloat64Array:
+		riders: Dictionary = {}) -> PackedFloat64Array:
 	var out := PackedFloat64Array()
-	var seats: Array = order
 	for gene: Variant in tiers:
 		var form := StringName(gene)
-		# **A toxin is a key with a dose**, whatever its places: a strain of one place,
-		# outside alone, is venom too (gene-catalogue.md §6.4).
 		var copies := clampi(int(tiers[gene]), 0, Genome.TIER_MAX)
 		var kind := Doses.kind_of(Genome.strain_of(form))
-		if copies <= 0 or kind < 0:
+		if copies <= 0 or kind < 0 or not Genome.is_inside_form(form):
 			continue
-		if Genome.is_inside_form(form):
-			_toxin_record(out, HOW_POISON, kind, Stats.value(form, &"poison_stacks", copies))
-			_toxin_record(out, HOW_SWALLOW, kind, Stats.value(form, &"swallow_stacks", copies))
-			continue
-		if seats.is_empty():
-			seats = Cilia.default_order(tiers)
-		var slot := seats.find(form)
-		if slot < 0 or Genome.is_front(slot):
-			_toxin_record(out, HOW_BITE, kind, Stats.value(form, &"venom_stacks", copies))
-		elif sides:
-			_toxin_record(out, HOW_STING, kind, Stats.value(form, &"venom_stacks", copies),
-				Cilia.slot_bearing(slot))
+		_toxin_record(out, HOW_POISON, kind, Stats.value(form, &"poison_stacks", copies))
+		_toxin_record(out, HOW_SWALLOW, kind, Stats.value(form, &"swallow_stacks", copies))
 	if riders.is_empty():
 		return out
 	_rider_record(out, HOW_BITE, riders, Catalogue.worn_provider(tiers, &"bite"),
 		&"bite_dose")
-	if seats.is_empty():
-		seats = Cilia.default_order(tiers)
+	var seats: Array = order if not order.is_empty() else Cilia.default_order(tiers)
 	_rider_record(out, HOW_DART, riders, Catalogue.seated_provider(seats, tiers,
 		&"dart_wound"), &"sting_dose")
 	return out
@@ -3024,20 +3062,19 @@ func _toxins_at(who: int) -> PackedFloat64Array:
 		return PackedFloat64Array()
 	var b := _cells[who]
 	var key := hash(b.genome) ^ (hash(b.order) * 31 if not b.order.is_empty() else 0) \
-		^ (0 if venom_sides else 0x5157) ^ (Riders.sign_of(b.riders) * 17)
+		^ (Riders.sign_of(b.riders) * 17)
 	if key != b.toxins_key:
-		b.toxins = toxins_of(b.genome, b.order, venom_sides, b.riders)
+		b.toxins = toxins_of(b.genome, b.order, b.riders)
 		b.toxins_key = key
 	return b.toxins
 
 
 ## **A bite's toxins** (§7.1): [param biter] bit [param target], landing at
 ## [param landed] -- the signed bearing at the target, clockwise from its nose.
-## The biter's front venom goes into the target; the target's poison, and its
-## sting if the bite landed within `VENOM_ARC_DEG / 2` of the bearing it guards,
-## go into the biter. [param felt] is the bearing the cell on this device feels
+## The venom in the biter's mouth's slot goes into the target; the target's poison
+## goes into the biter. [param felt] is the bearing the cell on this device feels
 ## its own dose from, when it is one of the two.
-func _bite_doses(biter: int, target: int, landed: float, felt: float) -> void:
+func _bite_doses(biter: int, target: int, _landed: float, felt: float) -> void:
 	var into_target := _toxins_at(biter)
 	for r in range(0, into_target.size(), TOX_STRIDE):
 		if int(into_target[r]) == HOW_BITE:
@@ -3045,17 +3082,11 @@ func _bite_doses(biter: int, target: int, landed: float, felt: float) -> void:
 			if biter == TARGET_PLAYER:
 				toxin_fired.emit(FIRED_VENOM)
 	var into_biter := _toxins_at(target)
-	var reach := deg_to_rad(CellBody.VENOM_ARC_DEG) * 0.5
 	for r in range(0, into_biter.size(), TOX_STRIDE):
-		var how := int(into_biter[r])
-		if how == HOW_POISON:
+		if int(into_biter[r]) == HOW_POISON:
 			_dose(biter, int(into_biter[r + 1]), into_biter[r + 2], target, felt, false)
 			if target == TARGET_PLAYER:
 				toxin_fired.emit(FIRED_POISON)
-		elif how == HOW_STING and absf(angle_difference(into_biter[r + 3], landed)) <= reach:
-			_dose(biter, int(into_biter[r + 1]), into_biter[r + 2], target, felt, false)
-			if target == TARGET_PLAYER:
-				toxin_fired.emit(FIRED_STING)
 
 
 ## **A swallow's toxin** (§7.1): [param eater] swallowed [param eaten], and takes
@@ -3346,7 +3377,8 @@ func _give_way(theirs: float, mine: float) -> float:
 ## that nothing outside CULL is simulated at all.
 ##
 ## **In the drop everything is simulated, so growth stops where the player's
-## does** (§5.5): at DIVIDE_RADIUS. The mouth keeps whatever it grows (row 5).
+## does** (§5.5): where it divides (margin.md §1.1). The mouth keeps whatever it
+## grows (row 5).
 func _devour(b: Body, prey: Body) -> void:
 	if _drop != null:
 		_grow(b, Genome.dominant_of(prey.genome))
@@ -3354,7 +3386,7 @@ func _devour(b: Body, prey: Body) -> void:
 	b.radius += CellBody.GROWTH_PER_MEAL
 	b.meals += 1
 	Genome.integrate_into(b.genome, Genome.dominant_of(prey.genome),
-		CellBody.slots_for(b.radius))
+		CellBody.slots_for(b.radius), CellBody.inside_for(b.radius))
 	b.derive()
 	_changes += 1
 
@@ -3607,6 +3639,13 @@ func _player_eye() -> Observer:
 	o.ping_bearing = ping_bearing
 	o.ping_through = ping_through
 	o.ping_tier = ping_tier
+	o.sight_mid = sight_mid
+	o.sight_half = sight_half
+	o.sight_range = sight_range
+	o.sight_core = sight_core
+	o.sight_dark = sight_dark
+	o.sight_blur = sight_blur
+	o.eyespot = sight_range > 0.0
 	o.slot = -1
 	return o
 
@@ -3618,8 +3657,6 @@ func _player_eye() -> Observer:
 ## by downstream and an instinct's by this. What the player's instincts are
 ## reported from (game/normal/own_rules.gd); nothing here is sensed again.
 func own_eye() -> Observer:
-	if _cell != null:
-		_eye.eyespot = _cell.on_channel(Catalogue.LIGHT) != &""
 	return _eye
 
 
@@ -3637,7 +3674,9 @@ func _step_sense() -> void:
 	# In the drop, the bodies near this cell the frame gathered: nothing past
 	# them reaches any sense (§4.2) -- and in a pond the people in the water.
 	# In today's water, every body.
-	_feel(o, _sense_ids(), true, true, true)
+	var scan := _sense_ids()
+	_feel(o, scan, true, true)
+	_see(o, scan, true)
 	concentration = minf(o.scent, 1.0)
 	# **There is no bearing here any more, and that is the change.** A cell with
 	# no chemocyte leaves with [member smell_range] 0, so nothing is ever inside
@@ -3646,7 +3685,7 @@ func _step_sense() -> void:
 	# gates downstream of it.
 	taste_level = o.smell
 	shadow = minf(o.shade, 1.0)
-	# Deliberately left where it was when the last shadow faded rather than
+	# Deliberately left where it was when the last sight faded rather than
 	# snapped to dead ahead: the lobe is already dark at strength 0, and a
 	# bearing that resets would swing the amber round to the nose on its way
 	# out -- a movement the player would read as something passing in front of
@@ -3657,24 +3696,23 @@ func _step_sense() -> void:
 	dread_level = minf(o.dread, 1.0) * DREAD_CAP
 
 
-## **What an observer smells, the shadow it stands in, and -- for the player
-## alone -- its dread** (behaviour.md §12.1), over the bodies in [param scan]:
-## one pass, as the player's membrane has always made it, read off the observer
-## and those bodies and nothing else. [param smell] asks the nose, [param shade]
-## the eyespot, and [param fear] the dread only a player's membrane feels: no
-## organ reports another cell's mouth, so no water cell is ever asked it (§3.4).
-## What it finds is written on [param o]; a sense not asked is left at nothing.
+## **What an observer smells, and -- for the player alone -- its dread**
+## (behaviour.md §12.1), over the bodies in [param scan]: one pass, as the
+## player's membrane has always made it, read off the observer and those bodies
+## and nothing else. [param smell] asks the nose and [param fear] the dread only a
+## player's membrane feels: no organ reports another cell's mouth, so no water
+## cell is ever asked it (§3.4). What it finds is written on [param o]; a sense not
+## asked is left at nothing. **The eyespot is [method _see]'s** since it sees
+## (docs/design/sight.md): it was the shadow this pass summed.
 ##
 ## [param scan] holds slots, and [constant TARGET_PLAYER] for the player on this
 ## device as a water cell finds it ([member _me]). The observer's own slot is
 ## passed over.
-func _feel(o: Observer, scan: PackedInt32Array, smell: bool, shade: bool, fear: bool) -> void:
+func _feel(o: Observer, scan: PackedInt32Array, smell: bool, fear: bool) -> void:
 	var total := 0.0
 	var dread := 0.0
 	var worst := 0.0
 	var gape := o.gape
-	var shaded := 0.0
-	var shade_pull := Vector2.ZERO
 	# **What the nose picks up, which is not the same sum again.** Restricted to
 	# sources inside [member smell_range] and weighted by how nearly each one
 	# lies along the organ's own arc -- and then simply added up, because
@@ -3688,7 +3726,7 @@ func _feel(o: Observer, scan: PackedInt32Array, smell: bool, shade: bool, fear: 
 	# **A nose asked alone sums only what lies inside its reach**: a water cell's
 	# `smell` is the level, which nothing past it reaches, and no organ of its
 	# reads the raw sum ([member Observer.scent]) the player's membrane does.
-	var nose_only := smell and not shade and not fear
+	var nose_only := smell and not fear
 
 	for i: int in scan:
 		if i == o.slot:
@@ -3749,26 +3787,9 @@ func _feel(o: Observer, scan: PackedInt32Array, smell: bool, shade: bool, fear: 
 						else:
 							smelt_rest += w
 
-		# A floc is smell and nothing more: no mass to cast a shadow and no
-		# mouth to dread (§7.5).
+		# A floc is smell and nothing more: no mouth to dread (§7.5).
 		if b.inert:
 			continue
-
-		# The shadow, over every body big enough to cast one. Summed and given a
-		# bearing exactly the way taste is, for the same reason: two bodies
-		# blocking the light really do block more of it than one, and a summed
-		# vector moves continuously where a pick-the-biggest would jump the
-		# bearing across the screen the frame two shadows swapped rank.
-		if shade:
-			var mass := smoothstep(SHADOW_MIN_RATIO, SHADOW_FULL_RATIO,
-				b.radius / maxf(o.radius, 0.001))
-			if mass > 0.0 and d < SHADOW_RANGE:
-				var near := clampf((SHADOW_RANGE - d) / (SHADOW_RANGE - SHADOW_CORE),
-					0.0, 1.0)
-				var blocked := mass * near
-				if blocked > 0.0:
-					shaded += blocked
-					shade_pull += offset / maxf(d, 0.001) * blocked
 
 		if not fear:
 			continue
@@ -3804,20 +3825,6 @@ func _feel(o: Observer, scan: PackedInt32Array, smell: bool, shade: bool, fear: 
 			* clampf((CHEW_RANGE - d) / (CHEW_RANGE - DREAD_CORE), 0.0, 1.0) \
 			* (CHEW_HURT_FLOOR + (1.0 - CHEW_HURT_FLOOR) * o.wound)
 
-	# **The meniscus bends the light away** (§3.2): a curved surface is a lens,
-	# and the stretch of it nearest the cell reads to an eyespot as a shadow at
-	# its bearing, EDGE_SHADOW of a body's at the closest, falling to nothing
-	# at SHADOW_RANGE. Summed with the bodies' like one more, so it moves the
-	# lobe as continuously as they do. The drop only.
-	if shade and _drop != null:
-		var edge := _drop.meniscus.depth(o.pos)
-		if edge < SHADOW_RANGE:
-			var blocked := Drop.EDGE_SHADOW * clampf((SHADOW_RANGE - edge)
-				/ (SHADOW_RANGE - SHADOW_CORE), 0.0, 1.0)
-			shaded += blocked
-			shade_pull += (_drop.meniscus.nearest_rim(o.pos) - o.pos) \
-				.normalized() * blocked
-
 	o.scent = total
 	# **A receptor saturates; it does not clip.** The clamp that used to be on
 	# this line was the actual fault three-senses.md §7.5 blamed on the sum:
@@ -3826,10 +3833,96 @@ func _feel(o: Observer, scan: PackedInt32Array, smell: bool, shade: bool, fear: 
 	# reach sums nothing, and `0 / (0 + K)` is 0.
 	var s := smelt_top + SMELL_TAIL * smelt_rest
 	o.smell = s / (s + SMELL_HALF)
-	o.shade = shaded
-	o.shade_pull = shade_pull
 	o.worst = worst
 	o.dread = dread
+
+
+## **What an observer's eyespot sees** (docs/design/sight.md), over the bodies in
+## [param scan]: every body in its field, nearest first, each hiding what is
+## behind it (game/mechanics/sight.gd), and each at how clearly it comes through
+## -- its blur against how wide what is left of it is, and the water's haze
+## against a reach the light at the eye sets. Written on [param o] as the shade
+## and its pull: the sum, and the direction of it, as the shadow was, so the lobe
+## moves as continuously as it did.
+##
+## **A floc hides what is behind it and is not what the eye reports**: it is
+## dust, and the sense says where the bodies are. **The rim** reads as it did,
+## [constant Drop.EDGE_SHADOW] of a body at the closest, while its nearest stretch
+## is in the field.
+##
+## [param picture] is the player's: it also writes what the views draw and what
+## earns the eye its levels ([member sight_fan], [member sight_seen]). An observer
+## with no eyespot sees nothing.
+func _see(o: Observer, scan: PackedInt32Array, picture: bool) -> void:
+	o.shade = 0.0
+	o.shade_pull = Vector2.ZERO
+	o.seen.resize(0)
+	if picture:
+		sight_fan.resize(0)
+		sight_seen.resize(0)
+		sight_reach = 0.0
+		sight_seeing = 0.0
+	if not o.eyespot or o.sight_range <= 0.0:
+		return
+	var seeing := Sight.seeing(light_at(o.pos), o.sight_dark)
+	var reach := o.sight_range * seeing
+	var core := o.sight_core * seeing
+	var things: Array = []
+	for i: int in scan:
+		if i == o.slot:
+			continue
+		var b := _cells[i] if i >= 0 else _me
+		if not b.seeded:
+			continue
+		var offset := b.pos - o.pos
+		var d := offset.length()
+		if d - b.radius >= reach:
+			continue
+		var bearing := atan2(offset.dot(o.starboard), offset.dot(o.forward))
+		if d > b.radius and absf(angle_difference(o.sight_mid, bearing)) \
+				> o.sight_half + asin(b.radius / d):
+			continue
+		things.append([bearing, d, b.radius, i])
+	var shaded := 0.0
+	var pull := Vector2.ZERO
+	for seen: Array in Sight.view(things, o.sight_mid, o.sight_half):
+		var i := int(seen[3])
+		var b := _cells[i] if i >= 0 else _me
+		var bearing := float(seen[0])
+		var d := float(seen[1])
+		var level := Sight.clarity(float(seen[4]), o.sight_blur) * Sight.haze(d, core, reach)
+		if b.inert or level <= 0.0:
+			continue
+		shaded += level
+		pull += (o.forward * cos(bearing) + o.starboard * sin(bearing)) * level
+		if level >= SIGHT_COUNTS:
+			o.seen.append(i)
+	# The edge an eye sees is its shore, where the water gets too thin for it
+	# (margin.md §2.4).
+	if _drop != null:
+		var edge := _drop.shore_depth(o.pos, o.radius)
+		if edge < reach:
+			var near := _drop.shore_point(o.pos, o.radius)
+			if absf(angle_difference(o.sight_mid, o.bearing_to(near))) <= o.sight_half:
+				var blocked := Drop.EDGE_SHADOW * Sight.haze(edge, core, reach)
+				shaded += blocked
+				pull += (near - o.pos).normalized() * blocked
+	o.shade = shaded
+	o.shade_pull = pull
+	if not picture:
+		return
+	sight_seen = o.seen.duplicate()
+	sight_reach = reach
+	sight_seeing = seeing
+	sight_fan.resize(SIGHT_FAN_RAYS)
+	for k in SIGHT_FAN_RAYS:
+		var bearing := o.sight_mid - o.sight_half \
+			+ 2.0 * o.sight_half * float(k) / float(SIGHT_FAN_RAYS - 1)
+		var run := Sight.cast(things, bearing, reach)
+		if _drop != null:
+			run = minf(run, _drop.meniscus.exit_along(o.pos,
+				o.forward * cos(bearing) + o.starboard * sin(bearing)))
+		sight_fan[k] = run
 
 
 ## **The player's beams**, through [method _beams_of] -- the one function every
@@ -4161,10 +4254,11 @@ func _call_of(o: Observer, scan: PackedInt32Array, out: Array,
 	# can meet, heard from its nearest point as one body EDGE_ECHO_RADIUS wide
 	# -- the widest, longest echo in the game. The hull, the bodies in the way
 	# and the returns' cap take their share of it exactly as of a body's.
+	# Heard where the water gets too thin for the caller, its shore (margin.md §2.4).
 	if _drop != null:
-		var edge := _drop.meniscus.depth(o.pos)
+		var edge := _drop.shore_depth(o.pos, o.radius)
 		if edge < o.ping_range:
-			found.append([maxf(edge, 0.0), _drop.meniscus.nearest_rim(o.pos),
+			found.append([maxf(edge, 0.0), _drop.shore_point(o.pos, o.radius),
 				Drop.EDGE_ECHO_RADIUS, true, 0.0])
 	if found.is_empty():
 		return
@@ -4458,12 +4552,13 @@ func _touch_of(o: Observer, scan: PackedInt32Array) -> void:
 		if d < best:
 			best = d
 			at = b.pos
-	# **And so is the meniscus** (the drop, §3.2): the nearest thing there is.
+	# **And so is the meniscus** (the drop, §3.2): the nearest thing there is --
+	# touched at its shore, where the water gets too thin for it (margin.md §2.4).
 	if _drop != null:
-		var edge := _drop.meniscus.depth(o.pos) - o.radius
+		var edge := _drop.shore_depth(o.pos, o.radius) - o.radius
 		if edge < best:
 			best = edge
-			at = _drop.meniscus.nearest_rim(o.pos)
+			at = _drop.shore_point(o.pos, o.radius)
 	if best >= o.touch_range:
 		return
 	o.touched = true
@@ -4512,6 +4607,9 @@ var _replay_slots := 0
 var _replay_flocs := {}
 ## Who the recording says killed the player, as a slot; -1 for nobody.
 var _killer := -1
+## **The light at the surface, as the recording says it** (docs/design/daylight.md
+## §7): [method restore_daylight]'s. Full until a recording says otherwise.
+var _replay_light := 1.0
 
 
 ## **Makes this a replay's field**: [param slots] bodies, every one of them
@@ -4536,8 +4634,19 @@ func open_replay(cell: CellBody, slots: int) -> void:
 		_cells.append(Body.new())
 	_replay_flocs.clear()
 	_killer = -1
+	_replay_light = 1.0
 	died_to = -1
 	_fresh_senses()
+
+
+## **The light at the surface, written back from a recording** (docs/design/
+## daylight.md §7): what [method daylight_now] answers, so the view tints the
+## truth pane as the run was tinted. What gets through to a place is worked out
+## again from the recorded place under the recorded rim. A field
+## [method open_replay] made only, never a run's.
+func restore_daylight(surface: float) -> void:
+	if _replay:
+		_replay_light = clampf(surface, 0.0, 1.0)
 
 
 ## **The drop's rim, written back from a recording**: this field is in the drop
@@ -5017,7 +5126,7 @@ func place_person(at: Vector2, heading: float, body_radius: float,
 	# **Held inside the drop's rim** (ocean.md §10.5), as everything in it is:
 	# an honest guest's own run contains its cell the same way.
 	if _drop != null:
-		at = _drop.meniscus.contain(at, body_radius)
+		at = _drop.holds(at, body_radius)
 	var pb := _cells[slot]
 	if pb.person == null:
 		pb.person = Person.new()
@@ -5182,7 +5291,7 @@ func place_sister(at: Vector2, heading: float, body_radius: float,
 	# carrying [param brain], the list her cell ran (automation.md §6.3), or the
 	# founders' for null.
 	if _drop != null:
-		var index := _spawn(_drop.meniscus.contain(at, body_radius), false, false,
+		var index := _spawn(_drop.holds(at, body_radius), false, false,
 			body_radius, tiers)
 		_cells[index].heading = heading
 		_cells[index].brain = brain
@@ -5323,6 +5432,7 @@ func become_mirror() -> void:
 	for i in range(PERSON_SLOT - 1, -1, -1):
 		_mirror_free.append(i)
 	_mirror_t = 0.0
+	_host_light = 1.0
 	_near.resize(0)
 	_stepped.resize(0)
 	_fresh_senses()
@@ -5598,12 +5708,20 @@ func flocs_in_reach(point: Vector2, reach: float = SEND_REACH) -> Array:
 ## and is harmed by them, until the next snapshot says again -- and never dies of
 ## its own count, since the host owns that death. Empty says nothing. Every other
 ## body's loads are only its flags, drawn at [constant MIRROR_SHOWN].
+##
+## **And [param daylight] is the host's sky** (docs/design/daylight.md §5): the light
+## at the surface of its drop -- or its room's -- held until the next snapshot. This
+## cell's light is it times what gets through the water over this cell under the
+## host's rim ([method light_at]): its own tank's food from light, its tile and the
+## water's tint. Not a number is held as it was.
 func apply_pond(your_wound: float, entries: Array,
-		your_loads := PackedFloat64Array()) -> void:
+		your_loads := PackedFloat64Array(), daylight := 1.0) -> void:
 	if not _mirror:
 		return
 	if is_finite(your_wound):
 		_cell.wound = clampf(your_wound, 0.0, 1.0)
+	if is_finite(daylight):
+		_host_light = clampf(daylight, 0.0, 1.0)
 	if not your_loads.is_empty():
 		_cell.restore_loads(your_loads)
 	var sent := {}
@@ -5958,7 +6076,7 @@ func _step_person(delta: float, slot: int = PERSON_SLOT) -> void:
 	# the host decides every dose and owns their death (dna-slots.md §14.1),
 	# found at the top of their contacts, and POND tells their device what they
 	# carry.
-	pb.wound = CellBody.dosed(pb.loads, pb.wound, pb.radius, delta)
+	pb.wound = CellBody.dosed(pb.loads, pb.wound, pb.radius, delta, pb.stat_mend)
 	pb.bite = maxf(pb.bite - delta, 0.0)
 	p.dart_clock = maxf(p.dart_clock - delta, 0.0)
 	if p.first_hunt > 0.0:
@@ -5966,7 +6084,7 @@ func _step_person(delta: float, slot: int = PERSON_SLOT) -> void:
 	_carry_person(pb, p.age)
 	# Carried, and held inside the drop's rim, as their own run holds them.
 	if _drop != null:
-		pb.pos = _drop.meniscus.contain(pb.pos, pb.radius)
+		pb.pos = _drop.holds(pb.pos, pb.radius)
 	p.age += delta
 
 
@@ -6268,7 +6386,7 @@ func put_sister(bearing: float, distance: float, body_radius: float,
 			place_sister(at, _angle_of(side, 0.0), body_radius, tiers, dna, mother, brain,
 				riders)
 			return
-		at = _drop.meniscus.contain(at, body_radius)
+		at = _drop.holds(at, body_radius)
 		var index := _spawn(at, false, false, body_radius, tiers)
 		_cells[index].heading = _angle_of(side, _cells[index].heading)
 		_cells[index].brain = brain
@@ -6366,13 +6484,17 @@ func _newborn() -> Dictionary:
 
 
 ## **Where a toxin the water draws goes** (docs/design/dna-slots.md §9): the
-## water draws it as one gene, by its variety's name and weight, and a coin puts
-## it inside, as poison, or outside, as venom -- the two places are equal. Any
-## other gene is itself, and no number is drawn for it.
+## water draws it as one gene, by its variety's name and weight. A gene of forms
+## with an outside form gets a coin between its two places; **the toxin has none
+## since its venom only rides** (gene.gd's RIDING), so it is its variety, poison,
+## inside, and no number is drawn. Any other gene is itself.
 func _place_toxin(gene: StringName) -> StringName:
 	if not Genome.has_forms(gene):
 		return gene
-	return gene if randi() % 2 == 0 else Genome.form_in(gene, Genome.OUTSIDE_PLACE)
+	var outer := Genome.form_in(gene, Genome.OUTSIDE_PLACE)
+	if outer == &"":
+		return gene
+	return gene if randi() % 2 == 0 else outer
 
 
 ## **A gene drawn from [param pool]**, varieties all, **by each one's weight in the
@@ -6609,7 +6731,9 @@ var half_rate := true
 ## §4.4: a tank that cannot move is not stepped -- which changes no number.
 var skip_still := true
 ## Where a run starts: `quiet` (§8.1), `centre`, or `edge` -- [member edge_gap]
-## inside the rim, facing it -- for the renders.
+## inside the rim, facing it, and held at its hold if that is nearer (margin.md
+## §2.1) -- for the renders and the probes. A room's [method quiet_place] takes
+## it too.
 var start_mode := &"quiet"
 var edge_gap := 380.0
 ## For the renders and the probes: this many flocs round the start, the last
@@ -6621,7 +6745,7 @@ var age_first := 0.0
 # --- Pack 2's rules, one switch each (docs/design/lineage.md §11.1, §12), set by
 # tools/drive.gd and tools/eco_probe.gd as the ones above are. Nothing in the game
 # writes them, and each reads as the drop's rule as it stands.
-## **Bodies divide** (§2-§5): a water body at DIVIDE_RADIUS divides on its tick,
+## **Bodies divide** (§2-§5): a water body at its division radius divides on its tick,
 ## a meal writes its DNA and not its body, every newborn has the grace, and the
 ## spawner keeps the food to its count and today's hunters as a floor. **Off is
 ## pack 1, to the census line**: nothing divides, a meal grows the body as well,
@@ -6662,6 +6786,18 @@ var rule_change := true
 ## rest stops its tail at every level, and no part a level brings is there or
 ## drawn by a change -- pack 3 had none -- what `--water-tail=pack3` plays.
 var tails_beat := true
+# --- The light's (docs/design/daylight.md §10.1), set by tools/drive.gd as the
+# ones above are, before the water is made. Nothing in the game writes them.
+## **The drop has a day, and its light fades toward its deep middle** (§2): a
+## body's food from light is its `sun` times the light where it is, averaged over
+## the step it is paid for -- the player's and every water body's alike. **Off is
+## today, to the byte** (§2.3): the light is the literal 1.0 everywhere, so
+## `absorbs + sun × 1.0` is today's `sun + absorbs` bit for bit -- what
+## `--daylight=0` plays. Today's water, with no drop, is always in full light.
+var daylight := true
+## **For the renders**: where a drop being made starts its day, in seconds into
+## the cycle (`--day-at=`). Below 0 is the game's, drop.gd's DAY_BEGINS.
+var day_at := -1.0
 
 ## **The drop this run is in**, or null for today's water.
 var _drop: Drop = null
@@ -6674,6 +6810,13 @@ var drop_seed := 0
 ## runs counts: frozen while the cell is dead or dividing, it has not aged.
 var _t := 0.0
 var _frame := 0
+## **Where the drop's day stood at its age 0** (docs/design/daylight.md §6), in
+## seconds into the cycle: the time of day is a pure function of the drop's age,
+## so it stops when the drop stops, as everything else in it does. A new drop and a
+## new room start at drop.gd's DAY_BEGINS; a kept one where it was kept.
+var _day_origin := Drop.DAY_BEGINS
+## **This water's day** (drop.gd's `daylight`), made once a field.
+var _sky: Daylight = Drop.daylight()
 ## Slots with nobody in them, reused last in, first out.
 var _free := PackedInt32Array()
 ## Living bodies, how many of them have no mouth, and flocs.
@@ -6802,7 +6945,7 @@ func setup_drop(cell: CellBody) -> void:
 	# drifters and newborns by the one share (water-evolves.md §2), every tank at
 	# any level up to FIRST_HUNGER_MAX (§5.8), and some flocs already settled.
 	for k in Drop.target():
-		_spawn(_drop.uniform_point(Drop.FILL_INSET), randf() < DRIFTER_SHARE, true)
+		_fill_one()
 	for k in Drop.FIRST_FLOCS:
 		_spawn_floc(_drop.uniform_point(Drop.SNOW_INSET), Drop.floc_radius(), true)
 	_arm_the_founders()
@@ -6924,7 +7067,7 @@ func _make_room(cell: CellBody) -> void:
 	_reset_drop()
 	_made_for = PackedFloat64Array([CellBody.BASE_RADIUS, 0.0])
 	for k in Drop.target():
-		_spawn(_drop.uniform_point(Drop.FILL_INSET), randf() < DRIFTER_SHARE, true)
+		_fill_one()
 	for k in Drop.FIRST_FLOCS:
 		_spawn_floc(_drop.uniform_point(Drop.SNOW_INSET), Drop.floc_radius(), true)
 	_arm_the_founders()
@@ -6952,6 +7095,9 @@ func _reset_drop() -> void:
 	stats.clear()
 	_t = 0.0
 	_frame = 0
+	# A new drop, and a new room, at the end of dawn (docs/design/daylight.md §2.1);
+	# a render's where it asked.
+	_day_origin = day_at if day_at >= 0.0 else Drop.DAY_BEGINS
 	_living = 0
 	_drifters = 0
 	_flocs = 0
@@ -7033,7 +7179,7 @@ func _push_person_drop(k: int) -> void:
 			continue
 		var normal := offset / d if d > 0.001 else -_forward(b.heading)
 		b.pos = m.contain(b.pos - normal * (overlap * (1.0 - _give_way(b.radius, pb.radius))
-			* PUSH_SHARE), b.radius)
+			* PUSH_SHARE), Drop.hold(b.radius))
 
 
 ## **How far a person's senses reach**, for the spawner's hide reach round
@@ -7048,11 +7194,12 @@ func _person_senses(pb: Body) -> float:
 ## **A quiet place in this drop for a born cell** (§8.1), without moving the
 ## drop or anything in it but what could swallow a born cell there: where a
 ## guest arrives in a room nobody is in (§10.3). Nobody watches an empty room,
-## so the clearing is seen by no one.
+## so the clearing is seen by no one. It follows [member start_mode], as a
+## run's start does.
 func quiet_place() -> Vector2:
 	if _drop == null:
 		return Vector2.ZERO
-	var at := _drop.quiet_start(_food_for_born, _dread_for_born)
+	var at := _start_point()
 	var mine := CellBody.swallow_radius_of(CellBody.BASE_RADIUS, Catalogue.born())
 	_count_ids.resize(0)
 	_drop.grid.query(at, DREAD_RANGE + Drop.GRID_SLACK, _count_ids)
@@ -7080,6 +7227,93 @@ func drop_age() -> float:
 	return _t
 
 
+# --- The light (docs/design/daylight.md §2) --------------------------------------------
+# **Any stat that should follow the light asks these** (§2.5). The plastid's `sun`
+# is the one that does, multiplied where it is read: the player's in
+# normal_mode.gd, every water body's in [method _tank]. Nothing the water decides
+# reads the light -- no rule, no search, no spawn (§4).
+
+## **Whether this water has a day**: a drop with [member daylight] on -- a solo
+## run's, a host's, a room, a guest's mirror of a host's once its ARRIVE gave it the
+## rim, or a replay's picture of one. Today's water, with no drop, is always in full
+## light.
+func _lit() -> bool:
+	return daylight and _drop != null
+
+
+## **The light at the surface now**, 0 to 1 (§2.1): drop.gd's day at the drop's
+## age, from where its day stood at age 0. **A guest's is the host's** (§5), as its
+## newest snapshot said it ([method apply_pond]): the host owns the sky. A replay's
+## is the recording's ([method restore_daylight]). The literal 1.0 with no day
+## ([method _lit]).
+func daylight_now() -> float:
+	if not _lit():
+		return 1.0
+	if _mirror:
+		return _host_light
+	if _replay:
+		return _replay_light
+	return _sky.surface(_day_origin + _t)
+
+
+## **How far into the day the drop is**, in seconds into the cycle -- what a kept
+## drop keeps as `day` (§6) -- or -1 where there is no day of this field's own to
+## say: today's water, a guest's mirror (the host's day is the host's), a replay,
+## or the light off.
+func day_time() -> float:
+	if not _lit() or _replay or _mirror:
+		return -1.0
+	return fposmod(_day_origin + _t, _sky.period())
+
+
+## **How long one day is**, in seconds: drop.gd's four spans.
+func day_length() -> float:
+	return _sky.period()
+
+
+## **The light at [param p] now**, 0 to 1 (§2.2): the surface light times what
+## gets through the water over [param p] -- all of it on the rim, drop.gd's
+## LIGHT_AT_MIDDLE at the drop's middle. The literal 1.0 with no day.
+func light_at(p: Vector2) -> float:
+	if not _lit():
+		return 1.0
+	return daylight_now() * _through(p)
+
+
+## **The light at [param p], averaged exactly over the drop's ages [param t0] to
+## [param t1]** (§2.3): what a step of that length is paid at. A far body
+## stepped once in 32 frames and the player stepped every frame take one light
+## this way, so the tank's arithmetic does not change. The literal 1.0 with no
+## day. A guest's is the host's surface light held since its newest snapshot --
+## the steepest dawn moves it 0.00125 between two (§5) -- and a replay's its
+## recorded light: neither steps.
+func light_over(p: Vector2, t0: float, t1: float) -> float:
+	if not _lit():
+		return 1.0
+	if _mirror or _replay:
+		return daylight_now() * _through(p)
+	return _sky.mean(_day_origin + t0, _day_origin + t1) * _through(p)
+
+
+## **What reaches the drop's deepest point**, for whoever draws the light (vision.gd's
+## water): drop.gd's LIGHT_AT_MIDDLE with a day, and 1 -- everything -- without.
+func light_at_deepest() -> float:
+	return Drop.LIGHT_AT_MIDDLE if _lit() else 1.0
+
+
+## **The least light anywhere, at any hour**: the day's floor under the whole
+## depth of the drop, which is 0; and 1 with no day. What a tank that cannot move
+## is judged in ([method _tank]).
+func _least_light() -> float:
+	return _sky.least * Drop.LIGHT_AT_MIDDLE if _lit() else 1.0
+
+
+## What gets through the water over [param p]: the rim's `column` there, through
+## drop.gd's LIGHT_AT_MIDDLE. A field with a day only.
+func _through(p: Vector2) -> float:
+	return Daylight.through(_drop.meniscus.column(p), Drop.LIGHT_AT_MIDDLE)
+
+
 ## **How many bodies the drop holds**: the living and the flocs, never a person.
 func drop_bodies() -> int:
 	return _living + _flocs if owns_drop() else 0
@@ -7090,8 +7324,13 @@ func drop_bodies() -> int:
 ## nothing yet, and nothing that has killed it.
 func _arrive() -> void:
 	died_to = -1
-	var at := _drop.meniscus.contain(_cell.position + Vector2(0.0, -FIRST_DISTANCE),
-		DRIFTER_MAX)
+	# Toward the middle when that is past where the water holds it: a run starts
+	# in the margin (margin.md §2.3), and the film must not pull it into view.
+	var at := _cell.position + Vector2(0.0, -FIRST_DISTANCE)
+	if not _drop.keeps(at, DRIFTER_MAX):
+		at = _cell.position + (_drop.meniscus.center - _cell.position).normalized() \
+			* FIRST_DISTANCE
+	at = _drop.holds(at, DRIFTER_MAX)
 	_first_index = _spawn(at, true)
 	_first_serial = _cells[_first_index].serial
 	_first_pending = true
@@ -7344,6 +7583,10 @@ func drop_state() -> Dictionary:
 	return {
 		"seed": drop_seed,
 		"age": _t,
+		# **Where the day stood when it was kept** (docs/design/daylight.md §6), in
+		# seconds into the cycle: a load works out from it where the day stood at
+		# age 0, so the drop opens at the hour it was kept.
+		"day": fposmod(_day_origin + _t, _sky.period()),
 		"frame": _frame,
 		"next_id": _next_id,
 		"rim_centre": _drop.meniscus.center,
@@ -7455,6 +7698,14 @@ func load_drop(cell: CellBody, state: Dictionary) -> Dictionary:
 		_made_for = PackedFloat64Array([CellBody.BASE_RADIUS, 0.0])
 	drop_seed = int(state["seed"])
 	_t = float(state["age"])
+	# **The day it was kept at** (docs/design/daylight.md §6), and where it stood
+	# at age 0 from that, so the day goes on from the age as everything else does.
+	# A file from before the light has none, and opens at the end of dawn,
+	# whatever its age.
+	var day := float(state.get("day", Drop.DAY_BEGINS))
+	if not is_finite(day):
+		day = Drop.DAY_BEGINS
+	_day_origin = fposmod(day - _t, _sky.period())
 	_frame = int(state["frame"])
 	_next_id = int(state["next_id"])
 	var clocks: PackedFloat64Array = state["clocks"]
@@ -7555,15 +7806,23 @@ func load_drop(cell: CellBody, state: Dictionary) -> Dictionary:
 			if not kept_dna_riders.is_empty() else {}
 		b.riders = Riders.kept(Riders.copy(kept_riders[k]), b.genome) \
 			if not kept_riders.is_empty() else {}
-		if not b.inert and b.radius > CellBody.DIVIDE_RADIUS:
-			b.radius = CellBody.DIVIDE_RADIUS
+		# **Venom worn on the body, by a drop kept before it only rode**
+		# (2026-10-16): into its mouth's slot, or let go.
+		Genome.seat_riding(b.dna, [], b.dna_riders)
+		Genome.seat_riding(b.genome, [], b.riders)
+		if not b.inert and b.radius > CellBody.RADIUS_MAX:
+			b.radius = CellBody.RADIUS_MAX
 			trimmed += 1
-		# Held inside by the test the running drop holds a body by (see
-		# [method _step_one]), so a body it left on the rim is not moved by a
-		# hair here: only a rim that is smaller than the one it was kept under.
+		# **Put back only from past the rim**: a rim smaller than the one it was
+		# kept under -- and then where the water is deep enough for it (margin.md
+		# §2.1). Past its hold but inside the rim -- a body grown a meal at its
+		# shore, which its next step holds, or one kept before the film -- it is
+		# left where it was kept, and its own step holds it, as the running drop's
+		# would: so a drop kept and loaded goes on as one that never stopped. A
+		# floc is held by no film: it lies on the glass where it fell.
 		var room := _drop.meniscus.radius - b.radius
 		if b.pos.distance_squared_to(_drop.meniscus.center) > room * room:
-			b.pos = _drop.meniscus.contain(b.pos, b.radius)
+			b.pos = _drop.meniscus.contain(b.pos, b.radius if b.inert else Drop.hold(b.radius))
 			contained += 1
 		b.aim = b.pos
 		b.flee_from = b.pos
@@ -7848,6 +8107,7 @@ func _process_drop(delta: float) -> void:
 			_guests_meet()
 	_contacts_drop()
 	_separate_drop()
+	_separate_grit()
 	_stings_drop()
 	if in_water:
 		_contain_player(false)
@@ -7910,12 +8170,13 @@ func _step_drop_bodies() -> void:
 
 
 ## One body, with the time it is owed: its grace, its tank, then what it does --
-## or, at DIVIDE_RADIUS on its tick, two daughters where it was -- then held
+## or, at its division radius on its tick, two daughters where it was -- then held
 ## inside the rim and filed again if it crossed a bucket line.
 ##
-## **A body at DIVIDE_RADIUS divides on its tick** (lineage.md §2.1), the 7.5
-## times a second every mouth decides, near the player or far from it: the first
-## tick it is at forty, whatever it was doing -- a run, a rest after the meal
+## **A body at its division radius divides on its tick** (lineage.md §2.1;
+## margin.md §1.1: forty, or later for a lineage whose genes need its daughters
+## bigger), the 7.5 times a second every mouth decides, near the player or far
+## from it: the first tick it is there, whatever it was doing -- a run, a rest after the meal
 ## that grew it, a search. Nothing makes it wait. A tank that ran out first is a
 ## death, and there is nobody left to divide.
 func _step_one(i: int, b: Body, tick: int) -> void:
@@ -7938,14 +8199,15 @@ func _step_one(i: int, b: Body, tick: int) -> void:
 	# returns as a starvation does: nothing here files a body it has retired.
 	if _dose_step(i, b, dt):
 		return
-	if births and b.look and not b.drifter and b.radius >= CellBody.DIVIDE_RADIUS - 0.01:
+	if births and b.look and not b.drifter and b.radius >= b.divide_at() - 0.01:
 		_divide(i, b)
 		return
 	_step_body(i, dt)
+	# Held where the water is deep enough for it (margin.md §2.1).
 	var m := _drop.meniscus
-	var room := m.radius - b.radius
+	var room := m.radius - Drop.hold(b.radius)
 	if b.pos.distance_squared_to(m.center) > room * room:
-		b.pos = m.contain(b.pos, b.radius)
+		b.pos = m.contain(b.pos, Drop.hold(b.radius))
 	_drop.grid.move(i, b.pos)
 
 
@@ -7959,12 +8221,24 @@ func _step_one(i: int, b: Body, tick: int) -> void:
 ## **A tank that cannot move is not stepped**: taking in at least its upkeep
 ## and having done nothing, its hunger cannot change until it eats -- which is
 ## most drifters, most of the time -- so skipping it changes no number (§4.4).
+## **Judged in the dark** (docs/design/daylight.md §2.3): what it takes in at the
+## least light there is, so a body that needs the light to hold its tank is
+## stepped. With the light off that is today's test, `upkeep <= sun + absorbs`.
+##
+## **What it takes in is `absorbs + sun × the light`** where it is, averaged
+## exactly over the [param dt] it is paid for ([method light_over]): a far body
+## stepped on its tick and a near one stepped every frame are paid one light. Only
+## a body with a `sun` asks. With the light off it is the literal 1.0, and the sum
+## today's to the bit.
 func _tank(i: int, b: Body, dt: float) -> bool:
 	if skip_still and b.effort == 0.0 and b.starve == 0.0 and b.hunger < 1.0 \
-			and b.upkeep <= b.income:
+			and b.upkeep <= b.absorbs + b.sun * _least_light():
 		return false
+	var income := b.absorbs
+	if b.sun > 0.0:
+		income += b.sun * light_over(b.pos, _t - dt, _t)
 	b.hunger = clampf(b.hunger
-		+ dt * Metabolism.rest_rate(b.upkeep, b.income, b.reserve) / Metabolism.HUNGER_SECONDS
+		+ dt * Metabolism.rest_rate(b.upkeep, income, b.reserve) / Metabolism.HUNGER_SECONDS
 		+ Metabolism.effort_cost(b.effort, b.burn, b.reserve), 0.0, 1.0)
 	b.effort = 0.0
 	if b.hunger < 1.0:
@@ -7984,7 +8258,7 @@ func _tank(i: int, b: Body, dt: float) -> bool:
 ## body leaves the water with its remains, and the caller stops touching it. A
 ## body carrying nothing is mended as it always was, for one test.
 func _dose_step(i: int, b: Body, dt: float) -> bool:
-	b.wound = CellBody.dosed(b.loads, b.wound, b.radius, dt)
+	b.wound = CellBody.dosed(b.loads, b.wound, b.radius, dt, b.stat_mend)
 	if b.wound < 1.0:
 		return false
 	_consume(i, Cause.POISONED)
@@ -8009,8 +8283,14 @@ func _feed_water(b: Body, nutrition: float) -> void:
 			_stat(&"meals_laser")
 
 
-## **Growth, as the player grows** (§5.5): a unit of radius a meal to
-## DIVIDE_RADIUS and no further, and the meal's gene into the slots that radius
+## **Where [param b] stops growing**: where it divides (margin.md §1.1), or forty
+## with [member births] off -- pack 1, where nothing divides and forty is the top.
+func _top(b: Body) -> float:
+	return b.divide_at() if births else CellBody.DIVIDE_RADIUS
+
+
+## **Growth, as the player grows** (§5.5): a unit of radius a meal to where it
+## divides (margin.md §1.1) and no further, and the meal's gene into the slots that radius
 ## has. The mouth keeps whatever it grows (row 5).
 ##
 ## **The meal is written to the DNA** (lineage.md §3.2), by the rule the
@@ -8021,10 +8301,12 @@ func _feed_water(b: Body, nutrition: float) -> void:
 ## [member births] off, which is pack 1, and today's water -- the body grows the
 ## organ as well, as it always did.
 func _grow(b: Body, gene: StringName) -> void:
-	b.radius = minf(b.radius + CellBody.GROWTH_PER_MEAL, CellBody.DIVIDE_RADIUS)
+	# Never smaller for a meal: a DNA that lost a gene since divides on its tick.
+	b.radius = maxf(b.radius, minf(b.radius + CellBody.GROWTH_PER_MEAL, _top(b)))
 	b.meals += 1
 	var slots := CellBody.slots_for(b.radius)
-	var placed := Genome.integrate_into(b.dna, gene, slots)
+	var inside := CellBody.inside_for(b.radius)
+	var placed := Genome.integrate_into(b.dna, gene, slots, inside)
 	# **A meal with no room on the body goes into a gene's own slot** that takes it
 	# (docs/design/gene-sockets.md §4): an empty one, or one holding it below three
 	# copies. It used to be lost. Only then: a copy more, or a free body slot, comes
@@ -8035,7 +8317,7 @@ func _grow(b: Body, gene: StringName) -> void:
 		Riders.put(b.dna_riders, room[0], room[1], gene, 1)
 		_stat(&"rider_meals")
 	if not (births and _drop != null):
-		Genome.integrate_into(b.genome, gene, slots)
+		Genome.integrate_into(b.genome, gene, slots, inside)
 		if not room.is_empty() and b.genome.has(room[0]):
 			Riders.put(b.riders, room[0], room[1], gene, 1)
 		b.derive()
@@ -8090,8 +8372,9 @@ func _refresh_body(b: Body) -> void:
 	b.reserve = Stats.of(g, &"store")
 	b.sun = Stats.of(g, &"sun")
 	# **A body with no mouth absorbs** (§5.3, row 11): an income like light, keyed
-	# on the organ and not on what made the body.
-	b.income = b.sun + (absorb if Catalogue.worn_provider(g, &"gape") == &"" else 0.0)
+	# on the organ and not on what made the body. The light's share is added where
+	# the tank is paid, at the light of the moment (daylight.md §2.3).
+	b.absorbs = absorb if Catalogue.worn_provider(g, &"gape") == &"" else 0.0
 	b.burn = Stats.of(g, &"burn")
 	b.armour = b.stat_armor
 	b.cruise = CellBody.swim_speed_of(g)
@@ -8121,7 +8404,9 @@ func _refresh_body(b: Body) -> void:
 	# A radar does not hear a floc and an eyespot does not see one (§7.5): a
 	# floc is found by the nose, the beam or the palp.
 	b.notice_floc = maxf(smell, maxf(beam, touch))
-	b.see_big = SHADOW_RANGE if Catalogue.worn_on(g, Catalogue.LIGHT) != &"" else 0.0
+	# **How far its eyespot can see in full light**, the reach a search for it is
+	# asked over; what it sees there is [method _see]'s (docs/design/sight.md).
+	b.see_big = float(sight_of(Catalogue.worn_on(g, Catalogue.LIGHT), 1)[1])
 	b.dart_bearing = 0.0
 	if b.dart_tier > 0:
 		b.dart_bearing = Cilia.slot_bearing(_seat_of(Cilia.default_order(g), g, &"dart_wound"))
@@ -8177,11 +8462,19 @@ func _look_in_drop(index: int, b: Body, reach: float) -> void:
 	var best := TARGET_NONE
 	var best_serial := 0
 	var best_d := INF
+	# **What its eyespot sees, once for the whole search** (docs/design/sight.md):
+	# a body it finds by eye is one in its field, not behind another, in light
+	# enough to make it out.
+	var eyed := PackedInt32Array()
+	if notice_by_senses and reach > 0.0 and b.see_big > 0.0 and b.eye != null:
+		var o := _body_eye(index, b)
+		_see(o, _scan_for(b, o.sight_range), false)
+		eyed = o.seen
 	if in_water and _first_hunt <= 0.0 and _worth_committing_to(b, gape,
 			_cell.swallow_radius(), _cell.wound):
 		var d := b.pos.distance_to(_cell.position)
 		if d <= maxf(reach, b.radius + _cell.radius) \
-				and _senses_find(b, d, _cell.radius, false):
+				and _senses_find(b, d, false, TARGET_PLAYER, eyed):
 			best = TARGET_PLAYER
 			best_d = d
 	# **The other players, in a pond, by the same rule** (§10.2): nothing
@@ -8198,7 +8491,7 @@ func _look_in_drop(index: int, b: Body, reach: float) -> void:
 				continue
 			var d := b.pos.distance_to(pb.pos)
 			if d <= maxf(reach, b.radius + pb.radius) and d < best_d \
-					and _senses_find(b, d, pb.radius, false):
+					and _senses_find(b, d, false, slot, eyed):
 				best = slot
 				best_serial = pb.serial
 				best_d = d
@@ -8222,7 +8515,7 @@ func _look_in_drop(index: int, b: Body, reach: float) -> void:
 					continue
 			elif not _worth_committing_to(b, gape, _swallow_r(other), other.wound):
 				continue
-			if not _senses_find(b, d, other.radius, other.inert):
+			if not _senses_find(b, d, other.inert, j, eyed):
 				continue
 			best = j
 			best_serial = other.serial
@@ -8234,18 +8527,19 @@ func _look_in_drop(index: int, b: Body, reach: float) -> void:
 	_start_run(b, best, best_serial)
 
 
-## **Whether its own senses find something [param body_radius] big at
-## [param d]** (§5.7): what touches it, always; else within the reach of its
-## nose, radar, beam or palp -- a floc only by nose, beam or palp -- or of its
-## eyespot, for a body big enough to cast a shadow.
-func _senses_find(b: Body, d: float, body_radius: float, floc: bool) -> bool:
-	if not notice_by_senses or d <= b.radius + body_radius:
+## **Whether its own senses find the body in slot [param id] at [param d]**
+## (§5.7): what touches it, always; else within the reach of its nose, radar,
+## beam or palp -- a floc only by nose, beam or palp -- or when its eyespot sees
+## it, [param eyed] being what it saw (docs/design/sight.md).
+func _senses_find(b: Body, d: float, floc: bool, id: int, eyed: PackedInt32Array) -> bool:
+	var other := _cells[id] if id >= 0 else _me
+	if not notice_by_senses or d <= b.radius + other.radius:
 		return true
 	if floc:
 		return d <= b.notice_floc
 	if d <= b.notice:
 		return true
-	return d <= b.see_big and body_radius >= SHADOW_MIN_RATIO * b.radius
+	return eyed.has(id)
 
 
 ## **A run begins**, at [param target]. A body spotted from afar is turned onto
@@ -8313,9 +8607,11 @@ func _dash(b: Body) -> void:
 
 
 ## **A drifting body turns off the shore** (§3.1): heading outward inside the
-## shallows, toward the middle at up to SHORE_TURN, by how deep it is in them.
+## shallows, toward the middle at up to SHORE_TURN, by how deep it is in them --
+## measured from its own hold, where the water stops being deep enough for it
+## (margin.md §2.1).
 func _shore_turn(b: Body, delta: float) -> void:
-	var depth := _drop.meniscus.depth(b.pos)
+	var depth := maxf(_drop.meniscus.depth(b.pos) - Drop.hold(b.radius), 0.0)
 	if depth > Drop.SHALLOWS:
 		return
 	var out := b.pos - _drop.meniscus.center
@@ -8499,7 +8795,19 @@ func _eye_of(b: Body) -> Observer:
 	o.smell_range = Stats.seated(order, g, &"smell_range")
 	o.smell_bearing = _arc_in(order, g, &"smell_range")
 	o.touch_range = Stats.of(g, &"touch_range")
-	o.eyespot = Catalogue.worn_on(g, Catalogue.LIGHT) != &""
+	# **Its eye as yours is aimed** (normal_mode.gd's `_aim_sight`): about the arc
+	# the default order puts it on, sharp as its copies -- a water cell has no
+	# levels, as its beam has none.
+	var eye := Catalogue.worn_on(g, Catalogue.LIGHT)
+	o.eyespot = eye != &""
+	var sight := sight_of(eye, Genome.tier_of(g, eye))
+	var seat := order.find(eye) if o.eyespot else -1
+	o.sight_mid = Cilia.slot_bearing(seat) if seat >= 0 else 0.0
+	o.sight_half = float(sight[0])
+	o.sight_range = float(sight[1])
+	o.sight_core = float(sight[2])
+	o.sight_dark = float(sight[3])
+	o.sight_blur = float(sight[4])
 	o.ping_range = Stats.seated(order, g, &"ping_range")
 	o.ping_tier = Stats.seated_tier(order, g, &"ping_range")
 	o.ping_period = Stats.seated(order, g, &"ping_period")
@@ -8545,6 +8853,28 @@ static func _arc_in(order: Array, tiers: Dictionary, stat: StringName) -> float:
 static func _seat_of(order: Array, tiers: Dictionary, stat: StringName) -> int:
 	var organ := Stats.organ(order, tiers, stat)
 	return order.find(organ) if organ != &"" else -1
+
+
+## **The eye of [param key] at [param level]**, from the organ's own numbers
+## (docs/design/sight.md): `[half-field, reach in full light, core, share kept
+## in the dark, blur]`, angles in radians. All nought for no key: an eye that is
+## not worn sees nothing. Yours and every water cell's are read here, so the two
+## can never be different eyes.
+static func sight_of(key: StringName, level: int) -> Array:
+	if key == &"":
+		return [0.0, 0.0, 0.0, 0.0, 0.0]
+	var half := float(_number(key, &"sight_half_deg"))
+	var blur := Sight.blur_at(level, float(_number(key, &"sight_blur_deg")),
+		float(_number(key, &"sight_finest_deg")))
+	return [deg_to_rad(half), float(_number(key, &"sight_range")),
+		float(_number(key, &"sight_core")), float(_number(key, &"sight_dark")),
+		deg_to_rad(blur)]
+
+
+## The catalogue's number [param name] of [param key], 0 where it has none.
+static func _number(key: StringName, name: StringName) -> float:
+	var v: Variant = Catalogue.number(key, name)
+	return float(v) if v != null else 0.0
 
 
 ## **Body [param b] in slot [param i], as an observer**: its organs and its
@@ -8637,7 +8967,7 @@ func _read_smell(i: int, b: Body) -> Array:
 	var o := _body_eye(i, b)
 	if o.smell_range <= 0.0:
 		return []
-	_feel(o, _scan_for(b, o.smell_range), true, false, false)
+	_feel(o, _scan_for(b, o.smell_range), true, false)
 	return report_smell(o)
 
 
@@ -8648,18 +8978,19 @@ static func report_smell(o: Observer) -> Array:
 	return [[o.smell]]
 
 
-## `stigma.shadow`: the light blocked by bodies about its size or bigger and by
-## the rim, summed with a bearing, while any is.
+## `stigma.shadow`: what its eyespot sees -- every body in its field it is not
+## hidden from and the rim, each at how clearly, summed with a bearing -- while
+## it sees anything (docs/design/sight.md).
 func _read_shadow(i: int, b: Body) -> Array:
 	var o := _body_eye(i, b)
 	if not o.eyespot:
 		return []
-	_feel(o, _scan_for(b, SHADOW_RANGE), false, true, false)
+	_see(o, _scan_for(b, o.sight_range), false)
 	return report_shadow(o)
 
 
-## The report of the shade on [param o]'s eyespot: its bearing, how dark, and
-## that bearing in the world, while there is any and it wears an eyespot.
+## The report of what [param o]'s eyespot sees: its bearing, how clearly, and
+## that bearing in the world, while it sees anything and it wears an eyespot.
 static func report_shadow(o: Observer) -> Array:
 	if not o.eyespot:
 		return []
@@ -8952,7 +9283,8 @@ func _move_ruled(b: Body, delta: float) -> void:
 			b.dash_v = 0.0
 	# **Holding on** (game/mechanics/grip.gd): a cling at the rim keeps it there.
 	if b.clinging and _drop != null:
-		pace = Grip.held_pace(pace, Grip.at_rim(_drop.meniscus, b.pos, b.radius, b.stat_tether))
+		pace = Grip.held_pace(pace, Grip.at_rim(_drop.meniscus, b.pos, Drop.hold(b.radius),
+			b.stat_tether))
 	b.pos += _forward(b.heading) * pace * delta
 	b.speed = pace
 
@@ -9161,7 +9493,7 @@ func _drop_lose(index: int, cause: int) -> void:
 				_stat(&"died_chewed")
 			Cause.STARVED:
 				_stat(&"died_starved")
-				if b.radius >= CellBody.DIVIDE_RADIUS - 0.01:
+				if b.radius >= _top(b) - 0.01:
 					_stat(&"died_starved_r40")
 			Cause.POISONED:
 				_stat(&"died_poisoned")
@@ -9217,7 +9549,7 @@ func _separate_drop() -> void:
 			if b.seeded and not b.inert:
 				_push_local(b, true)
 				# A body the cell shoulders at the rim is held there too.
-				b.pos = m.contain(b.pos, b.radius)
+				b.pos = m.contain(b.pos, Drop.hold(b.radius))
 		# **Each device moves only what it owns** (shared-pond.md §1.2): the
 		# other player gives way on their own device, by the same area share.
 		if _pond:
@@ -9256,15 +9588,56 @@ func _separate_drop() -> void:
 				if pull > 0.0:
 					var toward := -offset / d
 					var part := _give_way(other.radius, b.radius)
-					b.pos = m.contain(b.pos + toward * (pull * part * PUSH_SHARE), b.radius)
+					b.pos = m.contain(b.pos + toward * (pull * part * PUSH_SHARE),
+						Drop.hold(b.radius))
 					other.pos = m.contain(other.pos - toward * (pull * (1.0 - part) * PUSH_SHARE),
-						other.radius)
+						Drop.hold(other.radius))
 				continue
 			var normal := offset / d if d > 0.001 else _forward(b.heading)
 			var share := _give_way(other.radius, b.radius)
-			b.pos = m.contain(b.pos + normal * (overlap * share * PUSH_SHARE), b.radius)
+			b.pos = m.contain(b.pos + normal * (overlap * share * PUSH_SHARE),
+				Drop.hold(b.radius))
 			other.pos = m.contain(other.pos - normal * (overlap * (1.0 - share) * PUSH_SHARE),
-				other.radius)
+				Drop.hold(other.radius))
+
+
+## **Grit is solid to the water as it is to you** (the owner, 2026-10-17: *"The water
+## cells go through the obstacles present in the water. That's unfair"*): every
+## living body this device moves that overlaps a speck of [member grit] is put back
+## on its surface, all the way, since a speck does not give. It slides round it
+## as it swims on. A floc is no body and drifts over grit as it does over cells, a
+## person is moved by their own device, and a mirror moves nothing it does not own.
+func _separate_grit() -> void:
+	if grit.is_empty() or grit_radius <= 0.0 or _mirror or _replay:
+		return
+	if _drop != null:
+		var m := _drop.meniscus
+		for at: Vector2 in grit:
+			_pair_ids.resize(0)
+			_drop.grid.query(at, grit_radius + _widest_now + Drop.GRID_SLACK, _pair_ids)
+			for j: int in _pair_ids:
+				var b := _cells[j]
+				if b.seeded and not b.inert and b.person == null:
+					_off_grit(b, at)
+					b.pos = m.contain(b.pos, Drop.hold(b.radius))
+		return
+	for i in _water:
+		var b := _cells[i]
+		if b.seeded and not b.inert:
+			for at: Vector2 in grit:
+				_off_grit(b, at)
+
+
+## Body [param b] put back on the surface of the speck at [param at], if it is in it.
+func _off_grit(b: Body, at: Vector2) -> void:
+	var offset := b.pos - at
+	var reach := b.radius + grit_radius
+	var d2 := offset.length_squared()
+	if d2 >= reach * reach:
+		return
+	var d := sqrt(d2)
+	var normal := offset / d if d > 0.001 else -_forward(b.heading)
+	b.pos = at + normal * reach
 
 
 ## **The sting** (docs/design/sting.md): a contact weapon. Every body whose sting
@@ -9405,22 +9778,22 @@ func _stung(target: int, at: Vector2, wound: float, by: int) -> void:
 func _contain_player(knock: bool) -> void:
 	var m := _drop.meniscus
 	# **Holding on** (game/mechanics/grip.gd): a cling at the rim stops the cell there.
-	if _cell.clinging() and Grip.at_rim(m, _cell.position, _cell.radius,
-			_cell.stat(&"tether")):
+	var hold := Drop.hold(_cell.radius)
+	if _cell.clinging() and Grip.at_rim(m, _cell.position, hold, _cell.stat(&"tether")):
 		_cell.velocity = Vector2.ZERO
-	if m.inside(_cell.position, _cell.radius):
+	if m.inside(_cell.position, hold):
 		return
 	var out := (_cell.position - m.center).normalized()
 	var into := _cell.velocity.dot(out)
-	_cell.position = m.contain(_cell.position, _cell.radius)
+	_cell.position = m.contain(_cell.position, hold)
 	if not knock:
 		return
 	_cell.bump(-out, Drop.SHORE_RESTITUTION)
-	_cell.position = m.contain(_cell.position, _cell.radius)
+	_cell.position = m.contain(_cell.position, hold)
 	_stat(&"shore_frames")
 	if into > Drop.SHORE_FELT_SPEED and _shore_clock <= 0.0:
 		_shore_clock = Drop.SHORE_GAP
-		var rim := m.nearest_rim(_cell.position)
+		var rim := _drop.shore_point(_cell.position, _cell.radius)
 		_stat(&"shored")
 		shored.emit(_cell.bearing_to(rim),
 			clampf(sqrt(into / maxf(_cell.impulse_speed(), 1.0)), 0.35, 1.0), rim)
@@ -9435,9 +9808,10 @@ func _place_first() -> void:
 	if not b.seeded or b.serial != _first_serial:
 		return
 	var at := _cell.position + _cell.velocity.normalized() * FIRST_DISTANCE
-	if not _drop.meniscus.inside(at, FIRST_INSET):
+	if not _drop.meniscus.inside(at, maxf(FIRST_INSET, Drop.hold(b.radius))):
 		at = _cell.position + (_drop.meniscus.center - _cell.position).normalized() \
 			* FIRST_DISTANCE
+	at = _drop.holds(at, b.radius)
 	b.pos = at
 	b.aim = at
 	b.flee_from = at
@@ -9635,9 +10009,12 @@ func _make_one(players: PackedVector2Array, reaches: PackedFloat32Array) -> int:
 	var hides := PackedFloat32Array()
 	for k in players.size():
 		hides.append(Drop.hide_reach(reaches[k], DREAD_RANGE, not drifter))
+	# **A newborn comes into the water in the margin**, and **the food is kept
+	# fuller there** (margin.md §2.2, §2.3).
 	var candidates := _drop.spawn_candidates(players, hides,
-		turn if turn < players.size() else 0)
-	var pick := Replenish.thinnest(candidates, _thinness)
+		turn if turn < players.size() else 0, not drifter,
+		DRIFTER_MAX if drifter else CellBody.BASE_RADIUS)
+	var pick := Replenish.thinnest(candidates, _thinness_food if drifter else _thinness)
 	if pick < 0:
 		return -1
 	var index := _spawn(candidates[pick], drifter)
@@ -9680,9 +10057,19 @@ func _spawn_ahead(from: Vector2, heading: float, reach: float) -> int:
 	for attempt in AHEAD_TRIES:
 		var spread := AHEAD_SPREAD + AHEAD_WIDEN * float(attempt)
 		var at := from + _forward(heading + randf_range(-1.0, 1.0) * spread) * reach
-		if _drop.meniscus.inside(at, Drop.SPAWN_INSET):
+		if _drop.meniscus.inside(at, maxf(Drop.SPAWN_INSET, Drop.hold(DRIFTER_MAX))):
 			return _spawn(at, true)
 	return -1
+
+
+## **One body of a drop's first fill**: a drifter or a newborn by the one share
+## (water-evolves.md §2), anywhere it can be -- past its own hold (margin.md §2.1),
+## so the film piles nobody on its hold's circle, where a run starts.
+func _fill_one() -> void:
+	var drifter := randf() < DRIFTER_SHARE
+	var inset := maxf(Drop.FILL_INSET,
+		Drop.hold(DRIFTER_MAX if drifter else CellBody.BASE_RADIUS))
+	_spawn(_drop.uniform_point(inset), drifter, true)
 
 
 ## **The one door every new body comes in by** (§12) -- the spawner, the first
@@ -9732,6 +10119,10 @@ func _spawn(at: Vector2, drifter: bool, fill := false, body_radius := 0.0,
 		_give_back_by_peer(b)
 	# Expressed whole, as a run's first cell is: after the toxin, which is worn.
 	b.dna = b.genome.duplicate()
+	# **Where the water is deep enough for it** (margin.md §2.1): a point drawn
+	# before its size was is held at the hold its size has.
+	if _drop != null:
+		at = _drop.holds(at, b.radius)
 	b.pos = at
 	b.aim = at
 	b.flee_from = at
@@ -9822,7 +10213,8 @@ func _divide(i: int, b: Body) -> PackedInt32Array:
 	var at := b.pos
 	var heading := b.heading
 	var brain: Variant = b.brain
-	var r := CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)
+	# Half her mother's area, at the size her lineage divides at (margin.md §1.1).
+	var r := CellBody.daughter_radius(b.radius)
 	var changes := mutate >= 1.0 or randf() < mutate
 	var pair: Array = Drop.daughter_dna(b.dna) if changes \
 		else [b.dna.duplicate(), b.dna.duplicate(), &""]
@@ -9851,7 +10243,7 @@ func _divide(i: int, b: Body) -> PackedInt32Array:
 				if body.has(gene) and not dna.has(gene):
 					dna[gene] = int(body[gene])
 			_stat(&"born_gifted")
-		var j := _spawn(_drop.meniscus.contain(points[k], r), false, false, r, body)
+		var j := _spawn(_drop.holds(points[k], r), false, false, r, body)
 		var d := _cells[j]
 		d.heading = heading
 		d.dna = dna
@@ -9939,15 +10331,19 @@ func _free_slot_drop() -> int:
 ## (`Drop.takes_back`), and the gene waits for the next.
 func _give_back_by_peer(b: Body) -> void:
 	var gene := _peer_short()
-	if gene == &"" or not Drop.takes_back(b.genome, gene):
+	if gene == &"" or not Drop.takes_back(b.genome, gene, b.riders):
 		return
 	# Owed until its count is met ([member _peer_owed]); one, for a due gene no
 	# count of this run's owed -- a kept drop's queue, put back.
 	_peer_owed[gene] = int(_peer_owed.get(gene, 1)) - 1
 	if int(_peer_owed[gene]) <= 0:
 		_gene_floor.due.erase(gene)
+	var riders := Riders.copy(b.riders)
 	Drop.give_back(b.genome, gene, CellBody.slots_for(b.radius),
-		Catalogue.tagged(Catalogue.SENSE), randi(), randi() % 2 == 0)
+		Catalogue.tagged(Catalogue.SENSE), randi(), randi() % 2 == 0, riders,
+		CellBody.inside_for(b.radius))
+	b.riders = riders
+	b.dna_riders = Riders.copy(riders)
 	b.derive()
 	_stat(&"gene_floor_peer")
 	_stat(_floor_stat(&"gene_floor_peer", gene))
@@ -9983,10 +10379,14 @@ func _arm_the_founders() -> void:
 			if owed <= 0:
 				break
 			if not b.seeded or b.inert or b.drifter or b.person != null \
-					or not Drop.takes_back(b.genome, gene):
+					or not Drop.takes_back(b.genome, gene, b.riders):
 				continue
+			var riders := Riders.copy(b.riders)
 			Drop.give_back(b.genome, gene, CellBody.slots_for(b.radius),
-				Catalogue.tagged(Catalogue.SENSE), randi(), randi() % 2 == 0)
+				Catalogue.tagged(Catalogue.SENSE), randi(), randi() % 2 == 0, riders,
+				CellBody.inside_for(b.radius))
+			b.riders = riders
+			b.dna_riders = Riders.copy(riders)
 			b.dna = b.genome.duplicate()
 			b.derive()
 			_refresh_body(b)
@@ -10004,6 +10404,20 @@ func _carriers() -> Dictionary:
 		for gene: StringName in b.genome:
 			var kind := Genome.variety(gene)
 			counts[kind] = int(counts.get(kind, 0)) + 1
+		# **And a form that only rides, in its genes' slots** -- the venom in its
+		# mouth's, the toxin's one way outside since 2026-10-16: a carrier of that
+		# variety too, once, unless it wears it as well.
+		var riding := {}
+		for host: Variant in b.riders:
+			for one: Variant in b.riders[host]:
+				if one is Array and Genome.is_riding_form(StringName(one[0])):
+					riding[Genome.variety(StringName(one[0]))] = true
+		for kind: Variant in riding:
+			var worn := false
+			for gene: StringName in b.genome:
+				worn = worn or Genome.variety(gene) == kind
+			if not worn:
+				counts[kind] = int(counts.get(kind, 0)) + 1
 	return counts
 
 
@@ -10032,6 +10446,14 @@ func _scan_reach() -> float:
 
 func _thinness(at: Vector2) -> int:
 	return _count_living_at(at, Drop.SPAWN_SCAN)
+
+
+## **How full a place is, for food** (margin.md §2.2): [method _thinness], counted
+## [constant Drop.MARGIN_FOOD] times emptier in the margin a newborn can reach -- so
+## the spawner keeps it that much fuller.
+func _thinness_food(at: Vector2) -> float:
+	var n := float(_thinness(at))
+	return n / Drop.MARGIN_FOOD if _drop.in_margin(at) else n
 
 
 func _count_living_at(at: Vector2, reach: float) -> int:
@@ -10245,7 +10667,7 @@ func census_line() -> String:
 		for k in sizes.size():
 			if gape > sizes[k]:
 				threats[k] += 1
-		if b.radius >= CellBody.DIVIDE_RADIUS - 0.01:
+		if b.radius >= _top(b) - 0.01:
 			big += 1
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20260930
@@ -10322,7 +10744,7 @@ func lineage_line() -> String:
 			tails += 1
 		if b.notice > 0.0 or b.see_big > 0.0:
 			sighted += 1
-		if b.radius >= CellBody.DIVIDE_RADIUS - 0.01:
+		if b.radius >= _top(b) - 0.01:
 			big += 1
 		var parts := PackedStringArray()
 		for gene: StringName in Catalogue.live():
@@ -10398,6 +10820,19 @@ func rarity_line() -> String:
 		made, 100.0 * float(_n(&"gene_floor")) / float(maxi(made, 1)), ", ".join(drifters),
 		_n(&"gene_floor_peer"), peers_made,
 		100.0 * float(_n(&"gene_floor_peer")) / float(maxi(peers_made, 1)), ", ".join(peers)]
+
+
+## **The light, for the dev app's readout** (docs/design/daylight.md §3.6): `[how
+## far into the day the drop is, as a share of the day, the light where the cell
+## is]` -- the share -1 where there is no day of this field's own to say (a
+## friend's drop seen from inside it, whose light is the host's, or the light off),
+## and nothing at all in today's water. So the owner can say what time it was when
+## something felt wrong. Asking moves nothing.
+func daylight_counts() -> Array:
+	if _cell == null or (_drop == null and not _mirror):
+		return []
+	var day := day_time()
+	return [day / day_length() if day >= 0.0 else -1.0, light_at(_cell.position)]
 
 
 ## **The water's families, for the dev app's readout** (lineage.md §4, §6.4):

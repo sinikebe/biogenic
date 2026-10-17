@@ -277,6 +277,11 @@ screens of water, most of which a run never visits.
 point along a ray and the nearest point of the rim. The drop is a disc of
 `RADIUS` 6,000 with a band `SHALLOWS` 240 inside the rim.
 
+**Since the margin (docs/design/margin.md §2.1) a body is held at its hold, not its
+radius**: 30 µm from the rim for every unit of its radius, where the water is deep
+enough for it. Read `RADIUS - r` below as `RADIUS - hold(r)`. The shallows are
+measured from each body's hold, and its senses find the edge at its shore.
+
 - **A water body is contained**: after it moves, a centre past `RADIUS - r` is
   put back on that circle. Nothing is lost and nothing bounces.
 - **A drifting body turns off the shore** -- a drifter, or a hunter at rest or
@@ -293,6 +298,14 @@ point along a ray and the nearest point of the rim. The drop is a disc of
   after one knock.
 - **Grit stays in the water**: `motes.gd` places no mote past the rim, the
   authored first mote included. At the edge the meniscus is the first knock.
+- **Grit is solid to the water too** (2026-10-17; the owner: *"The water cells go
+  through the obstacles present in the water. That's unfair"*). The run hands the
+  field the grit every frame, and `food.gd`'s `_separate_grit` puts every living
+  water cell this device moves back on the surface of a speck it swam into, all
+  the way, since grit does not give. It slides round it and swims on. A floc
+  drifts over grit as it does over cells. Grit is the player's own, round the
+  player, so in a shared pond a host's water meets the host's grit and not a
+  guest's.
 
 A wall at your back is a real position: nothing comes at you from behind it.
 That falls out of containment and nothing was added for it.
@@ -690,6 +703,14 @@ None of the numbers is new:
 | a dash | `DASH_COST_BY_TIER` × 36 s | `cell.gd` |
 | spat out by venom | `VENOM_COST_BY_TIER` × 36 s | `cell.gd` |
 | a meal | `MEAL` × `clamp(prey r / eater r, 0.35, 1.40)` of the bar; a floc the same, with no growth and no gene | `food.gd`, `metabolism.gd` |
+
+**2026-10-16, the light** (daylight.md §2.3): `plastid`'s 0.12–0.34 is what it makes
+in full sun now. Every body is paid `sun × the light where it is`, which falls at
+night and toward the drop's deep middle, and absorption is added after it, as
+before. The light moves within a step, so a body takes its exact mean over the step
+it is paid for -- a far body stepped on its tick and the player stepped every frame
+are paid one light -- and the arithmetic of a tank is unchanged. `food.gd`'s
+`Body.income` is `Body.absorbs`; a tank that cannot move is judged in the dark.
 
 The player's flagellum pays per beat, on the speed each beat adds; a water body
 swims at a steady speed and pays for holding it against the drag -- the same
@@ -2025,6 +2046,12 @@ key, sixty in all; the genome book is keyed on (id, meals); SETTLE goes as a
 floc comes into the guest's reach and CLEAR as it leaves it or goes. Today's
 water, which only a tool opens now (`normal_mode.gd`'s `drop = 0`), keys its
 entries on its serials under the same cap.
+
+**2026-10-16, the light** (daylight.md §5): the host's drop has a day, and its sky
+rides in every POND snapshot: `daylight(u16, /65535)` after the loads, so the header
+is 12 bytes and the worst case 12 + 60 x 19 + 31 = 1,183, still one datagram, under
+`Wire.PROTOCOL` 10. A guest's light is the host's surface light times what gets
+through the water over its place under the host's rim.
 
 ### 10.5 What the referee must learn, and `Wire.RULES`
 

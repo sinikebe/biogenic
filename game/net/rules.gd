@@ -188,6 +188,9 @@ static func text() -> String:
 	put.call("cell.DIVIDE_RADIUS", CellBody.DIVIDE_RADIUS)
 	put.call("cell.DIVIDE_SPLIT", CellBody.DIVIDE_SPLIT)
 	put.call("cell.daughter_radius", CellBody.daughter_radius(CellBody.DIVIDE_RADIUS))
+	# The most a body grows (margin.md §1.1), which the referee bounds a size by. The
+	# floor a lineage's DNA sets is the plan's ladder, which the fingerprint holds.
+	put.call("cell.RADIUS_MAX", CellBody.RADIUS_MAX)
 	put.call("cell.MEND_SECONDS", CellBody.MEND_SECONDS)
 	put.call("cell.mended(0.5,10)", CellBody.mended(0.5, 10.0))
 	put.call("cell.IMPULSE_KICK", CellBody.IMPULSE_KICK)
@@ -205,10 +208,13 @@ static func text() -> String:
 	# player that fits on contact (row 15), armour makes a body bigger to a mouth
 	# (row 5).
 	put.call("drop.FLOC_GROWTH", FoodField.Drop.FLOC_GROWTH)
-	var held: Vector2 = FoodField.Drop.new().meniscus.contain(Vector2(7000.0, 125.0),
+	# Held where the water is deep enough for a daughter (margin.md §2.1): the film
+	# per unit of radius, and the rim's hold, by a sample.
+	put.call("drop.FILM", FoodField.Drop.FILM)
+	var held: Vector2 = FoodField.Drop.new().holds(Vector2(7000.0, 125.0),
 		Referee.DAUGHTER_RADIUS)
-	put.call("drop.contain(7000,125;r28.28).x", held.x)
-	put.call("drop.contain(7000,125;r28.28).y", held.y)
+	put.call("drop.holds(7000,125;r28.28).x", held.x)
+	put.call("drop.holds(7000,125;r28.28).y", held.y)
 	put.call("food.swallows_player(not hunting, on contact)",
 		FoodField.swallows_player(false, FoodField.CONTACT_SWALLOW, 20.0, 30.0))
 	put.call("food.armoured_size(r30, pellicle 2)",
@@ -232,8 +238,6 @@ static func text() -> String:
 		CellBody.bite_damage(0.3, 20.0, 30.0, 1.3, 0.0))
 	put.call("cell.bite_damage(0.3,40,r30,1,astern)",
 		CellBody.bite_damage(0.3, 40.0, 30.0, 1.0, PI))
-	put.call("cell.VENOM_ARC_DEG", CellBody.VENOM_ARC_DEG)
-	put.call("cell.VENOM_SIDES", CellBody.VENOM_SIDES)
 	put.call("cell.HARM_PER_STACK", CellBody.HARM_PER_STACK)
 	put.call("cell.DOSE_TAU_BY_KIND", CellBody.DOSE_TAU_BY_KIND)
 	put.call("cell.DOSE_GONE", CellBody.DOSE_GONE)

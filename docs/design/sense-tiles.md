@@ -24,6 +24,13 @@ the body is (three-senses.md §2.6, §2.7). Under it a thin bar says how much.
 **The beam has none.** Its rays already say what they strike, on the screen
 where they strike it (the owner: *"Beam does not need one"*).
 
+**2026-10-16, the light** (daylight.md §3.3): a fifth tile, for the organ that lives
+on light. `plastid` drives no membrane channel, so its tile is keyed by the stat it
+provides, `sun` -- a `readout` organ with no channel is keyed by its stat, worn being
+the body's provider of it and carried the DNA's. Its glow and its bar are both the
+light where the cell is, 0 to 1, the same for one copy or three. It sits first,
+beside the energy gauge, whose rate it explains.
+
 **"See works like smell, on the organ itself"**: the eyespot's tile and the nose's
 are lit the same way, by the same glow the body's organ shows, so a player reads
 one sense the way they read the other.

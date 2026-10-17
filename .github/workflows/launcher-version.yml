@@ -29,7 +29,12 @@ concurrency:
 jobs:
   check:
     name: Launcher version bump
-    runs-on: ubuntu-latest
+    # **Where it runs** (docs/ci-runner.md §1): **on the self-hosted runner**,
+    # main and dev alike, unless the repository variable CI_RUNNER names another
+    # label (ubuntu-latest sends everything back to GitHub's machines). A fork's
+    # pull request never reaches the runner, whatever the variable says: its
+    # code is a stranger's, and the runner is on the owner's own machine.
+    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || (vars.CI_RUNNER || 'self-hosted') }}
 
     steps:
       - name: Check out

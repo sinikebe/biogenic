@@ -331,6 +331,10 @@ usual.
 
 ### 3.7 A placement lands on the lift, because the press is ambiguous
 
+> **Superseded in part, 2026-10-16** (docs/design/placing.md): a tap only chooses a
+> slot, and a button under the figure writes, saying what it writes. The press is no
+> longer ambiguous, because a tap never writes, so nothing lands on the lift.
+
 **This is the one part of §9.7's gesture the move had to change, and leaving it
 alone was a blocker rather than a caveat.** A pointer going *down* on an armed
 locus is two things at once: it is the confirming second tap of a placement, and

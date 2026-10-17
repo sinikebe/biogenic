@@ -3,6 +3,10 @@ extends Control
 ## in this file should need editing to reskin a game's launcher.
 ##
 ## Update logic lives in UpdateService; this file only drives the UI.
+##
+## Never move or rename this scene, res://addons/launcher/launcher.tscn. It is
+## every game's main scene, the sync cannot change a game's project.godot, and
+## the README tells games to return here by that path.
 
 ## Emitted when one of [member LauncherConfig.extra_buttons] is pressed, with
 ## that button's label. Connect it from [constant HOOKS_PATH]'s
@@ -10,9 +14,18 @@ extends Control
 ## modifying the launcher.
 signal custom_button_pressed(label: String)
 
-## Emitted when Play is pressed, before it changes scene. With no play scene
-## configured, connecting this takes the Play action over entirely.
+## Emitted when Play is pressed, before it fades out and changes scene. With no
+## play scene configured, connecting this takes the Play action over entirely.
 signal play_requested()
+
+## Emitted when Back reaches the launcher's screen and the launcher did not take
+## it to close one of its dialogs or, with the quit on, to cancel an update. A
+## game that turns get_tree().quit_on_go_back off to handle Back itself here --
+## a panel of its own, a scene around the launcher -- connects this rather than
+## handling NOTIFICATION_WM_GO_BACK_REQUEST, which also arrives for a Back the
+## launcher took. Such a game gets a Back during an update too, and can call
+## UpdateService.cancel() itself.
+signal back_requested()
 
 ## The game's own script for the launcher's screen, run before it builds
 ## anything when the file exists. See _run_opening_hook().
@@ -68,8 +81,16 @@ static var _registered_catalogs: Dictionary = {}
 @onready var _overlay_primary: Button = %OverlayPrimary
 @onready var _overlay_secondary: Button = %OverlaySecondary
 
+## LauncherConfig.play_fade_seconds on an app build whose config predates it.
+## Keep it the same as that field's default.
+const DEFAULT_PLAY_FADE_SECONDS := 0.3
+const LauncherVeil := preload("res://addons/launcher/launcher_veil.gd")
+
 var _config: LauncherConfig
 var _menu_box: BoxContainer
+## Set once Play has started to leave for the game, so a second press, from the
+## keyboard or a gamepad during the fade, does not start it again.
+var _leaving := false
 var _first_button: Button = null
 ## Guards the re-entrancy between _apply_layout() and minimum_size_changed.
 var _laying_out := false
@@ -94,6 +115,14 @@ var _hooks: Object = null
 
 func _ready() -> void:
 	_config = BuildInfo.config
+	# On this screen Back quits as the game's project settings say, whatever the
+	# scene before left it at. The launcher only closes its own dialogs on Back
+	# and turns the quit off when it leaves for the game; see _notification().
+	# Before the hook, so a game that handles Back here itself -- a panel of its
+	# own, a scene around the launcher -- can turn it off and is not quit from
+	# under. With the override, as Godot read it at startup: a game may have set
+	# it for Android alone, as quit_on_go_back.android.
+	get_tree().quit_on_go_back = bool(ProjectSettings.get_setting_with_override("application/config/quit_on_go_back"))
 	# First, so whatever the game sets up -- its catalogs, a language the player
 	# chose -- is already in force when the screen below is built.
 	_run_opening_hook()
@@ -138,17 +167,55 @@ func _ready() -> void:
 		_first_button.grab_focus()
 	_apply_layout.call_deferred()
 
-	if _config.check_on_launch and _config.updates_enabled():
+	# Not when an update has already got past checking. The launcher opens again
+	# each time a game returns to it, and a check from RESTART_REQUIRED compares
+	# against the build still mounted, so it would offer an update that is already
+	# downloaded and staged as one to download again. The update button is not
+	# guarded: from INSTALL_HANDOFF it still checks, after a cancelled installer.
+	var past_checking := UpdateService.state in [
+		UpdateService.State.RESTART_REQUIRED,
+		UpdateService.State.INSTALL_HANDOFF,
+		UpdateService.State.NEEDS_PERMISSION,
+	]
+	if _config.check_on_launch and _config.updates_enabled() and not past_checking:
 		# Let the launcher paint before touching the network.
 		await get_tree().create_timer(0.4).timeout
 		await UpdateService.check_for_updates()
 
 
-## Follows a language change made while the launcher is showing. The menu and
-## the title translate themselves; the nodes refilled here are filled with tr()
-## instead -- so a placeholder can be filled after translating -- and nothing
-## else would ever refill them.
+## Handles Back, and follows a language change made while the launcher is
+## showing. The menu and the title translate themselves; the nodes refilled here
+## are filled with tr() instead -- so a placeholder can be filled after
+## translating -- and nothing else would ever refill them.
 func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
+		# Before _ready() there is no dialog to close, and _overlay is not set yet.
+		if not _screen_built:
+			return
+		if _leaving:
+			# Play is already on its way into the game; Back neither quits nor stops it.
+			_hold_quit_for_this_back()
+			return
+		# In the tree, not just visible: a launcher kept hidden beside the game
+		# can hold a dialog the player cannot see, which must not eat their Back.
+		if _overlay.is_visible_in_tree():
+			_hide_overlay()
+			_hold_quit_for_this_back()
+		elif get_tree().quit_on_go_back and _update_button.is_visible_in_tree() and UpdateService.is_busy():
+			# Back would quit: a check or download under way is stopped first, as the
+			# bar's Cancel does (#25), and the next Back quits. With the quit off,
+			# the game handles Back, and may have a panel of its own to close.
+			UpdateService.cancel()
+			_hold_quit_for_this_back()
+		else:
+			back_requested.emit()
+		return
+	if what == NOTIFICATION_EXIT_TREE:
+		# Leaving for the game, whose run must not end on one stray Back. Switched
+		# off at runtime, not in project.godot: a content pack cannot change a
+		# project setting. The game turns it back on in its own scene if it wants.
+		get_tree().quit_on_go_back = false
+		return
 	if what == NOTIFICATION_PREDELETE:
 		# A hooks script that extends Object is neither reference-counted nor in
 		# the tree, so nothing else would ever free it.
@@ -398,17 +465,90 @@ func _text_align_for(h_align: int) -> HorizontalAlignment:
 # ---------------------------------------------------------------------------
 
 func _on_play_pressed() -> void:
+	if _leaving:
+		return
 	# Asked before emitting: a one-shot connection -- which is what
 	# `await launcher.play_requested` makes -- is dropped during the emission.
 	var answered := not play_requested.get_connections().is_empty()
 	play_requested.emit()
+	if not is_inside_tree():
+		# A listener has already left for the game itself, changing scene from
+		# play_requested; there is no launcher left to fade or to change from.
+		return
 	if _config.play_scene.is_empty():
 		# A game listening to play_requested has taken Play over; only Play that
 		# nothing answers explains itself.
 		if not answered:
 			_explain_play()
 		return
-	get_tree().change_scene_to_file(_config.play_scene)
+	_leaving = true
+	await _fade_into(_config.play_scene, _play_fade_seconds())
+
+
+## LauncherConfig.play_fade_seconds, read by name: the config is the installed
+## app build's, and one from before the field has no such member.
+func _play_fade_seconds() -> float:
+	if "play_fade_seconds" in _config:
+		return maxf(0.0, float(_config.get("play_fade_seconds")))
+	return DEFAULT_PLAY_FADE_SECONDS
+
+
+## Fades the launcher out to background_color, loads [param scene] under that
+## colour, then fades the colour away over the game (#27). A cut from the
+## launcher's moving background straight to the game's first frame is the first
+## thing a player sees of the game proper.
+##
+## The veil is the launcher's own child while it fades in, so a game that changes
+## scene later, during the fade, takes it down with the launcher; one that changes
+## scene straight from play_requested never gets one (see _on_play_pressed()).
+## Only once the fade is done does it move to the root, where it outlives the
+## scene change: the frame between the two scenes then shows the veil rather than
+## the project's clear colour, which is the game's own setting and may be any
+## colour.
+func _fade_into(scene: String, seconds: float) -> void:
+	if seconds <= 0.0:
+		_change_to(scene)
+		return
+	var layer := CanvasLayer.new()
+	layer.layer = 128
+	# A game that pauses its tree as it starts must not leave the veil up.
+	layer.process_mode = Node.PROCESS_MODE_ALWAYS
+	var veil := LauncherVeil.new()
+	veil.color = Color(_config.background_color, 0.0)
+	veil.set_anchors_preset(Control.PRESET_FULL_RECT)
+	# The veil takes the mouse, and the keyboard's focus with nowhere to move it:
+	# with nothing focused, Tab would focus the menu again for Enter to press.
+	veil.mouse_filter = Control.MOUSE_FILTER_STOP
+	veil.focus_mode = Control.FOCUS_ALL
+	for side: Side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
+		veil.set_focus_neighbor(side, ^".")
+	veil.focus_next = ^"."
+	veil.focus_previous = ^"."
+	layer.add_child(veil)
+	add_child(layer)
+	veil.grab_focus()
+
+	# In real time: a game that came back here with Engine.time_scale at 0 would
+	# otherwise never get past the fade.
+	var fade_out := create_tween().set_ignore_time_scale()
+	fade_out.tween_property(veil, "color:a", 1.0, seconds)
+	await fade_out.finished
+
+	layer.reparent(get_tree().root)
+	veil.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	veil.focus_mode = Control.FOCUS_NONE
+	veil.lift(seconds)
+	_change_to(scene)
+
+
+## Loads [param scene], or, when it cannot be loaded, leaves the launcher usable:
+## the error is in the log, and Play can be pressed again.
+func _change_to(scene: String) -> void:
+	if get_tree().change_scene_to_file(scene) != OK:
+		_leaving = false
+		# Focus left with the veil; a keyboard or gamepad needs somewhere to start.
+		if _first_button != null:
+			_first_button.grab_focus()
 
 
 func _explain_play() -> void:
@@ -423,8 +563,12 @@ func _on_quit_pressed() -> void:
 
 
 ## The update button is the single entry point: it checks, then downloads, then
-## restarts, depending on where the updater currently is.
+## restarts, depending on where the updater currently is -- and while it is busy,
+## cancels.
 func _on_update_pressed() -> void:
+	if UpdateService.is_busy():
+		UpdateService.cancel()
+		return
 	match UpdateService.state:
 		UpdateService.State.CONTENT_READY, UpdateService.State.BINARY_READY:
 			await _prompt_update()
@@ -465,13 +609,7 @@ func _explain_install_handoff() -> void:
 func _refresh_update_ui() -> void:
 	_status_label.text = UpdateService.status_text()
 
-	var busy := UpdateService.state in [
-		UpdateService.State.CHECKING,
-		UpdateService.State.DOWNLOADING,
-		UpdateService.State.VERIFYING,
-	]
 	_progress.visible = UpdateService.state == UpdateService.State.DOWNLOADING
-	_update_button.disabled = busy
 
 	# A fresh install that has never reached the network has no notes to show,
 	# and a button that only opens "nothing recorded yet" is worse than no button.
@@ -486,6 +624,12 @@ func _refresh_update_ui() -> void:
 	# scene properties to keep in step.
 	_notes_button.text = tr("What's new")
 
+	if UpdateService.is_busy():
+		# Never a disabled button with no way out: busy, it stops the check or
+		# download (#25). The status line says what is under way.
+		_update_button.text = tr("Cancel")
+		return
+
 	match UpdateService.state:
 		UpdateService.State.BINARY_READY:
 			_update_button.text = tr("Update app")
@@ -495,10 +639,6 @@ func _refresh_update_ui() -> void:
 			_update_button.text = tr("Install")
 		UpdateService.State.RESTART_REQUIRED:
 			_update_button.text = tr("Restart")
-		UpdateService.State.CHECKING:
-			_update_button.text = tr("Checking…")
-		UpdateService.State.DOWNLOADING, UpdateService.State.VERIFYING:
-			_update_button.text = tr("Working…")
 		UpdateService.State.UNAVAILABLE when UpdateService.manual_download_needed:
 			_update_button.text = tr("Open releases page")
 		_:
@@ -642,6 +782,27 @@ func _fit_overlay() -> void:
 	# something recalculates the scroll's minimum size, it keeps its old height.
 	# A window made taller would otherwise leave the text in its old, smaller box.
 	_overlay_scroll.update_minimum_size()
+
+
+## Keeps the Back that just closed a dialog, or cancelled an update, from
+## quitting as well. Godot asks
+## quit_on_go_back in root's go_back_requested, emitted straight after this
+## notification, so the game's setting is put back only after that, deferred.
+func _hold_quit_for_this_back() -> void:
+	var tree := get_tree()
+	if not tree.quit_on_go_back:
+		return
+	tree.quit_on_go_back = false
+	_release_quit.call_deferred()
+
+
+## Ends _hold_quit_for_this_back(), unless the launcher left the tree in between
+## -- a tap on Play handled in the same frame as the Back. NOTIFICATION_EXIT_TREE
+## has then already turned the quit off for the game, and turning it back on
+## would let one stray Back end the run.
+func _release_quit() -> void:
+	if is_inside_tree():
+		get_tree().quit_on_go_back = true
 
 
 func _hide_overlay() -> void:

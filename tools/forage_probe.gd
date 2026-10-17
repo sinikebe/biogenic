@@ -136,6 +136,9 @@ var _fired_stacks := PackedFloat64Array([0.0, 0.0, 0.0])
 var _poison_frames: Array[int] = []
 var _bites := 0
 var _bites_stern := 0
+## The stern's arc a bite is counted on, in degrees: the 110 that venom at the stern
+## once guarded, before it rode the mouth alone.
+const STERN_DEG := 110.0
 var _bites_unplaced := 0
 var _bitten_now: Array[float] = []
 var _wound_was := -1.0
@@ -499,7 +502,7 @@ func _toxic(genome: Variant) -> bool:
 ## the record it fired from -- the cell's own, as the run handed them over.
 func _on_toxin_fired(how: int) -> void:
 	_fired[how] += 1
-	var record: int = [FoodField.HOW_BITE, FoodField.HOW_STING, FoodField.HOW_POISON][how]
+	var record: int = [FoodField.HOW_BITE, FoodField.HOW_DART, FoodField.HOW_POISON][how]
 	var toxins: PackedFloat64Array = _food.get("toxins")
 	for r in range(0, toxins.size(), FoodField.TOX_STRIDE):
 		if int(toxins[r]) == record:
@@ -515,7 +518,7 @@ func _on_bitten(bearing: float, _strength: float) -> void:
 
 ## **A bite on the cell**, found by its wound: a frame where it rose by more than
 ## [constant BITE_JUMP]. Placed by the bearing `bitten` gave that frame -- on the
-## stern when within `VENOM_ARC_DEG / 2` of it -- unless the cell's own bite
+## stern when within [constant STERN_DEG] / 2 of it -- unless the cell's own bite
 ## said one too, when it is counted but not placed.
 func _count_bites() -> void:
 	var cell: Node = _run.get("_cell")
@@ -523,7 +526,7 @@ func _count_bites() -> void:
 	if _wound_was >= 0.0 and wound - _wound_was > BITE_JUMP:
 		_bites += 1
 		if _bitten_now.size() == 1:
-			var reach := deg_to_rad(CellBody.VENOM_ARC_DEG) * 0.5
+			var reach := deg_to_rad(STERN_DEG) * 0.5
 			if absf(angle_difference(PI, _bitten_now[0])) <= reach:
 				_bites_stern += 1
 		else:
@@ -538,7 +541,7 @@ func _report_toxin() -> void:
 	var toxins: PackedFloat64Array = _food.get("toxins")
 	var carried := PackedStringArray()
 	for r in range(0, toxins.size(), FoodField.TOX_STRIDE):
-		carried.append("%s %.0f" % [["bite", "sting", "poison", "swallow"][int(toxins[r])],
+		carried.append("%s %.0f" % [["bite", "sting", "poison", "swallow", "dart"][int(toxins[r])],
 			toxins[r + 2]])
 	# A poison said in the frame the cell was swallowed went into its swallower.
 	var swallowed := _end.begins_with("eaten (swallowed)") and not _poison_frames.is_empty() \

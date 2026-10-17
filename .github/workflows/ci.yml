@@ -24,13 +24,35 @@ env:
 jobs:
   build:
     name: Export check
-    runs-on: ubuntu-latest
+    # **Where it runs** (docs/ci-runner.md §1): **on the self-hosted runner**,
+    # main and dev alike, unless the repository variable CI_RUNNER names another
+    # label (ubuntu-latest sends everything back to GitHub's machines). A fork's
+    # pull request never reaches the runner, whatever the variable says: its
+    # code is a stranger's, and the runner is on the owner's own machine.
+    runs-on: ${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && 'ubuntu-latest' || (vars.CI_RUNNER || 'self-hosted') }}
 
     steps:
       - name: Check out
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+
+      - name: Keep temporary files on disk
+        # **The runner's own temp folder, not /tmp** (docs/ci-runner.md §4). A
+        # self-hosted container's /tmp may be memory: Debian 13 mounts a tmpfs
+        # there. Godot's export templates, a 1 GB download unpacked beside itself
+        # by ci/install_godot.sh's mktemp, filled a 1 GB container that way and
+        # the unpacking was killed. RUNNER_TEMP is on the runner's disk and
+        # emptied after every job; on GitHub's machines this changes nothing.
+        run: echo "TMPDIR=${RUNNER_TEMP}" >> "$GITHUB_ENV"
+
+      - name: Start from no saved data
+        # A self-hosted runner keeps its disk between jobs (docs/ci-runner.md), so
+        # one run's worlds, cells, library and settings would still be in user://
+        # for the next, and a probe would start from them. Only the game's own
+        # folder goes: the export templates beside it stay. On GitHub's machines
+        # there is nothing to remove.
+        run: rm -rf "${HOME}/.local/share/godot/app_userdata/Biogenic"*
 
       - name: Check the translation template is current
         # The .pot is committed because Godot 4.7 cannot generate one headlessly,
@@ -54,7 +76,8 @@ jobs:
           java-version: "17"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
+        # Pinned to a commit (the template's): a third-party action runs as this job.
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           packages: "platform-tools build-tools;34.0.0"
 
@@ -242,7 +265,7 @@ jobs:
           if ! out=$(~/godot/godot --headless --path . --fixed-fps 60 \
                        --quit-after 660 res://tools/drive.tscn -- \
                        --size=1280x720 --seed=12345 \
-                       --radius=40 --genome="$genome" --trace=2.0 \
+                       --radius=42 --genome="$genome" --trace=2.0 \
                        --press=1.0:144,624,0 --press=1.2:1064,540,1 \
                        --press=1.6:1184,624,2 --lift=1.7:2 --slide=1.8:200,624,0 \
                        --lift=2.0:0 --lift=2.1:1 \
@@ -258,10 +281,11 @@ jobs:
             echo "::error::script errors under input"
             fail=1
           fi
-          # The cell is forced to DIVIDE_RADIUS, so it splits at once and the
-          # press at 3.0s is a held lean -- the turn hard over to starboard. A
-          # daughter is half the area, so r40 becomes r28.28: any r2x in the
-          # trace is a division that was answered.
+          # The cell is forced past its division radius -- r41.7 for the five
+          # genes it carries outside (docs/design/margin.md §1.1) -- so it splits
+          # at once and the press at 3.0s is a held lean -- the turn hard over to
+          # starboard. A daughter is half the area, so r42 becomes r29.70: any
+          # r2x in the trace is a division that was answered.
           if ! grep -qE "^\[trace\].*me r2[0-9]\." <<< "$out"; then
             printf '%s\n' "$out" | grep -E "^\[trace\]" || true
             echo "::error::no daughter was committed -- a held lean did not reach the division"
@@ -365,11 +389,64 @@ jobs:
         # the half circle put back, this branch printed f7e09406... to the byte, so
         # taking the waves out moved nothing. 68,435 lines, from 68,616.
         #
+        # **Re-pinned when venom came to ride** (docs/design/venom-rides.md), from
+        # 0c666c11...: the water changed on purpose. A toxin goes inside or into a
+        # gene's slot, never round the body, so the founder armed with venom
+        # carries it in its mouth's slot. Diffed against dev at 838c997, the traces
+        # agree to 25.8 s but for that founder's gene list, which no longer shows
+        # the venom on its body, and part there, where it swims a hair otherwise.
+        # 68,421 lines, from 68,435.
+        #
+        # **Re-pinned when the drop got a day** (docs/design/daylight.md §10.4,
+        # 2026-10-16), from 0540ccd6...: the water changed on purpose. A water body
+        # with a `plastid` is paid its sun at the light where it is, which falls at
+        # night and toward the drop's deep middle, so a hunter carrying one runs
+        # hungrier there. With `--daylight=0` -- full light everywhere, the build
+        # before the day -- this branch printed 0540ccd6... to the byte. With the
+        # light on the two traces agree to 47.02 s, where a body far off in the
+        # water first stands elsewhere. 68,421 lines, as before.
+        #
+        # **Re-pinned when the eyespot came to see** (docs/design/sight.md,
+        # 2026-10-16), from 69009c17...: the eye changed on purpose. It sees a
+        # field about its slot, as far as the light lets it and blurred by its
+        # level, and nothing behind a body. Diffed against dev at 8c15247, the
+        # traces agree to 50.12 s, where this run's cell first wears an eyespot:
+        # its lobe reads 0.164 at 36 degrees wide (a level-1 eye's blur) where it
+        # read 0.280 at 26. 68,461 lines, from 68,421.
+        #
+        # **Re-pinned when grit came to stop the water too** (food.gd's
+        # `_separate_grit`, 2026-10-17), from 686c55a2...: the water changed on
+        # purpose. What bumps you off now puts a water cell back on its surface.
+        # The two traces agree to 0.52 s, where a cell that began inside a speck,
+        # 887 um off, is pushed out of it by 0.4 um. 68,422 lines, from 68,461.
+        #
+        # **Re-pinned when the store moved inside and the mend came**
+        # (docs/design/inside-genes.md, 2026-10-17), from 9167630d...: the water
+        # changed on purpose. `lysosome` joins the drifters' draws and `store`
+        # takes no arc. Against dev at c7d9a13 the traces agree to 0.52 s, the
+        # first line, where drifter 11 now carries a beam, not a ping.
+        # 68,572 lines, from 68,422.
+        #
+        # **Re-pinned when lineages that carry much came to stay big**
+        # (docs/design/margin.md §1, 2026-10-17), from b1cfee73...: the water
+        # changed on purpose. A body divides where each half has the room its
+        # genes need, so a heavy lineage grows past forty. Against dev at 21044f9
+        # the traces agree to 21.70 s, where cell 251, carrying five genes
+        # outside, is fed to r41.72 where dev's stopped at r40.
+        # 68,558 lines, from 68,572.
+        #
+        # **Re-pinned when the drop's edge became a margin** (docs/design/margin.md
+        # §2, 2026-10-17), from e18d1233...: the water changed on purpose. A body
+        # is held 30 um from the rim for every unit of its radius, a run starts in
+        # the margin by the rim, and food and the water's newborns are made there.
+        # Against dev at 2496cdf the traces part at 0.52 s, the third line: the
+        # cell starts somewhere else, in the margin. 70,304 lines, from 68,558.
+        #
         # The run prints about ten megabytes, so it goes to a file rather than a
         # variable. About twenty seconds.
         run: |
           set -uo pipefail
-          pinned="0c666c1109ed869288514b8a5f6f43e043c1164805098e2d5d863822a4af9aad"
+          pinned="a53ffcef0c5c6c620809ca82aef8840a2341690d1b591419958a46c939f83f28"
           log=$(mktemp)
           fail=0
           echo "--- seed 1, sixty seconds, R pressed at 20 s"
@@ -960,8 +1037,11 @@ jobs:
           exit "$fail"
 
       - name: Check the shell scripts
+        # Installed only when missing (the template's): the runner of our own has it.
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          if ! command -v shellcheck >/dev/null; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          fi
           shellcheck --severity=warning ci/*.sh server/*.sh
 
       - name: Upload build for inspection

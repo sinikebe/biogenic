@@ -75,8 +75,8 @@ static func context(body: Dictionary, radius: float = CellBody.BASE_RADIUS) -> D
 ## in the body [param ctx] describes ([method context]). Each is an array of
 ## readout items, and `[[], []]` for a gene with no row. A levelled gene reads
 ## [param level] and [param path] instead of its copies (§5.2). [param slot] is
-## where it is worn, for a gene whose numbers depend on it -- venom at the front
-## and on a side are two rows -- and -1 where nobody knows.
+## where it is worn, for a gene whose numbers depend on it, and -1 where nobody
+## knows.
 ##
 ## **Each organ says its own** (gene-catalogue.md §8.4): its file's `lines` hook,
 ## handed the context and what wearing it costs. A gene with no row draws nothing,
@@ -127,17 +127,26 @@ static func _tank(ctx: Dictionary) -> float:
 	return MetabolismNode.HUNGER_SECONDS * float(ctx.get("reserve", 1.0))
 
 
-## **The next level, for the end of a worn beam's costs line** (§5.2):
+## **The next level, for the end of a worn levelled organ's costs line** (§5.2):
 ## `level 2 after 40 strikes`. A strike is one different body in the beam in
 ## one second, at most the beam's `xp_cap` a second, which is exactly what earns.
-static func progress_item(level: int, to_next: float) -> Dictionary:
-	var strikes := maxf(ceilf(to_next), 1.0)
+## [param earns] is what the organ earns by (gene.gd's `levels`, `earns`):
+## `strike`, the beam's, or `sight`, a body an eye saw (docs/design/sight.md).
+static func progress_item(level: int, to_next: float, earns: StringName = &"strike") -> Dictionary:
+	var count := maxf(ceilf(to_next), 1.0)
+	if earns == &"sight":
+		# TRANSLATORS: The last item of the eyespot's costs line: the next level,
+		# and how many bodies it has to see to earn it -- one different body in
+		# view in one second counts once. The English has a singular for one and a
+		# plural for any other number: give the forms your language needs.
+		return Readout.item_n("level {} after {} body seen", "level {} after {} bodies seen",
+			int(count), [level + 1, count], [U.COUNT, U.COUNT])
 	# TRANSLATORS: The last item of the beam's costs line: the next level, and how
 	# many "strikes" earn it. A strike is one different body touched by the beam
 	# in one second. The English has a singular for one strike and a plural for
 	# any other number: give the forms your language needs.
 	return Readout.item_n("level {} after {} strike", "level {} after {} strikes",
-		int(strikes), [level + 1, strikes], [U.COUNT, U.COUNT])
+		int(count), [level + 1, count], [U.COUNT, U.COUNT])
 
 
 ## **The odds, with their percentage** (§5.4): `one copy · 55% of daughters
@@ -167,11 +176,16 @@ static func odds_text(copies: int) -> String:
 ## tank holds, and how long that lasts drifting -- the one number every cost
 ## adds up to. [param upkeep] is genome.gd's `upkeep()` for [param body]; the
 ## tail beats on its own schedule whether or not anyone steers, so it is in.
-static func cell_items(radius: float, body: Dictionary, upkeep: float) -> Array:
+## **Drifting where the body is** (docs/design/daylight.md §3.5): its `sun` is
+## made at [param light], the light there now, 0 to 1 -- full light where nobody
+## says, as outside a drop -- so the time is true where you are.
+static func cell_items(radius: float, body: Dictionary, upkeep: float,
+		light := 1.0) -> Array:
 	var ctx := context(body)
 	var gap := (Stats.of(body, &"impulse_gap_min") + Stats.of(body, &"impulse_gap_max")) * 0.5
 	var tail := _beat(Stats.of(body, &"impulse_speed"), float(ctx["burn"])) / gap
-	var drifting := _tank(ctx) / maxf(maxf(upkeep - float(ctx["sun"]), 0.0) + tail, 0.05)
+	var drifting := _tank(ctx) / maxf(maxf(upkeep - float(ctx["sun"]) * light, 0.0) + tail,
+		0.05)
 	# TRANSLATORS: Two items added to the pause screen's caption when the numbers
 	# switch is on: the cell's width, and its food tank in seconds, then how long
 	# the food lasts while the cell just drifts ("a full tank: 36 s, 12 s
