@@ -435,11 +435,18 @@ jobs:
         # outside, is fed to r41.72 where dev's stopped at r40.
         # 68,558 lines, from 68,572.
         #
+        # **Re-pinned when the drop's edge became a margin** (docs/design/margin.md
+        # §2, 2026-10-17), from e18d1233...: the water changed on purpose. A body
+        # is held 30 um from the rim for every unit of its radius, a run starts in
+        # the margin by the rim, and food and the water's newborns are made there.
+        # Against dev at 2496cdf the traces part at 0.52 s, the third line: the
+        # cell starts somewhere else, in the margin. 70,304 lines, from 68,558.
+        #
         # The run prints about ten megabytes, so it goes to a file rather than a
         # variable. About twenty seconds.
         run: |
           set -uo pipefail
-          pinned="e18d12330dd35945fa1c6516f6d6ca50a38673801bdece01b5590f927d43a65a"
+          pinned="a53ffcef0c5c6c620809ca82aef8840a2341690d1b591419958a46c939f83f28"
           log=$(mktemp)
           fail=0
           echo "--- seed 1, sixty seconds, R pressed at 20 s"
