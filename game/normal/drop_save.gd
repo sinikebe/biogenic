@@ -422,6 +422,8 @@ static func rules_text() -> String:
 	for name: String in ["BASE_RADIUS", "SLOT_RADIUS", "SLOT_MIN", "SLOT_MAX",
 			"GROWTH_PER_MEAL", "DIVIDE_RADIUS", "STROKE_COST", "TURN_COST"]:
 		put.call("cell." + name, cell[name])
+	# The most a body grows (margin.md §1.1): a save holds bodies up to it.
+	put.call("cell.RADIUS_MAX", CellBody.RADIUS_MAX)
 	put.call("metabolism.HUNGER_SECONDS", Metabolism.HUNGER_SECONDS)
 	put.call("metabolism.STARVE_GRACE", Metabolism.STARVE_GRACE)
 	put.call("metabolism.MEAL", Metabolism.MEAL)
@@ -987,7 +989,7 @@ static func note(data: Dictionary, done: Dictionary) -> String:
 		+ " every body re-derived from its genome, %d trimmed to r%.0f, %d put back inside"
 		+ " the rim") % [int(data["content"]), str(data["commit"]),
 		str(data["rules"]).left(12), rules().left(12), int(done.get("trimmed", 0)),
-		CellBody.DIVIDE_RADIUS, int(done.get("contained", 0))]
+		CellBody.RADIUS_MAX, int(done.get("contained", 0))]
 
 
 ## `[content version, commit]` of this build, from the launcher's BuildInfo --

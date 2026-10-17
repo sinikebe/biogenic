@@ -1944,16 +1944,22 @@ static func _mutate_trade(tiers: Dictionary) -> bool:
 ##   toxin comes by `veneneux`'s name, as often as it ever did, and a lineage that
 ##   carries venom does not draw it again as poison;
 ## - **a toxin that comes is poison, inside**: its venom only rides (gene.gd's
-##   RIDING), so it can take no slot outside. With the inside full it does not
-##   come, and the caller's next kind is tried. A gene of forms that has an
+##   RIDING), so it can take no slot outside. With the inside full it comes in
+##   place of a gene inside. A gene of forms that has an
 ##   outside form takes the form of the slot it lands in, and a water cell's, with
 ##   no slots ([param seats] empty), is one more coin;
 ## - **an inside gene that goes is replaced by a gene that faces out**, which
 ##   needs a free outside slot: a hole in a daughter's layout, or, for a water
-##   cell, fewer genes outside than the plan has slots. With none, the drift does
-##   not apply, and the caller's next kind is tried. **And a gene that only works
+##   cell, fewer genes outside than the plan has slots. **And a gene that only works
 ##   inside** -- the store, the mend -- comes inside as the poison does, room
 ##   permitting (docs/design/inside-genes.md §2).
+## - **The gene that goes is drawn again when it leaves no room** for the one that
+##   comes, among those that would: an inside one for a gene that comes inside to a
+##   full inside, one outside for a gene that faces out to a full ring. Only with
+##   none of those does the drift not apply, and the caller's next kind is tried.
+##   With every gene at one copy there is no next kind -- a trade needs a gene at
+##   two -- and a division would have changed nothing; a lineage that fills its
+##   DNA, as one born big does (docs/design/margin.md §1.1), met that often.
 static func _mutate_drift(tiers: Dictionary, seats: Array[StringName]) -> bool:
 	var goes: Array[StringName] = []
 	var carried := {}
@@ -1994,6 +2000,14 @@ static func _mutate_drift(tiers: Dictionary, seats: Array[StringName]) -> bool:
 			form = outer
 		if form == &"":
 			return false
+	if not _drift_room(tiers, seats, out, form):
+		var can: Array[StringName] = []
+		for gene: StringName in goes:
+			if _drift_room(tiers, seats, gene, form):
+				can.append(gene)
+		if can.is_empty():
+			return false
+		out = can[randi() % can.size()]
 	# **A gene that comes inside needs room there** -- the toxin's poison, or a gene
 	# that only works inside -- unless the gene it replaces was inside too.
 	if is_inside_form(form) and not is_inside_form(out) \
@@ -2018,6 +2032,21 @@ static func _mutate_drift(tiers: Dictionary, seats: Array[StringName]) -> bool:
 	var slot := seats.find(out)
 	if slot >= 0:
 		seats[slot] = &"" if is_inside_form(form) else form
+	return true
+
+
+## **Whether [param out] going leaves room for [param form] coming** in a drift:
+## inside, a full inside takes it only in place of an inside gene; outside, in place
+## of an inside gene, it needs a free arc ([method _mutate_drift]).
+static func _drift_room(tiers: Dictionary, seats: Array[StringName], out: StringName,
+		form: StringName) -> bool:
+	if is_inside_form(form) and not is_inside_form(out) \
+			and count_inside(tiers) >= INSIDE_SLOTS:
+		return false
+	if is_inside_form(out) and not is_inside_form(form):
+		if seats.is_empty():
+			return count_outside(tiers) < CellBody.SLOT_MAX
+		return seats.has(&"")
 	return true
 
 

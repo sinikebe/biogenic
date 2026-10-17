@@ -265,7 +265,7 @@ jobs:
           if ! out=$(~/godot/godot --headless --path . --fixed-fps 60 \
                        --quit-after 660 res://tools/drive.tscn -- \
                        --size=1280x720 --seed=12345 \
-                       --radius=40 --genome="$genome" --trace=2.0 \
+                       --radius=42 --genome="$genome" --trace=2.0 \
                        --press=1.0:144,624,0 --press=1.2:1064,540,1 \
                        --press=1.6:1184,624,2 --lift=1.7:2 --slide=1.8:200,624,0 \
                        --lift=2.0:0 --lift=2.1:1 \
@@ -281,10 +281,11 @@ jobs:
             echo "::error::script errors under input"
             fail=1
           fi
-          # The cell is forced to DIVIDE_RADIUS, so it splits at once and the
-          # press at 3.0s is a held lean -- the turn hard over to starboard. A
-          # daughter is half the area, so r40 becomes r28.28: any r2x in the
-          # trace is a division that was answered.
+          # The cell is forced past its division radius -- r41.7 for the five
+          # genes it carries outside (docs/design/margin.md §1.1) -- so it splits
+          # at once and the press at 3.0s is a held lean -- the turn hard over to
+          # starboard. A daughter is half the area, so r42 becomes r29.70: any
+          # r2x in the trace is a division that was answered.
           if ! grep -qE "^\[trace\].*me r2[0-9]\." <<< "$out"; then
             printf '%s\n' "$out" | grep -E "^\[trace\]" || true
             echo "::error::no daughter was committed -- a held lean did not reach the division"
@@ -426,11 +427,19 @@ jobs:
         # first line, where drifter 11 now carries a beam, not a ping.
         # 68,572 lines, from 68,422.
         #
+        # **Re-pinned when lineages that carry much came to stay big**
+        # (docs/design/margin.md §1, 2026-10-17), from b1cfee73...: the water
+        # changed on purpose. A body divides where each half has the room its
+        # genes need, so a heavy lineage grows past forty. Against dev at 21044f9
+        # the traces agree to 21.70 s, where cell 251, carrying five genes
+        # outside, is fed to r41.72 where dev's stopped at r40.
+        # 68,558 lines, from 68,572.
+        #
         # The run prints about ten megabytes, so it goes to a file rather than a
         # variable. About twenty seconds.
         run: |
           set -uo pipefail
-          pinned="b1cfee733b68db668eb87e7bf8937bc7bc15b7cbf503adc6c9bd2b64c36ef740"
+          pinned="e18d12330dd35945fa1c6516f6d6ca50a38673801bdece01b5590f927d43a65a"
           log=$(mktemp)
           fail=0
           echo "--- seed 1, sixty seconds, R pressed at 20 s"

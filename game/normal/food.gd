@@ -1235,6 +1235,12 @@ class Body:
 		stat_effort_push = Riders.through(riders, g, &"push_accel", &"effort", 1.0)
 		stat_effort_dash = Riders.through(riders, g, &"dash_speed", &"effort", 1.0)
 
+	## **Where it divides** (docs/design/margin.md §1.1): forty, or later when the
+	## genes its DNA carries need each daughter bigger -- read off the DNA each time,
+	## since a meal or a seed may change it; the body it wears where it carries none.
+	func divide_at() -> float:
+		return CellBody.divide_radius_of(dna if not dna.is_empty() else genome)
+
 	## **The slots it wears its organs in**: a person's worn order, as they sent it,
 	## or the default order a water cell is drawn in (cilia.gd) -- where a mechanic
 	## with a place finds the organ it acts from (stats.gd's `SEATED`).
@@ -3371,7 +3377,8 @@ func _give_way(theirs: float, mine: float) -> float:
 ## that nothing outside CULL is simulated at all.
 ##
 ## **In the drop everything is simulated, so growth stops where the player's
-## does** (§5.5): at DIVIDE_RADIUS. The mouth keeps whatever it grows (row 5).
+## does** (§5.5): where it divides (margin.md §1.1). The mouth keeps whatever it
+## grows (row 5).
 func _devour(b: Body, prey: Body) -> void:
 	if _drop != null:
 		_grow(b, Genome.dominant_of(prey.genome))
@@ -6732,7 +6739,7 @@ var age_first := 0.0
 # --- Pack 2's rules, one switch each (docs/design/lineage.md §11.1, §12), set by
 # tools/drive.gd and tools/eco_probe.gd as the ones above are. Nothing in the game
 # writes them, and each reads as the drop's rule as it stands.
-## **Bodies divide** (§2-§5): a water body at DIVIDE_RADIUS divides on its tick,
+## **Bodies divide** (§2-§5): a water body at its division radius divides on its tick,
 ## a meal writes its DNA and not its body, every newborn has the grace, and the
 ## spawner keeps the food to its count and today's hunters as a floor. **Off is
 ## pack 1, to the census line**: nothing divides, a meal grows the body as well,
@@ -7791,8 +7798,8 @@ func load_drop(cell: CellBody, state: Dictionary) -> Dictionary:
 		# (2026-10-16): into its mouth's slot, or let go.
 		Genome.seat_riding(b.dna, [], b.dna_riders)
 		Genome.seat_riding(b.genome, [], b.riders)
-		if not b.inert and b.radius > CellBody.DIVIDE_RADIUS:
-			b.radius = CellBody.DIVIDE_RADIUS
+		if not b.inert and b.radius > CellBody.RADIUS_MAX:
+			b.radius = CellBody.RADIUS_MAX
 			trimmed += 1
 		# Held inside by the test the running drop holds a body by (see
 		# [method _step_one]), so a body it left on the rim is not moved by a
@@ -8147,12 +8154,13 @@ func _step_drop_bodies() -> void:
 
 
 ## One body, with the time it is owed: its grace, its tank, then what it does --
-## or, at DIVIDE_RADIUS on its tick, two daughters where it was -- then held
+## or, at its division radius on its tick, two daughters where it was -- then held
 ## inside the rim and filed again if it crossed a bucket line.
 ##
-## **A body at DIVIDE_RADIUS divides on its tick** (lineage.md §2.1), the 7.5
-## times a second every mouth decides, near the player or far from it: the first
-## tick it is at forty, whatever it was doing -- a run, a rest after the meal
+## **A body at its division radius divides on its tick** (lineage.md §2.1;
+## margin.md §1.1: forty, or later for a lineage whose genes need its daughters
+## bigger), the 7.5 times a second every mouth decides, near the player or far
+## from it: the first tick it is there, whatever it was doing -- a run, a rest after the meal
 ## that grew it, a search. Nothing makes it wait. A tank that ran out first is a
 ## death, and there is nobody left to divide.
 func _step_one(i: int, b: Body, tick: int) -> void:
@@ -8175,7 +8183,7 @@ func _step_one(i: int, b: Body, tick: int) -> void:
 	# returns as a starvation does: nothing here files a body it has retired.
 	if _dose_step(i, b, dt):
 		return
-	if births and b.look and not b.drifter and b.radius >= CellBody.DIVIDE_RADIUS - 0.01:
+	if births and b.look and not b.drifter and b.radius >= b.divide_at() - 0.01:
 		_divide(i, b)
 		return
 	_step_body(i, dt)
@@ -8258,8 +8266,14 @@ func _feed_water(b: Body, nutrition: float) -> void:
 			_stat(&"meals_laser")
 
 
-## **Growth, as the player grows** (§5.5): a unit of radius a meal to
-## DIVIDE_RADIUS and no further, and the meal's gene into the slots that radius
+## **Where [param b] stops growing**: where it divides (margin.md §1.1), or forty
+## with [member births] off -- pack 1, where nothing divides and forty is the top.
+func _top(b: Body) -> float:
+	return b.divide_at() if births else CellBody.DIVIDE_RADIUS
+
+
+## **Growth, as the player grows** (§5.5): a unit of radius a meal to where it
+## divides (margin.md §1.1) and no further, and the meal's gene into the slots that radius
 ## has. The mouth keeps whatever it grows (row 5).
 ##
 ## **The meal is written to the DNA** (lineage.md §3.2), by the rule the
@@ -8270,7 +8284,8 @@ func _feed_water(b: Body, nutrition: float) -> void:
 ## [member births] off, which is pack 1, and today's water -- the body grows the
 ## organ as well, as it always did.
 func _grow(b: Body, gene: StringName) -> void:
-	b.radius = minf(b.radius + CellBody.GROWTH_PER_MEAL, CellBody.DIVIDE_RADIUS)
+	# Never smaller for a meal: a DNA that lost a gene since divides on its tick.
+	b.radius = maxf(b.radius, minf(b.radius + CellBody.GROWTH_PER_MEAL, _top(b)))
 	b.meals += 1
 	var slots := CellBody.slots_for(b.radius)
 	var inside := CellBody.inside_for(b.radius)
@@ -9458,7 +9473,7 @@ func _drop_lose(index: int, cause: int) -> void:
 				_stat(&"died_chewed")
 			Cause.STARVED:
 				_stat(&"died_starved")
-				if b.radius >= CellBody.DIVIDE_RADIUS - 0.01:
+				if b.radius >= _top(b) - 0.01:
 					_stat(&"died_starved_r40")
 			Cause.POISONED:
 				_stat(&"died_poisoned")
@@ -10158,7 +10173,8 @@ func _divide(i: int, b: Body) -> PackedInt32Array:
 	var at := b.pos
 	var heading := b.heading
 	var brain: Variant = b.brain
-	var r := CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)
+	# Half her mother's area, at the size her lineage divides at (margin.md §1.1).
+	var r := CellBody.daughter_radius(b.radius)
 	var changes := mutate >= 1.0 or randf() < mutate
 	var pair: Array = Drop.daughter_dna(b.dna) if changes \
 		else [b.dna.duplicate(), b.dna.duplicate(), &""]
@@ -10603,7 +10619,7 @@ func census_line() -> String:
 		for k in sizes.size():
 			if gape > sizes[k]:
 				threats[k] += 1
-		if b.radius >= CellBody.DIVIDE_RADIUS - 0.01:
+		if b.radius >= _top(b) - 0.01:
 			big += 1
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 20260930
@@ -10680,7 +10696,7 @@ func lineage_line() -> String:
 			tails += 1
 		if b.notice > 0.0 or b.see_big > 0.0:
 			sighted += 1
-		if b.radius >= CellBody.DIVIDE_RADIUS - 0.01:
+		if b.radius >= _top(b) - 0.01:
 			big += 1
 		var parts := PackedStringArray()
 		for gene: StringName in Catalogue.live():

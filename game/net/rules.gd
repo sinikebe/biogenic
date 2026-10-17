@@ -188,6 +188,9 @@ static func text() -> String:
 	put.call("cell.DIVIDE_RADIUS", CellBody.DIVIDE_RADIUS)
 	put.call("cell.DIVIDE_SPLIT", CellBody.DIVIDE_SPLIT)
 	put.call("cell.daughter_radius", CellBody.daughter_radius(CellBody.DIVIDE_RADIUS))
+	# The most a body grows (margin.md §1.1), which the referee bounds a size by. The
+	# floor a lineage's DNA sets is the plan's ladder, which the fingerprint holds.
+	put.call("cell.RADIUS_MAX", CellBody.RADIUS_MAX)
 	put.call("cell.MEND_SECONDS", CellBody.MEND_SECONDS)
 	put.call("cell.mended(0.5,10)", CellBody.mended(0.5, 10.0))
 	put.call("cell.IMPULSE_KICK", CellBody.IMPULSE_KICK)

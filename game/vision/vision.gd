@@ -952,7 +952,7 @@ func _step_friend(delta: float) -> void:
 		"doubt": 0.0,
 		"alpha": alpha,
 		"pinch": pinch,
-		"double": smoothstep(CellBody.DIVIDE_WARN_RADIUS, CellBody.DIVIDE_RADIUS, drawn),
+		"double": smoothstep(CellBody.warn_radius_of(pb.divide_at()), pb.divide_at(), drawn),
 		"tiers": pb.genome,
 		"order": pb.order,
 		"riders": pb.riders,
@@ -1176,7 +1176,7 @@ func _on_eaten(nutrition: float, gene: StringName, at: Vector2) -> void:
 	# smallest drifter swallowed by the largest cell. Adding a fourth argument
 	# to a signal three files forward it would cost more than a pixel is worth.
 	var r := clampf(nutrition * _cell.radius,
-		FoodField.DRIFTER_MIN, CellBody.DIVIDE_RADIUS)
+		FoodField.DRIFTER_MIN, CellBody.RADIUS_MAX)
 	_meals.append([at, r, 0.0, Cilia.hue(gene) if gene != &"" else FOOD_TINT])
 
 
@@ -1480,7 +1480,7 @@ func _dose_felt(felt: Vector3) -> Dictionary:
 func _draw_drop_cells(a: float, middle: Vector2, half: float) -> void:
 	var bodies := _food_node.bodies()
 	var margin := CULL_MARGIN / ZOOM
-	var widest := CellBody.DIVIDE_RADIUS * CULL_REACH
+	var widest := CellBody.RADIUS_MAX * CULL_REACH
 	for i: int in _food_node.bodies_near(middle, half + widest + margin):
 		var b: Object = bodies[i]
 		var p: Vector2 = b.pos
@@ -1492,9 +1492,11 @@ func _draw_drop_cells(a: float, middle: Vector2, half: float) -> void:
 			_draw_floc(p, r, float(b.settle), int(b.id), a)
 			continue
 		# **A division coming** (lineage.md §6.4): every cell's nucleus doubles
-		# from DIVIDE_WARN_RADIUS as yours does, read off the radius -- which the
-		# wire and the replay already carry -- since every body at forty divides.
-		var double := smoothstep(CellBody.DIVIDE_WARN_RADIUS, CellBody.DIVIDE_RADIUS, r) \
+		# two meals before it divides, as yours does, read off the radius -- which
+		# the wire and the replay already carry -- and where its genes say it
+		# divides (margin.md §1.1).
+		var divide_at: float = b.divide_at()
+		var double := smoothstep(CellBody.warn_radius_of(divide_at), divide_at, r) \
 			if _food_node.births else 0.0
 		Cilia.draw_cell(_world, p, float(b.heading), r, b.genome, _food_node.gape_at(i),
 			_cell.radius, false, _clock, a, 0.0, 0.0, float(i) * 1.9, 1.0 / ZOOM, [],
