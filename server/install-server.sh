@@ -2,7 +2,7 @@
 # Installs, repairs or updates Biogenic's dedicated server on Debian or Ubuntu
 # -- written for a Proxmox LXC with no desktop -- as a systemd service.
 #
-#   curl -fsSLO https://github.com/sinikebe/biogenic/releases/latest/download/install-server.sh
+#   curl -fsSLO https://github.com/sinikebe/biogenic-releases/releases/latest/download/install-server.sh
 #   less install-server.sh          # it is short: read it before you run it
 #   sudo bash install-server.sh             # install, or update what the server cannot
 #   sudo bash install-server.sh --purge     # the same, from a clean kit (below)
@@ -61,14 +61,16 @@
 # touches the other: --purge --dev purges the dev kit alone, --purge the live
 # one alone. Until a release carries this installer, take it from dev's:
 #
-#   curl -fsSLO https://github.com/sinikebe/biogenic/releases/download/branch-dev/install-server.sh
+#   curl -fsSLO https://github.com/sinikebe/biogenic-releases/releases/download/branch-dev/install-server.sh
 #
 # BIOGENIC_REPO=owner/name installs from another fork's releases, and
 # BIOGENIC_RELEASE_URL, used as it is, from anywhere curl can read one
 # release's assets from -- a mirror, or file:///some/dir holding them.
 set -euo pipefail
 
-REPO="${BIOGENIC_REPO:-sinikebe/biogenic}"
+# The releases live in a public repository of their own, which the game updates
+# from too (docs/going-private.md): the code's repository may be private.
+REPO="${BIOGENIC_REPO:-sinikebe/biogenic-releases}"
 BINARY="biogenic-server.x86_64"
 # The unit's name in a release. The live server installs it as it is; the dev
 # server installs one made from it, under its own name.

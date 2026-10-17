@@ -49,11 +49,11 @@ request workflows from contributors", set to require approval for **all external
 contributors**, so no fork's workflow runs until the owner has read it. Going
 private removes the risk, since only collaborators can open pull requests there.
 
-**Publishing from the runner is slow**: the build takes under a minute, but the
-upload to GitHub's release server runs at about 1.5 Mbit/s, so a publish takes
-about 20 minutes, and the next pull request's CI waits behind it (§6). The owner
-chose it knowing that (2026-10-16: *"I think we'll move it back to my self
-hosted runner entirely"*, after measuring it).
+**Publishing from the runner was slow once** (§6): on 2026-10-16 the upload to
+GitHub's release server ran at about 1.5 Mbit/s and a publish took 22 minutes. The
+next day the same publish took 9 seconds. The owner chose the runner for
+everything knowing the first (2026-10-16: *"I think we'll move it back to my self
+hosted runner entirely"*).
 
 Two repository variables move them (Settings → Secrets and variables → Actions →
 Variables):
@@ -179,7 +179,7 @@ request into `dev`, or run CI by hand on `dev`. Then compare:
 - the time. The first run downloads Java, the Android SDK and Godot, and later
   runs reuse them.
 
-## 6. Publishing from the runner is slow
+## 6. Publishing from the runner: slow once, fast since
 
 Measured on 2026-10-16, the dev app's publish (`release.yml` on `dev`) on the
 runner:
@@ -210,5 +210,10 @@ And there is one runner: a pull request's CI waited behind those 22 minutes.
 
 Publishing went to GitHub's machines for an hour on 2026-10-16 (pull request
 #231), where the merge's publish step took 8 seconds, and came back to the runner
-the same evening at the owner's word. If the wait ever matters more than keeping
-everything on one machine, `CI_RUNNER_PUBLISH=ubuntu-latest` is the switch (§1).
+the same evening at the owner's word.
+
+**The next publish from the runner, 2026-10-17, took 9 seconds**: the 54 MB APK
+went up in about 5 and the 111 MB executable in about 6, some 20 MB/s. So the slow
+route of the evening before was a passing one, not the line's. If it comes back,
+the "Publish release" step's time says so, and `CI_RUNNER_PUBLISH=ubuntu-latest`
+is the switch (§1).

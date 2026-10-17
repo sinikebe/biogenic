@@ -31,7 +31,7 @@ env:
   LAUNCHER_TEMPLATE_REPO: sinikebe/godot-launcher-template
   LAUNCHER_TEMPLATE_REF: ${{ inputs.ref || 'main' }}
   # Where release.yml publishes, so the build stamp checks the same thing.
-  RELEASE_REPO: ${{ vars.RELEASE_REPO || github.repository }}
+  RELEASE_REPO: ${{ (github.ref_name == 'dev' && vars.RELEASE_REPO_DEV) || vars.RELEASE_REPO || github.repository }}
 
 jobs:
   sync:

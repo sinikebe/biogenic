@@ -59,12 +59,32 @@ installed game still updates from it.
    release's manifest, so no tag is needed in the code repository, and a releases
    repository with no release yet starts from this one's latest.
 3. **The public releases repository and its token.** Done (§2).
-4. **The switch, in a release.** Set the repository variable `RELEASE_REPO` to
-   `sinikebe/biogenic-releases`, and point `update_repo` in
-   `launcher_config.tres` at it. So does `REPO` in `server/install-server.sh` (and
-   the two URLs in its header). That ships as a release while this repo is still
-   public. The dev app's publish goes there first, which is the token's first
-   test.
+4. **The switch, in a release** (the template's docs/UPDATES.md, "Moving a game
+   that has already shipped"). In this order:
+   1. `update_repo` in `launcher_config.tres` points at
+      `sinikebe/biogenic-releases`, and so does `REPO` in
+      `server/install-server.sh` (and the two URLs in its header). **Done
+      2026-10-17**, into `dev`. A content update is enough: the launcher reads its
+      config after mounting the content pack, and a running server updates itself
+      the same way.
+   2. **The dev app moves first, as a rehearsal.** Step 1's merge is published
+      here, and the dev app takes it -- the binary 12 it carries too -- and then
+      looks in `sinikebe/biogenic-releases`. The repository variable
+      `RELEASE_REPO_DEV` is set to `sinikebe/biogenic-releases`, and the Release
+      workflow is run again on `dev`: `branch-dev` is published there, and the dev
+      app finds it. That is `RELEASE_TOKEN`'s first use, the release-repository
+      check's and the new repository's, all before any player depends on them.
+      `RELEASE_REPO_DEV` is read by `dev`'s publish alone (`release.yml`).
+   3. **A release to `main`, with `RELEASE_REPO` still unset**, so it is
+      published here, where every installed copy looks. Its build warns that it
+      checks one repository and is published to another: for this one release,
+      that is the point.
+   4. **Straight away**, the repository variable `RELEASE_REPO` is set to
+      `sinikebe/biogenic-releases`, and the Release workflow is run again on
+      `main`, so the releases repository holds that release too, with the patch
+      notes players already have. Until then a copy that took the release finds
+      nothing to check. `RELEASE_REPO_DEV` can go once `RELEASE_REPO` is set: dev
+      follows it.
 5. **Wait.** Every installed copy has to launch once on that release to learn
    the new address, the owner's dev app included. A copy that does not will never
    see another update, and will need a manual reinstall.
