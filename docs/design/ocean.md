@@ -293,6 +293,14 @@ point along a ray and the nearest point of the rim. The drop is a disc of
   after one knock.
 - **Grit stays in the water**: `motes.gd` places no mote past the rim, the
   authored first mote included. At the edge the meniscus is the first knock.
+- **Grit is solid to the water too** (2026-10-17; the owner: *"The water cells go
+  through the obstacles present in the water. That's unfair"*). The run hands the
+  field the grit every frame, and `food.gd`'s `_separate_grit` puts every living
+  water cell this device moves back on the surface of a speck it swam into, all
+  the way, since grit does not give. It slides round it and swims on. A floc
+  drifts over grit as it does over cells. Grit is the player's own, round the
+  player, so in a shared pond a host's water meets the host's grit and not a
+  guest's.
 
 A wall at your back is a real position: nothing comes at you from behind it.
 That falls out of containment and nothing was added for it.

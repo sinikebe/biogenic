@@ -1664,6 +1664,10 @@ func _process(delta: float) -> void:
 	_food.toxins = _toxins()
 	_aim_beam(delta)
 	_aim_sight()
+	# **The grit, for the water** (food.gd's `_separate_grit`): what you bump off,
+	# every water cell is solid against too.
+	_food.grit = _motes.points()
+	_food.grit_radius = MotesField.MOTE_RADIUS
 	# `chemocyte` and `ampulla`: how far this nose reaches and how often this
 	# electroreceptor fires. Scalars about the cell's own anatomy, handed to the
 	# field so it can answer in bearings -- the same contract as beam_range.

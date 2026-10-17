@@ -1423,6 +1423,14 @@ var sight_reach := 0.0
 var sight_seeing := 0.0
 var sight_seen := PackedInt32Array()
 
+## **The grit round the player** (motes.gd), written by the run every frame: where
+## each speck is and how wide. The player bumps off it in motes.gd; **every water
+## cell this device moves is solid against it too** ([method _separate_grit]), so
+## grit that stops you never lets a hunter through. Empty where nothing writes it
+## -- the probes' water, a server's.
+var grit := PackedVector2Array()
+var grit_radius := 0.0
+
 # --- The earned senses, computed here and posted by the run -----------------
 # Same contract as everything above: this node computes and does not post, and
 # not one of these is a position. Bearings are body-relative and distances are
@@ -1771,6 +1779,7 @@ func _process(delta: float) -> void:
 	if not _step_contacts():
 		return
 	_step_separate()
+	_separate_grit()
 	if _pond:
 		_step_pond()
 	if in_water:
@@ -8073,6 +8082,7 @@ func _process_drop(delta: float) -> void:
 			_guests_meet()
 	_contacts_drop()
 	_separate_drop()
+	_separate_grit()
 	_stings_drop()
 	if in_water:
 		_contain_player(false)
@@ -9549,6 +9559,45 @@ func _separate_drop() -> void:
 			b.pos = m.contain(b.pos + normal * (overlap * share * PUSH_SHARE), b.radius)
 			other.pos = m.contain(other.pos - normal * (overlap * (1.0 - share) * PUSH_SHARE),
 				other.radius)
+
+
+## **Grit is solid to the water as it is to you** (the owner, 2026-10-17: *"The water
+## cells go through the obstacles present in the water. That's unfair"*): every
+## living body this device moves that overlaps a speck of [member grit] is put back
+## on its surface, all the way, since a speck does not give. It slides round it
+## as it swims on. A floc is no body and drifts over grit as it does over cells, a
+## person is moved by their own device, and a mirror moves nothing it does not own.
+func _separate_grit() -> void:
+	if grit.is_empty() or grit_radius <= 0.0 or _mirror or _replay:
+		return
+	if _drop != null:
+		var m := _drop.meniscus
+		for at: Vector2 in grit:
+			_pair_ids.resize(0)
+			_drop.grid.query(at, grit_radius + _widest_now + Drop.GRID_SLACK, _pair_ids)
+			for j: int in _pair_ids:
+				var b := _cells[j]
+				if b.seeded and not b.inert and b.person == null:
+					_off_grit(b, at)
+					b.pos = m.contain(b.pos, b.radius)
+		return
+	for i in _water:
+		var b := _cells[i]
+		if b.seeded and not b.inert:
+			for at: Vector2 in grit:
+				_off_grit(b, at)
+
+
+## Body [param b] put back on the surface of the speck at [param at], if it is in it.
+func _off_grit(b: Body, at: Vector2) -> void:
+	var offset := b.pos - at
+	var reach := b.radius + grit_radius
+	var d2 := offset.length_squared()
+	if d2 >= reach * reach:
+		return
+	var d := sqrt(d2)
+	var normal := offset / d if d > 0.001 else -_forward(b.heading)
+	b.pos = at + normal * reach
 
 
 ## **The sting** (docs/design/sting.md): a contact weapon. Every body whose sting
