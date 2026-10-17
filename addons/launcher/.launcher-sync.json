@@ -2,7 +2,7 @@
   "_comment": "Written by ci/sync_launcher.sh. Do not edit addons/launcher/ or ci/ by hand -- the next sync overwrites them.",
   "source": "sinikebe/godot-launcher-template",
   "ref": "main",
-  "commit": "123ab3404a558146634c33f52569eff701ec9e41",
-  "subject": "Publish releases to a separate public repository, and run on your own runner (#94)",
-  "synced_at": "2026-10-17T00:26:21Z"
+  "commit": "bfcc8a449d6c79bf7b94f0d900585241f5b9a89f",
+  "subject": "Stamp the launcher's version from the sync record on every sync run (#95)",
+  "synced_at": "2026-10-17T00:52:09Z"
 }
