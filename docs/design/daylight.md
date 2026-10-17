@@ -330,6 +330,9 @@ draws nothing (`frame_readout.gd`).
   them starve there and leave remains. That is the mechanic, not a side effect.
 - **Nothing the water decides reads the light.** No rule, no search, no spawn. A
   water that swims to the shallows by day is a later pack's (§9).
+  > **Its eyes do, since 2026-10-16** (docs/design/sight.md): an eyespot sees less
+  > far as the light falls, so a water cell's instincts and its hunt by eye read
+  > the light through it. Nothing else does.
 
 ---
 
@@ -424,7 +427,8 @@ draws nothing (`frame_readout.gd`).
 - **Seeing affected by light** (the owner's later step). `light_at(p)` is the one
   call it needs: the eyespot's shadow, the beam's reach or the full-vision drawing
   of a cell could each be multiplied by it. Realism points the way: in a real
-  euglenid, the stigma is the organ that steers toward light.
+  euglenid, the stigma is the organ that steers toward light. **Built for the
+  eyespot, 2026-10-16** (docs/design/sight.md).
 - **An instinct that reads the light**: a `light` value beside `hunger` and `fed`
   in `metabolism.gd`'s `DECLARES`, for the player's programs and the water's rules.
 - **A water that migrates**: hunters on rules that swim to the shallows by day.

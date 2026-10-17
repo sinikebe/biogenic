@@ -591,6 +591,10 @@ mouth can take*. Smell now shows on the nose and nowhere else, in either view.
 
 ### 2.7 The eyespot glows with the shadow it is under (2026-10-15)
 
+> **The shadow is now what the eye sees** (docs/design/sight.md, 2026-10-16): a
+> field about the eyespot's slot, a reach the light sets, a blur its level sets,
+> and nothing behind a nearer body. The glow below is unchanged, fed by that.
+
 The owner, after the nose glowed:
 
 > And see should act a bit like smell. The organ changing visually to represent

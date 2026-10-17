@@ -17,6 +17,14 @@ extends CanvasLayer
 ## return too: at three copies the ping draws the side of a body its call
 ## reached, and nothing the call did not (ping-as-outline.md §13).
 ##
+## **And the eyespot's picture, since it sees** (docs/design/sight.md, the owner,
+## 2026-10-16: *"It will act like real vision"*). It is the interior perception.md
+## kept for vision: the water lit in the eye's field, as bright as the light lets
+## it, out to where the eye sees and stopped wherever a body is in the way -- so a
+## body is the dark notch it cuts, and what is behind it stays dark. Blurred by the
+## eye's level. Still no body is drawn: what is drawn is the light that reached the
+## eye, and a body is where it did not.
+##
 ## **A drawing change, not a simulation change.** Everything here is read out of
 ## `food.gd` exactly as it stands, the same way `vision.gd` reads it, and nothing
 ## here posts, writes or is subscribed to. In particular no position reaches the
@@ -121,6 +129,19 @@ const FIX_CORE_ALPHA := 0.80
 const OUTLINE_WIDTH := 2.4
 const OUTLINE_ALPHA := 0.78
 
+# --- The eyespot's picture (`stigma`, docs/design/sight.md) ---------------
+## **How bright the water in its field is**, at the eye in full light: dimmer with
+## the light (`food.gd`'s `sight_seeing`) and fading out with the haze to where the
+## eye stops seeing. Low, because it fills a third of the screen and the marks and
+## the membrane have to read over it.
+const SIGHT_ALPHA := 0.16
+## Where the picture starts, in body radii: just off the skin, so it never lies over
+## the figure.
+const SIGHT_SKIN := 1.12
+## The shader's array (sight.gdshader's `runs`), which has to be the field's.
+const SIGHT_RAYS := FoodField.SIGHT_FAN_RAYS
+const SIGHT_SHADER := preload("res://game/perception/sight.gdshader")
+
 ## **Whether something other than the field is stepping the water.** Left false
 ## by the run, where [method FoodField.is_processing] and the cell being in the
 ## water are the whole answer -- a division and a death both stop the field or,
@@ -140,10 +161,21 @@ var _glow := _new_glow()
 ## [[mark, age], ...] -- what the ping placed (§13), each held for its `life`.
 var _echo_marks: Array = []
 @onready var _marks: Control = $Marks
+## **The eyespot's picture**, under the marks: a rect as big as theirs that
+## sight.gdshader draws into ([method _update_sight]).
+var _sight := ColorRect.new()
 
 
 func _ready() -> void:
 	_marks.draw.connect(_draw_marks)
+	var m := ShaderMaterial.new()
+	m.shader = SIGHT_SHADER
+	_sight.material = m
+	_sight.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_sight.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_sight.visible = false
+	add_child(_sight)
+	move_child(_sight, _marks.get_index())
 
 
 ## Binds the layer to the body and the water it is reading. Nothing here assumes
@@ -162,6 +194,8 @@ func setup(cell: CellBody, food: FoodField) -> void:
 ## under exactly the same conditions; `normal_mode.gd` owns the switch.
 func set_active(on: bool) -> void:
 	visible = on
+	if _sight != null:
+		_sight.visible = false
 	if not on:
 		# Held marks are claims about a moment; one that was hidden through a
 		# pause or full vision is stale when it comes back.
@@ -188,6 +222,9 @@ func set_frame(rect: Rect2) -> void:
 	_marks.size = rect.size
 	_marks.clip_contents = true
 	_marks.queue_redraw()
+	_sight.set_anchors_preset(Control.PRESET_TOP_LEFT, false)
+	_sight.position = rect.position
+	_sight.size = rect.size
 
 
 func _process(delta: float) -> void:
@@ -200,6 +237,7 @@ func _process(delta: float) -> void:
 		if float(held[1]) >= float((held[0] as Dictionary).get("life", 0.0)):
 			_echo_marks.remove_at(i)
 	_marks.queue_redraw()
+	_update_sight()
 
 
 func _draw_marks() -> void:
@@ -222,6 +260,51 @@ func _draw_marks() -> void:
 	var centre := _marks.size * 0.5
 	_draw_echo_marks(centre)
 	_draw_pointers(centre)
+
+
+## **What the eyespot sees** (docs/design/sight.md): the field's rays handed to
+## sight.gdshader, which lights the water in the eye's field out to where each ray
+## stopped, per pixel and across the eye's blur. Hidden while there is no eye, the
+## water is not being stepped or this layer is off.
+func _update_sight() -> void:
+	var fan := _food.sight_fan if _food != null else PackedFloat32Array()
+	var live := _cell != null and _food != null \
+		and (driven or (_food.is_processing() and _food.in_water))
+	_sight.visible = live and fan.size() == SIGHT_RAYS and _food.sight_reach > 0.0
+	if not _sight.visible:
+		return
+	var m := _sight.material as ShaderMaterial
+	var size := _marks.size
+	m.set_shader_parameter("runs", fan)
+	m.set_shader_parameter("count", fan.size())
+	m.set_shader_parameter("mid", _food.sight_mid)
+	m.set_shader_parameter("half_field", _food.sight_half)
+	m.set_shader_parameter("blur", _food.sight_blur)
+	m.set_shader_parameter("reach", _food.sight_reach)
+	m.set_shader_parameter("core", _food.sight_core * _food.sight_seeing)
+	m.set_shader_parameter("skin", _cell.radius * SIGHT_SKIN)
+	m.set_shader_parameter("scale", SCALE)
+	m.set_shader_parameter("centre", size * 0.5)
+	m.set_shader_parameter("frame", size)
+	m.set_shader_parameter("lit", SIGHT_ALPHA * _food.sight_seeing)
+	var tone := Cilia.hue_on(Catalogue.LIGHT)
+	m.set_shader_parameter("tone", Vector3(tone.r, tone.g, tone.b))
+
+
+## How far from [param centre] along [param dir], in pixels, the edge fade reaches
+## nothing: [constant EDGE_HIDE] in from the frame.
+func _to_frame(centre: Vector2, dir: Vector2) -> float:
+	var size := _marks.size
+	var best := INF
+	if dir.x > 0.0001:
+		best = minf(best, (size.x - EDGE_HIDE - centre.x) / dir.x)
+	elif dir.x < -0.0001:
+		best = minf(best, (EDGE_HIDE - centre.x) / dir.x)
+	if dir.y > 0.0001:
+		best = minf(best, (size.y - EDGE_HIDE - centre.y) / dir.y)
+	elif dir.y < -0.0001:
+		best = minf(best, (EDGE_HIDE - centre.y) / dir.y)
+	return maxf(best, 0.0)
 
 
 ## **The pointer.** Where a beam was *stopped*, and nowhere else.

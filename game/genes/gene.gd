@@ -160,8 +160,9 @@ var numbers := {}
 
 ## **How it earns levels** (docs/design/beam-levels.md), for an organ that does:
 ## `step` (what going from level L to L + 1 costs, over L), `fork` (the level its
-## fork opens at, 0 for none) and `paths` (what the fork offers, an
-## `Array[StringName]`). Empty for an organ whose strength is its copies. Read by
+## fork opens at, 0 for none), `paths` (what the fork offers, an
+## `Array[StringName]`) and `earns` (what the pause screen says it earns by:
+## `strike`, the default, or `sight`). Empty for an organ whose strength is its copies. Read by
 ## `genome.gd`, which keeps a progression for every gene that levels.
 var levels := {}
 

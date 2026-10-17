@@ -53,6 +53,12 @@ env:
   # can come from anyone who can push one. prepare_build.sh refuses anything
   # outside [A-Za-z0-9._-].
   RELEASE_BRANCH: ${{ github.ref_name != 'main' && github.ref_name || '' }}
+  # **Where the release is published** (the template's, launcher 2.7.1;
+  # docs/going-private.md): every script reads it from here and takes unset as
+  # this repository. The RELEASE_REPO repository variable names a separate public
+  # repository that holds only releases, for when the code goes private, with the
+  # RELEASE_TOKEN secret to write there. Unset, everything publishes here as before.
+  RELEASE_REPO: ${{ vars.RELEASE_REPO || github.repository }}
 
 jobs:
   release:
@@ -62,12 +68,13 @@ jobs:
     # otherwise build that branch -- reviewed or not -- with the signing key and
     # publish it as a prerelease of its own.
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
-    # **Where it runs** (docs/ci-runner.md §1): on GitHub's own machine, dev's
-    # publish included, unless the repository variable CI_RUNNER_PUBLISH names a
-    # runner's label. The self-hosted runner builds this in under a minute but
-    # uploads to GitHub's release server at about 1.5 Mbit/s, so its publish took
-    # 22 minutes against GitHub's 1.5 (docs/ci-runner.md §6).
-    runs-on: ${{ vars.CI_RUNNER_PUBLISH || 'ubuntu-latest' }}
+    # **Where it runs** (docs/ci-runner.md §1): on the self-hosted runner, main's
+    # releases and dev's alike, or wherever the repository variable
+    # CI_RUNNER_PUBLISH, then CI_RUNNER, names. From the runner the upload to
+    # GitHub's release server is slow, about 1.5 Mbit/s, so a publish takes about
+    # 20 minutes, against 1.5 on GitHub's machines (docs/ci-runner.md §6):
+    # CI_RUNNER_PUBLISH=ubuntu-latest moves publishing alone back to them.
+    runs-on: ${{ vars.CI_RUNNER_PUBLISH || vars.CI_RUNNER || 'self-hosted' }}
     permissions:
       contents: write # create the release and upload its assets
 
@@ -77,6 +84,19 @@ jobs:
         with:
           # content_version is the commit count, so the full history is required.
           fetch-depth: 0
+          # Nothing here authenticates with git: publishing goes through gh. Left
+          # in .git/config, the write token would be readable by every later step
+          # -- on a runner of our own, by whatever else runs there.
+          persist-credentials: false
+
+      - name: Check the release repository
+        # First, so a missing token or an unusable releases repository fails in
+        # seconds rather than after every export. Nothing to check, and nothing
+        # called, while releases are published here (the template's).
+        env:
+          GH_TOKEN: ${{ vars.RELEASE_REPO && vars.RELEASE_REPO != github.repository && secrets.RELEASE_TOKEN || github.token }}
+          RELEASE_TOKEN_SET: ${{ secrets.RELEASE_TOKEN != '' }}
+        run: bash ci/check_release_repo.sh
 
       - name: Keep temporary files on disk
         # **The runner's own temp folder, not /tmp** (docs/ci-runner.md §4). A
@@ -102,7 +122,9 @@ jobs:
           java-version: "17"
 
       - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
+        # Pinned to a commit (the template's): a third-party action runs as this
+        # job, before the steps that hold the signing key and RELEASE_TOKEN.
+        uses: android-actions/setup-android@be39fa834029ff78f1a44aa3bb0819b8fc2bd8fd # v4.0.4
         with:
           packages: "platform-tools build-tools;34.0.0"
 
@@ -170,7 +192,8 @@ jobs:
 
       - name: Collect patch notes
         env:
-          GH_TOKEN: ${{ github.token }}
+          # Reads the latest release's manifest, from RELEASE_REPO.
+          GH_TOKEN: ${{ vars.RELEASE_REPO && vars.RELEASE_REPO != github.repository && secrets.RELEASE_TOKEN || github.token }}
         # Must run before the version stamp: prepare_build.sh bakes these notes
         # into the binary so the app can show its own changelog with no network.
         run: bash ci/collect_changes.sh
@@ -309,7 +332,7 @@ jobs:
           python3 ci/make_manifest.py \
             --changes-file build/notes/changes.json \
             --previous-manifest build/notes/previous.json \
-            --repo "${GITHUB_REPOSITORY}" \
+            --repo "${RELEASE_REPO}" \
             --version-name "${{ steps.version.outputs.version_name }}" \
             --binary-version "${{ steps.version.outputs.binary_version }}" \
             --content-version "${{ steps.version.outputs.content_version }}" \
@@ -325,7 +348,9 @@ jobs:
 
       - name: Publish release
         env:
-          GH_TOKEN: ${{ github.token }}
+          # github.token can write only to this repository; RELEASE_TOKEN is the
+          # one that reaches a separate RELEASE_REPO.
+          GH_TOKEN: ${{ vars.RELEASE_REPO && vars.RELEASE_REPO != github.repository && secrets.RELEASE_TOKEN || github.token }}
           TAG: ${{ steps.version.outputs.tag }}
           VERSION_NAME: ${{ steps.version.outputs.version_name }}
           GAME_NAME: ${{ steps.version.outputs.game_name }}
@@ -340,4 +365,6 @@ jobs:
         # Runners are ephemeral, but the keystore is removed explicitly so it
         # cannot survive into any later step of this job.
         if: always()
-        run: rm -rf "${RUNNER_TEMP}/launcher-signing"
+        run: |
+          find "${RUNNER_TEMP}/launcher-signing" -type f -exec shred -u {} + 2>/dev/null || true
+          rm -rf "${RUNNER_TEMP}/launcher-signing"

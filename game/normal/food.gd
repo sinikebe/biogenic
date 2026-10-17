@@ -68,6 +68,8 @@ const Metabolism := preload("res://game/normal/metabolism.gd")
 const Rulebook := preload("res://game/mechanics/rulebook.gd")
 ## A fan of rays: how a water cell's beam is spread, as the run spreads yours.
 const RayFan := preload("res://game/mechanics/ray_fan.gd")
+## What an eye sees of the bodies round it (docs/design/sight.md).
+const Sight := preload("res://game/mechanics/sight.gd")
 ## The file a drop is kept in, for the layout of pack 3's entries in it
 ## ([method drop_state]). It preloads nothing of this file's, so no cycle.
 const DropSave := preload("res://game/normal/drop_save.gd")
@@ -667,20 +669,20 @@ const AIM_STERN_SHARE := 0.6
 # perception.md's "never an identity", and it is the gap §2.3's reserved
 # chemoreceptor gene is there to sell later.
 
-## Inside WAKE_RANGE 760 on purpose: the gene sharpens what the cell knows, it
-## never extends how far it knows it.
-const SHADOW_RANGE := 620.0
-const SHADOW_CORE := 180.0
-## Bodies below this fraction of your own radius cast nothing.
-const SHADOW_MIN_RATIO := 0.8
-## **A divergence from §6, and the same one §7.0 forced on dread.** The design
-## writes the ratio as a threshold -- "any cell with radius >= SHADOW_MIN_RATIO
-## * cell.radius" -- and a threshold is a boolean, so a body drifting across it
-## would pop the amber lobe on and off. Every gate in this file has been taken
-## off exactly that argument. So 0.8 is where a shadow starts and a body your
-## own size casts a whole one, with a curve in between; nothing below 0.8 casts
-## anything, which is what the number in §6 actually means.
-const SHADOW_FULL_RATIO := 1.05
+## **The eyespot sees** (docs/design/sight.md, 2026-10-16): what the shadow above
+## summed is now what an eye sees, through game/mechanics/sight.gd -- a field about
+## the slot it is worn on, a reach the light sets, a blur its level sets, and
+## nothing behind a nearer body. Its numbers are the organ's, asked through the
+## catalogue by its channel. These two are the field's own.
+##
+## **How many rays the picture of what it sees is drawn with** (the player's only:
+## point of view and full vision draw it, docs/design/sight.md §4): one every 1.3
+## degrees across a 120-degree field, finer than the finest blur but one.
+const SIGHT_FAN_RAYS := 92
+## **What a body in view has to come through at to count as seen**: what earns the
+## eye its levels, a body at a tenth of its strength -- a body your size near the
+## edge of what a level-1 eye sees.
+const SIGHT_COUNTS := 0.1
 
 # --- The beam (`ocellus`, beam-levels.md) -----------------------------------
 
@@ -1312,10 +1314,17 @@ class Observer:
 	var smell_bearing := 0.0
 	## `palp`.
 	var touch_range := 0.0
-	## `stigma`: whether it wears one. The player's shadow is summed whatever it
-	## wears, and its membrane is gated downstream; a water cell's eyespot reads
-	## only when it is worn.
+	## `stigma`: whether it wears one, and its eye -- the bearing of the slot it is
+	## worn on, its field either side of it, how far it sees in full light and how
+	## near a body comes through whole, what it keeps in the dark and its blur, in
+	## radians and µm. An eye that is not worn sees nothing (docs/design/sight.md).
 	var eyespot := false
+	var sight_mid := 0.0
+	var sight_half := 0.0
+	var sight_range := 0.0
+	var sight_core := 0.0
+	var sight_dark := 0.0
+	var sight_blur := 0.0
 	## `ocellus`: each ray's bearing, the arc a sweeping one crossed, how far the
 	## rays reach, and where the fan points and how far it spreads.
 	var beam_range := 0.0
@@ -1341,9 +1350,13 @@ class Observer:
 	## alone, when the nose was asked alone.
 	var smell := 0.0
 	var scent := 0.0
-	## Light blocked, summed, and the direction it is blocked from.
+	## What the eye sees, summed -- each body in view at how clearly it comes
+	## through -- and the direction of that sum.
 	var shade := 0.0
 	var shade_pull := Vector2.ZERO
+	## The bodies it saw at [constant SIGHT_COUNTS] or better: what a hunter's eye
+	## finds ([method _senses_find]) and what earns the player's eye its levels.
+	var seen := PackedInt32Array()
 	## The player's dread, and the worst threat in it (§3.4: no water cell
 	## feels either).
 	var dread := 0.0
@@ -1380,14 +1393,35 @@ var dread_level := 0.0
 ## window dread is, ignoring distance. Public for the dev harness, which needs
 ## to be able to show that this varies continuously rather than stepping.
 var threat := 0.0
-## How much light is being blocked, 0..1, and from where. Read by whoever owns
-## the run and posted to the bus as the `stigma`'s lobe -- but only if the cell
-## has grown one. The field computes it either way: what the water is doing is
-## not a function of which organs are watching it. §6.
+## **What the eyespot sees**, 0..1, and from where: each body in its field it is
+## not hidden from, at how clearly it comes through, summed (docs/design/sight.md).
+## Posted by the run as the `stigma`'s lobe. 0 for a cell that wears no eyespot:
+## an eye that is not there sees nothing, so this is no longer the water's
+## (it was a shadow, which is).
 var shadow := 0.0
-## Body-relative bearing of the summed occlusion. Meaningless when [member
-## shadow] is 0.
+## Body-relative bearing of what it sees. Meaningless when [member shadow] is 0.
 var shadow_bearing := 0.0
+
+## **The player's eyespot, as the run wrote it this frame** (normal_mode.gd's
+## `_aim_sight`): the bearing of its slot, its field either side, how far it sees
+## in full light, how near a body is whole, what it keeps in the dark and its
+## blur at its level -- radians and µm. [member sight_range] 0 for no eyespot.
+var sight_mid := 0.0
+var sight_half := 0.0
+var sight_range := 0.0
+var sight_core := 0.0
+var sight_dark := 0.0
+var sight_blur := 0.0
+## **What the player's eye saw this frame**, for the views and the eye's levels:
+## how far each of [constant SIGHT_FAN_RAYS] rays across the field ran before
+## something stopped it, out to [member sight_reach] -- the picture point of view
+## and full vision draw -- and how far it saw, and how much of it the light left,
+## 0..1. And the bodies that counted as seen ([constant SIGHT_COUNTS]), which earn
+## the eye its levels.
+var sight_fan := PackedFloat32Array()
+var sight_reach := 0.0
+var sight_seeing := 0.0
+var sight_seen := PackedInt32Array()
 
 # --- The earned senses, computed here and posted by the run -----------------
 # Same contract as everything above: this node computes and does not post, and
@@ -3587,6 +3621,13 @@ func _player_eye() -> Observer:
 	o.ping_bearing = ping_bearing
 	o.ping_through = ping_through
 	o.ping_tier = ping_tier
+	o.sight_mid = sight_mid
+	o.sight_half = sight_half
+	o.sight_range = sight_range
+	o.sight_core = sight_core
+	o.sight_dark = sight_dark
+	o.sight_blur = sight_blur
+	o.eyespot = sight_range > 0.0
 	o.slot = -1
 	return o
 
@@ -3598,8 +3639,6 @@ func _player_eye() -> Observer:
 ## by downstream and an instinct's by this. What the player's instincts are
 ## reported from (game/normal/own_rules.gd); nothing here is sensed again.
 func own_eye() -> Observer:
-	if _cell != null:
-		_eye.eyespot = _cell.on_channel(Catalogue.LIGHT) != &""
 	return _eye
 
 
@@ -3617,7 +3656,9 @@ func _step_sense() -> void:
 	# In the drop, the bodies near this cell the frame gathered: nothing past
 	# them reaches any sense (§4.2) -- and in a pond the people in the water.
 	# In today's water, every body.
-	_feel(o, _sense_ids(), true, true, true)
+	var scan := _sense_ids()
+	_feel(o, scan, true, true)
+	_see(o, scan, true)
 	concentration = minf(o.scent, 1.0)
 	# **There is no bearing here any more, and that is the change.** A cell with
 	# no chemocyte leaves with [member smell_range] 0, so nothing is ever inside
@@ -3626,7 +3667,7 @@ func _step_sense() -> void:
 	# gates downstream of it.
 	taste_level = o.smell
 	shadow = minf(o.shade, 1.0)
-	# Deliberately left where it was when the last shadow faded rather than
+	# Deliberately left where it was when the last sight faded rather than
 	# snapped to dead ahead: the lobe is already dark at strength 0, and a
 	# bearing that resets would swing the amber round to the nose on its way
 	# out -- a movement the player would read as something passing in front of
@@ -3637,24 +3678,23 @@ func _step_sense() -> void:
 	dread_level = minf(o.dread, 1.0) * DREAD_CAP
 
 
-## **What an observer smells, the shadow it stands in, and -- for the player
-## alone -- its dread** (behaviour.md §12.1), over the bodies in [param scan]:
-## one pass, as the player's membrane has always made it, read off the observer
-## and those bodies and nothing else. [param smell] asks the nose, [param shade]
-## the eyespot, and [param fear] the dread only a player's membrane feels: no
-## organ reports another cell's mouth, so no water cell is ever asked it (§3.4).
-## What it finds is written on [param o]; a sense not asked is left at nothing.
+## **What an observer smells, and -- for the player alone -- its dread**
+## (behaviour.md §12.1), over the bodies in [param scan]: one pass, as the
+## player's membrane has always made it, read off the observer and those bodies
+## and nothing else. [param smell] asks the nose and [param fear] the dread only a
+## player's membrane feels: no organ reports another cell's mouth, so no water
+## cell is ever asked it (§3.4). What it finds is written on [param o]; a sense not
+## asked is left at nothing. **The eyespot is [method _see]'s** since it sees
+## (docs/design/sight.md): it was the shadow this pass summed.
 ##
 ## [param scan] holds slots, and [constant TARGET_PLAYER] for the player on this
 ## device as a water cell finds it ([member _me]). The observer's own slot is
 ## passed over.
-func _feel(o: Observer, scan: PackedInt32Array, smell: bool, shade: bool, fear: bool) -> void:
+func _feel(o: Observer, scan: PackedInt32Array, smell: bool, fear: bool) -> void:
 	var total := 0.0
 	var dread := 0.0
 	var worst := 0.0
 	var gape := o.gape
-	var shaded := 0.0
-	var shade_pull := Vector2.ZERO
 	# **What the nose picks up, which is not the same sum again.** Restricted to
 	# sources inside [member smell_range] and weighted by how nearly each one
 	# lies along the organ's own arc -- and then simply added up, because
@@ -3668,7 +3708,7 @@ func _feel(o: Observer, scan: PackedInt32Array, smell: bool, shade: bool, fear: 
 	# **A nose asked alone sums only what lies inside its reach**: a water cell's
 	# `smell` is the level, which nothing past it reaches, and no organ of its
 	# reads the raw sum ([member Observer.scent]) the player's membrane does.
-	var nose_only := smell and not shade and not fear
+	var nose_only := smell and not fear
 
 	for i: int in scan:
 		if i == o.slot:
@@ -3729,26 +3769,9 @@ func _feel(o: Observer, scan: PackedInt32Array, smell: bool, shade: bool, fear: 
 						else:
 							smelt_rest += w
 
-		# A floc is smell and nothing more: no mass to cast a shadow and no
-		# mouth to dread (§7.5).
+		# A floc is smell and nothing more: no mouth to dread (§7.5).
 		if b.inert:
 			continue
-
-		# The shadow, over every body big enough to cast one. Summed and given a
-		# bearing exactly the way taste is, for the same reason: two bodies
-		# blocking the light really do block more of it than one, and a summed
-		# vector moves continuously where a pick-the-biggest would jump the
-		# bearing across the screen the frame two shadows swapped rank.
-		if shade:
-			var mass := smoothstep(SHADOW_MIN_RATIO, SHADOW_FULL_RATIO,
-				b.radius / maxf(o.radius, 0.001))
-			if mass > 0.0 and d < SHADOW_RANGE:
-				var near := clampf((SHADOW_RANGE - d) / (SHADOW_RANGE - SHADOW_CORE),
-					0.0, 1.0)
-				var blocked := mass * near
-				if blocked > 0.0:
-					shaded += blocked
-					shade_pull += offset / maxf(d, 0.001) * blocked
 
 		if not fear:
 			continue
@@ -3784,20 +3807,6 @@ func _feel(o: Observer, scan: PackedInt32Array, smell: bool, shade: bool, fear: 
 			* clampf((CHEW_RANGE - d) / (CHEW_RANGE - DREAD_CORE), 0.0, 1.0) \
 			* (CHEW_HURT_FLOOR + (1.0 - CHEW_HURT_FLOOR) * o.wound)
 
-	# **The meniscus bends the light away** (§3.2): a curved surface is a lens,
-	# and the stretch of it nearest the cell reads to an eyespot as a shadow at
-	# its bearing, EDGE_SHADOW of a body's at the closest, falling to nothing
-	# at SHADOW_RANGE. Summed with the bodies' like one more, so it moves the
-	# lobe as continuously as they do. The drop only.
-	if shade and _drop != null:
-		var edge := _drop.meniscus.depth(o.pos)
-		if edge < SHADOW_RANGE:
-			var blocked := Drop.EDGE_SHADOW * clampf((SHADOW_RANGE - edge)
-				/ (SHADOW_RANGE - SHADOW_CORE), 0.0, 1.0)
-			shaded += blocked
-			shade_pull += (_drop.meniscus.nearest_rim(o.pos) - o.pos) \
-				.normalized() * blocked
-
 	o.scent = total
 	# **A receptor saturates; it does not clip.** The clamp that used to be on
 	# this line was the actual fault three-senses.md §7.5 blamed on the sum:
@@ -3806,10 +3815,94 @@ func _feel(o: Observer, scan: PackedInt32Array, smell: bool, shade: bool, fear: 
 	# reach sums nothing, and `0 / (0 + K)` is 0.
 	var s := smelt_top + SMELL_TAIL * smelt_rest
 	o.smell = s / (s + SMELL_HALF)
-	o.shade = shaded
-	o.shade_pull = shade_pull
 	o.worst = worst
 	o.dread = dread
+
+
+## **What an observer's eyespot sees** (docs/design/sight.md), over the bodies in
+## [param scan]: every body in its field, nearest first, each hiding what is
+## behind it (game/mechanics/sight.gd), and each at how clearly it comes through
+## -- its blur against how wide what is left of it is, and the water's haze
+## against a reach the light at the eye sets. Written on [param o] as the shade
+## and its pull: the sum, and the direction of it, as the shadow was, so the lobe
+## moves as continuously as it did.
+##
+## **A floc hides what is behind it and is not what the eye reports**: it is
+## dust, and the sense says where the bodies are. **The rim** reads as it did,
+## [constant Drop.EDGE_SHADOW] of a body at the closest, while its nearest stretch
+## is in the field.
+##
+## [param picture] is the player's: it also writes what the views draw and what
+## earns the eye its levels ([member sight_fan], [member sight_seen]). An observer
+## with no eyespot sees nothing.
+func _see(o: Observer, scan: PackedInt32Array, picture: bool) -> void:
+	o.shade = 0.0
+	o.shade_pull = Vector2.ZERO
+	o.seen.resize(0)
+	if picture:
+		sight_fan.resize(0)
+		sight_seen.resize(0)
+		sight_reach = 0.0
+		sight_seeing = 0.0
+	if not o.eyespot or o.sight_range <= 0.0:
+		return
+	var seeing := Sight.seeing(light_at(o.pos), o.sight_dark)
+	var reach := o.sight_range * seeing
+	var core := o.sight_core * seeing
+	var things: Array = []
+	for i: int in scan:
+		if i == o.slot:
+			continue
+		var b := _cells[i] if i >= 0 else _me
+		if not b.seeded:
+			continue
+		var offset := b.pos - o.pos
+		var d := offset.length()
+		if d - b.radius >= reach:
+			continue
+		var bearing := atan2(offset.dot(o.starboard), offset.dot(o.forward))
+		if d > b.radius and absf(angle_difference(o.sight_mid, bearing)) \
+				> o.sight_half + asin(b.radius / d):
+			continue
+		things.append([bearing, d, b.radius, i])
+	var shaded := 0.0
+	var pull := Vector2.ZERO
+	for seen: Array in Sight.view(things, o.sight_mid, o.sight_half):
+		var i := int(seen[3])
+		var b := _cells[i] if i >= 0 else _me
+		var bearing := float(seen[0])
+		var d := float(seen[1])
+		var level := Sight.clarity(float(seen[4]), o.sight_blur) * Sight.haze(d, core, reach)
+		if b.inert or level <= 0.0:
+			continue
+		shaded += level
+		pull += (o.forward * cos(bearing) + o.starboard * sin(bearing)) * level
+		if level >= SIGHT_COUNTS:
+			o.seen.append(i)
+	if _drop != null:
+		var edge := _drop.meniscus.depth(o.pos)
+		if edge < reach:
+			var near := _drop.meniscus.nearest_rim(o.pos)
+			if absf(angle_difference(o.sight_mid, o.bearing_to(near))) <= o.sight_half:
+				var blocked := Drop.EDGE_SHADOW * Sight.haze(edge, core, reach)
+				shaded += blocked
+				pull += (near - o.pos).normalized() * blocked
+	o.shade = shaded
+	o.shade_pull = pull
+	if not picture:
+		return
+	sight_seen = o.seen.duplicate()
+	sight_reach = reach
+	sight_seeing = seeing
+	sight_fan.resize(SIGHT_FAN_RAYS)
+	for k in SIGHT_FAN_RAYS:
+		var bearing := o.sight_mid - o.sight_half \
+			+ 2.0 * o.sight_half * float(k) / float(SIGHT_FAN_RAYS - 1)
+		var run := Sight.cast(things, bearing, reach)
+		if _drop != null:
+			run = minf(run, _drop.meniscus.exit_along(o.pos,
+				o.forward * cos(bearing) + o.starboard * sin(bearing)))
+		sight_fan[k] = run
 
 
 ## **The player's beams**, through [method _beams_of] -- the one function every
@@ -8266,7 +8359,9 @@ func _refresh_body(b: Body) -> void:
 	# A radar does not hear a floc and an eyespot does not see one (§7.5): a
 	# floc is found by the nose, the beam or the palp.
 	b.notice_floc = maxf(smell, maxf(beam, touch))
-	b.see_big = SHADOW_RANGE if Catalogue.worn_on(g, Catalogue.LIGHT) != &"" else 0.0
+	# **How far its eyespot can see in full light**, the reach a search for it is
+	# asked over; what it sees there is [method _see]'s (docs/design/sight.md).
+	b.see_big = float(sight_of(Catalogue.worn_on(g, Catalogue.LIGHT), 1)[1])
 	b.dart_bearing = 0.0
 	if b.dart_tier > 0:
 		b.dart_bearing = Cilia.slot_bearing(_seat_of(Cilia.default_order(g), g, &"dart_wound"))
@@ -8322,11 +8417,19 @@ func _look_in_drop(index: int, b: Body, reach: float) -> void:
 	var best := TARGET_NONE
 	var best_serial := 0
 	var best_d := INF
+	# **What its eyespot sees, once for the whole search** (docs/design/sight.md):
+	# a body it finds by eye is one in its field, not behind another, in light
+	# enough to make it out.
+	var eyed := PackedInt32Array()
+	if notice_by_senses and reach > 0.0 and b.see_big > 0.0 and b.eye != null:
+		var o := _body_eye(index, b)
+		_see(o, _scan_for(b, o.sight_range), false)
+		eyed = o.seen
 	if in_water and _first_hunt <= 0.0 and _worth_committing_to(b, gape,
 			_cell.swallow_radius(), _cell.wound):
 		var d := b.pos.distance_to(_cell.position)
 		if d <= maxf(reach, b.radius + _cell.radius) \
-				and _senses_find(b, d, _cell.radius, false):
+				and _senses_find(b, d, false, TARGET_PLAYER, eyed):
 			best = TARGET_PLAYER
 			best_d = d
 	# **The other players, in a pond, by the same rule** (§10.2): nothing
@@ -8343,7 +8446,7 @@ func _look_in_drop(index: int, b: Body, reach: float) -> void:
 				continue
 			var d := b.pos.distance_to(pb.pos)
 			if d <= maxf(reach, b.radius + pb.radius) and d < best_d \
-					and _senses_find(b, d, pb.radius, false):
+					and _senses_find(b, d, false, slot, eyed):
 				best = slot
 				best_serial = pb.serial
 				best_d = d
@@ -8367,7 +8470,7 @@ func _look_in_drop(index: int, b: Body, reach: float) -> void:
 					continue
 			elif not _worth_committing_to(b, gape, _swallow_r(other), other.wound):
 				continue
-			if not _senses_find(b, d, other.radius, other.inert):
+			if not _senses_find(b, d, other.inert, j, eyed):
 				continue
 			best = j
 			best_serial = other.serial
@@ -8379,18 +8482,19 @@ func _look_in_drop(index: int, b: Body, reach: float) -> void:
 	_start_run(b, best, best_serial)
 
 
-## **Whether its own senses find something [param body_radius] big at
-## [param d]** (§5.7): what touches it, always; else within the reach of its
-## nose, radar, beam or palp -- a floc only by nose, beam or palp -- or of its
-## eyespot, for a body big enough to cast a shadow.
-func _senses_find(b: Body, d: float, body_radius: float, floc: bool) -> bool:
-	if not notice_by_senses or d <= b.radius + body_radius:
+## **Whether its own senses find the body in slot [param id] at [param d]**
+## (§5.7): what touches it, always; else within the reach of its nose, radar,
+## beam or palp -- a floc only by nose, beam or palp -- or when its eyespot sees
+## it, [param eyed] being what it saw (docs/design/sight.md).
+func _senses_find(b: Body, d: float, floc: bool, id: int, eyed: PackedInt32Array) -> bool:
+	var other := _cells[id] if id >= 0 else _me
+	if not notice_by_senses or d <= b.radius + other.radius:
 		return true
 	if floc:
 		return d <= b.notice_floc
 	if d <= b.notice:
 		return true
-	return d <= b.see_big and body_radius >= SHADOW_MIN_RATIO * b.radius
+	return eyed.has(id)
 
 
 ## **A run begins**, at [param target]. A body spotted from afar is turned onto
@@ -8644,7 +8748,19 @@ func _eye_of(b: Body) -> Observer:
 	o.smell_range = Stats.seated(order, g, &"smell_range")
 	o.smell_bearing = _arc_in(order, g, &"smell_range")
 	o.touch_range = Stats.of(g, &"touch_range")
-	o.eyespot = Catalogue.worn_on(g, Catalogue.LIGHT) != &""
+	# **Its eye as yours is aimed** (normal_mode.gd's `_aim_sight`): about the arc
+	# the default order puts it on, sharp as its copies -- a water cell has no
+	# levels, as its beam has none.
+	var eye := Catalogue.worn_on(g, Catalogue.LIGHT)
+	o.eyespot = eye != &""
+	var sight := sight_of(eye, Genome.tier_of(g, eye))
+	var seat := order.find(eye) if o.eyespot else -1
+	o.sight_mid = Cilia.slot_bearing(seat) if seat >= 0 else 0.0
+	o.sight_half = float(sight[0])
+	o.sight_range = float(sight[1])
+	o.sight_core = float(sight[2])
+	o.sight_dark = float(sight[3])
+	o.sight_blur = float(sight[4])
 	o.ping_range = Stats.seated(order, g, &"ping_range")
 	o.ping_tier = Stats.seated_tier(order, g, &"ping_range")
 	o.ping_period = Stats.seated(order, g, &"ping_period")
@@ -8690,6 +8806,28 @@ static func _arc_in(order: Array, tiers: Dictionary, stat: StringName) -> float:
 static func _seat_of(order: Array, tiers: Dictionary, stat: StringName) -> int:
 	var organ := Stats.organ(order, tiers, stat)
 	return order.find(organ) if organ != &"" else -1
+
+
+## **The eye of [param key] at [param level]**, from the organ's own numbers
+## (docs/design/sight.md): `[half-field, reach in full light, core, share kept
+## in the dark, blur]`, angles in radians. All nought for no key: an eye that is
+## not worn sees nothing. Yours and every water cell's are read here, so the two
+## can never be different eyes.
+static func sight_of(key: StringName, level: int) -> Array:
+	if key == &"":
+		return [0.0, 0.0, 0.0, 0.0, 0.0]
+	var half := float(_number(key, &"sight_half_deg"))
+	var blur := Sight.blur_at(level, float(_number(key, &"sight_blur_deg")),
+		float(_number(key, &"sight_finest_deg")))
+	return [deg_to_rad(half), float(_number(key, &"sight_range")),
+		float(_number(key, &"sight_core")), float(_number(key, &"sight_dark")),
+		deg_to_rad(blur)]
+
+
+## The catalogue's number [param name] of [param key], 0 where it has none.
+static func _number(key: StringName, name: StringName) -> float:
+	var v: Variant = Catalogue.number(key, name)
+	return float(v) if v != null else 0.0
 
 
 ## **Body [param b] in slot [param i], as an observer**: its organs and its
@@ -8782,7 +8920,7 @@ func _read_smell(i: int, b: Body) -> Array:
 	var o := _body_eye(i, b)
 	if o.smell_range <= 0.0:
 		return []
-	_feel(o, _scan_for(b, o.smell_range), true, false, false)
+	_feel(o, _scan_for(b, o.smell_range), true, false)
 	return report_smell(o)
 
 
@@ -8793,18 +8931,19 @@ static func report_smell(o: Observer) -> Array:
 	return [[o.smell]]
 
 
-## `stigma.shadow`: the light blocked by bodies about its size or bigger and by
-## the rim, summed with a bearing, while any is.
+## `stigma.shadow`: what its eyespot sees -- every body in its field it is not
+## hidden from and the rim, each at how clearly, summed with a bearing -- while
+## it sees anything (docs/design/sight.md).
 func _read_shadow(i: int, b: Body) -> Array:
 	var o := _body_eye(i, b)
 	if not o.eyespot:
 		return []
-	_feel(o, _scan_for(b, SHADOW_RANGE), false, true, false)
+	_see(o, _scan_for(b, o.sight_range), false)
 	return report_shadow(o)
 
 
-## The report of the shade on [param o]'s eyespot: its bearing, how dark, and
-## that bearing in the world, while there is any and it wears an eyespot.
+## The report of what [param o]'s eyespot sees: its bearing, how clearly, and
+## that bearing in the world, while it sees anything and it wears an eyespot.
 static func report_shadow(o: Observer) -> Array:
 	if not o.eyespot:
 		return []

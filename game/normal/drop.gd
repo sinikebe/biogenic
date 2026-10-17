@@ -60,7 +60,7 @@ const SHORE_GAP := 0.6
 ## widest, longest echo in the game.
 const EDGE_ECHO_RADIUS := 80.0
 ## A `stigma` sees the rim as a shadow this deep at the closest, against a
-## body's 1, fading to nothing at food.gd's SHADOW_RANGE.
+## body's 1, fading to nothing where the eyespot stops seeing (food.gd's `_see`).
 const EDGE_SHADOW := 0.6
 
 # --- The light: a day, a night, and depth (docs/design/daylight.md §2) ----------

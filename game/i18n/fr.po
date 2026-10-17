@@ -1156,17 +1156,67 @@ msgstr "un battement toutes les {}–{} s"
 msgid "beating burns {} s a second, {} s a beat"
 msgstr "battre coûte {} s par seconde, {} s par battement"
 
-#. The shadow-sensing gene (`stigma`, shown as `see`): it feels the shadow of
-#. large bodies. "A bearing to within {}" means the direction of a body is
-#. known to within that many degrees.
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: stigma
+#. Room: at most 440 px in 15 px type; the English takes 308 px.
+#: game/genes/organs/stigma.gd
+msgid "sees what is in front of it, sharper with use"
+msgstr "voit ce qui est devant lui, plus net à l'usage"
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same words as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+#. which calls and listens; "your beam" its ocellus; "your nose" its
+#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
+#. the cell's flagellum, which swims; "two copies" means the gene is carried
+#. twice in the cell's DNA, which is what lets the tail be held still. "For
+#. free" means it costs no food.
+#. entry: stigma.shadow
+#. Room: at most 856 px in 15 px type; the English takes 509 px.
+#: game/genes/organs/stigma.gd
+msgid "shadow · what your eyespot sees in front of it: where, and how clearly."
+msgstr "ombre · ce que votre œil voit devant lui : où, et avec quelle netteté."
+
+#. The seeing gene (`stigma`, shown as `see`): an eyespot. "{} either side" is
+#. how far round it sees from where it is worn, in degrees. "Sharp to within
+#. {}" is its blur: a thing narrower than that many degrees looks faint.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
-#: game/normal/gene_stats.gd
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/stigma.gd
 #, python-brace-format
-msgid "feels bodies over {} × your size"
-msgstr "détecte les corps de plus de {} × votre taille"
+msgid "sees {} either side"
+msgstr "voit à {} de chaque côté"
+
+#. The seeing gene (`stigma`, shown as `see`): an eyespot. "{} either side" is
+#. how far round it sees from where it is worn, in degrees. "Sharp to within
+#. {}" is its blur: a thing narrower than that many degrees looks faint.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/stigma.gd
+#, python-brace-format
+msgid "out to {} µm in full light, {} µm in none"
+msgstr "à {} µm en pleine lumière, {} µm dans le noir"
+
+#. The seeing gene (`stigma`, shown as `see`): an eyespot. "{} either side" is
+#. how far round it sees from where it is worn, in degrees. "Sharp to within
+#. {}" is its blur: a thing narrower than that many degrees looks faint.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/stigma.gd
+#, python-brace-format
+msgid "sharp to within {}"
+msgstr "net à {} près"
 
 #. The shadow-sensing gene (`stigma`, shown as `see`): it feels the shadow of
 #. large bodies. "A bearing to within {}" means the direction of a body is
@@ -1183,18 +1233,6 @@ msgstr "détecte les corps de plus de {} × votre taille"
 #, python-brace-format
 msgid "out to {} µm"
 msgstr "jusqu'à {} µm"
-
-#. The shadow-sensing gene (`stigma`, shown as `see`): it feels the shadow of
-#. large bodies. "A bearing to within {}" means the direction of a body is
-#. known to within that many degrees.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "a bearing to within {}"
-msgstr "une direction à {} près"
 
 #. The smell gene (`chemocyte`, shown as `smell`). "{} as strong behind it"
 #. compares what it smells behind the cell with what it smells in front, as a
@@ -1591,6 +1629,21 @@ msgid "level {} after {} strike"
 msgid_plural "level {} after {} strikes"
 msgstr[0] "niveau {} après {} impact"
 msgstr[1] "niveau {} après {} impacts"
+
+#. The last item of the eyespot's costs line: the next level, and how many
+#. bodies it has to see to earn it -- one different body in view in one second
+#. counts once. The English has a singular for one and a plural for any other
+#. number: give the forms your language needs.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "level {} after {} body seen"
+msgid_plural "level {} after {} bodies seen"
+msgstr[0] "niveau {} après {} corps vu"
+msgstr[1] "niveau {} après {} corps vus"
 
 #. The odds line (14 px type) when the numbers switch is on: the copies of the
 #. gene in words (see "one copy"), a middle dot, then whether a daughter cell
@@ -2484,18 +2537,6 @@ msgstr "votre queue bat plus fort, et plus souvent"
 #. "numbers" switch at its right, so a translation should be no longer than
 #. the English. "That side" is the side of the body where the gene's slot is.
 #. The `entry` line says which gene.
-#. entry: stigma
-#. Room: at most 440 px in 15 px type; the English takes 342 px.
-#: game/normal/normal_mode.gd
-msgid "feels the shadow of anything big, however dark"
-msgstr "détecte l'ombre de tout ce qui est grand, même dans le noir"
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
 #. entry: ocellus
 #. Room: at most 440 px in 15 px type; the English takes 357 px.
 #: game/normal/normal_mode.gd
@@ -3361,23 +3402,6 @@ msgid ""
 msgstr ""
 "odeur · l'odeur de ce que votre bouche pourrait prendre, le long de votre "
 "nez."
-
-#. Explains one sense, action or value of the player's "instincts", on one
-#. line under them: its name (the same words as on its chip), a middle dot,
-#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
-#. which calls and listens; "your beam" its ocellus; "your nose" its
-#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
-#. the cell's flagellum, which swims; "two copies" means the gene is carried
-#. twice in the cell's DNA, which is what lets the tail be held still. "For
-#. free" means it costs no food.
-#. entry: stigma.shadow
-#. Room: at most 856 px in 15 px type; the English takes 528 px.
-#: game/normal/genome.gd
-msgid ""
-"shadow · the shade of anything your size or bigger: where, and how dark."
-msgstr ""
-"ombre · l'ombre de tout ce qui est de votre taille ou plus grand : où, et "
-"combien sombre."
 
 #. Explains one sense, action or value of the player's "instincts", on one
 #. line under them: its name (the same words as on its chip), a middle dot,
