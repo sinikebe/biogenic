@@ -709,11 +709,14 @@ func uniform_point(inset: float) -> Vector2:
 ##
 ## **A newborn ([param newborn]) comes into the water in the margin** (margin.md
 ## §2.3): every point drawn for one is in the band a run starts in, the ring's
-## kept only when they fall in it.
+## kept only when they fall in it. **And every point is past the hold** of the
+## biggest body that may be made there, [param biggest] -- so the film never moves
+## it after it was found hidden.
 func spawn_candidates(players: PackedVector2Array, hides: PackedFloat32Array,
-		turn: int, newborn := false) -> PackedVector2Array:
+		turn: int, newborn := false, biggest := 0.0) -> PackedVector2Array:
 	var out := PackedVector2Array()
 	var from := hold(CellBody.BASE_RADIUS)
+	var inset := maxf(SPAWN_INSET, hold(biggest))
 	for t in SPAWN_TRIES:
 		var at := Vector2.ZERO
 		if t % 2 == 1 and not players.is_empty():
@@ -722,7 +725,7 @@ func spawn_candidates(players: PackedVector2Array, hides: PackedFloat32Array,
 			var angle := randf_range(-PI, PI)
 			at = players[k] + Vector2(cos(angle), sin(angle)) \
 				* randf_range(hide, hide + SPAWN_RING)
-			if not meniscus.inside(at, SPAWN_INSET):
+			if not meniscus.inside(at, inset):
 				continue
 			if newborn:
 				var depth := meniscus.depth(at)
@@ -731,7 +734,7 @@ func spawn_candidates(players: PackedVector2Array, hides: PackedFloat32Array,
 		elif newborn:
 			at = margin_point()
 		else:
-			at = uniform_point(SPAWN_INSET)
+			at = uniform_point(inset)
 		if Replenish.hidden(at, players, hides):
 			out.append(at)
 	return out

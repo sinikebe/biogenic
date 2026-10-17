@@ -10003,7 +10003,8 @@ func _make_one(players: PackedVector2Array, reaches: PackedFloat32Array) -> int:
 	# **A newborn comes into the water in the margin**, and **the food is kept
 	# fuller there** (margin.md §2.2, §2.3).
 	var candidates := _drop.spawn_candidates(players, hides,
-		turn if turn < players.size() else 0, not drifter)
+		turn if turn < players.size() else 0, not drifter,
+		DRIFTER_MAX if drifter else CellBody.BASE_RADIUS)
 	var pick := Replenish.thinnest(candidates, _thinness_food if drifter else _thinness)
 	if pick < 0:
 		return -1
@@ -10047,7 +10048,7 @@ func _spawn_ahead(from: Vector2, heading: float, reach: float) -> int:
 	for attempt in AHEAD_TRIES:
 		var spread := AHEAD_SPREAD + AHEAD_WIDEN * float(attempt)
 		var at := from + _forward(heading + randf_range(-1.0, 1.0) * spread) * reach
-		if _drop.meniscus.inside(at, Drop.SPAWN_INSET):
+		if _drop.meniscus.inside(at, maxf(Drop.SPAWN_INSET, Drop.hold(DRIFTER_MAX))):
 			return _spawn(at, true)
 	return -1
 

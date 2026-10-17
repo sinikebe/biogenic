@@ -399,6 +399,10 @@ class WatchedDrop extends "res://game/normal/food.gd":
 			if b.serial == serial:
 				missed += 1
 
+	## **When each body last grew**, by its instance: a meal moves its hold a meal's
+	## worth from the rim, and its next step holds it there (check 4).
+	var grew_at := {}
+
 	## **Every division, judged** (checks 1 and 2): its mother at her division
 	## radius; two daughters at half her area, touching across her heading where she was and
 	## facing her way, fed, in their grace, new ids, her children; one carrying
@@ -570,6 +574,7 @@ class WatchedDrop extends "res://game/normal/food.gd":
 		var body := var_to_bytes(b.genome)
 		var expect := b.dna.duplicate()
 		super._grow(b, gene)
+		grew_at[b.get_instance_id()] = _frame
 		if not births:
 			return
 		Genome.integrate_into(expect, gene, CellBody.slots_for(b.radius),
@@ -2106,6 +2111,9 @@ func _containment() -> void:
 					bodies_seen += 1
 					var r := float(b.get("radius"))
 					var keep := r if b.get("inert") else Drop.hold(r)
+					# Grown since its last step: held at its new hold on its next.
+					if int(field.grew_at.get(b.get_instance_id(), -1)) >= int(b.get("stepped")):
+						keep = Drop.hold(r - CellBody.GROWTH_PER_MEAL)
 					worst_body = minf(worst_body, edge - keep - _dist(b.get("pos"), centre))
 	var gap := INF
 	var off_bearing := 0.0
